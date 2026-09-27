@@ -35,7 +35,7 @@ struct Config {
   int32_t pulse_ms;
   int32_t travel_timeout_s;
   // House node
-  int32_t shelly_sync;
+  int32_t ctrl_sync;
   int32_t sync_window_ms;
   int32_t resync_ms;
   int32_t mismatch_timeout_s;

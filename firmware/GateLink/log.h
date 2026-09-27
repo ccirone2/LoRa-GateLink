@@ -18,7 +18,7 @@ enum LogCode : uint8_t {
   EV_PULSE,          // a = relay, b = ms
   EV_GATE_STATE,     // a = state, b = cause
   EV_TRAVEL_TIMEOUT, // a = target state
-  EV_SHELLY,         // a = level
+  EV_CTRL,           // a = level
   EV_SYNC,           // a = level (edge caused by our K1 sync)
   EV_RESYNC,         // a = target level
   EV_CFG_REMOTE,     // a = param id, b = value

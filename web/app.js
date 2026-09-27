@@ -10,7 +10,7 @@ const GROUPS = [
   ['Link', ['retries', 'heartbeat_s', 'link_timeout_s', 'cmd_ttl_s']],
   ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert']],
   ['Gate node', ['pulse_ms', 'travel_timeout_s']],
-  ['House node', ['shelly_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open']],
+  ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open']],
 ];
 const HELP = {
   role: 'Reboot after saving',
@@ -26,14 +26,14 @@ const HELP = {
   link_timeout_s: 'No frames for this long = link down',
   cmd_ttl_s: 'Drop a command not delivered within this time',
   debounce_ms: 'Input debounce',
-  in1_invert: 'House: Shelly · Gate: open limit',
+  in1_invert: 'House: controller input · Gate: open limit',
   in2_invert: 'Gate: close limit',
   pulse_ms: 'OPEN/CLOSE contact closure length',
   travel_timeout_s: 'Report timeout if limit not reached',
-  shelly_sync: 'Drive Shelly SW from K1 to mirror gate',
-  sync_window_ms: 'Ignore Shelly edges caused by K1',
+  ctrl_sync: 'Drive K1 so the controller mirrors the gate',
+  sync_window_ms: 'Ignore controller edges caused by K1',
   resync_ms: 'K1 off-time when forcing a resync',
-  mismatch_timeout_s: 'Shelly ≠ gate this long → resync',
+  mismatch_timeout_s: 'Controller ≠ gate this long → resync',
   sensor_invert: 'Invert contact sensor output (K2)',
   linkloss_open: 'Sensor reads open when link is down',
 };
@@ -42,7 +42,7 @@ const SELECTS = {
   bw_hz: [[125000, '125 kHz'], [250000, '250 kHz'], [500000, '500 kHz']],
 };
 const IO_LABELS = {
-  house: { in1: 'IN1 · Shelly relay', in2: 'IN2 · unused', k1: 'K1 · Shelly sync', k2: 'K2 · Alarm sensor' },
+  house: { in1: 'IN1 · Controller input', in2: 'IN2 · unused', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
   gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Close limit', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
   unset: { in1: 'IN1', in2: 'IN2', k1: 'K1', k2: 'K2' },
 };
@@ -164,15 +164,17 @@ function setConnected(on) {
   if (!on) {
     $('devline').textContent = 'not connected';
     $('keyWarn').hidden = true;
+    document.title = 'GateLink Console';
   }
 }
 
 function applyRole(r) {
   role = r;
+  document.title = role === 'unset' ? 'GateLink Console' : `${role[0].toUpperCase()}${role.slice(1)} · GateLink`;
   document.querySelectorAll('[data-role]').forEach((el) => { el.hidden = el.dataset.role !== role; });
   const hint = {
     gate: 'K1 pulses the opener OPEN input and K2 the CLOSE input — this moves the real gate.',
-    house: 'K1 toggles the Shelly SW input (gate commands are paused during the test). K2 drives the alarm contact sensor.',
+    house: 'K1 toggles the controller sync output (gate commands are paused during the test). K2 drives the contact sensor output.',
     unset: 'Set a role first.',
   };
   $('relayHint').textContent = hint[role] || '';
@@ -238,7 +240,7 @@ function renderStatus(s) {
   if (s.role === 'house') {
     const r = s.remote || {};
     $('lnkRemoteRssi').textContent = r.uptime_s ? `${r.rssi} dBm / ${r.snr} dB` : '—';
-    $('hShelly').innerHTML = pill(s.shelly);
+    $('hCtrl').innerHTML = pill(s.ctrl);
     $('hArmed').textContent = yesNo(s.armed);
     $('hSync').textContent = `${yesNo(s.sync_window)} / ${yesNo(s.resyncing)}`;
     const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 3: 'busy' };

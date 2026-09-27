@@ -29,7 +29,7 @@ const ParamDef PARAMS[] = {
   { 15, "in2_invert", &Config::in2_invert, 0, 1, P_REMOTE },
   { 16, "pulse_ms", &Config::pulse_ms, 100, 5000, P_REMOTE },
   { 17, "travel_timeout_s", &Config::travel_timeout_s, 5, 300, P_REMOTE },
-  { 18, "shelly_sync", &Config::shelly_sync, 0, 1, 0 },
+  { 18, "ctrl_sync", &Config::ctrl_sync, 0, 1, 0 },
   { 19, "sync_window_ms", &Config::sync_window_ms, 500, 10000, 0 },
   { 20, "resync_ms", &Config::resync_ms, 200, 5000, 0 },
   { 21, "mismatch_timeout_s", &Config::mismatch_timeout_s, 10, 600, 0 },
@@ -70,7 +70,7 @@ void configDefaults(Config &c) {
   c.debounce_ms = 50;
   c.pulse_ms = 500;
   c.travel_timeout_s = 60;
-  c.shelly_sync = 1;
+  c.ctrl_sync = 1;
   c.sync_window_ms = 3000;
   c.resync_ms = 1000;
   c.mismatch_timeout_s = 75;

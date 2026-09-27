@@ -53,7 +53,7 @@ static void applyOutputs(uint32_t now) {
   bool k2on = closed != (bool)cfg.sensor_invert;
   if (!k2.pulsing() && k2.on() != k2on) k2.set(k2on);
 
-  if (cfg.shelly_sync && haveStatus && !resyncing && !k1.pulsing()) {
+  if (cfg.ctrl_sync && haveStatus && !resyncing && !k1.pulsing()) {
     bool t = k1Target();
     if (t != k1.on()) {
       k1.set(t);
@@ -109,7 +109,7 @@ void houseLoop(uint32_t now) {
       if (shellyLevel == syncExpect) syncActive = false;
       logEvent(EV_SYNC, shellyLevel);
     } else {
-      logEvent(EV_SHELLY, shellyLevel);
+      logEvent(EV_CTRL, shellyLevel);
       if (armed) sendCommand(shellyLevel ? ACT_OPEN : ACT_CLOSE);
     }
   }
@@ -121,7 +121,7 @@ void houseLoop(uint32_t now) {
       resyncing = false;
       k1.set(k1Target());
     }
-  } else if (cfg.shelly_sync && armed && linkUp && haveStatus && !linkPending(SLOT_CMD)) {
+  } else if (cfg.ctrl_sync && armed && linkUp && haveStatus && !linkPending(SLOT_CMD)) {
     bool t = k1Target();
     if (shellyLevel == t) {
       mismatchSince = 0;
@@ -193,7 +193,7 @@ void houseStatus(JsonObject o) {
   o["target"] = gateTarget == GS_UNKNOWN ? "" : gateStateName(gateTarget);
   o["link_up"] = linkUp;
   o["armed"] = armed;
-  o["shelly"] = shellyLevel;
+  o["ctrl"] = shellyLevel;
   o["sync_window"] = syncActive;
   o["resyncing"] = resyncing;
   o["cmd_id"] = cmdId;

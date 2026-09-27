@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GateLink: two Arduino MKR WAN 1310 boards (on MKR Relay Proto Shields) bridge an Alarm.com / 2GIG system (via a Shelly Wave 1 Z-Wave relay) at the house to a LiftMaster CSW24UL gate opener over raw point-to-point LoRa. `firmware/GateLink/` is one Arduino sketch flashed to both boards; the role (house/gate) is stored in flash config. `web/` is a static page that configures/diagnoses a board over USB using the Web Serial API. See README.md for wiring, device settings, and the bench-test checklist.
 
+Repo: https://github.com/ccirone2/LoRa-GateLink (public). The web console is hosted at https://ccirone2.github.io/LoRa-GateLink/, deployed from `web/` by `.github/workflows/pages.yml` on pushes to `main` that touch `web/**` (or via `gh workflow run pages.yml`).
+
 ## Commands
 
 Toolchain is `arduino-cli` (not PlatformIO). Run from the repo root:

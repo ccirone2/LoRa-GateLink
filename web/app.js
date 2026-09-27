@@ -47,6 +47,95 @@ const IO_LABELS = {
   unset: { in1: 'IN1', in2: 'IN2', k1: 'K1', k2: 'K2' },
 };
 
+// ---------- Field wiring (Install tab) ----------
+// kind: out = a relay contact the board switches, in = a dry contact the board reads, pwr = power.
+// rows: [board terminal, device terminal]. All board GND terminals are common.
+const WIRING = {
+  house: {
+    groups: [
+      { name: 'Controller relay output', hint: 'Dry contact · closed = open gate', kind: 'in',
+        rows: [['IN1 (A1)', 'Contact'], ['GND', 'Contact']] },
+      { name: 'Controller switch input', hint: 'K1 closed while gate is not closed', kind: 'out',
+        rows: [['K1 COM', 'Switch input'], ['K1 NO', 'Switch common']] },
+      { name: 'Contact sensor', hint: 'K2 closed = gate closed', kind: 'out',
+        rows: [['K2 COM', 'Terminal'], ['K2 NO', 'Terminal']] },
+      { name: '5 V supply', hint: 'Or USB', kind: 'pwr',
+        rows: [['VIN (5 V)', '+5 V'], ['GND', '0 V']] },
+    ],
+    notes: [
+      'IN1 is a dry-contact input to GND with an internal pull-up. The controller output must be a potential-free contact. Set <code>in1_invert</code> if ON and OFF come out reversed.',
+      'K1 mirrors the real gate back to the controller so its switch always shows the true state. Set the controller’s switch input to toggle/follow mode (contact closed = ON, open = OFF), not detached. Wire it per the controller’s switch-input diagram. Low voltage only; never switch mains with the shield.',
+      'The contact sensor needs an external terminal input. K2 closes when the gate is closed and opens if the link is lost (<code>linkloss_open</code>). <code>sensor_invert</code> flips it.',
+      'VIN is 5 V max. USB power is fine for the house board.',
+      'IN2 is unused on the house board.',
+    ],
+  },
+  gate: {
+    groups: [
+      { name: 'Opener OPEN input', hint: 'Pulsed only · shared with other devices', kind: 'out',
+        rows: [['K1 NO', 'OPEN'], ['K1 COM', 'COM']] },
+      { name: 'Opener CLOSE input', hint: 'Pulsed only · shared with other devices', kind: 'out',
+        rows: [['K2 NO', 'CLOSE'], ['K2 COM', 'COM']] },
+      { name: 'Opener AUX relay A', hint: 'Set to open limit', kind: 'in',
+        rows: [['IN1 (A1)', 'NO'], ['GND', 'C']] },
+      { name: 'Opener AUX relay B', hint: 'Set to close limit', kind: 'in',
+        rows: [['IN2 (A2)', 'NO'], ['GND', 'C']] },
+      { name: '24 V → 5 V buck', hint: 'Fed from opener 24 V accessory power', kind: 'pwr',
+        rows: [['VIN (5 V)', '+5 V out'], ['GND', '0 V out']] },
+    ],
+    notes: [
+      'K1/K2 go in parallel with whatever else is already on the opener’s OPEN/CLOSE inputs. GateLink only pulses them (<code>pulse_ms</code>) and never holds them, so the other devices keep working.',
+      'Gate state comes only from the limit contacts. Set AUX relay A to <em>open limit</em> and AUX relay B to <em>close limit</em> in the opener’s menu. Use <code>in1_invert</code>/<code>in2_invert</code> if a limit reads backwards.',
+      'VIN is 5 V max. Never connect the opener’s 24 V directly to the board.',
+      'Use the relays’ NO/COM contacts only. Add TVS or RC suppression on long input runs.',
+      'Keep the antenna vertical and outside any metal enclosure.',
+    ],
+  },
+};
+
+let wiringShown = 'house';
+
+function renderWiring(r) {
+  wiringShown = r;
+  const W = WIRING[r];
+  document.querySelectorAll('[data-wiring]').forEach((b) => b.classList.toggle('active', b.dataset.wiring === r));
+
+  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const rowH = 28, headH = 42, gap = 14, top = 70;
+  const bx = 16, bw = 250, dx = 500, dw = 250, width = 766;
+  let y = top;
+  let blocks = '', wires = '';
+  for (const g of W.groups) {
+    const h = headH + g.rows.length * rowH;
+    blocks += `<rect class="blk" x="${dx}" y="${y}" width="${dw}" height="${h}" rx="8"/>`
+      + `<text class="title" x="${dx + 12}" y="${y + 19}">${esc(g.name)}</text>`
+      + `<text class="dim" x="${dx + 12}" y="${y + 34}">${esc(g.hint)}</text>`;
+    g.rows.forEach(([bt, dt], i) => {
+      const cy = y + headH + i * rowH + rowH / 2;
+      wires += `<line class="w-${g.kind}" x1="${bx + bw}" y1="${cy}" x2="${dx}" y2="${cy}"/>`
+        + `<circle class="w-${g.kind}" cx="${bx + bw}" cy="${cy}" r="4.5"/>`
+        + `<circle class="w-${g.kind}" cx="${dx}" cy="${cy}" r="4.5"/>`
+        + `<text class="term" x="${bx + bw - 12}" y="${cy + 4}" text-anchor="end">${esc(bt)}</text>`
+        + `<text class="term" x="${dx + 12}" y="${cy + 4}">${esc(dt)}</text>`;
+    });
+    y += h + gap;
+  }
+  const height = y - gap + 16;
+  const board = `<rect class="blk board" x="${bx}" y="16" width="${bw}" height="${height - 32}" rx="8"/>`
+    + `<text class="title" x="${bx + 12}" y="38">${r === 'house' ? 'House' : 'Gate'} board</text>`
+    + `<text class="dim" x="${bx + 12}" y="54">MKR WAN 1310 + Relay Proto Shield</text>`;
+  const svg = $('wiringSvg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.innerHTML = board + blocks + wires;
+
+  $('wiringTable').innerHTML = '<thead><tr><th>Device</th><th>Board terminal</th><th>Device terminal</th></tr></thead><tbody>'
+    + W.groups.map((g) => g.rows.map(([bt, dt], i) =>
+      `<tr>${i === 0 ? `<td class="dev" rowspan="${g.rows.length}">${esc(g.name)}<small>${esc(g.hint)}</small></td>` : ''}`
+      + `<td class="mono">${esc(bt)}</td><td class="mono">${esc(dt)}</td></tr>`).join('')).join('')
+    + '</tbody>';
+  $('wiringNotes').innerHTML = W.notes.map((n) => `<li>${n}</li>`).join('');
+}
+
 // ---------- Serial transport ----------
 let port = null;
 let writer = null;
@@ -234,6 +323,7 @@ function setConnected(on) {
   $('btnConnect').hidden = on;
   $('btnDisconnect').hidden = !on;
   document.querySelectorAll('main button, main input, main select').forEach((el) => {
+    if (el.closest('#tab-install')) return; // static reference, usable without a board
     if (!['logRaw', 'btnLogClear', 'btnLogSave'].includes(el.id)) el.disabled = !on;
   });
   if (!on) {
@@ -255,6 +345,7 @@ function applyRole(r) {
   $('relayHint').textContent = hint[role] || '';
   $('btnK1').textContent = role === 'gate' ? 'Pulse K1 (OPEN)' : 'Pulse K1';
   $('btnK2').textContent = role === 'gate' ? 'Pulse K2 (CLOSE)' : 'Pulse K2';
+  if (WIRING[role]) renderWiring(role);
 }
 
 async function refreshInfo() {
@@ -497,7 +588,9 @@ function init() {
     $('btnConnect').disabled = true;
   }
   setConnected(false);
+  renderWiring(wiringShown);
   applyRole('unset');
+  document.querySelectorAll('[data-wiring]').forEach((b) => b.addEventListener('click', () => renderWiring(b.dataset.wiring)));
 
   document.querySelectorAll('#tabs button').forEach((b) =>
     b.addEventListener('click', () => {

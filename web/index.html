@@ -31,6 +31,7 @@
     <button data-tab="security">Security</button>
     <button data-tab="tools">Tools</button>
     <button data-tab="log">Log</button>
+    <button data-tab="install">Install</button>
   </nav>
 
   <main>
@@ -162,6 +163,36 @@
         <label class="check"><input id="logRaw" type="checkbox"> show raw serial</label>
       </div>
       <div id="logView" class="log mono"></div>
+    </section>
+
+    <!-- INSTALL -->
+    <section id="tab-install" class="tab">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Board">
+          <button data-wiring="house">House board</button>
+          <button data-wiring="gate">Gate board</button>
+        </div>
+        <span class="muted small">Field wiring for each board. Opens on the connected board's role.</span>
+      </div>
+      <div class="card">
+        <div class="label">Wiring diagram</div>
+        <div class="wiring"><svg id="wiringSvg" role="img" aria-label="Field wiring diagram"></svg></div>
+        <div class="legend">
+          <span><span class="sw w-out"></span> Relay contact (board switches it)</span>
+          <span><span class="sw w-in"></span> Input (board reads a dry contact)</span>
+          <span><span class="sw w-pwr"></span> Power</span>
+        </div>
+      </div>
+      <div class="grid install-grid">
+        <div class="card">
+          <div class="label">Terminal connections</div>
+          <div class="table-wrap"><table id="wiringTable" class="wtable"></table></div>
+        </div>
+        <div class="card">
+          <div class="label">Notes</div>
+          <ul id="wiringNotes" class="notes"></ul>
+        </div>
+      </div>
     </section>
   </main>
 

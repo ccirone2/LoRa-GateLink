@@ -72,7 +72,8 @@ Or open `web/index.html` via `http://localhost` (e.g. `python -m http.server -d 
 Tabs: **Status** (gate, link quality, I/O, house bridge state), **Config** (all parameters, apply/save,
 export/import JSON), **Security** (generate and write the link key), **Tools** (relay tests, ping with
 RSSI chart, remote gate diagnostics and settings over LoRa from the house board, replay self-test),
-**Log** (live events and the board's event ring buffer).
+**Log** (live events and the board's event ring buffer), **Install** (field wiring diagram, terminal
+table and notes for each board; works without a board connected).
 
 ### First-time setup
 

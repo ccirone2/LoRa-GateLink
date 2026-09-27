@@ -1,0 +1,233 @@
+// House node: bridges the Shelly Wave 1 (Alarm.com) to the gate over LoRa.
+//
+//  IN1 = Shelly relay contact ("switch state"). User edges become OPEN/CLOSE commands.
+//  K1  = Shelly SW input. Energized while the gate is not closed, so the Shelly (and
+//        the Alarm.com switch) follows the real gate even when another controller
+//        moved it. Edges on IN1 caused by K1 fall inside a sync window and are ignored.
+//  K2  = wireless contact sensor. Energized (closed loop) only when the gate is closed.
+#include "roles.h"
+#include "config.h"
+#include "log.h"
+#include "console.h"
+#include "radio.h"
+
+static uint8_t gateState = GS_UNKNOWN;
+static uint8_t gateInputs = 0;
+static uint8_t gateCause = CAUSE_NONE;
+static uint8_t gateResult = TR_NONE;
+static uint8_t gateTarget = GS_UNKNOWN;
+static uint32_t gateUptime = 0;
+static int16_t gateRssi = 0;  // RSSI measured at the gate
+static int8_t gateSnr = 0;
+static bool haveStatus = false;
+
+static bool linkUp = false;
+static bool armed = false;      // user commands accepted
+static uint32_t armAt = 0;      // arm once this time passes (0 = not scheduled)
+static bool shellyLevel = false;
+static bool syncActive = false;
+static uint32_t syncUntil = 0;
+static bool syncExpect = false;
+static bool resyncing = false;
+static uint32_t resyncUntil = 0;
+static uint32_t mismatchSince = 0;
+
+static uint16_t cmdId = 0;
+static uint8_t cmdAction = 0;
+static int cmdResult = -1;  // last ACK result, -2 = gave up, -1 = none
+
+static bool k1Target() {
+  return gateState != GS_CLOSED;
+}
+
+static void openSyncWindow(uint32_t now, bool expect, uint32_t extraMs) {
+  syncActive = true;
+  syncExpect = expect;
+  syncUntil = now + extraMs + cfg.sync_window_ms;
+}
+
+static void applyOutputs(uint32_t now) {
+  // Contact sensor: closed only when we positively know the gate is closed.
+  bool closed = gateState == GS_CLOSED;
+  if (!linkUp && cfg.linkloss_open) closed = false;
+  bool k2on = closed != (bool)cfg.sensor_invert;
+  if (!k2.pulsing() && k2.on() != k2on) k2.set(k2on);
+
+  if (cfg.shelly_sync && haveStatus && !resyncing && !k1.pulsing()) {
+    bool t = k1Target();
+    if (t != k1.on()) {
+      k1.set(t);
+      if (shellyLevel != t) openSyncWindow(now, t, 0);
+    }
+  }
+}
+
+static void sendCommand(uint8_t action) {
+  bool matches = (action == ACT_OPEN && gateState == GS_OPEN) || (action == ACT_CLOSE && gateState == GS_CLOSED);
+  if (linkUp && matches) {
+    logEvent(EV_CMD_SUPPRESSED, action, gateState);
+    return;
+  }
+  cmdId++;
+  cmdAction = action;
+  cmdResult = -1;
+  uint8_t p[3];
+  putU16(p, cmdId);
+  p[2] = action;
+  linkSendReliable(SLOT_CMD, MSG_CMD, p, 3, (uint32_t)cfg.cmd_ttl_s * 1000);
+  mismatchSince = 0;
+  logEvent(EV_CMD_SENT, action, cmdId);
+}
+
+void houseBegin() {
+  // Random start so the gate's duplicate-command check can't match an id from before a reboot.
+  cmdId = (uint16_t)radioRandom32();
+  shellyLevel = in1.active();
+  armed = false;
+  armAt = 0;
+  applyOutputs(millis());
+}
+
+void houseLoop(uint32_t now) {
+  const LinkStats &st = linkStats();
+  bool up = st.lastRxAt != 0 && (int32_t)(now - st.lastRxAt) < cfg.link_timeout_s * 1000;
+  if (up != linkUp) {
+    linkUp = up;
+    logEvent(up ? EV_LINK_UP : EV_LINK_DOWN);
+    applyOutputs(now);
+  }
+
+  if (!armed && armAt && (int32_t)(now - armAt) >= 0) armed = true;
+  applyOutputs(now);  // also restores K1/K2 after a relay test pulse
+  if (syncActive && (int32_t)(now - syncUntil) >= 0) syncActive = false;
+
+  if (in1.update(now, cfg.debounce_ms, cfg.in1_invert)) {
+    shellyLevel = in1.active();
+    // Any edge inside a sync window is attributed to K1 (e.g. gate bouncing CLOSED->BETWEEN->CLOSED
+    // flips K1 twice); if the Shelly ends up wrong, the mismatch/resync logic below corrects it.
+    if (syncActive) {
+      if (shellyLevel == syncExpect) syncActive = false;
+      logEvent(EV_SYNC, shellyLevel);
+    } else {
+      logEvent(EV_SHELLY, shellyLevel);
+      if (armed) sendCommand(shellyLevel ? ACT_OPEN : ACT_CLOSE);
+    }
+  }
+
+  // Resync the Shelly to the real gate if they disagree for too long
+  // (e.g. a command was overridden by the siren input, or lost while the link was down).
+  if (resyncing) {
+    if ((int32_t)(now - resyncUntil) >= 0) {
+      resyncing = false;
+      k1.set(k1Target());
+    }
+  } else if (cfg.shelly_sync && armed && linkUp && haveStatus && !linkPending(SLOT_CMD)) {
+    bool t = k1Target();
+    if (shellyLevel == t) {
+      mismatchSince = 0;
+    } else if (mismatchSince == 0) {
+      mismatchSince = now;
+    } else if ((int32_t)(now - mismatchSince) >= cfg.mismatch_timeout_s * 1000) {
+      // Shelly only reacts to SW transitions: drive K1 to the Shelly's current level, then to the target.
+      logEvent(EV_RESYNC, t);
+      resyncing = true;
+      resyncUntil = now + cfg.resync_ms;
+      k1.set(!t);
+      openSyncWindow(now, t, cfg.resync_ms);
+      mismatchSince = 0;
+    }
+  }
+}
+
+static void handleStatus(const RxMsg &m, uint32_t now) {
+  if (m.len < ST_LEN) {
+    linkAck(m.seq, RES_BAD);
+    return;
+  }
+  linkAck(m.seq, RES_OK);
+  uint8_t prevState = gateState;
+  uint8_t prevResult = gateResult;
+  gateState = m.payload[ST_STATE];
+  gateInputs = m.payload[ST_INPUTS];
+  gateCause = m.payload[ST_CAUSE];
+  gateResult = m.payload[ST_RESULT];
+  gateUptime = getU32(m.payload + ST_UPTIME);
+  gateRssi = (int16_t)getU16(m.payload + ST_RSSI);
+  gateSnr = (int8_t)m.payload[ST_SNR];
+  gateTarget = m.payload[ST_TARGET];
+  bool first = !haveStatus;
+  haveStatus = true;
+
+  if (gateState != prevState) logEvent(EV_GATE_STATE, gateState, gateCause);
+  // Command overridden (e.g. siren holding the gate open): resync the Shelly right away.
+  if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT && mismatchSince) {
+    mismatchSince = now - (uint32_t)cfg.mismatch_timeout_s * 1000;
+  }
+  applyOutputs(now);
+  // Accept user commands once the initial sync has settled.
+  if (first) armAt = (now + cfg.sync_window_ms) | 1;
+  consoleEventStatus();
+}
+
+void houseOnRx(const RxMsg &m) {
+  switch (m.type) {
+    case MSG_STATUS: handleStatus(m, millis()); break;
+    case MSG_DIAG: consoleEventDiag(m.payload, m.len); break;
+    default: break;
+  }
+}
+
+void houseOnAck(Slot slot, uint8_t, bool acked, uint8_t result) {
+  if (slot == SLOT_CMD) {
+    cmdResult = acked ? result : -2;
+    if (!acked) logEvent(EV_CMD_DROPPED, cmdAction, cmdId);
+  } else if (slot == SLOT_CFG) {
+    consoleEventRemoteSet(acked, result);
+  }
+}
+
+void houseStatus(JsonObject o) {
+  o["gate"] = haveStatus ? gateStateName(gateState) : "unknown";
+  o["cause"] = causeName(gateCause);
+  o["last_result"] = resultName(gateResult);
+  o["target"] = gateTarget == GS_UNKNOWN ? "" : gateStateName(gateTarget);
+  o["link_up"] = linkUp;
+  o["armed"] = armed;
+  o["shelly"] = shellyLevel;
+  o["sync_window"] = syncActive;
+  o["resyncing"] = resyncing;
+  o["cmd_id"] = cmdId;
+  o["cmd_pending"] = linkPending(SLOT_CMD);
+  o["cmd_result"] = cmdResult;
+  JsonObject g = o["remote"].to<JsonObject>();
+  g["uptime_s"] = gateUptime;
+  g["rssi"] = gateRssi;
+  g["snr"] = gateSnr;
+  g["open_limit"] = (bool)(gateInputs & 1);
+  g["close_limit"] = (bool)(gateInputs & 2);
+  g["k1"] = (bool)(gateInputs & 4);
+  g["k2"] = (bool)(gateInputs & 8);
+}
+
+void houseRelayTest(uint8_t k, uint32_t ms) {
+  uint32_t now = millis();
+  // A K1 test toggles the Shelly; don't turn the resulting edges into gate commands.
+  if (k == 1 && haveStatus) {
+    armed = false;
+    armAt = (now + ms + cfg.sync_window_ms) | 1;
+  }
+  (k == 1 ? k1 : k2).pulse(now, ms);
+  logEvent(EV_PULSE, k, ms);
+}
+
+void houseRemoteDiag() {
+  linkSend(MSG_DIAG_REQ, nullptr, 0);
+}
+
+bool houseRemoteSet(uint8_t id, int32_t value) {
+  uint8_t p[5];
+  p[0] = id;
+  putU32(p + 1, (uint32_t)value);
+  linkSendReliable(SLOT_CFG, MSG_CFG_SET, p, 5, 10000);
+  return true;
+}

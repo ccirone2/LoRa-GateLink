@@ -1,0 +1,493 @@
+// GateLink web console: talks newline-delimited JSON to the board over Web Serial.
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+
+// ---------- Parameter presentation ----------
+const GROUPS = [
+  ['General', ['role', 'net_id']],
+  ['Radio (must match on both boards)', ['freq_hz', 'sf', 'bw_hz', 'cr', 'tx_power', 'sync_word']],
+  ['Link', ['retries', 'heartbeat_s', 'link_timeout_s', 'cmd_ttl_s']],
+  ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert']],
+  ['Gate node', ['pulse_ms', 'travel_timeout_s']],
+  ['House node', ['shelly_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open']],
+];
+const HELP = {
+  role: 'Reboot after saving',
+  net_id: 'Frames with another id are ignored',
+  freq_hz: 'US: 902–928 MHz, EU: 863–870 MHz',
+  sf: 'Higher = longer range, slower',
+  bw_hz: '500 kHz recommended for US single channel',
+  cr: 'Coding rate 4/x',
+  tx_power: 'dBm (2–20)',
+  sync_word: 'Private network byte',
+  retries: 'Resends before giving up',
+  heartbeat_s: 'Gate status interval',
+  link_timeout_s: 'No frames for this long = link down',
+  cmd_ttl_s: 'Drop a command not delivered within this time',
+  debounce_ms: 'Input debounce',
+  in1_invert: 'House: Shelly · Gate: open limit',
+  in2_invert: 'Gate: close limit',
+  pulse_ms: 'OPEN/CLOSE contact closure length',
+  travel_timeout_s: 'Report timeout if limit not reached',
+  shelly_sync: 'Drive Shelly SW from K1 to mirror gate',
+  sync_window_ms: 'Ignore Shelly edges caused by K1',
+  resync_ms: 'K1 off-time when forcing a resync',
+  mismatch_timeout_s: 'Shelly ≠ gate this long → resync',
+  sensor_invert: 'Invert contact sensor output (K2)',
+  linkloss_open: 'Sensor reads open when link is down',
+};
+const SELECTS = {
+  role: [[0, 'unset'], [1, 'house'], [2, 'gate']],
+  bw_hz: [[125000, '125 kHz'], [250000, '250 kHz'], [500000, '500 kHz']],
+};
+const IO_LABELS = {
+  house: { in1: 'IN1 · Shelly relay', in2: 'IN2 · unused', k1: 'K1 · Shelly sync', k2: 'K2 · Alarm sensor' },
+  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Close limit', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
+  unset: { in1: 'IN1', in2: 'IN2', k1: 'K1', k2: 'K2' },
+};
+
+// ---------- Serial transport ----------
+let port = null;
+let writer = null;
+let reader = null;
+let nextId = 1;
+const pending = new Map();
+let pollTimer = null;
+let pingTimer = null;
+
+let role = 'unset';
+let meta = [];
+let params = {};
+
+async function connect() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+  } catch (e) {
+    logLine(`connect failed: ${e.message}`, 'err');
+    port = null;
+    return;
+  }
+  const enc = new TextEncoderStream();
+  enc.readable.pipeTo(port.writable);
+  writer = enc.writable.getWriter();
+  readLoop();
+  setConnected(true);
+  try {
+    await refreshInfo();
+    await loadConfig();
+    await refreshStatus();
+  } catch (e) {
+    logLine(`initial query failed: ${e.message}`, 'err');
+  }
+  pollTimer = setInterval(() => refreshStatus().catch(() => {}), 2000);
+}
+
+async function disconnect() {
+  clearInterval(pollTimer);
+  clearInterval(pingTimer);
+  $('pingAuto').checked = false;
+  try { await reader?.cancel(); } catch {}
+  try { await writer?.close(); } catch {}
+  try { await port?.close(); } catch {}
+  port = writer = reader = null;
+  for (const p of pending.values()) p.reject(new Error('disconnected'));
+  pending.clear();
+  setConnected(false);
+}
+
+async function readLoop() {
+  const dec = new TextDecoderStream();
+  port.readable.pipeTo(dec.writable).catch(() => {});
+  reader = dec.readable.getReader();
+  let buf = '';
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (line) onLine(line);
+      }
+    }
+  } catch (e) {
+    logLine(`serial read ended: ${e.message}`, 'err');
+  }
+  if (port) disconnect();
+}
+
+function onLine(line) {
+  if ($('logRaw').checked) logLine(line, 'raw');
+  let msg;
+  try { msg = JSON.parse(line); } catch { return; }
+  if (msg.id !== undefined && pending.has(msg.id)) {
+    const p = pending.get(msg.id);
+    pending.delete(msg.id);
+    clearTimeout(p.timer);
+    p.resolve(msg);
+    return;
+  }
+  if (msg.event) onEvent(msg);
+}
+
+function request(cmd, args = {}, timeoutMs = 4000) {
+  if (!writer) return Promise.reject(new Error('not connected'));
+  const id = nextId++;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error(`${cmd}: timeout`));
+    }, timeoutMs);
+    pending.set(id, { resolve, reject, timer });
+    writer.write(JSON.stringify({ id, cmd, ...args }) + '\n');
+  });
+}
+
+async function call(cmd, args) {
+  const res = await request(cmd, args);
+  if (!res.ok) throw new Error(res.error || `${cmd} failed`);
+  return res;
+}
+
+// ---------- UI state ----------
+function setConnected(on) {
+  $('btnConnect').hidden = on;
+  $('btnDisconnect').hidden = !on;
+  document.querySelectorAll('main button, main input, main select').forEach((el) => {
+    if (!['logRaw', 'btnLogClear', 'btnLogSave'].includes(el.id)) el.disabled = !on;
+  });
+  if (!on) {
+    $('devline').textContent = 'not connected';
+    $('keyWarn').hidden = true;
+  }
+}
+
+function applyRole(r) {
+  role = r;
+  document.querySelectorAll('[data-role]').forEach((el) => { el.hidden = el.dataset.role !== role; });
+  const hint = {
+    gate: 'K1 pulses the opener OPEN input and K2 the CLOSE input — this moves the real gate.',
+    house: 'K1 toggles the Shelly SW input (gate commands are paused during the test). K2 drives the alarm contact sensor.',
+    unset: 'Set a role first.',
+  };
+  $('relayHint').textContent = hint[role] || '';
+  $('btnK1').textContent = role === 'gate' ? 'Pulse K1 (OPEN)' : 'Pulse K1';
+  $('btnK2').textContent = role === 'gate' ? 'Pulse K2 (CLOSE)' : 'Pulse K2';
+}
+
+async function refreshInfo() {
+  const info = await call('info');
+  $('devline').textContent = `${info.board} · fw ${info.fw} · ${info.role}`;
+  $('keyWarn').hidden = info.key_set;
+  $('secKeySet').textContent = info.key_set ? 'yes' : 'no (link disabled)';
+  applyRole(info.role);
+}
+
+function fmtDur(ms) {
+  if (ms < 0) return 'never';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h}h ${m % 60}m`;
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
+}
+
+const yesNo = (v) => (v ? 'yes' : 'no');
+const pill = (on) => `<span class="pill ${on ? 'on' : ''}">${on ? 'ON' : 'off'}</span>`;
+
+async function refreshStatus() {
+  const res = await call('status');
+  renderStatus(res.status);
+}
+
+function renderStatus(s) {
+  if (s.role !== role) applyRole(s.role);
+  const gs = s.gate || 'unknown';
+  const g = $('gateState');
+  g.textContent = s.role === 'unset' ? 'role not set' : gs;
+  g.className = `gate-state ${gs}`;
+  $('gateCause').textContent = s.cause ?? '—';
+  $('gateResult').textContent = s.last_result ?? '—';
+  $('gateTarget').textContent = s.target || '—';
+
+  const l = s.link;
+  $('lnkVerified').innerHTML = l.verified ? '<span class="good">yes</span>' : '<span class="bad">no</span>';
+  $('lnkAge').textContent = l.age_ms < 0 ? 'never' : `${fmtDur(l.age_ms)} ago`;
+  $('lnkRssi').textContent = l.age_ms < 0 ? '—' : `${l.rssi} dBm / ${Number(l.snr).toFixed(1)} dB`;
+  $('lnkTxRx').textContent = `${l.tx} / ${l.rx}`;
+  $('lnkRetry').textContent = `${l.retries} / ${l.giveups}`;
+  $('lnkBad').textContent = `${l.mac_fail} / ${l.replay}`;
+
+  const labels = IO_LABELS[s.role] || IO_LABELS.unset;
+  $('ioList').innerHTML = ['in1', 'in2', 'k1', 'k2']
+    .map((k) => `<div class="kv"><span>${labels[k]}</span>${pill(s.io[k])}</div>`).join('');
+
+  $('bRole').textContent = s.reboot_pending ? `${s.role} (reboot to apply saved role)` : s.role;
+  $('bFw').textContent = s.fw;
+  $('bUp').textContent = fmtDur(s.uptime_ms);
+  $('bRadio').innerHTML = s.radio_ok ? '<span class="good">ok</span>' : '<span class="bad">not initialised</span>';
+  $('keyWarn').hidden = s.key_set;
+
+  if (s.role === 'house') {
+    const r = s.remote || {};
+    $('lnkRemoteRssi').textContent = r.uptime_s ? `${r.rssi} dBm / ${r.snr} dB` : '—';
+    $('hShelly').innerHTML = pill(s.shelly);
+    $('hArmed').textContent = yesNo(s.armed);
+    $('hSync').textContent = `${yesNo(s.sync_window)} / ${yesNo(s.resyncing)}`;
+    const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 3: 'busy' };
+    $('hCmd').textContent = `#${s.cmd_id} · ${s.cmd_pending ? 'sending…' : cmdRes[s.cmd_result] ?? s.cmd_result}`;
+    $('hLimits').textContent = r.uptime_s ? `open ${r.open_limit ? '●' : '○'}  close ${r.close_limit ? '●' : '○'}` : '—';
+    $('hGateUp').textContent = r.uptime_s ? fmtDur(r.uptime_s * 1000) : '—';
+  }
+}
+
+// ---------- Config ----------
+async function loadConfig() {
+  const res = await call('config.get');
+  meta = res.meta;
+  params = res.params;
+  renderConfig();
+  const sel = $('remParam');
+  sel.innerHTML = meta.filter((m) => m.remote).map((m) => `<option value="${m.name}">${m.name}</option>`).join('');
+}
+
+function renderConfig() {
+  const byName = Object.fromEntries(meta.map((m) => [m.name, m]));
+  const form = $('cfgForm');
+  form.innerHTML = '';
+  for (const [title, names] of GROUPS) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div class="label">${title}</div>`;
+    for (const name of names) {
+      const m = byName[name];
+      if (!m) continue;
+      const row = document.createElement('div');
+      row.className = 'field';
+      const id = `p_${name}`;
+      let input;
+      if (SELECTS[name] || (m.min === 0 && m.max === 1)) {
+        const opts = SELECTS[name] || [[0, 'off'], [1, 'on']];
+        input = `<select id="${id}">${opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
+      } else {
+        input = `<input id="${id}" type="number" min="${m.min}" max="${m.max}" step="1">`;
+      }
+      row.innerHTML = `<label for="${id}">${name}<small>${HELP[name] || ''}</small></label>${input}`;
+      card.appendChild(row);
+      const el = row.querySelector('input, select');
+      el.value = params[name];
+      el.addEventListener('input', () => row.classList.toggle('dirty', Number(el.value) !== params[name]));
+    }
+    form.appendChild(card);
+  }
+}
+
+function formValues(onlyDirty) {
+  const out = {};
+  for (const m of meta) {
+    const el = $(`p_${m.name}`);
+    if (!el) continue;
+    const v = Number(el.value);
+    if (!onlyDirty || v !== params[m.name]) out[m.name] = v;
+  }
+  return out;
+}
+
+async function applyConfig() {
+  const changes = formValues(true);
+  if (!Object.keys(changes).length) return toast('No changes.');
+  for (const [k, v] of Object.entries(changes)) {
+    const m = meta.find((x) => x.name === k);
+    if (!Number.isInteger(v) || v < m.min || v > m.max) return toast(`${k} must be an integer ${m.min}–${m.max}`);
+  }
+  const res = await request('config.set', { params: changes });
+  await loadConfig();
+  if (res.errors?.length) toast(`Rejected: ${res.errors.join(', ')}`);
+  else toast(`Applied ${res.applied.join(', ')}. ${res.reboot_required ? 'Save and reboot for role change.' : 'Remember to Save.'}`);
+}
+
+function download(name, text, type = 'application/json') {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function importConfig(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { return toast('Not a valid JSON file.'); }
+  const src = data.params || data;
+  for (const m of meta) {
+    const el = $(`p_${m.name}`);
+    if (el && Number.isInteger(src[m.name])) {
+      el.value = src[m.name];
+      el.dispatchEvent(new Event('input'));
+    }
+  }
+  toast('Imported into the form. Review, then Apply and Save.');
+}
+
+// ---------- Tools ----------
+const rssiHist = [];
+
+function drawRssi() {
+  const svg = $('rssiChart');
+  if (!rssiHist.length) { svg.innerHTML = ''; return; }
+  const all = rssiHist.flatMap((p) => [p.here, p.peer]);
+  const lo = Math.min(...all) - 3, hi = Math.max(...all) + 3;
+  const x = (i) => (rssiHist.length === 1 ? 150 : (i / (rssiHist.length - 1)) * 300);
+  const y = (v) => 85 - ((v - lo) / (hi - lo || 1)) * 80;
+  const line = (k, color) =>
+    `<polyline stroke="var(${color})" points="${rssiHist.map((p, i) => `${x(i)},${y(p[k])}`).join(' ')}"/>`;
+  svg.innerHTML = line('here', '--chart-here') + line('peer', '--chart-peer');
+  $('rssiRange').textContent = `${Math.round(lo + 3)} … ${Math.round(hi - 3)} dBm`;
+}
+
+function onEvent(ev) {
+  switch (ev.event) {
+    case 'log':
+      logLine(`[${fmtDur(ev.t)}] ${ev.ev} a=${ev.a} b=${ev.b}`);
+      break;
+    case 'status':
+      renderStatus(ev.status);
+      break;
+    case 'pong':
+      $('pingRtt').textContent = `${ev.rtt_ms} ms`;
+      $('pingHere').textContent = `${ev.rssi} dBm / ${Number(ev.snr).toFixed(1)} dB`;
+      $('pingPeer').textContent = `${ev.peer_rssi} dBm / ${ev.peer_snr} dB`;
+      rssiHist.push({ here: ev.rssi, peer: ev.peer_rssi });
+      if (rssiHist.length > 60) rssiHist.shift();
+      drawRssi();
+      break;
+    case 'remote_diag': {
+      const c = ev.counters;
+      $('diagOut').textContent =
+        `fw ${ev.fw} · up ${fmtDur(ev.uptime_s * 1000)}\n` +
+        `tx ${c.tx} rx ${c.rx} retries ${c.retries} giveups ${c.giveups} mac_fail ${c.mac_fail} replay ${c.replay}\n` +
+        Object.entries(ev.params).map(([k, v]) => `${k}=${v}`).join('  ');
+      break;
+    }
+    case 'remote_set':
+      $('remResult').textContent = ev.ok ? 'Gate accepted and saved the value.' : ev.acked ? 'Gate rejected the value.' : 'No reply from gate.';
+      break;
+  }
+}
+
+async function relayTest(k) {
+  const ms = Number($('relayMs').value);
+  if (role === 'gate' && !confirm(`This will pulse the opener ${k === 1 ? 'OPEN' : 'CLOSE'} input and move the gate. Continue?`)) return;
+  await call('relay.test', { k, ms });
+}
+
+// ---------- Log ----------
+const logLines = [];
+function logLine(text, cls = '') {
+  const stamp = new Date().toLocaleTimeString();
+  logLines.push(`${stamp} ${text}`);
+  const div = document.createElement('div');
+  div.textContent = `${stamp} ${text}`;
+  if (cls) div.className = cls;
+  const view = $('logView');
+  const atBottom = view.scrollTop + view.clientHeight >= view.scrollHeight - 20;
+  view.appendChild(div);
+  while (view.childElementCount > 1000) view.firstChild.remove();
+  if (atBottom) view.scrollTop = view.scrollHeight;
+}
+
+function toast(msg) {
+  logLine(msg);
+  alert(msg);
+}
+
+// ---------- Wiring ----------
+function guard(fn) {
+  return async (...a) => {
+    try { await fn(...a); } catch (e) { toast(e.message); }
+  };
+}
+
+function init() {
+  if (!('serial' in navigator)) {
+    $('unsupported').hidden = false;
+    $('btnConnect').disabled = true;
+  }
+  setConnected(false);
+  applyRole('unset');
+
+  document.querySelectorAll('#tabs button').forEach((b) =>
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('active', x === b));
+      document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${b.dataset.tab}`));
+    }));
+
+  $('btnConnect').onclick = connect;
+  $('btnDisconnect').onclick = disconnect;
+
+  $('btnCfgLoad').onclick = guard(loadConfig);
+  $('btnCfgApply').onclick = guard(applyConfig);
+  $('btnCfgSave').onclick = guard(async () => { await call('config.save'); toast('Saved to flash.'); });
+  $('btnReboot').onclick = guard(async () => {
+    if (!confirm('Reboot the board? Relays release during reboot.')) return;
+    await request('reboot', {}, 1500).catch(() => {});
+    await disconnect();
+    toast('Board rebooting — reconnect in a few seconds.');
+  });
+  $('btnCfgReset').onclick = guard(async () => {
+    if (!confirm('Erase config and key and restore defaults?')) return;
+    await call('config.reset');
+    await loadConfig();
+    await refreshInfo();
+    toast('Defaults restored. Reboot to apply role.');
+  });
+  $('btnCfgExport').onclick = () =>
+    download(`gatelink-${role}-config.json`, JSON.stringify({ role, params: formValues(false) }, null, 2));
+  $('fileImport').onchange = (e) => { if (e.target.files[0]) importConfig(e.target.files[0]); e.target.value = ''; };
+
+  $('btnKeyGen').onclick = () => {
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    $('keyInput').value = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  };
+  $('btnKeySet').onclick = guard(async () => {
+    const key = $('keyInput').value.trim().toLowerCase();
+    if (!/^[0-9a-f]{32}$/.test(key)) return toast('Key must be exactly 32 hex characters.');
+    await call('key.set', { key });
+    await refreshInfo();
+    toast('Key written and saved. Write the same key to the other board.');
+  });
+
+  $('btnK1').onclick = guard(() => relayTest(1));
+  $('btnK2').onclick = guard(() => relayTest(2));
+  $('btnPing').onclick = guard(() => call('radio.ping'));
+  $('pingAuto').onchange = (e) => {
+    clearInterval(pingTimer);
+    if (e.target.checked) pingTimer = setInterval(() => call('radio.ping').catch(() => {}), 3000);
+  };
+  $('btnDiag').onclick = guard(async () => { $('diagOut').textContent = 'waiting for gate…'; await call('remote.diag'); });
+  $('btnRemSet').onclick = guard(async () => {
+    const name = $('remParam').value;
+    const value = Number($('remValue').value);
+    $('remResult').textContent = 'sending…';
+    await call('remote.set', { name, value });
+  });
+  $('btnReplay').onclick = guard(() => call('debug.replay'));
+
+  $('btnLogGet').onclick = guard(async () => {
+    const res = await call('log.get');
+    logLine(`--- board log (${res.log.length} entries, board uptime ${fmtDur(res.now)}) ---`);
+    for (const e of res.log) logLine(`[${fmtDur(e.t)}] ${e.ev} a=${e.a} b=${e.b}`);
+  });
+  $('btnLogClear').onclick = () => { $('logView').innerHTML = ''; logLines.length = 0; };
+  $('btnLogSave').onclick = () => download('gatelink-log.txt', logLines.join('\n'), 'text/plain');
+
+  navigator.serial?.addEventListener('disconnect', (e) => { if (e.target === port) disconnect(); });
+}
+
+init();

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GateLink Console</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>GateLink</h1>
+      <span id="devline" class="muted">not connected</span>
+    </div>
+    <div class="actions">
+      <button id="btnConnect" class="primary">Connect board</button>
+      <button id="btnDisconnect" hidden>Disconnect</button>
+    </div>
+  </header>
+
+  <div id="unsupported" class="banner warn" hidden>
+    This page needs the Web Serial API. Use desktop Chrome or Edge, served from https:// or http://localhost.
+  </div>
+  <div id="keyWarn" class="banner warn" hidden>
+    No link key set on this board — the radio link stays disabled until you set one under <b>Security</b>.
+  </div>
+
+  <nav id="tabs">
+    <button data-tab="status" class="active">Status</button>
+    <button data-tab="config">Config</button>
+    <button data-tab="security">Security</button>
+    <button data-tab="tools">Tools</button>
+    <button data-tab="log">Log</button>
+  </nav>
+
+  <main>
+    <!-- STATUS -->
+    <section id="tab-status" class="tab active">
+      <div class="grid">
+        <div class="card hero">
+          <div class="label">Gate</div>
+          <div id="gateState" class="gate-state">—</div>
+          <div class="kv"><span>Cause</span><b id="gateCause">—</b></div>
+          <div class="kv"><span>Last command result</span><b id="gateResult">—</b></div>
+          <div class="kv"><span>Travelling to</span><b id="gateTarget">—</b></div>
+        </div>
+        <div class="card">
+          <div class="label">Link</div>
+          <div class="kv"><span>Peer verified</span><b id="lnkVerified">—</b></div>
+          <div class="kv"><span>Last frame</span><b id="lnkAge">—</b></div>
+          <div class="kv"><span>RSSI / SNR (here)</span><b id="lnkRssi">—</b></div>
+          <div class="kv" data-role="house"><span>RSSI / SNR (at gate)</span><b id="lnkRemoteRssi">—</b></div>
+          <div class="kv"><span>TX / RX</span><b id="lnkTxRx">—</b></div>
+          <div class="kv"><span>Retries / give-ups</span><b id="lnkRetry">—</b></div>
+          <div class="kv"><span>MAC fail / replays</span><b id="lnkBad">—</b></div>
+        </div>
+        <div class="card">
+          <div class="label">I/O</div>
+          <div id="ioList"></div>
+        </div>
+        <div class="card" data-role="house">
+          <div class="label">House bridge</div>
+          <div class="kv"><span>Shelly (Alarm.com switch)</span><b id="hShelly">—</b></div>
+          <div class="kv"><span>Commands armed</span><b id="hArmed">—</b></div>
+          <div class="kv"><span>Sync window / resync</span><b id="hSync">—</b></div>
+          <div class="kv"><span>Last command</span><b id="hCmd">—</b></div>
+          <div class="kv"><span>Gate limits (remote)</span><b id="hLimits">—</b></div>
+          <div class="kv"><span>Gate uptime</span><b id="hGateUp">—</b></div>
+        </div>
+        <div class="card">
+          <div class="label">Board</div>
+          <div class="kv"><span>Role</span><b id="bRole">—</b></div>
+          <div class="kv"><span>Firmware</span><b id="bFw">—</b></div>
+          <div class="kv"><span>Uptime</span><b id="bUp">—</b></div>
+          <div class="kv"><span>Radio</span><b id="bRadio">—</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONFIG -->
+    <section id="tab-config" class="tab">
+      <div class="toolbar">
+        <button id="btnCfgLoad">Reload from board</button>
+        <button id="btnCfgApply" class="primary">Apply</button>
+        <button id="btnCfgSave">Save to flash</button>
+        <button id="btnReboot">Reboot</button>
+        <span class="spacer"></span>
+        <button id="btnCfgExport">Export JSON</button>
+        <label class="button">Import JSON<input id="fileImport" type="file" accept="application/json" hidden></label>
+        <button id="btnCfgReset" class="danger">Factory reset</button>
+      </div>
+      <p class="muted">Apply changes RAM (radio settings take effect immediately). Save writes flash. Uploading new firmware erases saved config and key — export first. Both boards must share net_id, radio settings and key.</p>
+      <div id="cfgForm" class="cfg-groups"></div>
+    </section>
+
+    <!-- SECURITY -->
+    <section id="tab-security" class="tab">
+      <div class="card narrow">
+        <div class="label">Link key</div>
+        <p>Every frame is authenticated with HMAC-SHA256 using a shared 128-bit key. Both boards must have the same key. The key is write-only; it can't be read back from a board.</p>
+        <div class="kv"><span>Key set on this board</span><b id="secKeySet">—</b></div>
+        <div class="row">
+          <input id="keyInput" class="mono" placeholder="32 hex characters" maxlength="32" spellcheck="false" autocomplete="off">
+          <button id="btnKeyGen">Generate</button>
+          <button id="btnKeySet" class="primary">Write to board</button>
+        </div>
+        <p class="muted">Generate once, write it to this board, then connect the other board and write the same key. Keep a copy somewhere safe.</p>
+      </div>
+    </section>
+
+    <!-- TOOLS -->
+    <section id="tab-tools" class="tab">
+      <div class="grid">
+        <div class="card">
+          <div class="label">Relay test</div>
+          <p class="muted" id="relayHint"></p>
+          <div class="row">
+            <input id="relayMs" type="number" value="500" min="50" max="5000" step="50"> <span class="muted">ms</span>
+          </div>
+          <div class="row">
+            <button id="btnK1">Pulse K1</button>
+            <button id="btnK2">Pulse K2</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="label">Link ping</div>
+          <div class="row">
+            <button id="btnPing">Ping once</button>
+            <label class="check"><input id="pingAuto" type="checkbox"> every 3 s</label>
+          </div>
+          <div class="kv"><span>Last RTT</span><b id="pingRtt">—</b></div>
+          <div class="kv"><span>RSSI/SNR here</span><b id="pingHere">—</b></div>
+          <div class="kv"><span>RSSI/SNR at peer</span><b id="pingPeer">—</b></div>
+          <svg id="rssiChart" viewBox="0 0 300 90" preserveAspectRatio="none" role="img" aria-label="RSSI history"></svg>
+          <div class="legend"><span class="sw here"></span>here <span class="sw peer"></span>peer <span class="muted" id="rssiRange"></span></div>
+        </div>
+        <div class="card" data-role="house">
+          <div class="label">Remote gate node (over LoRa)</div>
+          <div class="row"><button id="btnDiag">Fetch gate diagnostics</button></div>
+          <pre id="diagOut" class="mono small">—</pre>
+          <div class="row">
+            <select id="remParam"></select>
+            <input id="remValue" type="number">
+            <button id="btnRemSet">Set on gate</button>
+          </div>
+          <p class="muted" id="remResult"></p>
+        </div>
+        <div class="card">
+          <div class="label">Security self-test</div>
+          <p class="muted">Re-transmits this board's last frame verbatim. The peer must reject it (its replay counter goes up), unless it was a message it already ACKed, in which case it only re-sends the ACK.</p>
+          <button id="btnReplay">Send replay</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOG -->
+    <section id="tab-log" class="tab">
+      <div class="toolbar">
+        <button id="btnLogGet">Fetch board log</button>
+        <button id="btnLogClear">Clear view</button>
+        <button id="btnLogSave">Download</button>
+        <label class="check"><input id="logRaw" type="checkbox"> show raw serial</label>
+      </div>
+      <div id="logView" class="log mono"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -59,6 +59,9 @@ let pingTimer = null;
 let role = 'unset';
 let meta = [];
 let params = {};
+// Stream pipes to/from the port; they must finish (unlocking the port streams) before port.close() works.
+let readPipe = null;
+let writePipe = null;
 
 async function connect() {
   try {
@@ -71,7 +74,7 @@ async function connect() {
     return;
   }
   const enc = new TextEncoderStream();
-  enc.readable.pipeTo(port.writable);
+  writePipe = enc.readable.pipeTo(port.writable).catch(() => {});
   writer = enc.writable.getWriter();
   readLoop();
   setConnected(true);
@@ -86,21 +89,30 @@ async function connect() {
 }
 
 async function disconnect() {
+  if (!port) return;
+  const p = port;
+  port = null; // also stops readLoop from re-entering disconnect()
   clearInterval(pollTimer);
   clearInterval(pingTimer);
   $('pingAuto').checked = false;
-  try { await reader?.cancel(); } catch {}
-  try { await writer?.close(); } catch {}
-  try { await port?.close(); } catch {}
-  port = writer = reader = null;
-  for (const p of pending.values()) p.reject(new Error('disconnected'));
+  for (const req of pending.values()) req.reject(new Error('disconnected'));
   pending.clear();
+  try { await reader?.cancel(); } catch {}
+  await readPipe;
+  try { await writer?.close(); } catch {}
+  await writePipe;
+  try {
+    await p.close();
+  } catch (e) {
+    logLine(`port close failed: ${e.message}`, 'err');
+  }
+  writer = reader = readPipe = writePipe = null;
   setConnected(false);
 }
 
 async function readLoop() {
   const dec = new TextDecoderStream();
-  port.readable.pipeTo(dec.writable).catch(() => {});
+  readPipe = port.readable.pipeTo(dec.writable).catch(() => {});
   reader = dec.readable.getReader();
   let buf = '';
   try {

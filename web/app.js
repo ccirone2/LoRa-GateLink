@@ -63,16 +63,44 @@ let params = {};
 let readPipe = null;
 let writePipe = null;
 
+// Auto-reconnect: after a reboot or unexpected drop the board re-enumerates; reopen it (no re-pairing
+// needed for an already-granted port) for a while instead of making the user click Connect again.
+const RECONNECT_MS = 30000;
+let lastPort = null;
+let reconnectUntil = 0;
+let reconnectTimer = null;
+let opening = false;
+
 async function connect() {
+  stopReconnect();
+  let p;
   try {
-    port = await navigator.serial.requestPort();
-    await port.open({ baudRate: 115200 });
-    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+    p = await navigator.serial.requestPort();
   } catch (e) {
     logLine(`connect failed: ${e.message}`, 'err');
-    port = null;
     return;
   }
+  try {
+    await openPort(p);
+  } catch (e) {
+    logLine(`connect failed: ${e.message}`, 'err');
+  }
+}
+
+async function openPort(p) {
+  opening = true;
+  try {
+    await p.open({ baudRate: 115200 });
+    try {
+      await p.setSignals({ dataTerminalReady: true, requestToSend: true });
+    } catch (e) {
+      await p.close().catch(() => {});
+      throw e;
+    }
+  } finally {
+    opening = false;
+  }
+  port = lastPort = p;
   const enc = new TextEncoderStream();
   writePipe = enc.readable.pipeTo(port.writable).catch(() => {});
   writer = enc.writable.getWriter();
@@ -88,7 +116,42 @@ async function connect() {
   pollTimer = setInterval(() => refreshStatus().catch(() => {}), 2000);
 }
 
-async function disconnect() {
+function startReconnect() {
+  if (!lastPort) return;
+  reconnectUntil = Date.now() + RECONNECT_MS;
+  $('devline').textContent = 'reconnecting…';
+  clearInterval(reconnectTimer);
+  reconnectTimer = setInterval(() => tryReconnect(lastPort), 1500);
+}
+
+function stopReconnect() {
+  clearInterval(reconnectTimer);
+  reconnectTimer = null;
+  reconnectUntil = 0;
+}
+
+async function tryReconnect(p) {
+  if (port || opening || !reconnectUntil) return;
+  if (Date.now() > reconnectUntil) {
+    stopReconnect();
+    $('devline').textContent = 'not connected';
+    logLine('auto-reconnect gave up; click Connect board', 'err');
+    return;
+  }
+  try {
+    await openPort(p);
+    stopReconnect();
+    logLine('reconnected');
+  } catch {} // not back yet; the timer retries
+}
+
+// Called when the board went away without the user asking (reset, reboot, cable).
+async function connectionLost() {
+  await disconnect(true);
+  startReconnect();
+}
+
+async function disconnect(quiet = false) {
   if (!port) return;
   const p = port;
   port = null; // also stops readLoop from re-entering disconnect()
@@ -104,7 +167,7 @@ async function disconnect() {
   try {
     await p.close();
   } catch (e) {
-    logLine(`port close failed: ${e.message}`, 'err');
+    if (!quiet) logLine(`port close failed: ${e.message}`, 'err');
   }
   writer = reader = readPipe = writePipe = null;
   setConnected(false);
@@ -130,7 +193,7 @@ async function readLoop() {
   } catch (e) {
     logLine(`serial read ended: ${e.message}`, 'err');
   }
-  if (port) disconnect();
+  if (port) connectionLost();
 }
 
 function onLine(line) {
@@ -443,7 +506,7 @@ function init() {
     }));
 
   $('btnConnect').onclick = connect;
-  $('btnDisconnect').onclick = disconnect;
+  $('btnDisconnect').onclick = () => { stopReconnect(); disconnect(); };
 
   $('btnCfgLoad').onclick = guard(loadConfig);
   $('btnCfgApply').onclick = guard(applyConfig);
@@ -451,8 +514,9 @@ function init() {
   $('btnReboot').onclick = guard(async () => {
     if (!confirm('Reboot the board? Relays release during reboot.')) return;
     await request('reboot', {}, 1500).catch(() => {});
-    await disconnect();
-    toast('Board rebooting — reconnect in a few seconds.');
+    await disconnect(true);
+    startReconnect();
+    toast('Board rebooting — reconnecting…');
   });
   $('btnCfgReset').onclick = guard(async () => {
     if (!confirm('Erase config and key and restore defaults?')) return;
@@ -501,7 +565,14 @@ function init() {
   $('btnLogClear').onclick = () => { $('logView').innerHTML = ''; logLines.length = 0; };
   $('btnLogSave').onclick = () => download('gatelink-log.txt', logLines.join('\n'), 'text/plain');
 
-  navigator.serial?.addEventListener('disconnect', (e) => { if (e.target === port) disconnect(); });
+  navigator.serial?.addEventListener('disconnect', (e) => { if (e.target === port) connectionLost(); });
+  // A granted port reappearing while we're waiting for a reboot is the board coming back (the other
+  // board never left, so it can't fire this).
+  navigator.serial?.addEventListener('connect', (e) => {
+    if (!reconnectUntil || port) return;
+    lastPort = e.target;
+    tryReconnect(lastPort);
+  });
 }
 
 init();

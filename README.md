@@ -65,7 +65,8 @@ Murata module firmware with the `MKRWANFWUpdate_standalone` example from the MKR
 
 ## Web console
 
-Open `web/index.html` via `http://localhost` (e.g. `python -m http.server -d web 8000`) or host the
+Hosted at **https://ccirone2.github.io/GateLink/** (deployed from `web/` by GitHub Actions on push to `main`).
+Or open `web/index.html` via `http://localhost` (e.g. `python -m http.server -d web 8000`) or host the
 `web/` folder on GitHub Pages, in desktop Chrome or Edge. Click **Connect board** and pick the board's COM port.
 
 Tabs: **Status** (gate, link quality, I/O, house bridge state), **Config** (all parameters, apply/save,

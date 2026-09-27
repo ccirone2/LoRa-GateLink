@@ -165,11 +165,13 @@ static void updateLed(uint32_t now) {
   } else {
     const LinkStats &st = linkStats();
     bool up = st.lastRxAt && now - st.lastRxAt < (uint32_t)cfg.link_timeout_s * 1000;
+    // Kept dim so neither reads as the solid "no role" light, and never fully dark between pulses.
+    const uint8_t floorLevel = 2;
     if (up) {
-      level = ledBump(now % 4000, 0, 4000, 255);
+      level = floorLevel + ledBump(now % 2500, 0, 2500, 40 - floorLevel);
     } else {
-      uint32_t t = now % 1400;
-      level = ledBump(t, 0, 200, 255) + ledBump(t, 260, 240, 140);
+      uint32_t t = now % 850;
+      level = floorLevel + ledBump(t, 0, 130, 15 - floorLevel) + ledBump(t, 170, 150, 7 - floorLevel);
     }
   }
   if (level != lastLevel) {

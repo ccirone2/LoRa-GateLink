@@ -110,17 +110,34 @@ void appFillStatus(JsonObject o) {
   else if (activeRole == ROLE_GATE) gateStatus(o);
 }
 
+// Smooth 0..peak..0 bump over [start, start + len), squared for a perceptually even fade.
+static uint8_t ledBump(uint32_t t, uint32_t start, uint32_t len, uint32_t peak) {
+  if (t < start || t >= start + len) return 0;
+  uint32_t x = (t - start) * 512 / len;  // 0..511
+  uint32_t tri = x < 256 ? x : 511 - x;  // 0..255..0
+  return tri * tri * peak / (255 * 255);
+}
+
 static void updateLed(uint32_t now) {
-  // Unset role: solid. Link good: short blink every 2 s. No link: fast blink.
-  bool on;
+  // Unset role: solid. Link good: short blink every 2 s. No link: lub-dub heartbeat.
+  static int lastLevel = -1;
+  uint8_t level;
   if (activeRole == ROLE_UNSET) {
-    on = true;
+    level = 255;
   } else {
     const LinkStats &st = linkStats();
     bool up = st.lastRxAt && now - st.lastRxAt < (uint32_t)cfg.link_timeout_s * 1000;
-    on = up ? (now % 2000) < 80 : (now % 250) < 125;
+    if (up) {
+      level = (now % 2000) < 80 ? 255 : 0;
+    } else {
+      uint32_t t = now % 1400;
+      level = ledBump(t, 0, 200, 255) + ledBump(t, 260, 240, 140);
+    }
   }
-  digitalWrite(LED_BUILTIN, on);
+  if (level != lastLevel) {
+    analogWrite(LED_BUILTIN, level);
+    lastLevel = level;
+  }
 }
 
 void setup() {

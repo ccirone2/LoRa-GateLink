@@ -119,7 +119,7 @@ static uint8_t ledBump(uint32_t t, uint32_t start, uint32_t len, uint32_t peak) 
 }
 
 static void updateLed(uint32_t now) {
-  // Unset role: solid. Link good: short blink every 2 s. No link: lub-dub heartbeat.
+  // Unset role: solid. Link good: slow breathing. No link: lub-dub heartbeat.
   static int lastLevel = -1;
   uint8_t level;
   if (activeRole == ROLE_UNSET) {
@@ -128,7 +128,7 @@ static void updateLed(uint32_t now) {
     const LinkStats &st = linkStats();
     bool up = st.lastRxAt && now - st.lastRxAt < (uint32_t)cfg.link_timeout_s * 1000;
     if (up) {
-      level = (now % 2000) < 80 ? 255 : 0;
+      level = ledBump(now % 4000, 0, 4000, 255);
     } else {
       uint32_t t = now % 1400;
       level = ledBump(t, 0, 200, 255) + ledBump(t, 260, 240, 140);

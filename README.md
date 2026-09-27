@@ -33,9 +33,16 @@ opener's inputs keep working. Gate state always comes from the opener's limit ou
 
 ## Hardware notes
 
-- Relays: K1 = D1, K2 = D2 on the Relay Proto Shield. Inputs: IN1 = A1, IN2 = A2, spare IN3 = A3, IN4 = A4 (contact to GND,
+- Relays: K1 = D1, K2 = D2 on the Relay Proto Shield. Inputs: IN1 = A1, IN2 = A2 (contact to GND,
   internal pull-up). Change in `firmware/GateLink/pins.h` if your wiring differs; check the shield silkscreen.
+- **Spare inputs** IN3 = A3, IN4 = A4: dry-contact inputs (pull-up, contact to GND) reserved for future use such
+  as a beam-break sensor or alarm status. They're debounced, logged (`input` events), shown in Status and sent to
+  the house, with `in3_invert` / `in4_invert`, but don't affect behaviour yet. Leave unwired if unused.
 - **MKR VIN is 5 V max.** Power the gate board from the opener's 24 V accessory supply through a 24 V→5 V buck.
+- **Power and antenna:** always attach the antenna before the radio transmits, and keep it away from the relay
+  shield and field wiring (a U.FL→SMA pigtail lets it sit outside the enclosure). A full-power transmit while a
+  relay is energized can crash a weakly powered board (seen on PC USB power); use a solid 5 V supply, and consider
+  a bulk capacitor (~470 µF) across 5 V/GND or a LiPo on the MKR battery connector.
 - Use relay NO/COM contacts for everything. Add TVS/RC suppression on long input runs.
 - **Shelly Wave 1**: power from 24 V DC/AC per Shelly's low-voltage wiring so the SW input that K1 drives
   is low voltage — do not switch mains with the shield. Wire the Shelly relay output **I→GND, O→HOUSE IN1**.
@@ -69,7 +76,16 @@ Hosted at **https://ccirone2.github.io/LoRa-GateLink/** (deployed from `web/` by
 Or open `web/index.html` via `http://localhost` (e.g. `python -m http.server -d web 8000`) or host the
 `web/` folder on GitHub Pages, in desktop Chrome or Edge. Click **Connect board** and pick the board's COM port.
 
-Tabs: **Status** (gate, link quality, I/O, house bridge state), **Config** (all parameters, apply/save,
+The console uses generic names so it isn't tied to one product: the house-side device is the **controller**
+(here the Shelly: *controller input* = IN1, *controller sync* = K1, `ctrl_sync`), and K2 drives the **contact sensor**.
+
+Header: **Identify** strobes the connected board's LED for 6 s, to tell boards apart on the bench. After a
+reboot from the console, or if the board drops off USB, the page reconnects to it automatically for 30 s
+(no re-pairing); **Disconnect** releases the port so `arduino-cli upload` can use it. The browser tab
+title shows the board's role.
+
+Tabs: **Status** (gate, link quality, I/O incl. spare inputs, house bridge state, board uptime, last reset cause,
+radio TX faults), **Config** (all parameters, apply/save,
 export/import JSON), **Security** (generate and write the link key), **Tools** (relay tests, ping with
 RSSI chart, remote gate diagnostics and settings over LoRa from the house board, replay self-test),
 **Log** (live events and the board's event ring buffer), **Install** (field wiring diagram, terminal
@@ -84,6 +100,17 @@ table and notes for each board; works without a board connected).
 4. With both powered, Status on either board should show *Peer verified: yes* within a few seconds.
 5. Tools → Ping to check RSSI/SNR. At the install site aim for ≥10 dB margin above the SF's sensitivity;
    raise `sf` (and/or `tx_power`) on **both** boards if the link is marginal.
+
+### Status LED
+
+| Pattern | Meaning |
+|---|---|
+| Solid, full brightness | No role set |
+| Dim breathing (2.5 s) | Link up |
+| Very dim, fast lub-dub heartbeat | No link (nothing heard for `link_timeout_s`) |
+| Fast bright strobe (6 s) | **Identify** requested from the web console |
+
+The breathing and heartbeat patterns never go fully dark between pulses.
 
 ## Radio defaults
 
@@ -117,3 +144,14 @@ and tell the two apart.
 - Tools → Send replay on one board → the other board's replay counter increases (or it re-ACKs).
 - Different key on one board → *Peer verified* stays no and `mac_fail` climbs.
 - Reboot the house board with IN1 grounded → the gate does not move.
+
+## Troubleshooting
+
+- **Relays click at random / a board keeps restarting.** Check Status → *Last reset* and the log's `boot`
+  entries. `watchdog` means the firmware froze for 8 s; each restart drops and re-energizes the house relays.
+  On the bench this was caused by full-power TX with a relay energized on USB power — lower `tx_power`,
+  improve the supply, and check the antenna (see Hardware notes). `brownout` points straight at power.
+- **Radio TX faults** (Board card, `radio_fail` log entries): the radio stopped mid-transmit and was
+  re-initialised. Occasional ones are recovered automatically; frequent ones mean power or RF trouble.
+- **The gate never pulses on its own.** It only pulses K1/K2 for an OPEN/CLOSE command from the house or a
+  relay test from the console. The house log's `cmd_sent` entries show what it sent and why.

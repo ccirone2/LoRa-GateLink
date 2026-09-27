@@ -24,12 +24,22 @@ Dependencies: `arduino:samd` core; libraries `LoRa` (sandeepmistry), `Crypto` (r
 ## Firmware architecture
 
 Layers, bottom up:
-- `radio.cpp` — wraps the LoRa lib in **polling** mode (`parsePacket()` re-arms RX-single each loop; `endPacket()` blocks). The loop must stay non-blocking. `radioRandom32()` samples wideband RSSI in continuous RX and hashes it; don't replace it with `LoRa.random()` alone (near-constant in standby).
+- `radio.cpp` — wraps the LoRa lib in **polling** mode (`parsePacket()` re-arms RX-single each loop). `radioSend()` uses async `endPacket(true)` and polls TX-done with a deadline (airtime + 200 ms) via its own SX127x register reads (the lib's are private); a stuck or reset radio is logged (`radio_fail`, a=1), counted (`radio_faults`) and re-initialised instead of hanging until the watchdog. Don't go back to the lib's blocking `endPacket()` — it spins forever if the radio resets mid-TX. The loop must stay non-blocking. `radioRandom32()` samples wideband RSSI in continuous RX and hashes it; don't replace it with `LoRa.random()` alone (near-constant in standby).
 - `link.cpp` — authenticated framing: `ver|type|net_id|src|dst|session|seq|payload|tag`, tag = HMAC-SHA256(key) truncated to 8 bytes. Replay protection has no persisted counters: each boot picks a random session id; a peer session is accepted only after a HELLO challenge is echoed in HELLO_ACK; seqs pass a 32-frame sliding window. Reliable messages use per-type `Slot`s (CMD/STATUS/CFG) with retry/TTL; a new send replaces the slot. Already-accepted retransmits are re-ACKed from an ACK memo, not re-processed. The link is disabled entirely while `cfg.key_set == 0`.
 - `role_gate.cpp` / `role_house.cpp` — application state machines (see below). Wire formats for STATUS/DIAG payloads are defined in `roles.h` and parsed in `role_house.cpp` / `console.cpp`; keep them in sync.
 - `console.cpp` — newline-delimited JSON request/response over USB serial (`{"id","cmd",...}` → `{"id","ok",...}`) plus unsolicited `{"event":...}` lines. This is the contract `web/app.js` depends on; change both together.
 - `config.cpp` — `Config` struct in program flash (FlashStorage) with CRC; **erased on every firmware upload**. The `PARAMS[]` table drives console get/set, the web form (via `meta`), and remote-over-LoRa writes (`P_REMOTE` flag; radio params are never remote-writable). Adding a setting = field in `Config` + default + `PARAMS` row (+ group/help text in `web/app.js`). Bump `CFG_VERSION` when the struct layout changes.
-- `GateLink.ino` — setup/loop, PING/PONG, dispatch by `activeRole`. `activeRole` is latched at boot; `cfg.role` changes only take effect after reboot. Use `activeRole`, not `cfg.role`, for runtime behaviour.
+- `GateLink.ino` — setup/loop, PING/PONG, dispatch by `activeRole`, status LED (`updateLed`: PWM on `LED_BUILTIN`; identify strobe / solid = no role / breathing = link up / heartbeat = no link), spare inputs IN3/IN4 (`updateSpareInputs`, called by both roles; no behaviour yet, reported in STATUS bits 4–5), and the reset cause (`PM->RCAUSE`, logged in `boot` a= and reported as `reset_cause`). `activeRole` is latched at boot; `cfg.role` changes only take effect after reboot. Use `activeRole`, not `cfg.role`, for runtime behaviour.
+
+## Web console
+
+`web/app.js` is plain JS, no build step. Notable pieces: auto-reconnect (`startReconnect`/`tryReconnect`: after a reboot or unexpected drop, reopen the already-granted port for 30 s; the Web Serial `connect` event identifies the returning board since both boards share VID/PID); `disconnect()` must await both stream pipes before `port.close()` or the port stays open and blocks uploads; the Install tab is driven by the `WIRING` table (keep it in sync with `pins.h` and the role behaviour).
+
+**Naming rule:** don't use "Shelly" or "Alarm.com" anywhere in `web/` — the house-side device is the generic "controller" (it may be replaced). Firmware names that reach the page follow the same rule (`ctrl_sync`, `ctrl` status field / log event). README and firmware comments may name the actual install hardware.
+
+## Bench testing
+
+The boards can be driven from scripts over USB serial with the same JSON console the web page uses (e.g. pyserial: `{"id":1,"cmd":"status"}`, `log.get`, `config.set`, `key.set`, `identify`, `reboot`). Only one program can hold a port — close/disconnect the web console first. Every upload wipes config (role, key, `tx_power`), so re-apply them afterwards. On USB power keep `tx_power` low (~5): full-power TX with a relay energized crashed the board into watchdog resets.
 
 ## Behavioural invariants (don't break these)
 

@@ -33,7 +33,7 @@ opener's inputs keep working. Gate state always comes from the opener's limit ou
 
 ## Hardware notes
 
-- Relays: K1 = D1, K2 = D2 on the Relay Proto Shield. Inputs: IN1 = A1, IN2 = A2 (contact to GND,
+- Relays: K1 = D1, K2 = D2 on the Relay Proto Shield. Inputs: IN1 = A1, IN2 = A2, spare IN3 = A3, IN4 = A4 (contact to GND,
   internal pull-up). Change in `firmware/GateLink/pins.h` if your wiring differs; check the shield silkscreen.
 - **MKR VIN is 5 V max.** Power the gate board from the opener's 24 V accessory supply through a 24 V→5 V buck.
 - Use relay NO/COM contacts for everything. Add TVS/RC suppression on long input runs.
@@ -102,7 +102,10 @@ effect after a reboot.
 
 ## Bench test checklist
 
-Use LEDs or a meter on the relay outputs and jumper wires on the inputs.
+Use LEDs or a meter on the relay outputs and jumper wires on the inputs. On USB power, set `tx_power`
+to ~5 dBm on both boards: a full-power transmit while a relay is energized can crash the board (watchdog
+reset, shown as `reset_cause` in Status). Use **Identify** in the web console to strobe a board's LED
+and tell the two apart.
 
 - House IN1 to GND (Shelly ON) → gate K1 pulses once; release → gate K2 pulses once.
 - Gate IN1 to GND (open limit) → house K1 energizes, K2 releases; gate IN2 to GND → K1 releases, K2 energizes.

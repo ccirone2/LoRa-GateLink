@@ -101,6 +101,8 @@ void houseLoop(uint32_t now) {
   applyOutputs(now);  // also restores K1/K2 after a relay test pulse
   if (syncActive && (int32_t)(now - syncUntil) >= 0) syncActive = false;
 
+  updateSpareInputs(now);
+
   if (in1.update(now, cfg.debounce_ms, cfg.in1_invert)) {
     shellyLevel = in1.active();
     // Any edge inside a sync window is attributed to K1 (e.g. gate bouncing CLOSED->BETWEEN->CLOSED
@@ -207,6 +209,8 @@ void houseStatus(JsonObject o) {
   g["close_limit"] = (bool)(gateInputs & 2);
   g["k1"] = (bool)(gateInputs & 4);
   g["k2"] = (bool)(gateInputs & 8);
+  g["in3"] = (bool)(gateInputs & 16);
+  g["in4"] = (bool)(gateInputs & 32);
 }
 
 void houseRelayTest(uint8_t k, uint32_t ms) {

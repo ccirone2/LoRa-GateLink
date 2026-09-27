@@ -8,7 +8,7 @@ const GROUPS = [
   ['General', ['role', 'net_id']],
   ['Radio (must match on both boards)', ['freq_hz', 'sf', 'bw_hz', 'cr', 'tx_power', 'sync_word']],
   ['Link', ['retries', 'heartbeat_s', 'link_timeout_s', 'cmd_ttl_s']],
-  ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert']],
+  ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert', 'in3_invert', 'in4_invert']],
   ['Gate node', ['pulse_ms', 'travel_timeout_s']],
   ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open']],
 ];
@@ -28,6 +28,8 @@ const HELP = {
   debounce_ms: 'Input debounce',
   in1_invert: 'House: controller input · Gate: open limit',
   in2_invert: 'Gate: close limit',
+  in3_invert: 'Spare input IN3 (A3)',
+  in4_invert: 'Spare input IN4 (A4)',
   pulse_ms: 'OPEN/CLOSE contact closure length',
   travel_timeout_s: 'Report timeout if limit not reached',
   ctrl_sync: 'Drive K1 so the controller mirrors the gate',
@@ -42,14 +44,17 @@ const SELECTS = {
   bw_hz: [[125000, '125 kHz'], [250000, '250 kHz'], [500000, '500 kHz']],
 };
 const IO_LABELS = {
-  house: { in1: 'IN1 · Controller input', in2: 'IN2 · unused', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
-  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Close limit', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
-  unset: { in1: 'IN1', in2: 'IN2', k1: 'K1', k2: 'K2' },
+  house: { in1: 'IN1 · Controller input', in2: 'IN2 · unused', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
+  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Close limit', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
+  unset: { in1: 'IN1', in2: 'IN2', in3: 'IN3', in4: 'IN4', k1: 'K1', k2: 'K2' },
 };
 
 // ---------- Field wiring (Install tab) ----------
 // kind: out = a relay contact the board switches, in = a dry contact the board reads, pwr = power.
 // rows: [board terminal, device terminal]. All board GND terminals are common.
+const SPARE_INPUTS = { name: 'Spare inputs (optional)', hint: 'Not used yet · e.g. beam break, alarm status', kind: 'in',
+  rows: [['IN3 (A3)', 'Contact'], ['IN4 (A4)', 'Contact'], ['GND', 'Common']] };
+const SPARE_NOTE = 'IN3 (A3) and IN4 (A4) are spare dry-contact inputs (contact to GND, internal pull-up), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave them unwired if unused; they read “off”.';
 const WIRING = {
   house: {
     groups: [
@@ -59,6 +64,7 @@ const WIRING = {
         rows: [['K1 COM', 'Switch input'], ['K1 NO', 'Switch common']] },
       { name: 'Contact sensor', hint: 'K2 closed = gate closed', kind: 'out',
         rows: [['K2 COM', 'Terminal'], ['K2 NO', 'Terminal']] },
+      SPARE_INPUTS,
       { name: '5 V supply', hint: 'Or USB', kind: 'pwr',
         rows: [['VIN (5 V)', '+5 V'], ['GND', '0 V']] },
     ],
@@ -68,6 +74,7 @@ const WIRING = {
       'The contact sensor needs an external terminal input. K2 closes when the gate is closed and opens if the link is lost (<code>linkloss_open</code>). <code>sensor_invert</code> flips it.',
       'VIN is 5 V max. USB power is fine for the house board.',
       'IN2 is unused on the house board.',
+      SPARE_NOTE,
     ],
   },
   gate: {
@@ -80,6 +87,7 @@ const WIRING = {
         rows: [['IN1 (A1)', 'NO'], ['GND', 'C']] },
       { name: 'Opener AUX relay B', hint: 'Set to close limit', kind: 'in',
         rows: [['IN2 (A2)', 'NO'], ['GND', 'C']] },
+      SPARE_INPUTS,
       { name: '24 V → 5 V buck', hint: 'Fed from opener 24 V accessory power', kind: 'pwr',
         rows: [['VIN (5 V)', '+5 V out'], ['GND', '0 V out']] },
     ],
@@ -89,6 +97,7 @@ const WIRING = {
       'VIN is 5 V max. Never connect the opener’s 24 V directly to the board.',
       'Use the relays’ NO/COM contacts only. Add TVS or RC suppression on long input runs.',
       'Keep the antenna vertical and outside any metal enclosure.',
+      SPARE_NOTE,
     ],
   },
 };
@@ -322,6 +331,7 @@ async function call(cmd, args) {
 function setConnected(on) {
   $('btnConnect').hidden = on;
   $('btnDisconnect').hidden = !on;
+  $('btnIdentify').hidden = !on;
   document.querySelectorAll('main button, main input, main select').forEach((el) => {
     if (el.closest('#tab-install')) return; // static reference, usable without a board
     if (!['logRaw', 'btnLogClear', 'btnLogSave'].includes(el.id)) el.disabled = !on;
@@ -394,13 +404,15 @@ function renderStatus(s) {
   $('lnkBad').textContent = `${l.mac_fail} / ${l.replay}`;
 
   const labels = IO_LABELS[s.role] || IO_LABELS.unset;
-  $('ioList').innerHTML = ['in1', 'in2', 'k1', 'k2']
+  $('ioList').innerHTML = ['in1', 'in2', 'in3', 'in4', 'k1', 'k2'].filter((k) => k in s.io)
     .map((k) => `<div class="kv"><span>${labels[k]}</span>${pill(s.io[k])}</div>`).join('');
 
   $('bRole').textContent = s.reboot_pending ? `${s.role} (reboot to apply saved role)` : s.role;
   $('bFw').textContent = s.fw;
   $('bUp').textContent = fmtDur(s.uptime_ms);
-  $('bRadio').innerHTML = s.radio_ok ? '<span class="good">ok</span>' : '<span class="bad">not initialised</span>';
+  $('bReset').textContent = (s.reset_cause ?? '—').replace('_', ' ');
+  const faults = s.radio_faults ? ` <span class="bad">· ${s.radio_faults} TX fault${s.radio_faults === 1 ? '' : 's'}</span>` : '';
+  $('bRadio').innerHTML = (s.radio_ok ? '<span class="good">ok</span>' : '<span class="bad">not initialised</span>') + faults;
   $('keyWarn').hidden = s.key_set;
 
   if (s.role === 'house') {
@@ -412,6 +424,7 @@ function renderStatus(s) {
     const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 3: 'busy' };
     $('hCmd').textContent = `#${s.cmd_id} · ${s.cmd_pending ? 'sending…' : cmdRes[s.cmd_result] ?? s.cmd_result}`;
     $('hLimits').textContent = r.uptime_s ? `open ${r.open_limit ? '●' : '○'}  close ${r.close_limit ? '●' : '○'}` : '—';
+    $('hSpare').textContent = r.uptime_s && 'in3' in r ? `IN3 ${r.in3 ? '●' : '○'}  IN4 ${r.in4 ? '●' : '○'}` : '—';
     $('hGateUp').textContent = r.uptime_s ? fmtDur(r.uptime_s * 1000) : '—';
   }
 }
@@ -600,6 +613,7 @@ function init() {
 
   $('btnConnect').onclick = connect;
   $('btnDisconnect').onclick = () => { stopReconnect(); disconnect(); };
+  $('btnIdentify').onclick = guard(async () => { await call('identify'); toast('LED strobing for 6 s.'); });
 
   $('btnCfgLoad').onclick = guard(loadConfig);
   $('btnCfgApply').onclick = guard(applyConfig);

@@ -9,6 +9,9 @@
 // Dry-contact inputs (contact to GND, internal pull-up). Use screw terminals / proto area.
 #define PIN_IN1 A1
 #define PIN_IN2 A2
+// Spare inputs, read and reported but not yet used (e.g. beam-break sensor, alarm status).
+#define PIN_IN3 A3
+#define PIN_IN4 A4
 
 // Role usage:
 //   HOUSE: IN1 = Shelly Wave 1 relay (O/I) "switch state"

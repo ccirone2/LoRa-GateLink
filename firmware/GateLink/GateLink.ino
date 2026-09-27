@@ -15,7 +15,20 @@
 #include "console.h"
 #include "app.h"
 
-Input in1, in2;
+Input in1, in2, in3, in4;
+static uint8_t resetCause = 0;  // PM->RCAUSE at boot
+static bool cfgLoaded = false;
+static uint32_t identifyUntil = 0;  // LED strobes until then (0 = off)
+
+static const char *resetCauseName(uint8_t rc) {
+  if (rc & PM_RCAUSE_WDT) return "watchdog";
+  if (rc & (PM_RCAUSE_BOD12 | PM_RCAUSE_BOD33)) return "brownout";
+  if (rc & PM_RCAUSE_POR) return "power_on";
+  if (rc & PM_RCAUSE_EXT) return "reset_pin";
+  if (rc & PM_RCAUSE_SYST) return "software";
+  return "unknown";
+}
+
 Relay k1, k2;
 
 static uint16_t pingId = 0;
@@ -87,10 +100,15 @@ void appFillStatus(JsonObject o) {
   o["reboot_pending"] = cfg.role != activeRole;
   o["uptime_ms"] = now;
   o["radio_ok"] = radioOk();
+  o["radio_faults"] = radioFaults();
+  o["reset_cause"] = resetCauseName(resetCause);
+  o["cfg_loaded"] = cfgLoaded;
   o["key_set"] = (bool)cfg.key_set;
   JsonObject io = o["io"].to<JsonObject>();
   io["in1"] = in1.active();
   io["in2"] = in2.active();
+  io["in3"] = in3.active();
+  io["in4"] = in4.active();
   io["k1"] = k1.on();
   io["k2"] = k2.on();
   const LinkStats &st = linkStats();
@@ -118,11 +136,31 @@ static uint8_t ledBump(uint32_t t, uint32_t start, uint32_t len, uint32_t peak) 
   return tri * tri * peak / (255 * 255);
 }
 
+bool updateSpareInputs(uint32_t now) {
+  bool changed = false;
+  if (in3.update(now, cfg.debounce_ms, cfg.in3_invert)) {
+    logEvent(EV_INPUT, 3, in3.active());
+    changed = true;
+  }
+  if (in4.update(now, cfg.debounce_ms, cfg.in4_invert)) {
+    logEvent(EV_INPUT, 4, in4.active());
+    changed = true;
+  }
+  return changed;
+}
+
+void appIdentify(uint32_t ms) {
+  identifyUntil = (millis() + ms) | 1;
+}
+
 static void updateLed(uint32_t now) {
-  // Unset role: solid. Link good: slow breathing. No link: lub-dub heartbeat.
+  // Identify: fast strobe. Unset role: solid. Link good: slow breathing. No link: lub-dub heartbeat.
   static int lastLevel = -1;
   uint8_t level;
-  if (activeRole == ROLE_UNSET) {
+  if (identifyUntil && (int32_t)(now - identifyUntil) >= 0) identifyUntil = 0;
+  if (identifyUntil) {
+    level = (now % 160) < 60 ? 255 : 0;
+  } else if (activeRole == ROLE_UNSET) {
     level = 255;
   } else {
     const LinkStats &st = linkStats();
@@ -141,17 +179,20 @@ static void updateLed(uint32_t now) {
 }
 
 void setup() {
+  resetCause = PM->RCAUSE.reg;
   // Relays first so outputs are de-energized as early as possible.
   k1.begin(PIN_K1);
   k2.begin(PIN_K2);
   pinMode(LED_BUILTIN, OUTPUT);
 
   consoleBegin();
-  bool loaded = configLoad();
+  cfgLoaded = configLoad();
   activeRole = cfg.role;
   in1.begin(PIN_IN1, cfg.in1_invert);
   in2.begin(PIN_IN2, cfg.in2_invert);
-  logEvent(EV_BOOT, loaded, activeRole);
+  in3.begin(PIN_IN3, cfg.in3_invert);
+  in4.begin(PIN_IN4, cfg.in4_invert);
+  logEvent(EV_BOOT, resetCause, activeRole);
 
   if (activeRole != ROLE_UNSET) {
     appRestartRadio();

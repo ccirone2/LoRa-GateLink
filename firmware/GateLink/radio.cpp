@@ -1,10 +1,30 @@
 #include "radio.h"
 #include "config.h"
+#include "log.h"
 #include <LoRa.h>
 #include <SHA256.h>
 
 static bool ok = false;
 static bool begun = false;
+static uint32_t faults = 0;
+
+// Direct SX127x register access (the LoRa library keeps its own private), same bus settings.
+#define REG_OP_MODE 0x01
+#define REG_IRQ_FLAGS 0x12
+#define IRQ_TX_DONE 0x08
+#define OPMODE_LORA_TX 0x83  // long-range mode | TX
+
+static uint8_t regAccess(uint8_t addr, uint8_t value) {
+  LORA_DEFAULT_SPI.beginTransaction(SPISettings(LORA_DEFAULT_SPI_FREQUENCY, MSBFIRST, SPI_MODE0));
+  digitalWrite(LORA_DEFAULT_SS_PIN, LOW);
+  LORA_DEFAULT_SPI.transfer(addr);
+  uint8_t r = LORA_DEFAULT_SPI.transfer(value);
+  digitalWrite(LORA_DEFAULT_SS_PIN, HIGH);
+  LORA_DEFAULT_SPI.endTransaction();
+  return r;
+}
+static uint8_t readReg(uint8_t addr) { return regAccess(addr & 0x7F, 0x00); }
+static void writeReg(uint8_t addr, uint8_t v) { regAccess(addr | 0x80, v); }
 
 bool radioBegin() {
   if (begun) LoRa.end();
@@ -25,11 +45,32 @@ bool radioOk() {
   return ok;
 }
 
-void radioSend(const uint8_t *buf, size_t len) {
-  if (!ok) return;
+uint32_t radioFaults() {
+  return faults;
+}
+
+bool radioSend(const uint8_t *buf, size_t len) {
+  if (!ok) return false;
   LoRa.beginPacket();
   LoRa.write(buf, len);
-  LoRa.endPacket();  // blocks until TX done; next parsePacket() re-enters RX
+  LoRa.endPacket(true);  // async: we poll below with a deadline; next parsePacket() re-enters RX
+  // The library's blocking endPacket() waits forever for TX done. A supply dip during TX can
+  // reset the radio, which then never reports it and the watchdog reboots the board.
+  uint32_t start = millis();
+  uint32_t limit = radioAirtimeMs(len) + 200;
+  for (;;) {
+    if (readReg(REG_IRQ_FLAGS) & IRQ_TX_DONE) {
+      writeReg(REG_IRQ_FLAGS, IRQ_TX_DONE);
+      return true;
+    }
+    bool stillTx = readReg(REG_OP_MODE) == OPMODE_LORA_TX;
+    if (!stillTx && (readReg(REG_IRQ_FLAGS) & IRQ_TX_DONE)) continue;  // finished between reads
+    if (!stillTx || (int32_t)(millis() - start) >= (int32_t)limit) break;
+  }
+  faults++;
+  logEvent(EV_RADIO_FAIL, 1, faults);
+  radioBegin();
+  return false;
 }
 
 size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {

@@ -5,7 +5,7 @@
 // must be re-applied after a firmware update. The web UI can export/import config.
 
 #define CFG_MAGIC 0x47544C4Bu  // "GTLK"
-#define CFG_VERSION 1
+#define CFG_VERSION 2
 
 Config cfg;
 int32_t activeRole = ROLE_UNSET;
@@ -35,6 +35,8 @@ const ParamDef PARAMS[] = {
   { 21, "mismatch_timeout_s", &Config::mismatch_timeout_s, 10, 600, 0 },
   { 22, "sensor_invert", &Config::sensor_invert, 0, 1, 0 },
   { 23, "linkloss_open", &Config::linkloss_open, 0, 1, 0 },
+  { 24, "in3_invert", &Config::in3_invert, 0, 1, P_REMOTE },
+  { 25, "in4_invert", &Config::in4_invert, 0, 1, P_REMOTE },
 };
 const size_t PARAM_COUNT = sizeof(PARAMS) / sizeof(PARAMS[0]);
 

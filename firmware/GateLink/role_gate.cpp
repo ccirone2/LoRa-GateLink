@@ -38,7 +38,8 @@ static uint8_t readState() {
 static void sendStatus(uint32_t now) {
   uint8_t p[ST_LEN];
   p[ST_STATE] = state;
-  p[ST_INPUTS] = in1.active() | (in2.active() << 1) | (k1.on() << 2) | (k2.on() << 3);
+  p[ST_INPUTS] = in1.active() | (in2.active() << 1) | (k1.on() << 2) | (k2.on() << 3)
+                 | (in3.active() << 4) | (in4.active() << 5);
   p[ST_CAUSE] = cause;
   p[ST_RESULT] = lastResult;
   putU16(p + ST_CMD_ID, lastCmdId);
@@ -80,6 +81,7 @@ void gateLoop(uint32_t now) {
     logEvent(EV_GATE_STATE, state, cause);
     sendStatus(now);
   }
+  if (updateSpareInputs(now)) sendStatus(now);
 
   // New house session (house rebooted): its command ids restart, so forget the last one.
   if (linkStats().sessions != seenSessions) {

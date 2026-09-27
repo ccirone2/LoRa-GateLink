@@ -157,6 +157,9 @@ static void handle(JsonDocument &req) {
     Serial.flush();
     delay(100);
     NVIC_SystemReset();
+  } else if (!strcmp(cmd, "identify")) {
+    uint32_t ms = req["ms"] | 6000;
+    appIdentify(ms > 60000 ? 60000 : ms);
   } else if (!strcmp(cmd, "debug.replay")) {
     linkDebugReplay();
   } else {

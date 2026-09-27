@@ -31,6 +31,8 @@ struct Config {
   int32_t debounce_ms;
   int32_t in1_invert;
   int32_t in2_invert;
+  int32_t in3_invert;
+  int32_t in4_invert;
   // Gate node
   int32_t pulse_ms;
   int32_t travel_timeout_s;

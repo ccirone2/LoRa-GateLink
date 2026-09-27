@@ -14,6 +14,7 @@
     </div>
     <div class="actions">
       <button id="btnConnect" class="primary">Connect board</button>
+      <button id="btnIdentify" hidden title="Strobe this board's LED for 6 s">Identify</button>
       <button id="btnDisconnect" hidden>Disconnect</button>
     </div>
   </header>
@@ -66,6 +67,7 @@
           <div class="kv"><span>Sync window / resync</span><b id="hSync">—</b></div>
           <div class="kv"><span>Last command</span><b id="hCmd">—</b></div>
           <div class="kv"><span>Gate limits (remote)</span><b id="hLimits">—</b></div>
+          <div class="kv"><span>Gate spare inputs</span><b id="hSpare">—</b></div>
           <div class="kv"><span>Gate uptime</span><b id="hGateUp">—</b></div>
         </div>
         <div class="card">
@@ -73,6 +75,7 @@
           <div class="kv"><span>Role</span><b id="bRole">—</b></div>
           <div class="kv"><span>Firmware</span><b id="bFw">—</b></div>
           <div class="kv"><span>Uptime</span><b id="bUp">—</b></div>
+          <div class="kv"><span>Last reset</span><b id="bReset">—</b></div>
           <div class="kv"><span>Radio</span><b id="bRadio">—</b></div>
         </div>
       </div>

@@ -2,8 +2,8 @@
 #include <Arduino.h>
 
 enum LogCode : uint8_t {
-  EV_BOOT = 0,
-  EV_RADIO_FAIL,
+  EV_BOOT = 0,       // a = reset cause (PM RCAUSE bits), b = role
+  EV_RADIO_FAIL,     // a = 0 init failed, 1 TX fault (radio re-initialised); b = fault count
   EV_LINK_UP,
   EV_LINK_DOWN,
   EV_SESSION,        // a = peer session accepted
@@ -22,6 +22,7 @@ enum LogCode : uint8_t {
   EV_SYNC,           // a = level (edge caused by our K1 sync)
   EV_RESYNC,         // a = target level
   EV_CFG_REMOTE,     // a = param id, b = value
+  EV_INPUT,          // a = spare input number (3/4), b = level
   EV_COUNT
 };
 

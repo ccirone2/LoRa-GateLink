@@ -32,6 +32,7 @@ enum AckResult : uint8_t {
   RES_ALREADY = 1,   // command matched current state; no pulse
   RES_BAD = 2,       // malformed / rejected
   RES_BUSY = 3,      // interlock: other relay pulsing
+  RES_NO_POWER = 4,  // opener unpowered (IN3 power sense); no pulse
 };
 
 struct RxMsg {

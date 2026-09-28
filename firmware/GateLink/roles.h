@@ -4,7 +4,7 @@
 #include "io.h"
 #include "link.h"
 
-enum GateState : uint8_t { GS_UNKNOWN = 0, GS_CLOSED, GS_OPEN, GS_BETWEEN, GS_FAULT };
+enum GateState : uint8_t { GS_UNKNOWN = 0, GS_CLOSED, GS_OPEN, GS_BETWEEN, GS_FAULT, GS_NO_POWER };
 enum Cause : uint8_t { CAUSE_NONE = 0, CAUSE_LORA, CAUSE_EXTERNAL };
 enum Action : uint8_t { ACT_OPEN = 1, ACT_CLOSE = 2 };
 enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };

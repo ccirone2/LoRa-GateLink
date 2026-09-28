@@ -94,7 +94,7 @@ main { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .gate-state { font-size: 34px; font-weight: 700; margin: 4px 0 10px; text-transform: capitalize; }
 .gate-state.closed { color: var(--ok); }
 .gate-state.open, .gate-state.between { color: var(--warn); }
-.gate-state.fault, .gate-state.unknown { color: var(--bad); }
+.gate-state.fault, .gate-state.unknown, .gate-state.no_power { color: var(--bad); }
 .good { color: var(--ok); }
 .bad { color: var(--bad); }
 

@@ -8,7 +8,7 @@ static size_t count = 0;
 static const char *const NAMES[EV_COUNT] = {
   "boot", "radio_fail", "link_up", "link_down", "session", "mac_fail", "replay",
   "tx_giveup", "cmd_sent", "cmd_suppressed", "cmd_dropped", "cmd_rx", "cmd_dup",
-  "pulse", "gate_state", "travel_timeout", "ctrl", "sync", "resync", "cfg_remote", "input",
+  "pulse", "gate_state", "travel_timeout", "ctrl", "sync", "resync", "cfg_remote", "input", "cmd_refused",
 };
 
 void logEvent(LogCode code, int32_t a, int32_t b) {

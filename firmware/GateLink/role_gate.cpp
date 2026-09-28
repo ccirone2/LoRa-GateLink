@@ -28,6 +28,8 @@ static bool elapsed(uint32_t now, uint32_t t, uint32_t ms) {
 }
 
 static uint8_t readState() {
+  // IN3 = opener 24 V present. Without power the AUX limit relays drop, which would read as BETWEEN.
+  if (cfg.power_sense && !in3.active()) return GS_NO_POWER;
   bool open = in1.active(), closed = in2.active();
   if (open && closed) return GS_FAULT;
   if (closed) return GS_CLOSED;
@@ -68,20 +70,24 @@ void gateBegin() {
 void gateLoop(uint32_t now) {
   in1.update(now, cfg.debounce_ms, cfg.in1_invert);
   in2.update(now, cfg.debounce_ms, cfg.in2_invert);
+  bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense
 
   uint8_t s = readState();
   if (s != state) {
+    // Power loss/return isn't a gate movement, so it has no cause.
+    bool power = s == GS_NO_POWER || state == GS_NO_POWER;
     state = s;
     bool ours = havePulsed && !elapsed(now, lastPulseAt, (uint32_t)cfg.travel_timeout_s * 1000);
-    cause = ours ? CAUSE_LORA : CAUSE_EXTERNAL;
+    cause = power ? CAUSE_NONE : ours ? CAUSE_LORA : CAUSE_EXTERNAL;
     if (target != GS_UNKNOWN && state == target) {
       lastResult = TR_REACHED;
       target = GS_UNKNOWN;
     }
     logEvent(EV_GATE_STATE, state, cause);
     sendStatus(now);
+  } else if (spareChanged) {
+    sendStatus(now);
   }
-  if (updateSpareInputs(now)) sendStatus(now);
 
   // New house session (house rebooted): its command ids restart, so forget the last one.
   if (linkStats().sessions != seenSessions) {
@@ -119,7 +125,10 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   haveCmd = true;
   lastCmdId = id;
   uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
-  if (state == want) {
+  if (state == GS_NO_POWER) {
+    logEvent(EV_CMD_REFUSED, action, id);
+    lastCmdAck = RES_NO_POWER;
+  } else if (state == want) {
     lastResult = TR_ALREADY;
     lastCmdAck = RES_ALREADY;
   } else {
@@ -195,6 +204,7 @@ void gateStatus(JsonObject o) {
   o["last_result"] = resultName(lastResult);
   o["target"] = target == GS_UNKNOWN ? "" : gateStateName(target);
   o["last_cmd_id"] = lastCmdId;
+  o["power_sense"] = (bool)cfg.power_sense;
 }
 
 void gateRelayTest(uint8_t k, uint32_t ms) {

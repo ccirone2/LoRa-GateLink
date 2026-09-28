@@ -35,8 +35,8 @@ static uint16_t pingId = 0;
 static uint32_t pingAt = 0;
 
 const char *gateStateName(uint8_t s) {
-  static const char *const n[] = { "unknown", "closed", "open", "between", "fault" };
-  return s < 5 ? n[s] : "?";
+  static const char *const n[] = { "unknown", "closed", "open", "between", "fault", "no_power" };
+  return s < 6 ? n[s] : "?";
 }
 
 const char *causeName(uint8_t c) {

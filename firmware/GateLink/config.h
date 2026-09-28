@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.1.0"
+#define FW_VERSION "0.2.0"
 
 enum Role : uint8_t { ROLE_UNSET = 0, ROLE_HOUSE = 1, ROLE_GATE = 2 };
 
@@ -33,6 +33,7 @@ struct Config {
   int32_t in2_invert;
   int32_t in3_invert;
   int32_t in4_invert;
+  int32_t power_sense;  // gate: IN3 = opener power present
   // Gate node
   int32_t pulse_ms;
   int32_t travel_timeout_s;

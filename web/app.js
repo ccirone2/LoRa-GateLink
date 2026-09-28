@@ -8,7 +8,7 @@ const GROUPS = [
   ['General', ['role', 'net_id']],
   ['Radio (must match on both boards)', ['freq_hz', 'sf', 'bw_hz', 'cr', 'tx_power', 'sync_word']],
   ['Link', ['retries', 'heartbeat_s', 'link_timeout_s', 'cmd_ttl_s']],
-  ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert', 'in3_invert', 'in4_invert']],
+  ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert', 'in3_invert', 'in4_invert', 'power_sense']],
   ['Gate node', ['pulse_ms', 'travel_timeout_s']],
   ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open']],
 ];
@@ -30,6 +30,7 @@ const HELP = {
   in2_invert: 'Gate: close limit',
   in3_invert: 'Spare input IN3 (A3)',
   in4_invert: 'Spare input IN4 (A4)',
+  power_sense: 'Gate: IN3 = opener 24 V present · off → gate reads “no power” and refuses commands',
   pulse_ms: 'OPEN/CLOSE contact closure length',
   travel_timeout_s: 'Report timeout if limit not reached',
   ctrl_sync: 'Drive K1 so the controller mirrors the gate',
@@ -45,7 +46,7 @@ const SELECTS = {
 };
 const IO_LABELS = {
   house: { in1: 'IN1 · Controller input', in2: 'IN2 · unused', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
-  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Close limit', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
+  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Close limit', in3: 'IN3 · Opener power', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
   unset: { in1: 'IN1', in2: 'IN2', in3: 'IN3', in4: 'IN4', k1: 'K1', k2: 'K2' },
 };
 
@@ -87,7 +88,10 @@ const WIRING = {
         rows: [['IN1 (A1)', 'NO'], ['GND', 'C']] },
       { name: 'Opener AUX relay B', hint: 'Set to close limit', kind: 'in',
         rows: [['IN2 (A2)', 'NO'], ['GND', 'C']] },
-      SPARE_INPUTS,
+      { name: 'Opener power sense', hint: 'Opto LED across opener 24 V accessory power', kind: 'in',
+        rows: [['IN3 (A3)', 'Opto collector'], ['GND', 'Opto emitter']] },
+      { name: 'Spare input (optional)', hint: 'Not used yet · e.g. beam break', kind: 'in',
+        rows: [['IN4 (A4)', 'Contact'], ['GND', 'Common']] },
       { name: '24 V → 5 V buck', hint: 'Fed from opener 24 V accessory power', kind: 'pwr',
         rows: [['VIN (5 V)', '+5 V out'], ['GND', '0 V out']] },
     ],
@@ -97,7 +101,9 @@ const WIRING = {
       'VIN is 5 V max. Never connect the opener’s 24 V directly to the board.',
       'Use the relays’ NO/COM contacts only. Add TVS or RC suppression on long input runs.',
       'Keep the antenna vertical and outside any metal enclosure.',
-      SPARE_NOTE,
+      'IN3 senses opener power so a dead opener isn’t mistaken for a gate stopped between limits. Drive the opto LED from the opener’s 24 V accessory output through about 2.2 kΩ; wire the opto transistor collector to IN3 and emitter to GND. With no power the gate reads “no power” and refuses commands. Set <code>power_sense</code> to 0 if IN3 isn’t wired.',
+      'Any input can be isolated the same way: opto collector to IN, emitter to GND, LED driven by the field contact. Polarity is unchanged (LED on = active).',
+      'IN4 (A4) is a spare dry-contact input (contact to GND, internal pull-up), reserved for future use. It is shown and logged but doesn’t affect behaviour yet.',
     ],
   },
 };
@@ -389,7 +395,7 @@ function renderStatus(s) {
   if (s.role !== role) applyRole(s.role);
   const gs = s.gate || 'unknown';
   const g = $('gateState');
-  g.textContent = s.role === 'unset' ? 'role not set' : gs;
+  g.textContent = s.role === 'unset' ? 'role not set' : gs.replace('_', ' ');
   g.className = `gate-state ${gs}`;
   $('gateCause').textContent = s.cause ?? '—';
   $('gateResult').textContent = s.last_result ?? '—';
@@ -421,7 +427,7 @@ function renderStatus(s) {
     $('hCtrl').innerHTML = pill(s.ctrl);
     $('hArmed').textContent = yesNo(s.armed);
     $('hSync').textContent = `${yesNo(s.sync_window)} / ${yesNo(s.resyncing)}`;
-    const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 3: 'busy' };
+    const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 3: 'busy', 4: 'refused: opener unpowered' };
     $('hCmd').textContent = `#${s.cmd_id} · ${s.cmd_pending ? 'sending…' : cmdRes[s.cmd_result] ?? s.cmd_result}`;
     $('hLimits').textContent = r.uptime_s ? `open ${r.open_limit ? '●' : '○'}  close ${r.close_limit ? '●' : '○'}` : '—';
     $('hSpare').textContent = r.uptime_s && 'in3' in r ? `IN3 ${r.in3 ? '●' : '○'}  IN4 ${r.in4 ? '●' : '○'}` : '—';

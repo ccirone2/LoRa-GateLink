@@ -102,6 +102,8 @@ void houseLoop(uint32_t now) {
   if (syncActive && (int32_t)(now - syncUntil) >= 0) syncActive = false;
 
   updateSpareInputs(now);
+  // IN2 is a spare on the house board: debounced and logged only.
+  if (in2.update(now, cfg.debounce_ms, cfg.in2_invert)) logEvent(EV_INPUT, 2, in2.active());
 
   if (in1.update(now, cfg.debounce_ms, cfg.in1_invert)) {
     shellyLevel = in1.active();

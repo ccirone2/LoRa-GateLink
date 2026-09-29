@@ -22,7 +22,7 @@ enum LogCode : uint8_t {
   EV_SYNC,           // a = level (edge caused by our K1 sync)
   EV_RESYNC,         // a = target level
   EV_CFG_REMOTE,     // a = param id, b = value
-  EV_INPUT,          // a = spare input number (3/4), b = level
+  EV_INPUT,          // a = spare input number (house 2/3/4, gate 3/4), b = level
   EV_CMD_REFUSED,    // a = action, b = cmd id (opener unpowered)
   EV_COUNT
 };

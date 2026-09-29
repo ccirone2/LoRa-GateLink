@@ -45,9 +45,10 @@ never from the last command sent.
   opener's 24 V accessory output drives IN3 to tell them apart: IN3 off → gate state `no_power`, which overrides
   the limits, and OPEN/CLOSE commands are acknowledged as refused without pulsing. Turn the `power_sense` toggle
   off (also possible remotely over LoRa) if IN3 isn't wired.
-- **Spare inputs** IN4 = A4 (and IN3 on the house board): pull-down inputs (contact to 3.3 V) reserved for
+- **Spare inputs** IN4 = A4 (and IN2/IN3 on the house board): pull-down inputs (contact to 3.3 V) reserved for
   future use such as a beam-break sensor or alarm status. They're debounced, logged (`input` events), shown in Status
-  and sent to the house, with `in3_invert` / `in4_invert`, but don't affect behaviour yet. Leave unwired if unused.
+  (the gate's are also sent to the house), with `inN_invert` toggles, but don't affect behaviour yet. Leave
+  unwired if unused.
 - **Opto board (gate):** a 4-channel PNP-output opto isolator (NOYITO MT-301R4P-P), OUT1–OUT4 → IN1–IN4, output
   GND → board GND, output VCC → the board's **3.3 V only** (a PNP output passes VCC straight to the pin). On the
   24 V side, wet each AUX limit contact from the opener's 24 V (24 V → AUX C, AUX NO → opto input) and put channel 3

@@ -16,6 +16,7 @@
 
 // Role usage:
 //   HOUSE: IN1 = Shelly Wave 1 relay (O/I) "switch state"
+//          IN2-IN4 = spare (read and logged only)
 //          K1  = Shelly SW input (state sync: energized = gate not closed)
 //          K2  = 2GIG wireless contact sensor terminals (energized = gate closed)
 //   GATE:  (all inputs via a PNP-output opto board)

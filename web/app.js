@@ -27,7 +27,7 @@ const HELP = {
   cmd_ttl_s: 'Drop a command not delivered within this time',
   debounce_ms: 'Input debounce',
   in1_invert: 'House: controller input · Gate: open limit',
-  in2_invert: 'Gate: closed limit',
+  in2_invert: 'House: spare IN2 · Gate: closed limit',
   in3_invert: 'House: spare IN3 · Gate: opener power sense',
   in4_invert: 'Spare input IN4 (A4)',
   power_sense: 'Gate: IN3 senses opener 24 V; without it the gate reads “no power” and refuses commands',
@@ -45,7 +45,7 @@ const SELECTS = {
   bw_hz: [[125000, '125 kHz'], [250000, '250 kHz'], [500000, '500 kHz']],
 };
 const IO_LABELS = {
-  house: { in1: 'IN1 · Controller input', in2: 'IN2 · unused', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
+  house: { in1: 'IN1 · Controller input', in2: 'IN2 · spare', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
   gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Closed limit', in3: 'IN3 · Opener power', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
   unset: { in1: 'IN1', in2: 'IN2', in3: 'IN3', in4: 'IN4', k1: 'K1', k2: 'K2' },
 };
@@ -56,8 +56,8 @@ const IO_LABELS = {
 // Inputs use the internal pull-down: active = driven to 3.3 V, unwired/open = off.
 const V33 = '3.3 V (VCC)';
 const SPARE_INPUTS = { name: 'Spare inputs (optional)', hint: 'Not used yet · e.g. beam break, alarm status', kind: 'in',
-  rows: [['IN3 (A3)', 'Contact'], ['IN4 (A4)', 'Contact'], [V33, 'Common']] };
-const SPARE_NOTE = 'IN3 (A3) and IN4 (A4) are spare inputs (contact to 3.3 V, internal pull-down), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave them unwired if unused; they read “off”.';
+  rows: [['IN2 (A2)', 'Contact'], ['IN3 (A3)', 'Contact'], ['IN4 (A4)', 'Contact'], [V33, 'Common']] };
+const SPARE_NOTE = 'IN2 (A2), IN3 (A3) and IN4 (A4) are spare inputs (contact to 3.3 V, internal pull-down), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave them unwired if unused; they read “off”.';
 const WIRING = {
   house: {
     groups: [
@@ -76,7 +76,6 @@ const WIRING = {
       'K1 mirrors the real gate back to the controller so its switch always shows the true state. Set the controller’s switch input to toggle/follow mode (contact closed = ON, open = OFF), not detached. Wire it per the controller’s switch-input diagram. Low voltage only; never switch mains with the shield.',
       'The contact sensor needs an external terminal input. K2 closes when the gate is closed and opens if the link is lost (<code>linkloss_open</code>). <code>sensor_invert</code> flips it.',
       'VIN is 5 V max. USB power is fine for the house board.',
-      'IN2 is unused on the house board.',
       SPARE_NOTE,
     ],
   },

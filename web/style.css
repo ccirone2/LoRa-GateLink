@@ -107,6 +107,19 @@ main { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .field label small { display: block; color: var(--muted); }
 .field input, .field select { width: 100%; }
 .field.dirty input, .field.dirty select { border-color: var(--warn); }
+.field input.toggle {
+  appearance: none; width: 40px; height: 22px; padding: 0; margin: 0; border-radius: 999px; justify-self: end;
+  position: relative; cursor: pointer; background: var(--border); border: 1px solid var(--border); transition: background .15s;
+}
+.field input.toggle::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface); transition: transform .15s;
+}
+.field input.toggle:checked { background: var(--accent); border-color: var(--accent); }
+.field input.toggle:checked::after { transform: translateX(18px); }
+.field input.toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.field input.toggle:disabled { opacity: .5; cursor: default; }
+.field.dirty input.toggle { box-shadow: 0 0 0 2px var(--warn); }
 
 #rssiChart { width: 100%; height: 90px; margin-top: 8px; background: var(--bg); border-radius: 6px; }
 #rssiChart polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }

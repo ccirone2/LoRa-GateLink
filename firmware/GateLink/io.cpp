@@ -2,15 +2,15 @@
 
 void Input::begin(uint8_t pin, bool invert) {
   _pin = pin;
-  pinMode(_pin, INPUT_PULLUP);
-  delayMicroseconds(50);  // let the pull-up settle before the first read
-  _raw = _candidate = (digitalRead(_pin) == LOW) != invert;
+  pinMode(_pin, INPUT_PULLDOWN);
+  delayMicroseconds(50);  // let the pull-down settle before the first read
+  _raw = _candidate = (digitalRead(_pin) == HIGH) != invert;
   _state = _raw;
   _since = millis();
 }
 
 bool Input::update(uint32_t now, uint32_t debounceMs, bool invert) {
-  _raw = (digitalRead(_pin) == LOW) != invert;
+  _raw = (digitalRead(_pin) == HIGH) != invert;
   if (_raw != _candidate) {
     _candidate = _raw;
     _since = now;

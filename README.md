@@ -9,8 +9,9 @@ system at the house to a LiftMaster CSW24UL swing-gate opener over point-to-poin
                     2GIG contact sensor ◀──────────────── HOUSE K2    (closed = gate closed)
                                   ~~~~ LoRa 915 MHz, HMAC-signed ~~~~
  CSW24UL OPEN  + COM ◀── GATE K1 (pulse)      CSW24UL AUX "open limit"  ──▶ GATE IN1
- CSW24UL CLOSE + COM ◀── GATE K2 (pulse)      CSW24UL AUX "close limit" ──▶ GATE IN2
+ CSW24UL CLOSE + COM ◀── GATE K2 (pulse)      CSW24UL AUX "closed limit" ──▶ GATE IN2
                                               CSW24UL 24 V accessory ─opto─▶ GATE IN3 (opener powered)
+        (gate inputs all via a PNP-output opto board)
         (shared with AES Prime Edge + siren sensor)
 ```
 
@@ -35,19 +36,23 @@ opener's inputs keep working. Gate state always comes from the opener's limit ou
 
 ## Hardware notes
 
-- Relays: K1 = D1, K2 = D2 on the Relay Proto Shield. Inputs: IN1 = A1, IN2 = A2 (contact to GND,
-  internal pull-up). Change in `firmware/GateLink/pins.h` if your wiring differs; check the shield silkscreen.
+- Relays: K1 = D1, K2 = D2 on the Relay Proto Shield. Inputs: IN1–IN4 = A1–A4, all with the SAMD's **internal
+  pull-down**: an input is active when driven to 3.3 V (a PNP opto output or a contact to the board's 3.3 V) and
+  reads off when open. **Never put more than 3.3 V on an input.** Change pins in `firmware/GateLink/pins.h` if your
+  wiring differs; check the shield silkscreen.
 - **Gate IN3 = opener power sense** (`power_sense`, default on). Without power the CSW24UL's AUX limit relays
-  drop and the gate would read `between`, the same as a gate stopped mid-travel. An optocoupler with its LED across
-  the opener's 24 V accessory output (≈2.2 kΩ series resistor) and its transistor from IN3 to GND tells them apart:
+  drop and the gate would read `between`, the same as a gate stopped mid-travel. An opto channel across the opener's
+  24 V accessory output, its output driving IN3, tells them apart:
   IN3 off → gate state `no_power`, which overrides the limits, and OPEN/CLOSE commands are ACKed as refused
   without pulsing. Set `power_sense = 0` (also possible remotely over LoRa) if IN3 isn't wired.
-- **Spare inputs** IN4 = A4 (and IN3 on the house board): dry-contact inputs (pull-up, contact to GND) reserved for
+- **Spare inputs** IN4 = A4 (and IN3 on the house board): inputs (pull-down, contact to 3.3 V) reserved for
   future use such as a beam-break sensor or alarm status. They're debounced, logged (`input` events), shown in Status
   and sent to the house, with `in3_invert` / `in4_invert`, but don't affect behaviour yet. Leave unwired if unused.
-- **Optocouplers** on any input: collector to IN, emitter to GND, LED driven by the field circuit. Polarity is
-  unchanged (LED on = input active). Wetting the limit contacts from the opener's own 24 V keeps the fail direction
-  the same: power loss or a cut wire reads as "not at a limit", never as closed.
+- **Opto board (gate):** a 4-channel PNP-output opto isolator (NOYITO MT-301R4P-P), OUT1–OUT4 → IN1–IN4, output
+  GND → board GND, output VCC → the board's **3.3 V only** (a PNP output passes VCC straight to the pin). On the
+  24 V side, wet each AUX limit contact from the opener's 24 V (24 V → AUX C, AUX NO → opto input) and put channel 3
+  across the 24 V. A lit opto reads active; power loss, a dead opto or a cut wire reads off — "not at a limit",
+  never closed.
 - **MKR VIN is 5 V max.** Power the gate board from the opener's 24 V accessory supply through a 24 V→5 V buck.
 - **Power and antenna:** always attach the antenna before the radio transmits, and keep it away from the relay
   shield and field wiring (a U.FL→SMA pigtail lets it sit outside the enclosure). A full-power transmit while a
@@ -55,13 +60,13 @@ opener's inputs keep working. Gate state always comes from the opener's limit ou
   a bulk capacitor (~470 µF) across 5 V/GND or a LiPo on the MKR battery connector.
 - Use relay NO/COM contacts for everything. Add TVS/RC suppression on long input runs.
 - **Shelly Wave 1**: power from 24 V DC/AC per Shelly's low-voltage wiring so the SW input that K1 drives
-  is low voltage — do not switch mains with the shield. Wire the Shelly relay output **I→GND, O→HOUSE IN1**.
+  is low voltage — do not switch mains with the shield. Wire the Shelly relay output **I→3.3 V, O→HOUSE IN1**.
   Set the SW input to *toggle switch, contact closed = ON / open = OFF* (see the "SW1 switch type"
   parameter in the Shelly Wave 1 manual). Don't use detached mode.
 - **2GIG contact sensor**: any 2GIG-compatible door/window sensor with external terminal input. Wire K2 NO/COM
   to its terminals; name it "Gate" in Alarm.com. (`sensor_invert` flips the sense if needed.)
-- **CSW24UL**: set AUX relay A to *open limit* and AUX relay B to *close limit* (per the LiftMaster manual)
-  and wire their dry contacts to GATE IN1 / IN2. K1 NO/COM → OPEN + COM, K2 NO/COM → CLOSE + COM.
+- **CSW24UL**: set AUX relay A to *open limit* and AUX relay B to *closed limit* (per the LiftMaster manual)
+  and wire their contacts to GATE IN1 / IN2 through the opto board (above). K1 NO/COM → OPEN + COM, K2 NO/COM → CLOSE + COM.
 
 ## Build and flash
 
@@ -139,20 +144,21 @@ effect after a reboot.
 
 ## Bench test checklist
 
-Use LEDs or a meter on the relay outputs and jumper wires on the inputs. With `power_sense` on (the default
-after every flash), keep gate IN3 jumpered to GND for the other tests, or the gate reads `no_power`. On USB power, set `tx_power`
+Use LEDs or a meter on the relay outputs and jumper wires on the inputs: an input is active when jumpered to
+**3.3 V** (not GND). With `power_sense` on (the default
+after every flash), keep gate IN3 jumpered to 3.3 V for the other tests, or the gate reads `no_power`. On USB power, set `tx_power`
 to ~5 dBm on both boards: a full-power transmit while a relay is energized can crash the board (watchdog
 reset, shown as `reset_cause` in Status). Use **Identify** in the web console to strobe a board's LED
 and tell the two apart.
 
-- House IN1 to GND (Shelly ON) → gate K1 pulses once; release → gate K2 pulses once.
-- Gate IN1 to GND (open limit) → house K1 energizes, K2 releases; gate IN2 to GND → K1 releases, K2 energizes.
-- External move: with no command sent, ground gate IN1 → house status shows `cause external`, **no command sent**
+- House IN1 to 3.3 V (Shelly ON) → gate K1 pulses once; release → gate K2 pulses once.
+- Gate IN1 to 3.3 V (open limit) → house K1 energizes, K2 releases; gate IN2 to 3.3 V → K1 releases, K2 energizes.
+- External move: with no command sent, jumper gate IN1 to 3.3 V → house status shows `cause external`, **no command sent**
   (house log shows `sync`, not `cmd_sent`, if the Shelly or a jumper follows K1).
-- Override: ground gate IN1 (open), turn house IN1 off (CLOSE) → gate reports `timeout` after `travel_timeout_s`,
+- Override: jumper gate IN1 (open), turn house IN1 off (CLOSE) → gate reports `timeout` after `travel_timeout_s`,
   house log shows `resync`.
 - Power sense: release gate IN3 → gate `no_power` (`cause none`), house K2 releases and K1 energizes;
-  toggle house IN1 → gate log `cmd_refused`, no `pulse`, house command result *refused*. Re-ground IN3 → state
+  toggle house IN1 → gate log `cmd_refused`, no `pulse`, house command result *refused*. Re-jumper IN3 → state
   follows the limits again. Set `power_sense = 0` → IN3 is ignored.
 - Unpower the gate board → after `link_timeout_s` house K2 releases (sensor open), log `link_down`.
 - Tools → Send replay on one board → the other board's replay counter increases (or it re-ACKs).

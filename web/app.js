@@ -27,7 +27,7 @@ const HELP = {
   cmd_ttl_s: 'Drop a command not delivered within this time',
   debounce_ms: 'Input debounce',
   in1_invert: 'House: controller input · Gate: open limit',
-  in2_invert: 'Gate: close limit',
+  in2_invert: 'Gate: closed limit',
   in3_invert: 'Spare input IN3 (A3)',
   in4_invert: 'Spare input IN4 (A4)',
   power_sense: 'Gate: IN3 = opener 24 V present · off → gate reads “no power” and refuses commands',
@@ -46,21 +46,23 @@ const SELECTS = {
 };
 const IO_LABELS = {
   house: { in1: 'IN1 · Controller input', in2: 'IN2 · unused', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
-  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Close limit', in3: 'IN3 · Opener power', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
+  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Closed limit', in3: 'IN3 · Opener power', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
   unset: { in1: 'IN1', in2: 'IN2', in3: 'IN3', in4: 'IN4', k1: 'K1', k2: 'K2' },
 };
 
 // ---------- Field wiring (Install tab) ----------
-// kind: out = a relay contact the board switches, in = a dry contact the board reads, pwr = power.
+// kind: out = a relay contact the board switches, in = a signal the board reads, pwr = power.
 // rows: [board terminal, device terminal]. All board GND terminals are common.
+// Inputs use the internal pull-down: active = driven to 3.3 V, unwired/open = off.
+const V33 = '3.3 V (VCC)';
 const SPARE_INPUTS = { name: 'Spare inputs (optional)', hint: 'Not used yet · e.g. beam break, alarm status', kind: 'in',
-  rows: [['IN3 (A3)', 'Contact'], ['IN4 (A4)', 'Contact'], ['GND', 'Common']] };
-const SPARE_NOTE = 'IN3 (A3) and IN4 (A4) are spare dry-contact inputs (contact to GND, internal pull-up), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave them unwired if unused; they read “off”.';
+  rows: [['IN3 (A3)', 'Contact'], ['IN4 (A4)', 'Contact'], [V33, 'Common']] };
+const SPARE_NOTE = 'IN3 (A3) and IN4 (A4) are spare inputs (contact to 3.3 V, internal pull-down), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave them unwired if unused; they read “off”.';
 const WIRING = {
   house: {
     groups: [
       { name: 'Controller relay output', hint: 'Dry contact · closed = open gate', kind: 'in',
-        rows: [['IN1 (A1)', 'Contact'], ['GND', 'Contact']] },
+        rows: [['IN1 (A1)', 'Contact'], [V33, 'Contact']] },
       { name: 'Controller switch input', hint: 'K1 closed while gate is not closed', kind: 'out',
         rows: [['K1 COM', 'Switch input'], ['K1 NO', 'Switch common']] },
       { name: 'Contact sensor', hint: 'K2 closed = gate closed', kind: 'out',
@@ -70,7 +72,7 @@ const WIRING = {
         rows: [['VIN (5 V)', '+5 V'], ['GND', '0 V']] },
     ],
     notes: [
-      'IN1 is a dry-contact input to GND with an internal pull-up. The controller output must be a potential-free contact. Set <code>in1_invert</code> if ON and OFF come out reversed.',
+      'IN1 reads the controller’s relay contact switched to the board’s 3.3 V (internal pull-down; open = off). The controller output must be a potential-free contact, and nothing above 3.3 V may reach IN1. Set <code>in1_invert</code> if ON and OFF come out reversed.',
       'K1 mirrors the real gate back to the controller so its switch always shows the true state. Set the controller’s switch input to toggle/follow mode (contact closed = ON, open = OFF), not detached. Wire it per the controller’s switch-input diagram. Low voltage only; never switch mains with the shield.',
       'The contact sensor needs an external terminal input. K2 closes when the gate is closed and opens if the link is lost (<code>linkloss_open</code>). <code>sensor_invert</code> flips it.',
       'VIN is 5 V max. USB power is fine for the house board.',
@@ -84,26 +86,21 @@ const WIRING = {
         rows: [['K1 NO', 'OPEN'], ['K1 COM', 'COM']] },
       { name: 'Opener CLOSE input', hint: 'Pulsed only · shared with other devices', kind: 'out',
         rows: [['K2 NO', 'CLOSE'], ['K2 COM', 'COM']] },
-      { name: 'Opener AUX relay A', hint: 'Set to open limit', kind: 'in',
-        rows: [['IN1 (A1)', 'NO'], ['GND', 'C']] },
-      { name: 'Opener AUX relay B', hint: 'Set to close limit', kind: 'in',
-        rows: [['IN2 (A2)', 'NO'], ['GND', 'C']] },
-      { name: 'Opener power sense', hint: 'Opto LED across opener 24 V accessory power', kind: 'in',
-        rows: [['IN3 (A3)', 'Opto collector'], ['GND', 'Opto emitter']] },
-      { name: 'Spare input (optional)', hint: 'Not used yet · e.g. beam break', kind: 'in',
-        rows: [['IN4 (A4)', 'Contact'], ['GND', 'Common']] },
+      { name: 'Opto board outputs (PNP)', hint: 'Output side powered from 3.3 V only', kind: 'in',
+        rows: [['IN1 (A1)', 'OUT1 · open limit'], ['IN2 (A2)', 'OUT2 · closed limit'], ['IN3 (A3)', 'OUT3 · opener 24 V'],
+          ['IN4 (A4)', 'OUT4 · spare'], [V33, 'VCC (output side)'], ['GND', 'GND (output side)']] },
       { name: '24 V → 5 V buck', hint: 'Fed from opener 24 V accessory power', kind: 'pwr',
         rows: [['VIN (5 V)', '+5 V out'], ['GND', '0 V out']] },
     ],
     notes: [
       'K1/K2 go in parallel with whatever else is already on the opener’s OPEN/CLOSE inputs. GateLink only pulses them (<code>pulse_ms</code>) and never holds them, so the other devices keep working.',
-      'Gate state comes only from the limit contacts. Set AUX relay A to <em>open limit</em> and AUX relay B to <em>close limit</em> in the opener’s menu. Use <code>in1_invert</code>/<code>in2_invert</code> if a limit reads backwards.',
+      'All gate inputs go through a PNP-output opto board. Power its output side from the board’s 3.3 V, never 5 V or 24 V: a PNP output passes that voltage straight to the input pin. A lit opto drives its input to 3.3 V (active); a dead opto, missing 24 V or cut wire reads off.',
+      'Opto input side (24 V): wet each limit contact from the opener’s 24 V accessory output — 24 V to AUX C, AUX NO to the opto channel input — and connect the third channel across the 24 V itself. Follow the opto board’s input markings for the common. Set AUX relay A to <em>open limit</em> and AUX relay B to <em>closed limit</em> in the opener’s menu.',
+      'Gate state comes only from the limit inputs. IN3 senses opener power so a dead opener isn’t mistaken for a gate stopped between limits: with no power the gate reads “no power” and refuses commands. Set <code>power_sense</code> to 0 if IN3 isn’t wired.',
       'VIN is 5 V max. Never connect the opener’s 24 V directly to the board.',
-      'Use the relays’ NO/COM contacts only. Add TVS or RC suppression on long input runs.',
+      'Use the relays’ NO/COM contacts only. Add TVS or RC suppression on long field runs.',
       'Keep the antenna vertical and outside any metal enclosure.',
-      'IN3 senses opener power so a dead opener isn’t mistaken for a gate stopped between limits. Drive the opto LED from the opener’s 24 V accessory output through about 2.2 kΩ; wire the opto transistor collector to IN3 and emitter to GND. With no power the gate reads “no power” and refuses commands. Set <code>power_sense</code> to 0 if IN3 isn’t wired.',
-      'Any input can be isolated the same way: opto collector to IN, emitter to GND, LED driven by the field contact. Polarity is unchanged (LED on = active).',
-      'IN4 (A4) is a spare dry-contact input (contact to GND, internal pull-up), reserved for future use. It is shown and logged but doesn’t affect behaviour yet.',
+      'IN4 (A4) is spare, reserved for future use. It is shown and logged but doesn’t affect behaviour yet.',
     ],
   },
 };
@@ -429,7 +426,7 @@ function renderStatus(s) {
     $('hSync').textContent = `${yesNo(s.sync_window)} / ${yesNo(s.resyncing)}`;
     const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 3: 'busy', 4: 'refused: opener unpowered' };
     $('hCmd').textContent = `#${s.cmd_id} · ${s.cmd_pending ? 'sending…' : cmdRes[s.cmd_result] ?? s.cmd_result}`;
-    $('hLimits').textContent = r.uptime_s ? `open ${r.open_limit ? '●' : '○'}  close ${r.close_limit ? '●' : '○'}` : '—';
+    $('hLimits').textContent = r.uptime_s ? `open ${r.open_limit ? '●' : '○'}  closed ${r.close_limit ? '●' : '○'}` : '—';
     $('hSpare').textContent = r.uptime_s && 'in3' in r ? `IN3 ${r.in3 ? '●' : '○'}  IN4 ${r.in4 ? '●' : '○'}` : '—';
     $('hGateUp').textContent = r.uptime_s ? fmtDur(r.uptime_s * 1000) : '—';
   }
@@ -460,8 +457,10 @@ function renderConfig() {
       row.className = 'field';
       const id = `p_${name}`;
       let input;
-      if (SELECTS[name] || (m.min === 0 && m.max === 1)) {
-        const opts = SELECTS[name] || [[0, 'off'], [1, 'on']];
+      if (!SELECTS[name] && m.min === 0 && m.max === 1) {
+        input = `<input id="${id}" type="checkbox" class="toggle" role="switch">`;
+      } else if (SELECTS[name]) {
+        const opts = SELECTS[name];
         input = `<select id="${id}">${opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
       } else {
         input = `<input id="${id}" type="number" min="${m.min}" max="${m.max}" step="1">`;
@@ -469,11 +468,21 @@ function renderConfig() {
       row.innerHTML = `<label for="${id}">${name}<small>${HELP[name] || ''}</small></label>${input}`;
       card.appendChild(row);
       const el = row.querySelector('input, select');
-      el.value = params[name];
-      el.addEventListener('input', () => row.classList.toggle('dirty', Number(el.value) !== params[name]));
+      setField(el, params[name]);
+      el.addEventListener('input', () => row.classList.toggle('dirty', fieldValue(el) !== params[name]));
     }
     form.appendChild(card);
   }
+}
+
+// On/off parameters are checkbox toggles; everything else carries its value in .value.
+function fieldValue(el) {
+  return el.type === 'checkbox' ? Number(el.checked) : Number(el.value);
+}
+
+function setField(el, v) {
+  if (el.type === 'checkbox') el.checked = !!v;
+  else el.value = v;
 }
 
 function formValues(onlyDirty) {
@@ -481,7 +490,7 @@ function formValues(onlyDirty) {
   for (const m of meta) {
     const el = $(`p_${m.name}`);
     if (!el) continue;
-    const v = Number(el.value);
+    const v = fieldValue(el);
     if (!onlyDirty || v !== params[m.name]) out[m.name] = v;
   }
   return out;
@@ -515,7 +524,7 @@ async function importConfig(file) {
   for (const m of meta) {
     const el = $(`p_${m.name}`);
     if (el && Number.isInteger(src[m.name])) {
-      el.value = src[m.name];
+      setField(el, src[m.name]);
       el.dispatchEvent(new Event('input'));
     }
   }

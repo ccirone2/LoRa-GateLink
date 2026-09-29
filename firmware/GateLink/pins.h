@@ -6,7 +6,8 @@
 #define PIN_K1 1
 #define PIN_K2 2
 
-// Dry-contact inputs (contact to GND, internal pull-up). Use screw terminals / proto area.
+// Inputs: internal pull-down, active = HIGH (3.3 V from a PNP opto output or a contact to 3.3 V).
+// Never drive above 3.3 V. Use screw terminals / proto area.
 #define PIN_IN1 A1
 #define PIN_IN2 A2
 // Spare inputs, read and reported but not yet used (e.g. beam-break sensor, alarm status).
@@ -18,6 +19,6 @@
 //          K1  = Shelly SW input (state sync: energized = gate not closed)
 //          K2  = 2GIG wireless contact sensor terminals (energized = gate closed)
 //   GATE:  IN1 = CSW24UL AUX relay "open limit"
-//          IN2 = CSW24UL AUX relay "close limit"
+//          IN2 = CSW24UL AUX relay "closed limit"
 //          K1  = CSW24UL OPEN + COM   (pulsed only)
 //          K2  = CSW24UL CLOSE + COM  (pulsed only)

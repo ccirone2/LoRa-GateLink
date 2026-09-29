@@ -48,5 +48,6 @@ The boards can be driven from scripts over USB serial with the same JSON console
 - Gate IN3 is opener power (`power_sense`, default on): while it's off the gate state is `no_power` (overrides the limits, cause none) and commands are ACKed `RES_NO_POWER` without pulsing. `updateSpareInputs` must run before `readState()` in `gateLoop`.
 - House K2 (alarm contact sensor) reads closed only when the gate is known closed; on link loss it fails open (`linkloss_open`).
 - Timing comparisons must be wrap-safe and signed (`(int32_t)(now - t) >= ms`): handlers invoked from `linkPoll` stamp times with `millis()`, which can be slightly later than the loop's `now`.
+- All inputs use the internal **pull-down** (`INPUT_PULLDOWN`, active = HIGH) to suit the gate's PNP-output opto board: a dead opto or cut wire must read inactive. Keep `inN_invert` at 0; don't fix polarity with invert (it makes faults read active). Bench jumpers go to 3.3 V, not GND.
 - Use `Serial.dtr()` rather than `if (Serial)` — the SAMD core's bool operator has a 10 ms `delay`.
 - Hardware watchdog is 8 s; keep blocking work well under that.

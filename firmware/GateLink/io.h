@@ -1,7 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
-// Dry-contact input with pull-up; "active" = contact closed (unless inverted).
+// Input with internal pull-down; "active" = driven to 3.3 V (unless inverted). Suits PNP
+// (sourcing) opto outputs and contacts to 3.3 V: a dead opto or cut wire reads inactive.
 class Input {
 public:
   void begin(uint8_t pin, bool invert);

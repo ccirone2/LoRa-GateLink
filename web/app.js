@@ -63,7 +63,7 @@ const WIRING = {
     groups: [
       { name: 'Controller relay output', hint: 'Dry contact · closed = open gate', kind: 'in',
         rows: [['IN1 (A1)', 'Contact'], [V33, 'Contact']] },
-      { name: 'Controller switch input', hint: 'K1 closed while gate is not closed', kind: 'out',
+      { name: 'Controller switch input', hint: 'K1 closed while gate is not closed (held until travel ends)', kind: 'out',
         rows: [['K1 COM', 'Switch input'], ['K1 NO', 'Switch common']] },
       { name: 'Contact sensor', hint: 'K2 closed = gate closed', kind: 'out',
         rows: [['K2 COM', 'Terminal'], ['K2 NO', 'Terminal']] },

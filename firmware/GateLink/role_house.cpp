@@ -3,7 +3,9 @@
 //  IN1 = Shelly relay contact ("switch state"). User edges become OPEN/CLOSE commands.
 //  K1  = Shelly SW input. Energized while the gate is not closed, so the Shelly (and
 //        the Alarm.com switch) follows the real gate even when another controller
-//        moved it. Edges on IN1 caused by K1 fall inside a sync window and are ignored.
+//        moved it. While the gate travels (BETWEEN) K1 holds its level until the far
+//        limit is reached, falling back to open only if it stays BETWEEN longer than
+//        travel_timeout_s. Edges on IN1 caused by K1 fall inside a sync window and are ignored.
 //  K2  = wireless contact sensor. Energized (closed loop) only when the gate is closed.
 #include "roles.h"
 #include "config.h"
@@ -20,6 +22,8 @@ static uint32_t gateUptime = 0;
 static int16_t gateRssi = 0;  // RSSI measured at the gate
 static int8_t gateSnr = 0;
 static bool haveStatus = false;
+static uint8_t lastEnd = GS_UNKNOWN;  // last limit reached (OPEN/CLOSED), held while BETWEEN
+static uint32_t betweenSince = 0;
 
 static bool linkUp = false;
 static bool armed = false;      // user commands accepted
@@ -36,7 +40,14 @@ static uint16_t cmdId = 0;
 static uint8_t cmdAction = 0;
 static int cmdResult = -1;  // last ACK result, -2 = gave up, -1 = none
 
-static bool k1Target() {
+// Gate in travel from a known limit: K1 keeps showing where it started.
+static bool holdingTravel(uint32_t now) {
+  return gateState == GS_BETWEEN && lastEnd != GS_UNKNOWN
+         && (int32_t)(now - betweenSince) < cfg.travel_timeout_s * 1000;
+}
+
+static bool k1Target(uint32_t now) {
+  if (holdingTravel(now)) return lastEnd != GS_CLOSED;
   return gateState != GS_CLOSED;
 }
 
@@ -54,7 +65,7 @@ static void applyOutputs(uint32_t now) {
   if (!k2.pulsing() && k2.on() != k2on) k2.set(k2on);
 
   if (cfg.ctrl_sync && haveStatus && !resyncing && !k1.pulsing()) {
-    bool t = k1Target();
+    bool t = k1Target(now);
     if (t != k1.on()) {
       k1.set(t);
       if (shellyLevel != t) openSyncWindow(now, t, 0);
@@ -123,11 +134,12 @@ void houseLoop(uint32_t now) {
   if (resyncing) {
     if ((int32_t)(now - resyncUntil) >= 0) {
       resyncing = false;
-      k1.set(k1Target());
+      k1.set(k1Target(now));
     }
   } else if (cfg.ctrl_sync && armed && linkUp && haveStatus && !linkPending(SLOT_CMD)) {
-    bool t = k1Target();
-    if (shellyLevel == t) {
+    bool t = k1Target(now);
+    // Mid-travel the Shelly may already show a user's new command while K1 holds the old limit.
+    if (shellyLevel == t || holdingTravel(now)) {
       mismatchSince = 0;
     } else if (mismatchSince == 0) {
       mismatchSince = now;
@@ -163,6 +175,9 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   haveStatus = true;
 
   if (gateState != prevState) logEvent(EV_GATE_STATE, gateState, gateCause);
+  if (gateState == GS_OPEN || gateState == GS_CLOSED) lastEnd = gateState;
+  else if (gateState != GS_BETWEEN) lastEnd = GS_UNKNOWN;  // fault/no power: show not-closed
+  if (gateState == GS_BETWEEN && prevState != GS_BETWEEN) betweenSince = now;
   // Command overridden (e.g. siren holding the gate open): resync the Shelly right away.
   if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT && mismatchSince) {
     mismatchSince = now - (uint32_t)cfg.mismatch_timeout_s * 1000;

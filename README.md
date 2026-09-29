@@ -24,6 +24,7 @@ system at the house to a LiftMaster CSW24UL swing-gate opener over point-to-poin
 | Alarm.com switch turned **ON** | House sends `OPEN`; gate pulses the opener OPEN input |
 | Alarm.com switch turned **OFF** | House sends `CLOSE`; gate pulses CLOSE |
 | Gate moved by AES Prime Edge / siren / keypad | Gate reports it (`cause: external`); house flips K1, the Shelly follows, **no command is sent back** |
+| Gate travelling (`between`) | K1 (and so the Shelly) keeps showing the limit it left and flips only when the other limit is reached; if the gate stays `between` longer than `travel_timeout_s` it shows open. The contact sensor reads open as soon as the gate leaves closed |
 | Command ignored by opener (e.g. siren holding gate open) | Gate reports `timeout`; house re-syncs the Shelly to the real state |
 | Command already satisfied (OPEN while open) | Suppressed at the house, or acknowledged as `already` at the gate |
 | Link lost | Contact sensor reads **open** (fail-safe, configurable); commands expire after `cmd_ttl_s` rather than firing late |
@@ -159,6 +160,8 @@ and tell the two apart.
 
 - House IN1 to 3.3 V (Shelly ON) → gate K1 pulses once; release → gate K2 pulses once.
 - Gate IN1 to 3.3 V (open limit) → house K1 energizes, K2 releases; gate IN2 to 3.3 V → K1 releases, K2 energizes.
+- Travel: from closed (gate IN2 jumpered), remove IN2 → house K2 releases at once but K1 stays off; jumper IN1 → K1
+  energizes. Leave both off for `travel_timeout_s` instead → K1 energizes when it expires.
 - External move: with no command sent, jumper gate IN1 to 3.3 V → house status shows `cause external`,
   **no command sent** (house log shows `sync`, not `cmd_sent`, if the Shelly or a jumper follows K1).
 - Override: jumper gate IN1 (open), turn house IN1 off (CLOSE) → gate reports `timeout` after `travel_timeout_s`,

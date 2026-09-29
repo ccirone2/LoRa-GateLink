@@ -67,7 +67,7 @@
           <div class="kv"><span>Sync window / resync</span><b id="hSync">—</b></div>
           <div class="kv"><span>Last command</span><b id="hCmd">—</b></div>
           <div class="kv"><span>Gate limits (remote)</span><b id="hLimits">—</b></div>
-          <div class="kv"><span>Gate spare inputs</span><b id="hSpare">—</b></div>
+          <div class="kv"><span>Gate opener power / spare</span><b id="hSpare">—</b></div>
           <div class="kv"><span>Gate uptime</span><b id="hGateUp">—</b></div>
         </div>
         <div class="card">
@@ -93,7 +93,7 @@
         <label class="button">Import JSON<input id="fileImport" type="file" accept="application/json" hidden></label>
         <button id="btnCfgReset" class="danger">Factory reset</button>
       </div>
-      <p class="muted">Apply changes RAM (radio settings take effect immediately). Save writes flash. Uploading new firmware erases saved config and key — export first. Both boards must share net_id, radio settings and key.</p>
+      <p class="muted">Apply updates the running settings (radio settings take effect immediately); Save writes them to flash. Uploading new firmware erases saved config and key — export first. Both boards must share net_id, radio settings and key.</p>
       <div id="cfgForm" class="cfg-groups"></div>
     </section>
 

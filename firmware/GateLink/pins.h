@@ -10,7 +10,7 @@
 // Never drive above 3.3 V. Use screw terminals / proto area.
 #define PIN_IN1 A1
 #define PIN_IN2 A2
-// Spare inputs, read and reported but not yet used (e.g. beam-break sensor, alarm status).
+// IN3/IN4: read and reported. Gate IN3 = opener power sense (power_sense); the rest are spare.
 #define PIN_IN3 A3
 #define PIN_IN4 A4
 
@@ -18,7 +18,9 @@
 //   HOUSE: IN1 = Shelly Wave 1 relay (O/I) "switch state"
 //          K1  = Shelly SW input (state sync: energized = gate not closed)
 //          K2  = 2GIG wireless contact sensor terminals (energized = gate closed)
-//   GATE:  IN1 = CSW24UL AUX relay "open limit"
+//   GATE:  (all inputs via a PNP-output opto board)
+//          IN1 = CSW24UL AUX relay "open limit"
 //          IN2 = CSW24UL AUX relay "closed limit"
+//          IN3 = CSW24UL 24 V accessory power (power sense)
 //          K1  = CSW24UL OPEN + COM   (pulsed only)
 //          K2  = CSW24UL CLOSE + COM  (pulsed only)

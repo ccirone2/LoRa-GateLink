@@ -24,7 +24,7 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 extern Input in1, in2, in3, in4;
 extern Relay k1, k2;
 
-// Debounce the spare inputs (IN3/IN4) and log edges. Returns true if either changed.
+// Debounce IN3/IN4 (gate IN3 = opener power sense) and log edges. Returns true if either changed.
 bool updateSpareInputs(uint32_t now);
 
 const char *gateStateName(uint8_t s);

@@ -33,13 +33,13 @@ Layers, bottom up:
 
 ## Web console
 
-`web/app.js` is plain JS, no build step. Notable pieces: auto-reconnect (`startReconnect`/`tryReconnect`: after a reboot or unexpected drop, reopen the already-granted port for 30 s; the Web Serial `connect` event identifies the returning board since both boards share VID/PID); `disconnect()` must await both stream pipes before `port.close()` or the port stays open and blocks uploads; the Install tab is driven by the `WIRING` table (keep it in sync with `pins.h` and the role behaviour).
+`web/app.js` is plain JS, no build step. Notable pieces: auto-reconnect (`startReconnect`/`tryReconnect`: after a reboot or unexpected drop, reopen the already-granted port for 30 s; the Web Serial `connect` event identifies the returning board since both boards share VID/PID); `disconnect()` must await both stream pipes before `port.close()` or the port stays open and blocks uploads; the Install tab is driven by the `WIRING` table (keep it in sync with `pins.h` and the role behaviour); 0/1 params without a `SELECTS` entry render as toggle checkboxes, so read/write form fields through `fieldValue`/`setField`, not `.value`.
 
 **Naming rule:** don't use "Shelly" or "Alarm.com" anywhere in `web/` — the house-side device is the generic "controller" (it may be replaced). Firmware names that reach the page follow the same rule (`ctrl_sync`, `ctrl` status field / log event). README and firmware comments may name the actual install hardware.
 
 ## Bench testing
 
-The boards can be driven from scripts over USB serial with the same JSON console the web page uses (e.g. pyserial: `{"id":1,"cmd":"status"}`, `log.get`, `config.set`, `key.set`, `identify`, `reboot`). Only one program can hold a port — close/disconnect the web console first. Every upload wipes config (role, key, `tx_power`), so re-apply them afterwards. On USB power keep `tx_power` low (~5): full-power TX with a relay energized crashed the board into watchdog resets.
+The boards can be driven from scripts over USB serial with the same JSON console the web page uses (e.g. pyserial: `{"id":1,"cmd":"status"}`, `log.get`, `config.set`, `key.set`, `identify`, `reboot`). Only one program can hold a port — close/disconnect the web console first. Every upload wipes config (role, key, `tx_power`; `power_sense` returns to on), so re-apply them afterwards. Without jumpers, toggling an input's `inN_invert` flips what the firmware sees, which lets scripts exercise input paths on bare boards (restore to 0 afterwards). On USB power keep `tx_power` low (~5): full-power TX with a relay energized crashed the board into watchdog resets.
 
 ## Behavioural invariants (don't break these)
 

@@ -28,9 +28,9 @@ const HELP = {
   debounce_ms: 'Input debounce',
   in1_invert: 'House: controller input · Gate: open limit',
   in2_invert: 'Gate: closed limit',
-  in3_invert: 'Spare input IN3 (A3)',
+  in3_invert: 'House: spare IN3 · Gate: opener power sense',
   in4_invert: 'Spare input IN4 (A4)',
-  power_sense: 'Gate: IN3 = opener 24 V present · off → gate reads “no power” and refuses commands',
+  power_sense: 'Gate: IN3 senses opener 24 V; without it the gate reads “no power” and refuses commands',
   pulse_ms: 'OPEN/CLOSE contact closure length',
   travel_timeout_s: 'Report timeout if limit not reached',
   ctrl_sync: 'Drive K1 so the controller mirrors the gate',
@@ -427,7 +427,7 @@ function renderStatus(s) {
     const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 3: 'busy', 4: 'refused: opener unpowered' };
     $('hCmd').textContent = `#${s.cmd_id} · ${s.cmd_pending ? 'sending…' : cmdRes[s.cmd_result] ?? s.cmd_result}`;
     $('hLimits').textContent = r.uptime_s ? `open ${r.open_limit ? '●' : '○'}  closed ${r.close_limit ? '●' : '○'}` : '—';
-    $('hSpare').textContent = r.uptime_s && 'in3' in r ? `IN3 ${r.in3 ? '●' : '○'}  IN4 ${r.in4 ? '●' : '○'}` : '—';
+    $('hSpare').textContent = r.uptime_s && 'in3' in r ? `power ${r.in3 ? '●' : '○'}  IN4 ${r.in4 ? '●' : '○'}` : '—';
     $('hGateUp').textContent = r.uptime_s ? fmtDur(r.uptime_s * 1000) : '—';
   }
 }

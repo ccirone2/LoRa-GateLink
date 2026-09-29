@@ -55,9 +55,9 @@ const IO_LABELS = {
 // rows: [board terminal, device terminal]. All board GND terminals are common.
 // Inputs use the internal pull-down: active = driven to 3.3 V, unwired/open = off.
 const V33 = '3.3 V (VCC)';
-const SPARE_INPUTS = { name: 'Spare inputs (optional)', hint: 'Not used yet · e.g. beam break, alarm status', kind: 'in',
+const SPARE_INPUTS = { name: 'Spare inputs (optional)', hint: 'Spare · e.g. beam break, alarm status', kind: 'in',
   rows: [['IN2 (A2)', 'Contact'], ['IN3 (A3)', 'Contact'], ['IN4 (A4)', 'Contact'], [V33, 'Common']] };
-const SPARE_NOTE = 'IN2 (A2), IN3 (A3) and IN4 (A4) are spare inputs (contact to 3.3 V, internal pull-down), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave them unwired if unused; they read “off”.';
+const SPARE_NOTE = 'IN2 (A2), IN3 (A3) and IN4 (A4) are spare inputs (contact to 3.3 V, internal pull-down), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave spare inputs unwired if you don’t need them; they read “off”.';
 const WIRING = {
   house: {
     groups: [

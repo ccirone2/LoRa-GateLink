@@ -18,12 +18,13 @@ enum LogCode : uint8_t {
   EV_PULSE,          // a = relay, b = ms
   EV_GATE_STATE,     // a = state, b = cause
   EV_TRAVEL_TIMEOUT, // a = target state
-  EV_CTRL,           // a = level
+  EV_CTRL,           // a = level, b = 1 if ignored (controller unpowered)
   EV_SYNC,           // a = level (edge caused by our K1 sync)
   EV_RESYNC,         // a = target level
   EV_CFG_REMOTE,     // a = param id, b = value
   EV_INPUT,          // a = spare input number (house 2/3/4, gate 3/4), b = level
   EV_CMD_REFUSED,    // a = action, b = cmd id (opener unpowered)
+  EV_CTRL_POWER,     // a = controller power level, b = action discarded by the power loss (0 = none)
   EV_COUNT
 };
 

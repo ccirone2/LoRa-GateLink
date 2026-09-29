@@ -10,7 +10,8 @@ const GROUPS = [
   ['Link', ['retries', 'heartbeat_s', 'link_timeout_s', 'cmd_ttl_s']],
   ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert', 'in3_invert', 'in4_invert', 'power_sense']],
   ['Gate node', ['pulse_ms', 'travel_timeout_s']],
-  ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open']],
+  ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open',
+    'ctrl_power_sense', 'ctrl_confirm_ms', 'ctrl_settle_ms']],
 ];
 const HELP = {
   role: 'Reboot after saving',
@@ -27,7 +28,7 @@ const HELP = {
   cmd_ttl_s: 'Drop a command not delivered within this time',
   debounce_ms: 'Input debounce',
   in1_invert: 'House: controller input · Gate: open limit',
-  in2_invert: 'House: spare IN2 · Gate: closed limit',
+  in2_invert: 'House: controller power sense · Gate: closed limit',
   in3_invert: 'House: spare IN3 · Gate: opener power sense',
   in4_invert: 'Spare input IN4 (A4)',
   power_sense: 'Gate: IN3 senses opener 24 V; without it the gate reads “no power” and refuses commands',
@@ -39,13 +40,16 @@ const HELP = {
   mismatch_timeout_s: 'Controller ≠ gate this long → resync',
   sensor_invert: 'Invert contact sensor output (K2)',
   linkloss_open: 'Sensor reads open when link is down',
+  ctrl_power_sense: 'House: IN2 senses the controller’s supply; while it’s off, controller edges never become commands',
+  ctrl_confirm_ms: 'Hold each controller edge this long; dropped if controller power fails meanwhile',
+  ctrl_settle_ms: 'After controller power returns (or house boot), treat its edges as sync this long',
 };
 const SELECTS = {
   role: [[0, 'unset'], [1, 'house'], [2, 'gate']],
   bw_hz: [[125000, '125 kHz'], [250000, '250 kHz'], [500000, '500 kHz']],
 };
 const IO_LABELS = {
-  house: { in1: 'IN1 · Controller input', in2: 'IN2 · spare', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
+  house: { in1: 'IN1 · Controller input', in2: 'IN2 · Controller power', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
   gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Closed limit', in3: 'IN3 · Opener power', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
   unset: { in1: 'IN1', in2: 'IN2', in3: 'IN3', in4: 'IN4', k1: 'K1', k2: 'K2' },
 };
@@ -56,13 +60,15 @@ const IO_LABELS = {
 // Inputs use the internal pull-down: active = driven to 3.3 V, unwired/open = off.
 const V33 = '3.3 V (VCC)';
 const SPARE_INPUTS = { name: 'Spare inputs (optional)', hint: 'Spare · e.g. beam break, alarm status', kind: 'in',
-  rows: [['IN2 (A2)', 'Contact'], ['IN3 (A3)', 'Contact'], ['IN4 (A4)', 'Contact'], [V33, 'Common']] };
-const SPARE_NOTE = 'IN2 (A2), IN3 (A3) and IN4 (A4) are spare inputs (contact to 3.3 V, internal pull-down), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave spare inputs unwired if you don’t need them; they read “off”.';
+  rows: [['IN3 (A3)', 'Contact'], ['IN4 (A4)', 'Contact'], [V33, 'Common']] };
+const SPARE_NOTE = 'IN3 (A3) and IN4 (A4) are spare inputs (contact to 3.3 V, internal pull-down), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave spare inputs unwired if you don’t need them; they read “off”.';
 const WIRING = {
   house: {
     groups: [
       { name: 'Controller relay output', hint: 'Dry contact · closed = open gate', kind: 'in',
         rows: [['IN1 (A1)', 'Contact'], [V33, 'Contact']] },
+      { name: 'Controller power sense (opto, PNP)', hint: 'Channel across the controller’s 12 V supply', kind: 'in',
+        rows: [['IN2 (A2)', 'OUT · controller power'], [V33, 'VCC (output side)'], ['GND', 'GND (output side)']] },
       { name: 'Controller switch input', hint: 'K1 closed while gate is not closed (held until travel ends)', kind: 'out',
         rows: [['K1 COM', 'Switch input'], ['K1 NO', 'Switch common']] },
       { name: 'Contact sensor', hint: 'K2 closed = gate closed', kind: 'out',
@@ -74,6 +80,7 @@ const WIRING = {
     notes: [
       'IN1 reads the controller’s relay contact switched to the board’s 3.3 V (internal pull-down; open = off). The controller output must be a potential-free contact, and nothing above 3.3 V may reach IN1. Set <code>in1_invert</code> if ON and OFF come out reversed.',
       'K1 mirrors the real gate back to the controller so its switch always shows the true state. Set the controller’s switch input to toggle/follow mode (contact closed = ON, open = OFF), not detached. Wire it per the controller’s switch-input diagram. Low voltage only; never switch mains with the shield.',
+      'IN2 senses the controller’s supply through a PNP-output opto channel wired across it (use a channel rated for that voltage; output side from 3.3 V only). When the controller loses power its relay drops, which would otherwise look like a user turning the switch off: while IN2 is off, controller edges are logged but never sent, each edge waits <code>ctrl_confirm_ms</code> in case power is failing, and after power returns its edges count as sync for up to <code>ctrl_settle_ms</code>. Set <code>ctrl_power_sense</code> to 0 if IN2 isn’t wired.',
       'The contact sensor needs an external terminal input. K2 closes when the gate is closed and opens if the link is lost (<code>linkloss_open</code>). <code>sensor_invert</code> flips it.',
       'VIN is 5 V max. USB power is fine for the house board.',
       SPARE_NOTE,
@@ -421,6 +428,7 @@ function renderStatus(s) {
     const r = s.remote || {};
     $('lnkRemoteRssi').textContent = r.uptime_s ? `${r.rssi} dBm / ${r.snr} dB` : '—';
     $('hCtrl').innerHTML = pill(s.ctrl);
+    $('hCtrlPower').innerHTML = 'ctrl_power' in s ? (s.ctrl_power ? pill(true) : '<span class="bad">off · edges ignored</span>') : '—';
     $('hArmed').textContent = yesNo(s.armed);
     $('hSync').textContent = `${yesNo(s.sync_window)} / ${yesNo(s.resyncing)}`;
     const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 3: 'busy', 4: 'refused: opener unpowered' };

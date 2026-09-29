@@ -44,6 +44,9 @@ struct Config {
   int32_t mismatch_timeout_s;
   int32_t sensor_invert;
   int32_t linkloss_open;
+  int32_t ctrl_power_sense;  // house: IN2 = controller supply present
+  int32_t ctrl_confirm_ms;
+  int32_t ctrl_settle_ms;
   // Security
   uint8_t key[16];
   int32_t key_set;

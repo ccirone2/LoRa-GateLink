@@ -7,6 +7,8 @@
 //        limit is reached, falling back to open only if it stays BETWEEN longer than
 //        travel_timeout_s. Edges on IN1 caused by K1 fall inside a sync window and are ignored.
 //  K2  = wireless contact sensor. Energized (closed loop) only when the gate is closed.
+//  IN2 = Shelly supply, via a PNP opto (ctrl_power_sense). The Shelly's relay drops when it loses
+//        power and comes back at the K1 level when it boots; neither edge may become a command.
 #include "roles.h"
 #include "config.h"
 #include "log.h"
@@ -36,6 +38,9 @@ static bool resyncing = false;
 static uint32_t resyncUntil = 0;
 static uint32_t mismatchSince = 0;
 static bool k1WasPulsing = false;
+static bool ctrlPower = true;
+static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms
+static uint32_t pendingAt = 0;
 
 static uint16_t cmdId = 0;
 static uint8_t cmdAction = 0;
@@ -52,10 +57,12 @@ static bool k1Target(uint32_t now) {
   return gateState != GS_CLOSED;
 }
 
+// Never shortens an open window (e.g. the settle window after the Shelly powers up).
 static void openSyncWindow(uint32_t now, bool expect, uint32_t extraMs) {
+  uint32_t until = now + extraMs + cfg.sync_window_ms;
+  if (!syncActive || (int32_t)(until - syncUntil) > 0) syncUntil = until;
   syncActive = true;
   syncExpect = expect;
-  syncUntil = now + extraMs + cfg.sync_window_ms;
 }
 
 // Every K1 change opens a sync window, even when the Shelly should already be at that level:
@@ -104,7 +111,20 @@ void houseBegin() {
   shellyLevel = in1.active();
   armed = false;
   armAt = 0;
-  applyOutputs(millis());
+  ctrlPower = !cfg.ctrl_power_sense || in2.active();
+  uint32_t now = millis();
+  // A shared supply may have just powered up the Shelly too: let it settle to K1 first.
+  openSyncWindow(now, k1.on(), cfg.ctrl_settle_ms);
+  applyOutputs(now);
+}
+
+static void updateCtrlPower(uint32_t now) {
+  bool p = !cfg.ctrl_power_sense || in2.active();
+  if (p == ctrlPower) return;
+  ctrlPower = p;
+  logEvent(EV_CTRL_POWER, p, p ? 0 : pendingAction);
+  if (!p) pendingAction = 0;  // the edge was the relay dropping with the supply
+  else openSyncWindow(now, k1.on(), cfg.ctrl_settle_ms);
 }
 
 void houseLoop(uint32_t now) {
@@ -125,20 +145,31 @@ void houseLoop(uint32_t now) {
   if (syncActive && (int32_t)(now - syncUntil) >= 0) syncActive = false;
 
   updateSpareInputs(now);
-  // IN2 is a spare on the house board: debounced and logged only.
-  if (in2.update(now, cfg.debounce_ms, cfg.in2_invert)) logEvent(EV_INPUT, 2, in2.active());
+  // IN2 is the Shelly power sense; with ctrl_power_sense off it's a spare, only logged.
+  if (in2.update(now, cfg.debounce_ms, cfg.in2_invert) && !cfg.ctrl_power_sense) logEvent(EV_INPUT, 2, in2.active());
+  updateCtrlPower(now);
 
   if (in1.update(now, cfg.debounce_ms, cfg.in1_invert)) {
     shellyLevel = in1.active();
-    // Any edge inside a sync window is attributed to K1 (e.g. gate bouncing CLOSED->BETWEEN->CLOSED
-    // flips K1 twice); if the Shelly ends up wrong, the mismatch/resync logic below corrects it.
+    // Any edge inside a sync window is attributed to K1 (e.g. a Shelly that toggles on every SW edge,
+    // or one still booting); if the Shelly ends up wrong, the mismatch/resync logic below corrects it.
     if (syncActive) {
       if (shellyLevel == syncExpect) syncActive = false;
       logEvent(EV_SYNC, shellyLevel);
+    } else if (!ctrlPower) {
+      logEvent(EV_CTRL, shellyLevel, 1);
     } else {
       logEvent(EV_CTRL, shellyLevel);
-      if (armed) sendCommand(shellyLevel ? ACT_OPEN : ACT_CLOSE);
+      if (armed) {
+        pendingAction = shellyLevel ? ACT_OPEN : ACT_CLOSE;
+        pendingAt = now;
+      }
     }
+  }
+  // The relay can drop before the power sense does: send only once power has held for ctrl_confirm_ms.
+  if (pendingAction && (!cfg.ctrl_power_sense || (int32_t)(now - pendingAt) >= cfg.ctrl_confirm_ms)) {
+    sendCommand(pendingAction);
+    pendingAction = 0;
   }
 
   // Resync the Shelly to the real gate if they disagree for too long
@@ -148,6 +179,8 @@ void houseLoop(uint32_t now) {
       resyncing = false;
       driveK1(now, k1Target(now));
     }
+  } else if (!ctrlPower) {
+    mismatchSince = 0;  // an unpowered Shelly can't follow K1; start over once it's back
   } else if (cfg.ctrl_sync && armed && linkUp && haveStatus && !linkPending(SLOT_CMD)) {
     bool t = k1Target(now);
     // Mid-travel the Shelly may already show a user's new command while K1 holds the old limit.
@@ -225,6 +258,7 @@ void houseStatus(JsonObject o) {
   o["link_up"] = linkUp;
   o["armed"] = armed;
   o["ctrl"] = shellyLevel;
+  o["ctrl_power"] = ctrlPower;
   o["sync_window"] = syncActive;
   o["resyncing"] = resyncing;
   o["cmd_id"] = cmdId;

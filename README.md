@@ -29,6 +29,7 @@ system at the house to a LiftMaster CSW24UL swing-gate opener over point-to-poin
 | Command already satisfied (OPEN while open) | Suppressed at the house, or acknowledged as `already` at the gate — unless the opposite command is still in flight (switch flipped and straight back), which is sent and pulsed to reverse it |
 | Link lost | Contact sensor reads **open** (fail-safe, configurable); commands expire after `cmd_ttl_s` rather than firing late |
 | Opener loses power (gate IN3 off) | Gate reports `no_power` instead of `between`; contact sensor reads open; commands are refused (gate log `cmd_refused`; house shows *refused: opener unpowered*) |
+| Shelly loses power (house IN2 off) | Its relay drops, but that edge is never sent as a command (house log `ctrl_power 0`, then `ctrl` with b=1); an edge seen up to `ctrl_confirm_ms` before the power sense drops is discarded too. When power returns the Shelly comes back at the K1 level and that edge is logged `sync` |
 | House board reboots | Never commands the gate from the Shelly's level at power-up; waits for gate status first |
 
 Gate relays are **only ever pulsed** (default 500 ms), never held, so the other devices on the
@@ -46,7 +47,16 @@ never from the last command sent.
   opener's 24 V accessory output drives IN3 to tell them apart: IN3 off → gate state `no_power`, which overrides
   the limits, and OPEN/CLOSE commands are acknowledged as refused without pulsing. Turn the `power_sense` toggle
   off (also possible remotely over LoRa) if IN3 isn't wired.
-- **Spare inputs** IN4 = A4 (and IN2/IN3 on the house board): pull-down inputs (contact to 3.3 V) reserved for
+- **House IN2 = Shelly power sense** (`ctrl_power_sense`, default on). When the Shelly loses power its relay drops,
+  which looks exactly like the Alarm.com switch being turned off; without this a power blip would close the gate
+  and reopen it when the Shelly came back. A PNP opto channel across the Shelly's 12 V supply drives IN2 (use a
+  channel rated for 12 V input; output side from the board's 3.3 V, as on the gate). While IN2 is off, IN1 edges are
+  logged but never sent and resync pauses. Because the relay can drop before the opto does, each IN1 edge is held
+  for `ctrl_confirm_ms` (default 500 ms) and discarded if IN2 drops meanwhile. After power returns (and after a house
+  boot) IN1 edges count as sync for up to `ctrl_settle_ms` (default 10 s), ending as soon as the Shelly matches K1.
+  A Shelly that reboots internally without losing its supply isn't covered. Turn `ctrl_power_sense` off if IN2 isn't
+  wired.
+- **Spare inputs** IN4 = A4 (and IN3 on the house board): pull-down inputs (contact to 3.3 V) reserved for
   future use such as a beam-break sensor or alarm status. They're debounced, logged (`input` events), shown in Status
   (the gate's are also sent to the house), with `inN_invert` toggles, but don't affect behaviour yet. Leave
   unwired if unused.
@@ -61,7 +71,7 @@ never from the last command sent.
   relay is energized can crash a weakly powered board (seen on PC USB power); use a solid 5 V supply, and consider
   a bulk capacitor (~470 µF) across 5 V/GND or a LiPo on the MKR battery connector.
 - Use relay NO/COM contacts for everything. Add TVS/RC suppression on long input runs.
-- **Shelly Wave 1**: power from 24 V DC/AC per Shelly's low-voltage wiring so the SW input that K1 drives
+- **Shelly Wave 1**: power from a low-voltage supply per Shelly's wiring (12 V DC here) so the SW input that K1 drives
   is low voltage — do not switch mains with the shield. Wire the Shelly relay output **I→3.3 V, O→HOUSE IN1**.
   Set the SW input to *toggle switch, contact closed = ON / open = OFF* (see the "SW1 switch type"
   parameter in the Shelly Wave 1 manual). Don't use detached mode. If it is left on "changes status when
@@ -116,7 +126,8 @@ table and notes for each board; works without a board connected).
 1. Flash both boards.
 2. Connect board A → Config → `role = house` → Apply → Save → Reboot. Board B → `role = gate`, same.
    If the gate's IN3 power sense isn't wired yet, turn its `power_sense` toggle off too, or the gate reads
-   `no_power` and refuses commands.
+   `no_power` and refuses commands. Likewise turn the house's `ctrl_power_sense` off until IN2 is wired, or
+   Alarm.com commands are ignored (Status: *Controller power: off*).
 3. Security → **Generate** → write the key to board A, then write the **same** key to board B.
    The radio link stays off until a key is set, so a fresh or reset board can never be commanded.
 4. With both powered, Status on either board should show *Peer verified: yes* within a few seconds.
@@ -172,6 +183,10 @@ and tell the two apart.
   toggle house IN1 → gate log `cmd_refused`, no `pulse`, house *Last command* shows *refused: opener unpowered*. Re-jumper IN3 → state
   follows the limits again. Turn the gate's `power_sense` toggle off and Apply (or from the house: Tools → remote
   setting `power_sense` = 0) → IN3 is ignored.
+- Shelly power sense: with the gate open and the Shelly on, remove the Shelly's 12 V → house log `ctrl_power 0`
+  (plus `ctrl` b=1, or `ctrl_power` b=2 if the relay dropped first), no `cmd_sent`, gate no `pulse`; restore it →
+  `ctrl_power 1`, then `sync 1` when the Shelly comes back on. Compare the `ctrl` and `ctrl_power` times to check
+  `ctrl_confirm_ms` covers the gap.
 - Config toggles: flip any toggle → its row is highlighted as unsaved; Apply → the highlight clears and Status
   reflects the change; Save, reboot → the toggle keeps its new position. Export config shows it as 0/1.
 - Unpower the gate board → after `link_timeout_s` house K2 releases (sensor open), log `link_down`.

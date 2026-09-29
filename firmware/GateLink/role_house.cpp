@@ -57,6 +57,14 @@ static void openSyncWindow(uint32_t now, bool expect, uint32_t extraMs) {
   syncUntil = now + extraMs + cfg.sync_window_ms;
 }
 
+// Every K1 change opens a sync window, even when the Shelly should already be at that level:
+// a Shelly misconfigured to toggle on SW edges flips anyway, and that flip must not become a command.
+static void driveK1(uint32_t now, bool level) {
+  if (k1.on() == level) return;
+  k1.set(level);
+  openSyncWindow(now, level, 0);
+}
+
 static void applyOutputs(uint32_t now) {
   // Contact sensor: closed only when we positively know the gate is closed.
   bool closed = gateState == GS_CLOSED;
@@ -65,11 +73,7 @@ static void applyOutputs(uint32_t now) {
   if (!k2.pulsing() && k2.on() != k2on) k2.set(k2on);
 
   if (cfg.ctrl_sync && haveStatus && !resyncing && !k1.pulsing()) {
-    bool t = k1Target(now);
-    if (t != k1.on()) {
-      k1.set(t);
-      if (shellyLevel != t) openSyncWindow(now, t, 0);
-    }
+    driveK1(now, k1Target(now));
   }
 }
 
@@ -134,7 +138,7 @@ void houseLoop(uint32_t now) {
   if (resyncing) {
     if ((int32_t)(now - resyncUntil) >= 0) {
       resyncing = false;
-      k1.set(k1Target(now));
+      driveK1(now, k1Target(now));
     }
   } else if (cfg.ctrl_sync && armed && linkUp && haveStatus && !linkPending(SLOT_CMD)) {
     bool t = k1Target(now);

@@ -64,7 +64,9 @@ never from the last command sent.
 - **Shelly Wave 1**: power from 24 V DC/AC per Shelly's low-voltage wiring so the SW input that K1 drives
   is low voltage — do not switch mains with the shield. Wire the Shelly relay output **I→3.3 V, O→HOUSE IN1**.
   Set the SW input to *toggle switch, contact closed = ON / open = OFF* (see the "SW1 switch type"
-  parameter in the Shelly Wave 1 manual). Don't use detached mode.
+  parameter in the Shelly Wave 1 manual). Don't use detached mode. If it is left on "changes status when
+  switch changes status", the Alarm.com switch flips whenever K1 moves (house log: `sync` right after
+  `gate_state`, then repeated `resync`); the house ignores those flips, so no gate commands result.
 - **2GIG contact sensor**: any 2GIG-compatible door/window sensor with external terminal input. Wire K2 NO/COM
   to its terminals; name it "Gate" in Alarm.com. (`sensor_invert` flips the sense if needed.)
 - **CSW24UL**: set AUX relay A to *open limit* and AUX relay B to *closed limit* (per the LiftMaster manual)

@@ -35,6 +35,7 @@ static bool syncExpect = false;
 static bool resyncing = false;
 static uint32_t resyncUntil = 0;
 static uint32_t mismatchSince = 0;
+static bool k1WasPulsing = false;
 
 static uint16_t cmdId = 0;
 static uint8_t cmdAction = 0;
@@ -78,8 +79,11 @@ static void applyOutputs(uint32_t now) {
 }
 
 static void sendCommand(uint8_t action) {
-  bool matches = (action == ACT_OPEN && gateState == GS_OPEN) || (action == ACT_CLOSE && gateState == GS_CLOSED);
-  if (linkUp && matches) {
+  uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
+  // Don't suppress while an opposite command is queued or the gate is still heading the other way
+  // (switch flipped off and straight back on before the gate left its limit).
+  bool opposing = (linkPending(SLOT_CMD) && cmdAction != action) || (gateTarget != GS_UNKNOWN && gateTarget != want);
+  if (linkUp && gateState == want && !opposing) {
     logEvent(EV_CMD_SUPPRESSED, action, gateState);
     return;
   }
@@ -113,6 +117,10 @@ void houseLoop(uint32_t now) {
   }
 
   if (!armed && armAt && (int32_t)(now - armAt) >= 0) armed = true;
+  // The end of a K1 test pulse moves the Shelly too (the pulse may outlast arming): cover it with a window.
+  bool k1Pulsing = k1.pulsing();
+  if (k1WasPulsing && !k1Pulsing) openSyncWindow(now, k1.on(), 0);
+  k1WasPulsing = k1Pulsing;
   applyOutputs(now);  // also restores K1/K2 after a relay test pulse
   if (syncActive && (int32_t)(now - syncUntil) >= 0) syncActive = false;
 

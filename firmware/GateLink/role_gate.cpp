@@ -89,15 +89,22 @@ void gateLoop(uint32_t now) {
     sendStatus(now);
   }
 
-  // New house session (house rebooted): its command ids restart, so forget the last one.
+  // New house session (house rebooted): its command ids restart, so forget the last one, and
+  // report now so the house restores K1/K2 without waiting for the next heartbeat.
   if (linkStats().sessions != seenSessions) {
     seenSessions = linkStats().sessions;
     haveCmd = false;
+    sendStatus(now);
   }
 
   if (target != GS_UNKNOWN && elapsed(now, targetSince, (uint32_t)cfg.travel_timeout_s * 1000)) {
-    logEvent(EV_TRAVEL_TIMEOUT, target);
-    lastResult = TR_TIMEOUT;
+    // A reversal pulsed before the gate left its limit never sees a state change: it's there already.
+    if (state == target) {
+      lastResult = TR_REACHED;
+    } else {
+      logEvent(EV_TRAVEL_TIMEOUT, target);
+      lastResult = TR_TIMEOUT;
+    }
     target = GS_UNKNOWN;
     sendStatus(now);
   }
@@ -125,10 +132,12 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   haveCmd = true;
   lastCmdId = id;
   uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
+  // Still at this limit, but our last pulse is heading for the other one: pulse to reverse it.
+  bool reversing = target != GS_UNKNOWN && target != want;
   if (state == GS_NO_POWER) {
     logEvent(EV_CMD_REFUSED, action, id);
     lastCmdAck = RES_NO_POWER;
-  } else if (state == want) {
+  } else if (state == want && !reversing) {
     lastResult = TR_ALREADY;
     lastCmdAck = RES_ALREADY;
   } else {

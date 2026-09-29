@@ -26,7 +26,7 @@ system at the house to a LiftMaster CSW24UL swing-gate opener over point-to-poin
 | Gate moved by AES Prime Edge / siren / keypad | Gate reports it (`cause: external`); house flips K1, the Shelly follows, **no command is sent back** |
 | Gate travelling (`between`) | K1 (and so the Shelly) keeps showing the limit it left and flips only when the other limit is reached; if the gate stays `between` longer than `travel_timeout_s` it shows open. The contact sensor reads open as soon as the gate leaves closed |
 | Command ignored by opener (e.g. siren holding gate open) | Gate reports `timeout`; house re-syncs the Shelly to the real state |
-| Command already satisfied (OPEN while open) | Suppressed at the house, or acknowledged as `already` at the gate |
+| Command already satisfied (OPEN while open) | Suppressed at the house, or acknowledged as `already` at the gate — unless the opposite command is still in flight (switch flipped and straight back), which is sent and pulsed to reverse it |
 | Link lost | Contact sensor reads **open** (fail-safe, configurable); commands expire after `cmd_ttl_s` rather than firing late |
 | Opener loses power (gate IN3 off) | Gate reports `no_power` instead of `between`; contact sensor reads open; commands are refused (gate log `cmd_refused`; house shows *refused: opener unpowered*) |
 | House board reboots | Never commands the gate from the Shelly's level at power-up; waits for gate status first |

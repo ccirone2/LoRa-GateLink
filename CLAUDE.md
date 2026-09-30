@@ -19,6 +19,8 @@ node --check web/app.js                        # syntax check for the web UI
 python -m http.server 8000 -d web              # serve UI at http://localhost:8000 (Chrome/Edge)
 ```
 
+`tools/GateSim/` is a separate bench-only Uno sketch (`--fqbn arduino:avr:uno`) that simulates the CSW24UL's limits, power and OPEN/CLOSE inputs for the gate board; see README "Bench opener simulator". It is not GateLink firmware.
+
 Dependencies: `arduino:samd` core; libraries `LoRa` (sandeepmistry), `Crypto` (rweather), `FlashStorage` (cmaglie), `ArduinoJson` v7, `Adafruit SleepyDog Library`. There are no automated tests; verification is a clean compile (keep project files warning-free — filter output with `grep GateLink[\\/]`) plus the hardware bench checklist in README.md.
 
 ## Firmware architecture

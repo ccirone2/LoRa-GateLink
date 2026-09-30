@@ -23,12 +23,12 @@ system at the house to a LiftMaster CSW24UL swing-gate opener over point-to-poin
 |---|---|
 | Alarm.com switch turned **ON** | House sends `OPEN`; gate pulses the opener OPEN input |
 | Alarm.com switch turned **OFF** | House sends `CLOSE`; gate pulses CLOSE |
-| Gate moved by AES Prime Edge / siren / keypad | Gate reports it (`cause: external`); house flips K1, the Shelly follows, **no command is sent back** |
+| Gate moved by AES Prime Edge / siren / keypad | Gate reports it (`cause: external`, even right after one of our commands); house flips K1, the Shelly follows, **no command is sent back**. `cause: lora` means the gate is moving toward the limit our last command asked for |
 | Gate travelling (`between`) | K1 (and so the Shelly) keeps showing the limit it left and flips only when the other limit is reached; if the gate stays `between` longer than `travel_timeout_s` it shows open. The contact sensor reads open as soon as the gate leaves closed |
 | Command ignored by opener (e.g. siren holding gate open) | Gate reports `timeout`; house re-syncs the Shelly to the real state |
 | Command already satisfied (OPEN while open) | Suppressed at the house, or acknowledged as `already` at the gate — unless the opposite command is still in flight (switch flipped and straight back), which is sent and pulsed to reverse it |
 | Link lost | Contact sensor reads **open** (fail-safe, configurable); commands expire after `cmd_ttl_s` rather than firing late |
-| Opener loses power (gate IN3 off) | Gate reports `no_power` instead of `between`; contact sensor reads open; commands are refused (gate log `cmd_refused`; house shows *refused: opener unpowered*) |
+| Opener loses power (gate IN3 off) | Gate reports `no_power` instead of `between`. The gate doesn't move, but its position can't be verified (and it may be moved by hand), so the house shows not-closed: contact sensor open, K1 energized and the Shelly shows on. Commands are refused (gate log `cmd_refused`; house shows *refused: opener unpowered*). When power returns everything follows the limits again |
 | Shelly loses power (house IN2 off) | Its relay drops, but that edge is never sent as a command (house log `ctrl_power 0`, then `ctrl` with b=1); an edge seen up to `ctrl_confirm_ms` before the power sense drops is discarded too. When power returns the Shelly comes back at the K1 level and that edge is logged `sync` |
 | House board reboots | Never commands the gate from the Shelly's level at power-up; waits for gate status first |
 
@@ -194,6 +194,15 @@ and tell the two apart.
 - Different key on one board → *Peer verified* stays no and `mac_fail` climbs.
 - Reboot the house board with IN1 jumpered to 3.3 V → the gate does not move.
 
+With the opener simulator below wired in, the same checks run end to end without jumpers:
+
+- Shelly ON → gate pulses K1, simulator travels, gate `between` → `open` (`cause lora`); house K1 stays off during
+  travel and energizes at the open limit, K2 releases as soon as the gate leaves closed. Shelly OFF → reverse.
+- Shelly OFF a few seconds into an opening → gate pulses K2 and the simulator reverses to closed (`cause lora`).
+- Simulator `open`/`close` (even right after a Shelly command) → `cause external`, house log `sync`, no `cmd_sent`.
+- Simulator `power off` → gate `no_power`, house not-closed; Shelly OFF → gate `cmd_refused`. `power on` → back to
+  the limits.
+
 ### Bench opener simulator (`tools/GateSim`)
 
 Bench only: an Arduino Uno with a relay module stands in for the CSW24UL so the gate board sees real limit and
@@ -220,7 +229,8 @@ move), `stop` (strand it between), `power on|off`, `travel <s>` (default 15), `f
 CLOSE for closed, reversing mid-travel. Without power the limits drop, motion freezes and pulses are ignored.
 Faults: `stuck` leaves the limit and jams (exercises `travel_timeout_s`), `both` asserts both limits (gate
 `fault`), `flicker` chatters a limit on arrival (debounce), `deaf` ignores the gate's pulses. Opening the port
-resets the Uno, which restarts it closed and powered.
+resets the Uno, which restarts it closed and powered (the gate briefly sees `no_power`); scripts can avoid that
+by opening it with DTR off (pyserial: set `dtr = False` before `open()`).
 
 Polarity: the bench relay module switches on when the pin is HIGH (`polarity high`, the default); many
 modules are the other way round. After boot, the closed-limit (D3) and power (D4) relays should be on and D2

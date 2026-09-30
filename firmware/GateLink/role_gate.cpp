@@ -12,8 +12,6 @@ static uint8_t cause = CAUSE_NONE;
 static uint8_t lastResult = TR_NONE;
 static uint8_t target = GS_UNKNOWN;  // state we're waiting to reach after our pulse
 static uint32_t targetSince = 0;
-static uint32_t lastPulseAt = 0;
-static bool havePulsed = false;
 static bool haveCmd = false;
 static uint16_t lastCmdId = 0;
 static uint8_t lastCmdAck = RES_OK;
@@ -56,8 +54,6 @@ static void sendStatus(uint32_t now) {
 static void pulse(Relay &r, Relay &other, uint8_t which, uint32_t now) {
   other.set(false);  // interlock: never both
   r.pulse(now, cfg.pulse_ms);
-  lastPulseAt = now;
-  havePulsed = true;
   logEvent(EV_PULSE, which, cfg.pulse_ms);
 }
 
@@ -77,7 +73,9 @@ void gateLoop(uint32_t now) {
     // Power loss/return isn't a gate movement, so it has no cause.
     bool power = s == GS_NO_POWER || state == GS_NO_POWER;
     state = s;
-    bool ours = havePulsed && !elapsed(now, lastPulseAt, (uint32_t)cfg.travel_timeout_s * 1000);
+    // Ours only while our pulse is still heading somewhere and the gate moves that way; anything
+    // else (a local button, the other controllers, an override to the far limit) is external.
+    bool ours = target != GS_UNKNOWN && (s == target || s == GS_BETWEEN);
     cause = power ? CAUSE_NONE : ours ? CAUSE_LORA : CAUSE_EXTERNAL;
     if (target != GS_UNKNOWN && state == target) {
       lastResult = TR_REACHED;
@@ -222,7 +220,8 @@ void gateRelayTest(uint8_t k, uint32_t ms) {
   Relay &other = k == 1 ? k2 : k1;
   other.set(false);
   r.pulse(now, ms);
-  lastPulseAt = now;
-  havePulsed = true;
+  // Track it like a command so the resulting movement is attributed to us, not external.
+  target = k == 1 ? GS_OPEN : GS_CLOSED;
+  targetSince = now;
   logEvent(EV_PULSE, k, ms);
 }

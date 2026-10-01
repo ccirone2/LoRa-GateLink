@@ -1,0 +1,74 @@
+"""Board resets (power blips, watchdog): nothing may be commanded by a reboot, and state recovers."""
+import time
+
+from gatelink.bench import CAUSE, GS, SIM_TRAVEL_S
+from gatelink.flows import open_via_ctrl
+
+
+def test_gate_reboot_at_rest(rig):
+    """The gate resets: new session, the house keeps its state, no relay moves."""
+    rig.expect_commands(0)
+    m = rig.mark()
+    sessions = rig.house.status()["link"]["sessions"]
+    rig.reboot("gate")
+    rig.wait_for(lambda: rig.house.status()["link"]["sessions"] > sessions and rig.gate.status()["link"]["verified"],
+                 20, "new gate session verified")
+    rig.latency("gate reboot -> session re-established", rig.mark() - m)
+    rig.wait_house(10, gate="closed", link_up=True, io__k2=True, io__k1=False)
+    # Back well inside link_timeout_s: the house never declared the link down or changed the sensor.
+    rig.expect_no("house", "link_down", since=m)
+    rig.expect_no("house", "gate_state", since=m)
+    rig.expect_no("gate", "pulse", since=m)
+
+
+def test_gate_reboot_mid_travel(rig):
+    """The gate resets while its OPEN is travelling: it reports the real position and doesn't claim the move."""
+    rig.expect_commands(1)
+    m = rig.mark()
+    rig.ctrl.on()
+    rig.wait_log("gate", "gate_state", a=GS["between"], b=CAUSE["lora"], since=m, timeout=15)
+    time.sleep(1)  # let the 500 ms pulse finish so the reset doesn't cut it short
+    rig.reboot("gate")
+    t_boot = rig.mark()
+    rig.wait_gate("open", timeout=SIM_TRAVEL_S + 10)
+    st = rig.gate.status()
+    assert st["cause"] != "lora", "after a reset the gate has no command in flight, so the move isn't ours"
+    assert st["target"] == ""
+    rig.wait_house(15, gate="open", io__k1=True, io__k2=False, ctrl=True)
+    assert len(rig.logs("gate", "pulse", since=m)) == 1, "exactly the one pulse before the reset"
+    rig.expect_no("gate", "cmd_rx", since=t_boot)
+
+
+def test_house_reboot_controller_on_gate_closed(rig):
+    """House resets while the controller is on but the gate is closed: it must not open the gate."""
+    rig.expect_commands(0)
+    # Get the controller on without a command: report the controller unpowered while switching it on.
+    rig.house.config_set(in2_invert=0)
+    rig.house.config_set(ctrl_power_sense=1)
+    rig.wait_house(5, ctrl_power=False)
+    m = rig.mark()
+    rig.ctrl.on()
+    rig.wait_log("house", "ctrl", a=1, b=1, since=m, timeout=10)
+    rig.reboot("house")  # also re-applies the profile: ctrl_power_sense back off
+    t_boot = rig.mark()
+    rig.wait_house(30, link_up=True, gate="closed", armed=True)
+    # The controller is wrong (on, gate closed); the house fixes the controller, never the gate.
+    rig.wait_ctrl(False, timeout=45)
+    rig.wait_house(10, io__k1=False, io__k2=True, resyncing=False)
+    rig.expect_no("gate", "cmd_rx", since=m)
+    rig.expect_no("gate", "pulse", since=m)
+    rig.latency("house reboot -> controller resynced", rig.mark() - t_boot)
+
+
+def test_house_reboot_gate_open(rig):
+    """House resets with the gate open: relays drop and come back, the controller ends on, nothing commanded."""
+    open_via_ctrl(rig, record=False)
+    rig.expect_commands(1)
+    m = rig.mark()
+    rig.reboot("house")
+    rig.wait_house(30, link_up=True, gate="open", io__k1=True, io__k2=False)
+    # K1 dropping during the reset can switch the controller off; it must come back on without a command.
+    rig.wait_ctrl(True, timeout=45)
+    time.sleep(2)
+    rig.expect_no("gate", "cmd_rx", since=m)
+    assert rig.gate.status()["gate"] == "open"

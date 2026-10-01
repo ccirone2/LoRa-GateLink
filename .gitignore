@@ -3,3 +3,6 @@ build/
 *.bin
 *.elf
 *.hex
+tests/e2e/results/
+__pycache__/
+.pytest_cache/

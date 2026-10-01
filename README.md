@@ -236,6 +236,50 @@ Polarity: the bench relay module switches on when the pin is HIGH (`polarity hig
 modules are the other way round. After boot, the closed-limit (D3) and power (D4) relays should be on and D2
 off. If it's the other way round, send `polarity low` (saved in EEPROM). Travel time is saved too.
 
+## End-to-end tests (`tests/e2e`)
+
+A pytest suite drives the real bench end to end: both boards over their USB JSON console, the opener simulator
+over serial, and the controller (the bench Shelly) through Home Assistant. It runs the bench checklist above,
+plus failure modes that are hard to test by hand, and asserts the outcome at every hop. Bench only; there are no
+unit tests.
+
+Prerequisites:
+- Both boards are flashed and configured with role, shared key and `tx_power` of about 5.
+- The GateSim is wired to the gate board, and the web console is disconnected.
+- `pip install -r tests/e2e/requirements.txt`.
+
+```sh
+export GATELINK_HA_URL=https://<home-assistant>:8123    # token read from ~/.ha_token (GATELINK_HA_TOKEN_FILE)
+pytest tests/e2e -v                       # about 30 min; boards found by role, simulator on COM10 (--sim-port)
+pytest tests/e2e -m soak --cycles 20      # repeated open/close cycles with latency stats
+GATELINK_KEY=<32 hex> pytest tests/e2e -k wrong_key   # wrong-key test, opt-in (rewrites the gate's saved key)
+```
+
+Without the bench connected, every test is skipped. If `test_00_preflight` fails, the scenarios are skipped.
+
+| File | Covers |
+|---|---|
+| `test_normal.py` | Open and close from the controller, with timing at every hop. Reversal mid-travel. Flip back before the gate leaves its limit. External moves, including one right after our command |
+| `test_opener_faults.py` | Opener power loss at rest and mid-travel. Jammed gate. Opener ignoring the command (siren/override). Both limits active. Limit chatter |
+| `test_link_faults.py` | Link loss and recovery. A command into a dead link (expires, never fires late). A short outage covered by retries. A gate move missed during an outage. Replayed frames. Wrong key |
+| `test_reboots.py` | Gate reset at rest and mid-travel. House reset with the controller wrong, and with the gate open |
+| `test_controller_faults.py` | Controller toggled while unpowered. Relay dropping before the power sense. Controller coming back at the wrong level. Rapid toggling |
+
+How it works:
+- **Faster timings.** The suite applies shorter timings to both boards for the run, unsaved: `heartbeat_s` 5,
+  `link_timeout_s` 15, `travel_timeout_s` 15, `mismatch_timeout_s` 20, `cmd_ttl_s` 10, and simulator travel 8 s.
+  At the end it restores every param from `results/<run>/config_backup.json`. Saved config is never written,
+  except by the opt-in wrong-key test.
+- **Simulated faults.** A radio outage is the gate moved to another `net_id`. Controller power is house
+  `in2_invert` (IN2 isn't wired on the bench).
+- **Baseline.** Each test starts from the same point: opener powered, gate closed, controller off, house armed
+  and in sync.
+- **Invariant checks after every test.** OPEN and CLOSE are never pulsed together. Every gate pulse is `pulse_ms`
+  long and answers a received command. No board resets or radio faults. No MAC failures or replays. The house sent
+  exactly the number of commands the scenario expects.
+- **Results.** `tests/e2e/results/<run>/` holds a time-ordered timeline per test (all four devices, JSONL) and
+  `summary.md` (results, latencies, link quality, anomalies).
+
 ## Troubleshooting
 
 - **Relays click at random / a board keeps restarting.** Check Status → *Last reset* and the log's `boot`

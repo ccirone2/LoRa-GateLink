@@ -17,11 +17,12 @@ arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateL
 arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COMx firmware/GateLink
 node --check web/app.js                        # syntax check for the web UI
 python -m http.server 8000 -d web              # serve UI at http://localhost:8000 (Chrome/Edge)
+GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -v   # bench end-to-end suite (hardware required)
 ```
 
 `tools/GateSim/` is a separate bench-only Uno sketch (`--fqbn arduino:avr:uno`) that simulates the CSW24UL's limits, power and OPEN/CLOSE inputs for the gate board; see README "Bench opener simulator". It is not GateLink firmware.
 
-Dependencies: `arduino:samd` core; libraries `LoRa` (sandeepmistry), `Crypto` (rweather), `FlashStorage` (cmaglie), `ArduinoJson` v7, `Adafruit SleepyDog Library`. There are no automated tests; verification is a clean compile (keep project files warning-free — filter output with `grep GateLink[\\/]`) plus the hardware bench checklist in README.md.
+Dependencies: `arduino:samd` core; libraries `LoRa` (sandeepmistry), `Crypto` (rweather), `FlashStorage` (cmaglie), `ArduinoJson` v7, `Adafruit SleepyDog Library`. Verification is a clean compile (keep project files warning-free — filter output with `grep GateLink[\\/]`) plus the bench end-to-end suite in `tests/e2e` (pytest; README "End-to-end tests"), which drives both boards, the GateSim and the Shelly (via Home Assistant) and checks the behavioural invariants below after every scenario. There are no unit tests. The suite parses console replies, log event names/values and status fields (`tests/e2e/gatelink/`), so change it together with `console.cpp`/`log.cpp`/`roles.h`, like `web/app.js`. Scenario timings assume its test profile (`gatelink/bench.py`).
 
 ## Firmware architecture
 

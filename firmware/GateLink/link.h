@@ -8,19 +8,21 @@
 //
 // Replay protection without persistent counters: each node picks a random session
 // id at boot. A frame is accepted only if its session matches the peer session we
-// have verified and its seq is higher than the last accepted. Unknown sessions are
-// verified with a HELLO challenge that the peer must echo in a MAC'd HELLO_ACK.
+// have verified and its seq is new: above the HELLO_ACK that verified the session,
+// and not seen before in a 32-frame sliding window. Unknown sessions are verified
+// with a HELLO challenge that the peer must echo in a MAC'd HELLO_ACK; until one
+// answers, the verified session stays in place (a replayed HELLO can't drop it).
 
 enum MsgType : uint8_t {
   MSG_HELLO = 1,      // challenge u32
   MSG_HELLO_ACK = 2,  // challenge u32
   MSG_ACK = 3,        // acked seq u32, result u8
   MSG_CMD = 4,        // cmd_id u16, action u8                (reliable, house->gate)
-  MSG_STATUS = 5,     // see role_gate.cpp                    (reliable, gate->house)
+  MSG_STATUS = 5,     // see roles.h                          (reliable, gate->house)
   MSG_PING = 6,       // ping_id u16
   MSG_PONG = 7,       // ping_id u16, rssi i16, snr i8
   MSG_DIAG_REQ = 8,   //                                       (house->gate)
-  MSG_DIAG = 9,       // see role_gate.cpp                    (gate->house)
+  MSG_DIAG = 9,       // see roles.h                          (gate->house)
   MSG_CFG_SET = 10,   // param id u8, value i32               (reliable, house->gate)
 };
 

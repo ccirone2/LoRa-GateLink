@@ -154,9 +154,11 @@ FCC 15.247 digital-modulation category in the US. For EU use 868.x MHz and stay 
 
 Frame: `ver | type | net_id | src | dst | session | seq | payload | tag`, tag = HMAC-SHA256 (shared
 128-bit key) truncated to 8 bytes. Each board picks a random session id at boot; a peer's session is
-accepted only after it echoes a fresh challenge (HELLO / HELLO_ACK), and seq numbers must increase
-within a session, so recorded frames can't be replayed — even across reboots, with no counters in flash.
-A 32-frame sliding window tolerates reordering between retried messages. Commands and status are
+accepted only after it echoes a fresh challenge (HELLO / HELLO_ACK), and only seq numbers above that
+HELLO_ACK's are accepted, each once, so recorded frames can't be replayed — even across reboots, with no
+counters in flash. A 32-frame sliding window tolerates reordering between retried messages. A HELLO from an
+unknown session (a restarted peer, or a replayed old one) is challenged, but the verified session stays in
+place until the new one answers. Commands and status are
 acknowledged and retried: the `retries` resends are spread over the message's lifetime with doubling gaps
 (`cmd_ttl_s` for commands: at 10 s and 5 retries about 0.3, 0.9, 2.2, 4.7 and 9.7 s), so a command survives an
 outage of nearly `cmd_ttl_s` and is dropped, never fired late, after it. Duplicate commands are detected and not re-pulsed. Role changes take

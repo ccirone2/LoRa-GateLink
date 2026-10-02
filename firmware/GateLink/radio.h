@@ -4,9 +4,13 @@
 // Thin wrapper over the sandeepmistry LoRa library (raw point-to-point, not LoRaWAN).
 bool radioBegin();  // (re)initialise with current cfg radio params
 bool radioOk();
-// Transmits and waits (bounded) for TX done. On a stuck or reset radio it logs a fault,
-// re-initialises the radio and returns false instead of hanging until the watchdog fires.
+// Starts transmitting and returns at once (false if the radio is down or still transmitting). The radio
+// goes back to RX continuous as soon as TX is done.
 bool radioSend(const uint8_t *buf, size_t len);
+// True while a frame is on the air. A TX that overruns its airtime (stuck or reset radio) is logged as a
+// fault and the radio is re-initialised.
+bool radioTxBusy();
+uint32_t radioTxEndAt();  // millis() when the last TX ended
 uint32_t radioFaults();  // TX faults since boot
 // Listen-before-talk: true while a LoRa frame is being received (preamble detected onward) or a received
 // packet is still waiting to be read. Blind for the first few preamble symbols.

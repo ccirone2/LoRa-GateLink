@@ -15,11 +15,15 @@ static uint32_t faults = 0;
 #define REG_FIFO_RX_CURRENT_ADDR 0x10
 #define REG_IRQ_FLAGS 0x12
 #define REG_RX_NB_BYTES 0x13
+#define REG_MODEM_STAT 0x18
+// Signal detected | signal synchronized | header info valid. Bit 2 (RX on-going) is set whenever the
+// receiver is on, so it says nothing about the channel.
+#define MODEM_STAT_BUSY 0x0B
 #define IRQ_RX_DONE 0x40
 #define IRQ_CRC_ERROR 0x20
 #define IRQ_TX_DONE 0x08
 #define OPMODE_LORA_TX 0x83         // long-range mode | TX
-#define OPMODE_LORA_RX_SINGLE 0x86  // long-range mode | RX single
+#define OPMODE_LORA_RX_CONT 0x85    // long-range mode | RX continuous
 
 static uint8_t regAccess(uint8_t addr, uint8_t value) {
   LORA_DEFAULT_SPI.beginTransaction(SPISettings(LORA_DEFAULT_SPI_FREQUENCY, MSBFIRST, SPI_MODE0));
@@ -32,6 +36,12 @@ static uint8_t regAccess(uint8_t addr, uint8_t value) {
 }
 static uint8_t readReg(uint8_t addr) { return regAccess(addr & 0x7F, 0x00); }
 static void writeReg(uint8_t addr, uint8_t v) { regAccess(addr | 0x80, v); }
+
+static void startRx() {
+  writeReg(REG_IRQ_FLAGS, 0xFF);
+  writeReg(REG_FIFO_ADDR_PTR, 0);
+  writeReg(REG_OP_MODE, OPMODE_LORA_RX_CONT);
+}
 
 bool radioBegin() {
   if (begun) LoRa.end();
@@ -60,14 +70,16 @@ bool radioSend(const uint8_t *buf, size_t len) {
   if (!ok) return false;
   LoRa.beginPacket();
   LoRa.write(buf, len);
-  LoRa.endPacket(true);  // async: we poll below with a deadline; next radioReceive() re-enters RX
+  LoRa.endPacket(true);  // async: we poll below with a deadline
   // The library's blocking endPacket() waits forever for TX done. A supply dip during TX can
   // reset the radio, which then never reports it and the watchdog reboots the board.
   uint32_t start = millis();
   uint32_t limit = radioAirtimeMs(len) + 200;
   for (;;) {
     if (readReg(REG_IRQ_FLAGS) & IRQ_TX_DONE) {
-      writeReg(REG_IRQ_FLAGS, IRQ_TX_DONE);
+      // Straight back into RX: the peer answers ~25 ms after our frame ends, and waiting for the next
+      // radioReceive() could miss its preamble when the loop stalls (USB writes took up to ~40 ms).
+      startRx();
       return true;
     }
     bool stillTx = readReg(REG_OP_MODE) == OPMODE_LORA_TX;
@@ -80,17 +92,23 @@ bool radioSend(const uint8_t *buf, size_t len) {
   return false;
 }
 
-// Our own RX-single polling instead of LoRa.parsePacket(). That one writes the IRQ flags back while a
-// packet is still arriving (clearing ValidHeader mid-packet), after which RX_DONE could survive its clear
-// and the next poll returned the same FIFO contents again (seen as `replay` with a == b). Here the flags
-// are only read and cleared once the radio has dropped back to standby, when they can no longer change.
+// Our own RX polling instead of LoRa.parsePacket(). That one writes the IRQ flags back while a packet is
+// still arriving (clearing ValidHeader mid-packet), after which RX_DONE could survive its clear and the next
+// poll returned the same FIFO contents again (seen as `replay` with a == b). Here the flags are touched only
+// once RX_DONE is up, and only the bits read are cleared.
+// RX continuous, not RX-single: RX-single gives up after 100 symbols and sits in standby until the loop
+// re-arms it, and a frame whose preamble straddled that moment was lost (~2 % of frames at SF9, more at
+// SF12, both directions).
 size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
   if (!ok) return 0;
-  if (readReg(REG_OP_MODE) == OPMODE_LORA_RX_SINGLE) return 0;  // listening, or a packet is arriving
-  // Standby: RX single ended (packet or timeout), or we transmitted / re-initialised since.
+  if (readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) {  // after init or radioRandom32()
+    startRx();
+    return 0;
+  }
   uint8_t irq = readReg(REG_IRQ_FLAGS);
+  if (!(irq & IRQ_RX_DONE)) return 0;  // nothing finished; never touch the flags mid-packet
   size_t n = 0;
-  if ((irq & IRQ_RX_DONE) && !(irq & IRQ_CRC_ERROR)) {
+  if (!(irq & IRQ_CRC_ERROR)) {
     uint8_t len = readReg(REG_RX_NB_BYTES);
     if (len <= max) {  // drop oversize packets
       writeReg(REG_FIFO_ADDR_PTR, readReg(REG_FIFO_RX_CURRENT_ADDR));
@@ -99,10 +117,16 @@ size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
       snr = LoRa.packetSnr();
     }
   }
-  writeReg(REG_IRQ_FLAGS, 0xFF);
-  writeReg(REG_FIFO_ADDR_PTR, 0);
-  writeReg(REG_OP_MODE, OPMODE_LORA_RX_SINGLE);
+  writeReg(REG_IRQ_FLAGS, irq);
   return n;
+}
+
+bool radioChannelBusy() {
+  if (!ok) return false;
+  // A packet we haven't read yet: transmitting now would overwrite it in the FIFO.
+  if (readReg(REG_IRQ_FLAGS) & IRQ_RX_DONE) return true;
+  if (readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) return false;
+  return (readReg(REG_MODEM_STAT) & MODEM_STAT_BUSY) != 0;
 }
 
 uint32_t radioAirtimeMs(size_t payloadLen) {

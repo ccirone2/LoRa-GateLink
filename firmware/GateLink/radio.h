@@ -8,6 +8,9 @@ bool radioOk();
 // re-initialises the radio and returns false instead of hanging until the watchdog fires.
 bool radioSend(const uint8_t *buf, size_t len);
 uint32_t radioFaults();  // TX faults since boot
+// Listen-before-talk: true while a LoRa frame is being received (preamble detected onward) or a received
+// packet is still waiting to be read. Blind for the first few preamble symbols.
+bool radioChannelBusy();
 // Polls for a received packet. Returns length (0 if none).
 size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr);
 uint32_t radioAirtimeMs(size_t payloadLen);

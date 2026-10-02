@@ -124,6 +124,8 @@ void appFillStatus(JsonObject o) {
   l["mac_fail"] = st.macFail;
   l["replay"] = st.replay;
   l["sessions"] = st.sessions;
+  l["lbt_defers"] = st.lbtDefers;
+  l["lbt_forced"] = st.lbtForced;
   if (activeRole == ROLE_HOUSE) houseStatus(o);
   else if (activeRole == ROLE_GATE) gateStatus(o);
 }

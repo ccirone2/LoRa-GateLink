@@ -46,6 +46,7 @@ struct RxMsg {
 
 struct LinkStats {
   uint32_t tx, rx, macFail, replay, retries, giveups, sessions;
+  uint32_t lbtDefers, lbtForced;  // frames held for a busy channel; sent anyway after the cap
   int16_t lastRssi;
   float lastSnr;
   uint32_t lastRxAt;  // millis of last authenticated frame from peer (0 = never)

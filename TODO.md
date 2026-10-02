@@ -23,14 +23,21 @@ firmware 0.3.2 landed on 2026-10-01; what's left needs hardware, the install sit
 - [x] **Slow resync after a house boot with the controller out of step.** After a boot or controller power
   return, the house resyncs as soon as the settle window (`ctrl_settle_ms`) closes, instead of after
   `mismatch_timeout_s`.
-- [ ] **Frame loss on a strong link.** It shows up as an occasional slow gate → house status and as lost pings.
-  - Measured at the bench (−60 dBm): 2–3.5 % of pings at SF9 (4/200 and 7/200), the same on 0.3.1's driver.
-    At SF12 / 2 dBm with a 5 s heartbeat, 11/20.
-  - The latest 20-cycle soak had no slow status (max 0.135 s, was 0.83 s).
-  - Not the RX-single symbol timeout: raising it to 1023 symbols changed nothing (7/200).
-  - Next suspects: half-duplex collisions with heartbeats/ACKs (there's no listen-before-talk), and the 25 ms
-    turnaround.
-  - The suite lists any status slower than 0.5 s under "Anomalies" with the gate's retry count.
+- [x] **Frame loss on a strong link** (0.3.3, 2026-10-01; measured, see below).
+  - **Main cause: RX-single.** It gives up after 100 symbols and sits in standby until the loop re-arms it;
+    a frame whose preamble straddled that moment was lost. The radio now stays in RX continuous.
+  - **Also fixed:** RX is re-armed inside `radioSend()`, because a USB write could stall the loop for ~40 ms.
+    Listen-before-talk with response priority and a random backoff. A board whose HELLO was lost now retries
+    the handshake by itself. 0.3.2's slot hold had removed the traffic that used to trigger a retry, so the
+    link could stay down until a command was sent. That bug is in 0.3.2 on `main`.
+  - **Results:**
+    - Gate receives 298/300 pings at SF9 (up to 8 % lost along the way).
+    - SF12 / 2 dBm: 19/20 pings in the RF test, was 11/20.
+    - Gate reboot → session in 3 s, was 8.4 s.
+- [ ] **The house still misses ~2–3 % of pongs at SF9.** Only the house board has shown CRC errors, and moving
+  the channel to 903 or 925 MHz made no difference. Suspect: the bench Shelly's Z-Wave radio (916 MHz,
+  centimetres away) blocking the house receiver in bursts. Check with the Shelly moved away, and at the
+  install site (`-m rf`).
 
 ## Test suite
 

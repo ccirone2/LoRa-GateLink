@@ -411,6 +411,7 @@ function renderStatus(s) {
   $('lnkTxRx').textContent = `${l.tx} / ${l.rx}`;
   $('lnkRetry').textContent = `${l.retries} / ${l.giveups}`;
   $('lnkBad').textContent = `${l.mac_fail} / ${l.replay}`;
+  $('lnkLbt').textContent = l.lbt_defers === undefined ? '—' : `${l.lbt_defers} / ${l.lbt_forced}`;
 
   const labels = IO_LABELS[s.role] || IO_LABELS.unset;
   $('ioList').innerHTML = ['in1', 'in2', 'in3', 'in4', 'k1', 'k2'].filter((k) => k in s.io)

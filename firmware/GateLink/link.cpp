@@ -13,7 +13,6 @@
 #define CHALLENGE_LIFE_MS 10000
 #define ACK_MEMO 4
 #define TURNAROUND_MS 25        // let the peer get back into RX between frames
-#define HELLO_RESET_GUARD_MS 2000  // limit how often a (possibly replayed) HELLO can reset verification
 #define TXQ_LEN 4               // unreliable frames (ACK, HELLO, PING...) waiting for a clear channel
 #define RESPONSE_SLACK_MS 40    // how late a response may start (the peer's loop can stall on USB writes)
 
@@ -54,7 +53,6 @@ static bool peerOk;
 static uint32_t peerSession;
 static uint32_t peerLastSeq;
 static uint32_t peerWindow;  // bit i set = peerLastSeq - i already accepted
-static uint32_t sessionAt;
 static uint32_t challenge;
 static uint32_t challengeAt;
 static uint32_t lastHelloAt;
@@ -74,6 +72,7 @@ static uint32_t txqBusySince, txqBackoff;
 static uint8_t lastFrame[MAX_FRAME];
 static uint8_t lastFrameLen;
 static uint32_t lastAirAt;  // end of our last TX or RX
+static bool txOnAir;  // our frame is being transmitted
 
 static void computeTag(const uint8_t *buf, size_t len, uint8_t *tag) {
   SHA256 h;
@@ -104,14 +103,24 @@ static uint8_t buildFrame(uint8_t type, const uint8_t *payload, uint8_t len, uin
   return HDR_LEN + len + TAG_LEN;
 }
 
-static void transmit(const uint8_t *frame, uint8_t len) {
-  if (!cfg.key_set) return;  // never run the link on the default key
-  while (millis() - lastAirAt < TURNAROUND_MS) {}
-  radioSend(frame, len);
-  lastAirAt = millis();
+// TX is asynchronous: one frame at a time, and the air time counts from its end.
+static bool txIdle() {
+  if (txOnAir && !radioTxBusy()) {
+    txOnAir = false;
+    uint32_t end = radioTxEndAt();  // a frame received since then may already have moved lastAirAt on
+    if ((int32_t)(end - lastAirAt) > 0) lastAirAt = end;
+  }
+  return !txOnAir;
+}
+
+static bool transmit(const uint8_t *frame, uint8_t len) {
+  if (!cfg.key_set) return false;  // never run the link on the default key
+  if (!radioSend(frame, len)) return false;
+  txOnAir = true;
   memcpy(lastFrame, frame, len);
   lastFrameLen = len;
   stats.tx++;
+  return true;
 }
 
 static bool isResponse(uint8_t type) {
@@ -127,7 +136,9 @@ static bool isResponse(uint8_t type) {
 // Then hold a frame while the peer's frame is on the air (or one waits unread). A channel that never
 // clears (noise read as a signal) must not mute the board: after twice the longest frame it is sent anyway.
 static bool clearToSend(uint32_t &busySince, uint32_t &backoff, uint8_t type) {
+  if (!txIdle()) return false;
   uint32_t now = millis();
+  if ((int32_t)(now - lastAirAt) < TURNAROUND_MS) return false;  // let the peer get back into RX
   if (!isResponse(type)) {
     if (!backoff) {
       uint32_t symUs = (1000000UL << cfg.sf) / (uint32_t)cfg.bw_hz;
@@ -155,8 +166,8 @@ static bool clearToSend(uint32_t &busySince, uint32_t &backoff, uint8_t type) {
 }
 
 static void drainQueue() {
-  while (txqCount && clearToSend(txqBusySince, txqBackoff, txq[txqHead].frame[1])) {
-    transmit(txq[txqHead].frame, txq[txqHead].len);
+  if (txqCount && clearToSend(txqBusySince, txqBackoff, txq[txqHead].frame[1])) {
+    transmit(txq[txqHead].frame, txq[txqHead].len);  // unreliable: dropped if the radio is down
     txqHead = (txqHead + 1) % TXQ_LEN;
     txqCount--;
   }
@@ -217,12 +228,21 @@ static uint32_t retryDelay(const PendingSlot &s) {
   return gap < minGap ? minGap : gap;
 }
 
-static void reframeSlots(uint32_t now) {
-  // Peer lost our session (rebooted); resend pending messages with fresh seq numbers.
+// The peer is verifying our session from the HELLO_ACK just built, and will accept only later seqs from us:
+// renumber everything still waiting (the HELLO_ACK, a response, is ahead of it all, see linkSend).
+static void reframePending(uint32_t now) {
   for (auto &s : slots) {
     if (!s.active) continue;
     s.frameLen = buildFrame(s.type, s.payload, s.len, s.frame, &s.seq);
     s.nextAt = now + random(120, 300);
+  }
+  for (uint8_t i = 0; i < txqCount; i++) {
+    QueuedFrame &q = txq[(txqHead + i) % TXQ_LEN];
+    if (q.frame[1] == MSG_HELLO_ACK) continue;
+    uint8_t len = q.len - HDR_LEN - TAG_LEN;
+    uint8_t payload[MAX_PAYLOAD];
+    memcpy(payload, q.frame + HDR_LEN, len);
+    q.len = buildFrame(q.frame[1], payload, len, q.frame, nullptr);
   }
 }
 
@@ -237,10 +257,13 @@ void linkBegin(RxHandler rx, AckHandler ack) {
   memset(acks, 0, sizeof(acks));
   txqCount = 0;
   txqBusySince = txqBackoff = 0;
+  txOnAir = false;  // radioBegin() abandoned any TX
+  lastAirAt = millis();
   randomSeed(radioRandom32());
   do { mySession = radioRandom32(); } while (mySession == 0);
   txSeq = 0;
   peerOk = false;
+  peerSession = 0;
   challenge = 0;
   helloSent = false;
   helloRound = 0;
@@ -346,33 +369,35 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
   if (type == MSG_HELLO) {
     if (plen < 4) return;
     linkSend(MSG_HELLO_ACK, payload, 4);
-    // Give the peer time to get back into RX before we challenge it.
-    if (!peerOk || session != peerSession) {
-      // Peer restarted (or a stale HELLO): re-verify before accepting anything.
-      if (!peerOk || now - sessionAt >= HELLO_RESET_GUARD_MS) {
-        peerOk = false;
-        helloDueAt = (now + 60) | 1;
-      }
-    }
-    reframeSlots(now);
+    reframePending(now);
+    // A session we haven't verified: the peer restarted, or an old HELLO is being replayed. Challenge it
+    // (once the peer is back in RX), but keep the verified session until the new one answers, so a replayed
+    // HELLO can't take the link down.
+    if (!peerOk || session != peerSession) helloDueAt = (now + 60) | 1;
     return;
   }
   if (type == MSG_HELLO_ACK) {
-    if (plen >= 4 && challenge != 0 && getU32(payload) == challenge) {
+    if (plen < 4 || challenge == 0 || getU32(payload) != challenge) return;
+    challenge = 0;
+    stats.lastRxAt = now;
+    stats.lastRssi = rssi;
+    stats.lastSnr = snr;
+    if (peerSession != 0 && session == peerSession) {
+      // Already verified (we challenged it after a stale HELLO): keep its replay window and ACK memo.
+      acceptSeq(seq);
       peerOk = true;
-      peerSession = session;
-      peerLastSeq = seq;
-      peerWindow = 1;
-      sessionAt = now;
-      memset(acks, 0, sizeof(acks));
-      challenge = 0;
-      stats.sessions++;
-      helloRound = 0;
-      stats.lastRxAt = now;
-      stats.lastRssi = rssi;
-      stats.lastSnr = snr;
-      logEvent(EV_SESSION, (int32_t)session);
+      return;
     }
+    peerOk = true;
+    peerSession = session;
+    // Nothing at or before the HELLO_ACK is accepted, so frames recorded earlier (e.g. before our reboot)
+    // can't be replayed; the peer renumbered what it still had waiting.
+    peerLastSeq = seq;
+    peerWindow = 0xFFFFFFFF;
+    memset(acks, 0, sizeof(acks));
+    stats.sessions++;
+    helloRound = 0;
+    logEvent(EV_SESSION, (int32_t)session);
     return;
   }
 
@@ -412,11 +437,13 @@ void linkPoll(uint32_t now) {
   uint8_t buf[256];
   int16_t rssi;
   float snr;
+  txIdle();
   size_t n = radioReceive(buf, sizeof(buf), rssi, snr);
   if (n) handleFrame(buf, n, rssi, snr, now);
   if (helloDueAt && (int32_t)(now - helloDueAt) >= 0) {
     helloDueAt = 0;
-    if (!peerOk) sendHello(now, true);
+    // While verified, the usual HELLO interval applies: that limits what replayed HELLOs can provoke.
+    sendHello(now, !peerOk);
   }
   // Keep challenging until the peer answers. Nothing else may be on the air to provoke a HELLO (slots
   // hold until the peer is verified), so if both first HELLOs were lost the link would never come back.
@@ -444,10 +471,13 @@ void linkPoll(uint32_t now) {
       s.nextAt = now + random(10, 60);  // poll again soon; deferring doesn't use up an attempt
       continue;
     }
+    if (!transmit(s.frame, s.frameLen)) {  // radio down: doesn't use up an attempt
+      s.nextAt = now + 100;
+      continue;
+    }
     if (s.attempts > 0) stats.retries++;
-    transmit(s.frame, s.frameLen);
     s.attempts++;
-    s.nextAt = millis() + retryDelay(s);
+    s.nextAt = millis() + radioAirtimeMs(s.frameLen) + retryDelay(s);  // gaps count from the frame's end
     if ((int32_t)(s.nextAt - s.expiresAt) > 0) s.nextAt = s.expiresAt;
   }
 }
@@ -461,5 +491,5 @@ bool linkPeerVerified() {
 }
 
 void linkDebugReplay() {
-  if (lastFrameLen) radioSend(lastFrame, lastFrameLen);
+  if (lastFrameLen && txIdle() && radioSend(lastFrame, lastFrameLen)) txOnAir = true;
 }

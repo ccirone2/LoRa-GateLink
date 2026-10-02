@@ -10,10 +10,20 @@ static char line[LINE_MAX];
 static size_t lineLen = 0;
 static bool overflow = false;
 
+// One USB write per line: serialized straight to Serial, every character was its own USB transfer, and with the
+// radio transmitting asynchronously single bytes went missing on the bench (lines like `{"event":"lo",...`).
 static void send(JsonDocument &doc) {
   if (!Serial.dtr()) return;  // not Serial's bool operator: it delays 10 ms
-  serializeJson(doc, Serial);
-  Serial.write('\n');
+  static char out[4096];
+  size_t n = measureJson(doc);
+  if (n + 1 > sizeof(out)) {  // doesn't fit: stream it
+    serializeJson(doc, Serial);
+    Serial.write('\n');
+    return;
+  }
+  serializeJson(doc, out, sizeof(out));
+  out[n++] = '\n';
+  Serial.write((const uint8_t *)out, n);
 }
 
 static int hexVal(char c) {

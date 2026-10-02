@@ -7,6 +7,11 @@
 static bool ok = false;
 static bool begun = false;
 static uint32_t faults = 0;
+// Transmission in progress. TX is asynchronous: a frame takes up to seconds at SF12, and blocking for it held
+// up the loop (relay pulses ran long by the airtime, and back-to-back frames could reach the watchdog).
+static volatile bool txActive = false;
+static volatile uint32_t txEndAt;  // when the last TX finished (or was abandoned)
+static uint32_t txStart, txLimit;
 
 // Direct SX127x register access (the LoRa library keeps its own private), same bus settings.
 #define REG_FIFO 0x00
@@ -16,12 +21,15 @@ static uint32_t faults = 0;
 #define REG_IRQ_FLAGS 0x12
 #define REG_RX_NB_BYTES 0x13
 #define REG_MODEM_STAT 0x18
+#define REG_DIO_MAPPING_1 0x40
+#define DIO0_TX_DONE 0x40
 // Signal detected | signal synchronized | header info valid. Bit 2 (RX on-going) is set whenever the
 // receiver is on, so it says nothing about the channel.
 #define MODEM_STAT_BUSY 0x0B
 #define IRQ_RX_DONE 0x40
 #define IRQ_CRC_ERROR 0x20
 #define IRQ_TX_DONE 0x08
+#define OPMODE_LORA_FSTX 0x82       // long-range mode | frequency synthesis (TX starting)
 #define OPMODE_LORA_TX 0x83         // long-range mode | TX
 #define OPMODE_LORA_RX_CONT 0x85    // long-range mode | RX continuous
 
@@ -43,11 +51,28 @@ static void startRx() {
   writeReg(REG_OP_MODE, OPMODE_LORA_RX_CONT);
 }
 
+static void finishTx() {
+  startRx();
+  txActive = false;
+  txEndAt = millis();
+}
+
+// DIO0 rises on TX done: straight back into RX. The peer answers ~25 ms after our frame ends, and waiting
+// for the loop could miss its preamble when the loop stalls (USB writes took up to ~40 ms). SPI is safe here:
+// usingInterrupt() masks this interrupt during every transaction on the bus, ours and the library's.
+static void onDio0() {
+  if (txActive && (readReg(REG_IRQ_FLAGS) & IRQ_TX_DONE)) finishTx();
+}
+
 bool radioBegin() {
+  txActive = false;
   if (begun) LoRa.end();
   begun = true;
   ok = LoRa.begin(cfg.freq_hz);
   if (!ok) return false;
+  int irq = digitalPinToInterrupt(LORA_DEFAULT_DIO0_PIN);
+  LORA_DEFAULT_SPI.usingInterrupt(irq);
+  attachInterrupt(irq, onDio0, RISING);
   LoRa.setSpreadingFactor(cfg.sf);
   LoRa.setSignalBandwidth(cfg.bw_hz);
   LoRa.setCodingRate4(cfg.cr);
@@ -67,29 +92,39 @@ uint32_t radioFaults() {
 }
 
 bool radioSend(const uint8_t *buf, size_t len) {
-  if (!ok) return false;
+  if (!ok || radioTxBusy()) return false;
   LoRa.beginPacket();
   LoRa.write(buf, len);
-  LoRa.endPacket(true);  // async: we poll below with a deadline
-  // The library's blocking endPacket() waits forever for TX done. A supply dip during TX can
-  // reset the radio, which then never reports it and the watchdog reboots the board.
-  uint32_t start = millis();
-  uint32_t limit = radioAirtimeMs(len) + 200;
-  for (;;) {
-    if (readReg(REG_IRQ_FLAGS) & IRQ_TX_DONE) {
-      // Straight back into RX: the peer answers ~25 ms after our frame ends, and waiting for the next
-      // radioReceive() could miss its preamble when the loop stalls (USB writes took up to ~40 ms).
-      startRx();
-      return true;
-    }
-    bool stillTx = readReg(REG_OP_MODE) == OPMODE_LORA_TX;
-    if (!stillTx && (readReg(REG_IRQ_FLAGS) & IRQ_TX_DONE)) continue;  // finished between reads
-    if (!stillTx || (int32_t)(millis() - start) >= (int32_t)limit) break;
+  writeReg(REG_DIO_MAPPING_1, DIO0_TX_DONE);
+  txStart = millis();
+  txLimit = radioAirtimeMs(len) + 200;
+  txActive = true;
+  LoRa.endPacket(true);  // async; the library's blocking endPacket() waits forever if the radio resets
+  return true;
+}
+
+// Polled fallback for the DIO0 interrupt, and the deadline: a supply dip during TX can reset the radio,
+// which then never reports TX done. That is logged as a fault and the radio is re-initialised.
+bool radioTxBusy() {
+  if (!txActive) return false;
+  // FSTX first: the synthesizer starts up for a moment after endPacket() before TX proper.
+  uint8_t mode = readReg(REG_OP_MODE);
+  bool stillTx = mode == OPMODE_LORA_TX || mode == OPMODE_LORA_FSTX;
+  bool done = readReg(REG_IRQ_FLAGS) & IRQ_TX_DONE;  // read after the mode: catches a TX just finished
+  if (!txActive) return false;  // the interrupt finished it between the reads (and cleared the flags)
+  if (done) {
+    finishTx();
+  } else if (!stillTx || (int32_t)(millis() - txStart) >= (int32_t)txLimit) {
+    faults++;
+    logEvent(EV_RADIO_FAIL, 1, faults);
+    radioBegin();
+    txEndAt = millis();
   }
-  faults++;
-  logEvent(EV_RADIO_FAIL, 1, faults);
-  radioBegin();
-  return false;
+  return txActive;
+}
+
+uint32_t radioTxEndAt() {
+  return txEndAt;
 }
 
 // Our own RX polling instead of LoRa.parsePacket(). That one writes the IRQ flags back while a packet is
@@ -100,8 +135,8 @@ bool radioSend(const uint8_t *buf, size_t len) {
 // re-arms it, and a frame whose preamble straddled that moment was lost (~2 % of frames at SF9, more at
 // SF12, both directions).
 size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
-  if (!ok) return 0;
-  if (readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) {  // after init or radioRandom32()
+  if (!ok || radioTxBusy()) return 0;
+  if (readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) {  // after init
     startRx();
     return 0;
   }
@@ -123,6 +158,7 @@ size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
 
 bool radioChannelBusy() {
   if (!ok) return false;
+  if (radioTxBusy()) return true;
   // A packet we haven't read yet: transmitting now would overwrite it in the FIFO.
   if (readReg(REG_IRQ_FLAGS) & IRQ_RX_DONE) return true;
   if (readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) return false;
@@ -141,27 +177,32 @@ uint32_t radioAirtimeMs(size_t payloadLen) {
 }
 
 uint32_t radioRandom32() {
-  // Wideband RSSI noise only changes while the radio is receiving: sample its LSB in
-  // continuous RX, mix in timer jitter, and hash. Called rarely (session ids, challenges).
-  static uint32_t counter = 0;
+  // Wideband RSSI noise only changes while the radio is receiving: sample its LSB in continuous RX, mix in
+  // timer jitter, and hash, chained with the previous state. Never leaves RX (that aborted a frame being
+  // received and dropped an unread one) and doesn't sample during TX (the chain still changes the result).
+  // Called rarely (session ids, challenges, command ids).
+  static uint8_t state[32];
   uint8_t pool[64];
   uint32_t t = micros();
-  if (ok) LoRa.receive();
+  bool sample = ok && !radioTxBusy();
+  if (sample && readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) startRx();
   for (size_t i = 0; i < sizeof(pool); i++) {
     uint8_t b = 0;
     for (int bit = 0; bit < 8; bit++) {
       delayMicroseconds(40);
-      b = (b << 1) | ((ok ? LoRa.random() : 0) & 1);
+      b = (b << 1) | ((sample ? LoRa.random() : 0) & 1);
     }
     pool[i] = b ^ (uint8_t)micros();
   }
-  if (ok) LoRa.idle();
   SHA256 h;
+  h.update(state, sizeof(state));
   h.update(pool, sizeof(pool));
   h.update(&t, sizeof(t));
-  counter++;
-  h.update(&counter, sizeof(counter));
+  h.finalize(state, sizeof(state));
   uint32_t out;
-  h.finalize(&out, sizeof(out));
+  memcpy(&out, state, sizeof(out));
+  h.reset();
+  h.update(state, sizeof(state));
+  h.finalize(state, sizeof(state));  // so the output doesn't reveal the next state
   return out;
 }

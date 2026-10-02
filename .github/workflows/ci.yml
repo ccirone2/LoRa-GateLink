@@ -9,11 +9,16 @@ on:
 permissions:
   contents: read
 
+# `shell: bash` adds pipefail, so a compile error piped through tee still fails the step.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   firmware:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: arduino/setup-arduino-cli@v2
       # Versions: keep in sync with docs/development.md and release.yml.
       - name: Install cores and libraries
@@ -34,7 +39,7 @@ jobs:
   web-and-python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Syntax check web console
         run: node --check web/app.js
       - name: Byte-compile the e2e suite and tools

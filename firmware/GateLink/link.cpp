@@ -14,6 +14,8 @@
 #define ACK_MEMO 4
 #define TURNAROUND_MS 25        // let the peer get back into RX between frames
 #define HELLO_RESET_GUARD_MS 2000  // limit how often a (possibly replayed) HELLO can reset verification
+#define TXQ_LEN 4               // unreliable frames (ACK, HELLO, PING...) waiting for a clear channel
+#define RESPONSE_SLACK_MS 40    // how late a response may start (the peer's loop can stall on USB writes)
 
 struct PendingSlot {
   bool active;
@@ -27,6 +29,13 @@ struct PendingSlot {
   uint32_t nextAt;
   uint32_t ttl;
   uint32_t expiresAt;
+  uint32_t busySince;  // listen-before-talk: channel busy since (0 = not waiting)
+  uint32_t backoff;    // this frame's gap after the last air activity (0 = not drawn yet)
+};
+
+struct QueuedFrame {
+  uint8_t frame[MAX_FRAME];
+  uint8_t len;
 };
 
 struct AckMemo {
@@ -49,12 +58,18 @@ static uint32_t sessionAt;
 static uint32_t challenge;
 static uint32_t challengeAt;
 static uint32_t lastHelloAt;
+static uint32_t helloGap;  // this round's HELLO interval, randomized
+static uint8_t helloRound;  // HELLOs since the last verified session: the interval doubles, up to ~8 s
 static bool helloSent;
 static uint32_t helloDueAt;  // deferred HELLO after answering the peer's HELLO
 
 static PendingSlot slots[SLOT_COUNT];
 static AckMemo acks[ACK_MEMO];
 static uint8_t ackNext;
+
+static QueuedFrame txq[TXQ_LEN];
+static uint8_t txqHead, txqCount;
+static uint32_t txqBusySince, txqBackoff;
 
 static uint8_t lastFrame[MAX_FRAME];
 static uint8_t lastFrameLen;
@@ -99,14 +114,82 @@ static void transmit(const uint8_t *frame, uint8_t len) {
   stats.tx++;
 }
 
+static bool isResponse(uint8_t type) {
+  return type == MSG_ACK || type == MSG_HELLO_ACK || type == MSG_PONG || type == MSG_DIAG;
+}
+
+// Listen-before-talk, with priorities as in Wi-Fi's SIFS/DIFS. The end of a frame lines both nodes up: the
+// receiver answers and the sender may have something new due, and frames that start together can't hear
+// each other (a preamble takes a few symbols to detect). On the bench every gate heartbeat collided like
+// that with a ping. So a response (ACK, PONG...) goes after the short turnaround, while a new frame first
+// waits out the response slot plus a random backoff drawn once per frame, by which time a response or the
+// other side's new frame is detectable. On a quiet channel neither waits.
+// Then hold a frame while the peer's frame is on the air (or one waits unread). A channel that never
+// clears (noise read as a signal) must not mute the board: after twice the longest frame it is sent anyway.
+static bool clearToSend(uint32_t &busySince, uint32_t &backoff, uint8_t type) {
+  uint32_t now = millis();
+  if (!isResponse(type)) {
+    if (!backoff) {
+      uint32_t symUs = (1000000UL << cfg.sf) / (uint32_t)cfg.bw_hz;
+      backoff = TURNAROUND_MS + RESPONSE_SLACK_MS + 8 * symUs / 1000 + random(0, 32 * symUs / 1000 + 1);
+    }
+    if ((int32_t)(now - lastAirAt) < (int32_t)backoff) return false;
+  }
+  if (!radioChannelBusy()) {
+    busySince = 0;
+    backoff = 0;
+    return true;
+  }
+  if (!busySince) {
+    busySince = now | 1;
+    stats.lbtDefers++;
+    return false;
+  }
+  uint32_t waited = now - busySince;
+  if ((int32_t)waited < (int32_t)(2 * radioAirtimeMs(MAX_FRAME))) return false;
+  busySince = 0;
+  backoff = 0;
+  stats.lbtForced++;
+  logEvent(EV_LBT_FORCED, type, waited);
+  return true;
+}
+
+static void drainQueue() {
+  while (txqCount && clearToSend(txqBusySince, txqBackoff, txq[txqHead].frame[1])) {
+    transmit(txq[txqHead].frame, txq[txqHead].len);
+    txqHead = (txqHead + 1) % TXQ_LEN;
+    txqCount--;
+  }
+}
+
 void linkSend(uint8_t type, const uint8_t *payload, uint8_t len) {
+  if (!cfg.key_set) return;
   uint8_t frame[MAX_FRAME];
   uint8_t n = buildFrame(type, payload, len, frame, nullptr);
-  transmit(frame, n);
+  if (!txqCount && clearToSend(txqBusySince, txqBackoff, type)) {
+    transmit(frame, n);  // the usual case: nothing queued, channel clear
+    return;
+  }
+  if (txqCount == TXQ_LEN) {  // full: the oldest is the stalest
+    txqHead = (txqHead + 1) % TXQ_LEN;
+    txqCount--;
+  }
+  uint8_t slot;
+  if (isResponse(type)) {  // ahead of any new frame waiting out its backoff
+    txqHead = (txqHead + TXQ_LEN - 1) % TXQ_LEN;
+    slot = txqHead;
+    txqBusySince = txqBackoff = 0;
+  } else {
+    slot = (txqHead + txqCount) % TXQ_LEN;
+  }
+  txqCount++;
+  QueuedFrame &q = txq[slot];
+  memcpy(q.frame, frame, n);
+  q.len = n;
 }
 
 static void sendHello(uint32_t now, bool force) {
-  if (!force && helloSent && now - lastHelloAt < HELLO_INTERVAL_MS) return;
+  if (!force && helloSent && now - lastHelloAt < helloGap) return;
   if (challenge == 0 || now - challengeAt > CHALLENGE_LIFE_MS) {
     do { challenge = radioRandom32(); } while (challenge == 0);
     challengeAt = now;
@@ -115,6 +198,11 @@ static void sendHello(uint32_t now, bool force) {
   putU32(p, challenge);
   linkSend(MSG_HELLO, p, 4);
   lastHelloAt = now;
+  // Random, and at least a few frames long, so two boards retrying at once can't stay in step. Doubling, so
+  // a board whose peer is off for hours doesn't keep the channel busy.
+  uint32_t base = HELLO_INTERVAL_MS << (helloRound < 3 ? helloRound : 3);
+  helloGap = base + 4 * radioAirtimeMs(HDR_LEN + 4 + TAG_LEN) + random(0, base);
+  if (helloRound < 3) helloRound++;
   helloSent = true;
 }
 
@@ -147,12 +235,15 @@ void linkBegin(RxHandler rx, AckHandler ack) {
   memset(&stats, 0, sizeof(stats));
   memset(slots, 0, sizeof(slots));
   memset(acks, 0, sizeof(acks));
+  txqCount = 0;
+  txqBusySince = txqBackoff = 0;
   randomSeed(radioRandom32());
   do { mySession = radioRandom32(); } while (mySession == 0);
   txSeq = 0;
   peerOk = false;
   challenge = 0;
   helloSent = false;
+  helloRound = 0;
   // Start the handshake ourselves rather than waiting for the peer's next frame.
   helloDueAt = (millis() + random(100, 600)) | 1;
 }
@@ -168,6 +259,7 @@ void linkSendReliable(Slot slot, uint8_t type, const uint8_t *payload, uint8_t l
   s.attempts = 0;
   uint32_t now = millis();
   s.nextAt = now;
+  s.busySince = s.backoff = 0;
   s.ttl = ttlMs;
   s.expiresAt = now + ttlMs;
 }
@@ -275,6 +367,7 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
       memset(acks, 0, sizeof(acks));
       challenge = 0;
       stats.sessions++;
+      helloRound = 0;
       stats.lastRxAt = now;
       stats.lastRssi = rssi;
       stats.lastSnr = snr;
@@ -325,6 +418,10 @@ void linkPoll(uint32_t now) {
     helloDueAt = 0;
     if (!peerOk) sendHello(now, true);
   }
+  // Keep challenging until the peer answers. Nothing else may be on the air to provoke a HELLO (slots
+  // hold until the peer is verified), so if both first HELLOs were lost the link would never come back.
+  if (!peerOk && helloSent && cfg.key_set) sendHello(now, false);
+  drainQueue();
 
   for (uint8_t i = 0; i < SLOT_COUNT; i++) {
     PendingSlot &s = slots[i];
@@ -343,6 +440,10 @@ void linkPoll(uint32_t now) {
     // Its ACK would be dropped until the peer is verified, so sending now only takes airtime from the
     // handshake (at SF12 the retries crowded out the HELLO_ACK for good). Hold it; the TTL keeps running.
     if (!peerOk) continue;
+    if (!clearToSend(s.busySince, s.backoff, s.type)) {
+      s.nextAt = now + random(10, 60);  // poll again soon; deferring doesn't use up an attempt
+      continue;
+    }
     if (s.attempts > 0) stats.retries++;
     transmit(s.frame, s.frameLen);
     s.attempts++;

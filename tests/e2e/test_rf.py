@@ -15,6 +15,7 @@ from gatelink.flows import close_via_ctrl, open_via_ctrl
 
 MARGINAL = {"tx_power": 2, "sf": 12}
 PINGS = 20
+MIN_PONGS = 18  # 90 %: before listen-before-talk (0.3.2) this link managed about 11/20
 
 
 def _verified(rig):
@@ -47,7 +48,7 @@ def test_marginal_link(rig, request):
             except AssertionError:
                 pass
             time.sleep(0.5)
-        assert pongs, "no pong at all on the marginal link"
+        assert len(pongs) >= MIN_PONGS, f"only {len(pongs)}/{PINGS} pongs on the marginal link"
         rig.facts["marginal link"] = f"tx_power {MARGINAL['tx_power']} dBm, SF{MARGINAL['sf']}"
         rig.facts["marginal pings"] = f"{len(pongs)}/{PINGS}, RTT median {statistics.median(p['rtt_ms'] for p in pongs)} ms"
         rig.facts["marginal RSSI/SNR at house"] = (f"{statistics.median(p['rssi'] for p in pongs)} dBm / "
@@ -60,6 +61,7 @@ def test_marginal_link(rig, request):
             close_via_ctrl(rig, record=False)
         for n in ("house", "gate"):
             link = rig.board(n).status()["link"]
-            rig.facts[f"marginal {n} tx/retries/giveups"] = f"{link['tx']}/{link['retries']}/{link['giveups']}"
+            rig.facts[f"marginal {n} tx/retries/giveups/lbt held/lbt forced"] = (
+                f"{link['tx']}/{link['retries']}/{link['giveups']}/{link['lbt_defers']}/{link['lbt_forced']}")
     finally:
         _set_radio(rig, before)

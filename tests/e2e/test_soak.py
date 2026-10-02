@@ -15,7 +15,7 @@ from gatelink.flows import close_via_ctrl, open_via_ctrl, outage
 LINK_TIMEOUT_S = 15  # PROFILE_COMMON
 HEARTBEAT_S = 5
 TRAVEL_TIMEOUT_S = 15
-COUNTERS = ("tx", "rx", "retries", "giveups", "mac_fail", "replay", "sessions")
+COUNTERS = ("tx", "rx", "retries", "giveups", "mac_fail", "replay", "sessions", "lbt_defers", "lbt_forced")
 
 
 # Each scenario starts from the baseline and returns how many commands the house should have sent.

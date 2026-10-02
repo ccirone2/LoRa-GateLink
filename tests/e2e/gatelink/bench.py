@@ -232,6 +232,9 @@ class Bench:
         for n in ("house", "gate"):
             for e in self.timeline.logs(n, "radio_fail", since):
                 problems.append(f"{n} radio_fail at {e['t']}s (a={e['a']})")
+            for e in self.timeline.logs(n, "lbt_forced", since):
+                # The channel read busy for twice the longest frame: noise taken for a signal, or a stuck modem.
+                self.anomalies.append(f"{self.test_name}: {n} sent type {e['a']} into a channel busy for {e['b']} ms")
         try:
             end = self.snapshot()
         except BoardError as e:

@@ -25,6 +25,7 @@ enum LogCode : uint8_t {
   EV_INPUT,          // a = spare input number (house 2/3/4, gate 3/4), b = level
   EV_CMD_REFUSED,    // a = action, b = cmd id (opener unpowered)
   EV_CTRL_POWER,     // a = controller power level, b = action discarded by the power loss (0 = none)
+  EV_LBT_FORCED,     // a = msg type, b = ms the channel stayed busy (sent anyway)
   EV_COUNT
 };
 

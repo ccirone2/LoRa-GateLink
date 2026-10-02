@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-GateLink: two Arduino MKR WAN 1310 boards (on MKR Relay Proto Shields) bridge an Alarm.com / 2GIG system (via a Shelly Wave 1 Z-Wave relay) at the house to a LiftMaster CSW24UL gate opener over raw point-to-point LoRa. `firmware/GateLink/` is one Arduino sketch flashed to both boards; the role (house/gate) is stored in flash config. `web/` is a static page that configures/diagnoses a board over USB using the Web Serial API. See README.md for wiring, device settings, and the bench-test checklist.
+GateLink: two Arduino MKR WAN 1310 boards (on MKR Relay Proto Shields) bridge an Alarm.com / 2GIG system (via a Shelly Wave 1 Z-Wave relay) at the house to a LiftMaster CSW24UL gate opener over raw point-to-point LoRa. `firmware/GateLink/` is one Arduino sketch flashed to both boards; the role (house/gate) is stored in flash config. `web/` is a static page that configures/diagnoses a board over USB using the Web Serial API. README.md is the overview and indexes the docs: `docs/hardware.md` (wiring, device settings), `docs/protocol.md`, `docs/console.md` (console commands, status fields, log events), `docs/bench-testing.md` (bench rules, manual checklist), `docs/development.md` (workflow, versioning, releases).
 
 Repo: https://github.com/ccirone2/LoRa-GateLink (public). The web console is hosted at https://ccirone2.github.io/LoRa-GateLink/, deployed from `web/` by `.github/workflows/pages.yml` on pushes to `main` that touch `web/**` (or via `gh workflow run pages.yml`).
 
@@ -18,11 +18,13 @@ arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COMx firmware/GateLink
 node --check web/app.js                        # syntax check for the web UI
 python -m http.server 8000 -d web              # serve UI at http://localhost:8000 (Chrome/Edge)
 GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -v   # bench end-to-end suite (hardware required)
+python tools/gatelink.py ports                 # boards on USB: role, fw, key, link (also: <house|gate|COMx> <cmd> k=v)
+python tools/gatelink.py snapshot | restore    # save config before flashing / re-apply config + key after
 ```
 
-`tools/GateSim/` is a separate bench-only Uno sketch (`--fqbn arduino:avr:uno`) that simulates the CSW24UL's limits, power and OPEN/CLOSE inputs for the gate board; see README "Bench opener simulator". It is not GateLink firmware.
+`tools/GateSim/` is a separate bench-only Uno sketch (`--fqbn arduino:avr:uno`) that simulates the CSW24UL's limits, power and OPEN/CLOSE inputs for the gate board; see `tools/GateSim/README.md`. It is not GateLink firmware.
 
-Dependencies: `arduino:samd` core; libraries `LoRa` (sandeepmistry), `Crypto` (rweather), `FlashStorage` (cmaglie), `ArduinoJson` v7, `Adafruit SleepyDog Library`. Verification is a clean compile (keep project files warning-free — filter output with `grep GateLink[\\/]`) plus the bench end-to-end suite in `tests/e2e` (pytest; README "End-to-end tests"), which drives both boards, the GateSim and the Shelly (via Home Assistant) and checks the behavioural invariants below after every scenario. There are no unit tests. The suite parses console replies, log event names/values and status fields (`tests/e2e/gatelink/`), so change it together with `console.cpp`/`log.cpp`/`roles.h`, like `web/app.js`. Scenario timings assume its test profile (`gatelink/bench.py`).
+Dependencies: `arduino:samd` core; libraries `LoRa` (sandeepmistry), `Crypto` (rweather), `FlashStorage` (cmaglie), `ArduinoJson` v7, `Adafruit SleepyDog Library` (pinned versions in `docs/development.md`, used by CI). Verification is a clean compile (keep project files warning-free — filter output with `grep GateLink[\\/]`) plus the bench end-to-end suite in `tests/e2e` (pytest; `tests/e2e/README.md`), which drives both boards, the GateSim and the Shelly (via Home Assistant) and checks the behavioural invariants below after every scenario. There are no unit tests. The suite parses console replies, log event names/values and status fields (`tests/e2e/gatelink/`), so change it together with `console.cpp`/`log.cpp`/`roles.h`, like `web/app.js`. Scenario timings assume its test profile (`gatelink/bench.py`).
 
 ## Firmware architecture
 
@@ -38,11 +40,19 @@ Layers, bottom up:
 
 `web/app.js` is plain JS, no build step. Notable pieces: auto-reconnect (`startReconnect`/`tryReconnect`: after a reboot or unexpected drop, reopen the already-granted port for 30 s; the Web Serial `connect` event identifies the returning board since both boards share VID/PID); `disconnect()` must await both stream pipes before `port.close()` or the port stays open and blocks uploads; the Install tab is driven by the `WIRING` table (keep it in sync with `pins.h` and the role behaviour); 0/1 params without a `SELECTS` entry render as toggle checkboxes, so read/write form fields through `fieldValue`/`setField`, not `.value`.
 
-**Naming rule:** don't use "Shelly" or "Alarm.com" anywhere in `web/` — the house-side device is the generic "controller" (it may be replaced). Firmware names that reach the page follow the same rule (`ctrl_sync`, `ctrl` status field / log event). README and firmware comments may name the actual install hardware.
+**Naming rule:** don't use "Shelly" or "Alarm.com" anywhere in `web/` — the house-side device is the generic "controller" (it may be replaced). Firmware names that reach the page follow the same rule (`ctrl_sync`, `ctrl` status field / log event). README, `docs/` and firmware comments may name the actual install hardware.
 
 ## Bench testing
 
-The boards can be driven from scripts over USB serial with the same JSON console the web page uses (e.g. pyserial: `{"id":1,"cmd":"status"}`, `log.get`, `config.set`, `key.set`, `identify`, `reboot`). Only one program can hold a port — close/disconnect the web console first. Every upload wipes config (role, key, `tx_power`; `power_sense` and `ctrl_power_sense` return to on), so re-apply them afterwards. Without jumpers, toggling an input's `inN_invert` flips what the firmware sees, which lets scripts exercise input paths on bare boards (restore to 0 afterwards). On USB power keep `tx_power` low (~5): full-power TX with a relay energized crashed the board into watchdog resets. The key can't be read back from a board, so save `config.get` and know the key before flashing; if the key is lost, `key.set` a fresh one on both boards. With the GateSim Uno wired to the gate board, the full loop (controller → house → gate → simulated opener) can be scripted; open its port with DTR off, or the Uno resets and the gate briefly sees `no_power`.
+The boards can be driven from scripts over USB serial with the same JSON console the web page uses (`docs/console.md`; `python tools/gatelink.py house status`, or pyserial: `{"id":1,"cmd":"status"}`). Only one program can hold a port — close/disconnect the web console first. Every upload wipes config (role, key, `tx_power`; `power_sense` and `ctrl_power_sense` return to on): use the `/flash` skill, or `tools/gatelink.py snapshot` before and `restore` after (key from `~/.gatelink_key`). Without jumpers, toggling an input's `inN_invert` flips what the firmware sees, which lets scripts exercise input paths on bare boards (restore to 0 afterwards). On USB power keep `tx_power` low (~5): full-power TX with a relay energized crashed the board into watchdog resets. The key can't be read back from a board; if `~/.gatelink_key` is lost, `key.set` a fresh one on both boards. With the GateSim Uno wired to the gate board, the full loop (controller → house → gate → simulated opener) can be scripted; open its port with DTR off, or the Uno resets and the gate briefly sees `no_power`.
+
+## Tracking, versions and releases
+
+- `TODO.md` — open bugs, investigations, bench/field tasks. `ROADMAP.md` — desired features. Add findings there as you go; remove items once their fix or feature is merged (the PR and release notes record them).
+- Every firmware change bumps `FW_VERSION` (`config.h`); MINOR for a `CFG_VERSION` bump, a new feature, or a change both boards need together (STATUS/DIAG or frame format), PATCH otherwise. One branch + PR per change, with bench results in the PR body.
+- The changelog is GitHub Releases (`vX.Y.Z` tag on the merge commit); `.github/workflows/release.yml` attaches the built `.bin`. CI (`ci.yml`) compiles firmware and GateSim (fails on warnings in project files) and syntax-checks web and Python. Details: `docs/development.md`.
+- Project skills (`.claude/skills/`): `/flash` (upload to the bench boards and restore config/key), `/release` (tag and publish a release with notes).
+- Keep docs in step with code: console/log/status → `docs/console.md`; pins/wiring → `docs/hardware.md` and the `WIRING` table; suite options → `tests/e2e/README.md`.
 
 ## Behavioural invariants (don't break these)
 

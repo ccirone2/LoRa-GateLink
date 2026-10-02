@@ -2,7 +2,7 @@
 
 The rest of the suite simulates outages with net_id; this one puts real RF margin under test. Opt-in, and meant to
 be run with something in the path: at the bench with an attenuator in line or the antennas off, and at the install
-site (see README "End-to-end tests"):
+site (see tests/e2e/README.md, "Optional hardware"):
     pytest tests/e2e -m rf [--rf-cycles 5]
 The radio params are applied unsaved and put back afterwards.
 """

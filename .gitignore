@@ -1,4 +1,6 @@
-.claude/
+# Local Claude Code state; project skills are shared
+.claude/*
+!.claude/skills/
 build/
 *.bin
 *.elf

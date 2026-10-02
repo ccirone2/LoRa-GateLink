@@ -1,0 +1,45 @@
+name: Release firmware binary
+
+# Builds the firmware at a release's tag and attaches GateLink-<tag>.bin to the release.
+# Run by hand (workflow_dispatch) to add the binary to an existing release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build, e.g. v0.3.5
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: arduino/setup-arduino-cli@v2
+      # Versions: keep in sync with docs/development.md and ci.yml.
+      - name: Install core and libraries
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:samd@1.8.14
+          arduino-cli lib install "LoRa@0.8.0" "Crypto@0.4.0" "FlashStorage@1.0.0" "ArduinoJson@7.4.3" \
+            "Adafruit SleepyDog Library@1.8.4"
+      - name: Compile
+        run: arduino-cli compile --fqbn arduino:samd:mkrwan1310 --output-dir build firmware/GateLink
+      - name: Check FW_VERSION matches the tag
+        run: |
+          v=$(sed -n 's/^#define FW_VERSION "\(.*\)"/\1/p' firmware/GateLink/config.h)
+          [ "v$v" = "$TAG" ] || { echo "FW_VERSION $v doesn't match tag $TAG"; exit 1; }
+      - name: Attach binary to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/GateLink.ino.bin "GateLink-$TAG.bin"
+          gh release upload "$TAG" "GateLink-$TAG.bin" --clobber

@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 
 from .board import BoardError
-from .controller import ControllerError
+from .controller import ControllerError, CtrlPower
 from .gatesim import GateSimError
 
 # Wire values as they appear in log entries (roles.h / link.h).
@@ -37,6 +37,7 @@ def _get(d, path):
 class Bench:
     def __init__(self, house, gate, sim, ctrl, timeline, run_dir):
         self.house, self.gate, self.sim, self.ctrl = house, gate, sim, ctrl
+        self.power = CtrlPower(ctrl, house)
         self.timeline = timeline
         self.run_dir = run_dir
         self.backup = {"house": house.config_get(), "gate": gate.config_get()}
@@ -85,6 +86,10 @@ class Bench:
             self.sim.travel(self.sim_travel_orig)
         except GateSimError as e:
             print(f"\nWARNING: couldn't restore the simulator: {e}")
+        try:
+            self.power.ensure_on()
+        except ControllerError as e:
+            print(f"\nWARNING: couldn't switch the controller's supply back on: {e}")
 
     # --- waits ------------------------------------------------------------------------------------------------
     def mark(self):
@@ -183,6 +188,7 @@ class Bench:
         self.sim.fault("none")
         self.sim.relay_auto()
         self.sim.power(True)
+        self.power.ensure_on()
         self.apply_profile()
         self.wait_for(lambda: self.house.status()["link_up"] and self.gate.status()["link"]["verified"],
                       45, "link up and verified")
@@ -240,13 +246,10 @@ class Bench:
                 elif n not in self._allowed_counters and end[n]["mac_fail"] != snap[n]["mac_fail"]:
                     problems.append(f"{n} mac_fail went {snap[n]['mac_fail']} -> {end[n]['mac_fail']}")
         for n in ("house", "gate"):
+            if n in self._allowed_counters:
+                continue
             for e in self.timeline.logs(n, "replay", since):
-                if e["a"] == e["b"]:
-                    # The frame just accepted, received again: seen on the bench without any link-level
-                    # retransmission (suspected RX re-arm in the radio driver). Rejected safely; reported.
-                    self.anomalies.append(f"{self.test_name}: {n} received its last frame twice (seq {e['a']}) at {e['t']}s")
-                elif n not in self._allowed_counters:
-                    problems.append(f"{n} rejected a replayed frame at {e['t']}s (seq {e['a']}, last {e['b']})")
+                problems.append(f"{n} rejected a replayed frame at {e['t']}s (seq {e['a']}, last {e['b']})")
         cmds = len(self.timeline.logs("house", "cmd_sent", since))
         lo, hi = self._expected_cmds
         if not lo <= cmds <= hi:

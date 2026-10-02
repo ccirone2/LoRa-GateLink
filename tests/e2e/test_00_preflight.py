@@ -44,3 +44,44 @@ def test_simulator(bench):
 
 def test_controller(bench):
     assert bench.ctrl.state() in ("on", "off"), "controller unavailable in Home Assistant"
+
+
+# (level mid-pulse, level after) when K1 is pulsed while the controller is on and K1 off
+SW_MODES = {
+    (True, False): None,  # follows the SW level: stays on while K1 is on, off with it
+    (False, True): "toggles on every SW edge",
+    (False, False): "toggles on the rising SW edge only (momentary / push-button)",
+    (True, True): "ignores the SW input (detached)",
+}
+
+
+def test_controller_follow_mode(bench):
+    """The controller's SW input must follow K1's level. Normal-operation tests expect no resync after K1 changes,
+    and in the field a controller that toggles on SW edges would turn every sync into a reverse command."""
+    b = bench
+    b.begin_test("preflight_controller_mode")
+    b.baseline()
+    pulse_ms = 2000
+    try:
+        # The house must ignore the controller's edges here: have it read the controller as unpowered.
+        b.power.fake(True)
+        b.house.config_set(ctrl_power_sense=1)
+        b.wait_house(5, ctrl_power=False)
+        b.ctrl.on()
+        b.wait_ctrl(True, timeout=15)
+        time.sleep(1)
+        b.house.request("relay.test", k=1, ms=pulse_ms)
+        time.sleep(pulse_ms / 2000)
+        mid = b.house.status()["ctrl"]
+        time.sleep(pulse_ms / 2000 + 2)
+        after = b.house.status()["ctrl"]
+        problem = SW_MODES[(mid, after)]
+        b.facts["controller SW mode"] = problem or "follows the SW level"
+        assert problem is None, (
+            f"the controller {problem} (K1 pulse with it on: {'on' if mid else 'off'} mid-pulse, "
+            f"{'on' if after else 'off'} after). Set its switch input so the relay follows the input level.")
+    finally:
+        if b.house.status()["ctrl"]:
+            b.ctrl.off()  # still read as unpowered: ignored
+            b.wait_ctrl(False, timeout=15)
+        b.apply_profile("house")

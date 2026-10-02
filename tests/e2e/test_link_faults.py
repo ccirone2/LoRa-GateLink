@@ -1,10 +1,4 @@
-"""Radio link failures.
-
-An outage is injected by moving the gate to another net_id (applied, not saved): each board then drops every
-frame from the other before authentication (link.cpp), which looks the same as a total RF outage. Putting the
-net_id back ends it. The baseline re-applies the profile, so a failed test can't leave the link broken.
-"""
-import contextlib
+"""Radio link failures, injected with flows.outage() (the gate moved to another net_id; see there)."""
 import os
 import secrets
 import time
@@ -12,28 +6,10 @@ import time
 import pytest
 
 from gatelink.bench import ACT_OPEN, GS, SIM_TRAVEL_S
+from gatelink.flows import outage
 
 LINK_TIMEOUT_S = 15  # PROFILE_COMMON link_timeout_s
 HEARTBEAT_S = 5
-
-
-def start_outage(b):
-    b.note("radio outage starts")
-    b.gate.config_set(net_id=(b.profile["gate"]["net_id"] + 1) % 256)
-
-
-def end_outage(b):
-    b.gate.config_set(net_id=b.profile["gate"]["net_id"])
-    b.note("radio outage ends")
-
-
-@contextlib.contextmanager
-def outage(b):
-    start_outage(b)
-    try:
-        yield
-    finally:
-        end_outage(b)
 
 
 def test_link_loss_at_rest(rig):
@@ -77,7 +53,7 @@ def test_short_outage_command_delivered_by_retry(rig):
     with outage(rig):
         rig.ctrl.on()
         sent = rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m, timeout=10)
-        time.sleep(0.6)  # well inside the retry budget (cfg retries=5, backoff grows to ~1 s)
+        time.sleep(0.6)  # well inside the retry budget (retries spread over cmd_ttl_s: ~0.3, 0.9, 2.2, 4.7, 9.7 s)
     rx = rig.wait_log("gate", "cmd_rx", a=ACT_OPEN, since=m, timeout=10)
     rig.wait_log("gate", "pulse", a=1, since=m, timeout=5)
     rig.wait_gate("open", timeout=SIM_TRAVEL_S + 8)
@@ -86,6 +62,25 @@ def test_short_outage_command_delivered_by_retry(rig):
     assert len(rig.logs("gate", "pulse", since=m)) == 1
     assert rig.house.status()["link"]["retries"] > retries0, "expected the command to need a retry"
     rig.latency("cmd_sent -> gate cmd_rx (after short outage)", rx["t"] - sent["t"])
+
+
+def test_long_outage_command_delivered_within_ttl(rig):
+    """A 4 s outage outlasts the old fixed retry budget (~4.1 s on 0.3.1); retries spread over cmd_ttl_s deliver it
+    once. 4 s leaves two retries after the outage (~4.4 and ~9 s): a longer one leaves only the last, which a single
+    lost frame would turn into a flaky failure."""
+    rig.expect_commands(1)
+    m = rig.mark()
+    with outage(rig):
+        rig.ctrl.on()
+        sent = rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m, timeout=10)
+        time.sleep(max(0.0, 4 - (rig.mark() - sent["t"])))
+    rx = rig.wait_log("gate", "cmd_rx", a=ACT_OPEN, since=m, timeout=10)
+    assert rx["t"] - sent["t"] < 10.5, "delivered after cmd_ttl_s"
+    rig.wait_gate("open", timeout=SIM_TRAVEL_S + 8)
+    rig.wait_house(15, gate="open", io__k1=True, io__k2=False, cmd_result=0)
+    assert len(rig.logs("gate", "pulse", since=m)) == 1
+    rig.expect_no("house", "cmd_dropped", since=m)
+    rig.latency("cmd_sent -> gate cmd_rx (after 4 s outage)", rx["t"] - sent["t"])
 
 
 def test_gate_moved_during_outage(rig):
@@ -112,11 +107,14 @@ def test_replayed_frames_rejected(rig):
     for sender, peer in (("house", "gate"), ("gate", "house")):
         before = rig.board(peer).status()["link"]["replay"]
         m = rig.mark()
-        for _ in range(3):  # a heartbeat or ACK can slip in between; then the replayed frame is a different one
+        for _ in range(5):  # a heartbeat or ACK can slip in between; then the replayed frame is a different one
             m = rig.mark()
             # A PING is never ACK-memoed, so its replay must be counted rather than re-ACKed.
             rig.board(sender).request("radio.ping")
-            rig.wait_for(lambda: rig.timeline.first(sender, "pong", m), 5, "pong", poll=0.05)
+            try:
+                rig.wait_for(lambda: rig.timeline.first(sender, "pong", m), 3, "pong", poll=0.05)
+            except AssertionError:
+                continue  # a lost ping or pong (a few % on the bench): try again
             rig.board(sender).request("debug.replay")
             time.sleep(1)
             if rig.board(peer).status()["link"]["replay"] > before:

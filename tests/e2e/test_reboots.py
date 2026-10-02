@@ -43,7 +43,7 @@ def test_house_reboot_controller_on_gate_closed(rig):
     """House resets while the controller is on but the gate is closed: it must not open the gate."""
     rig.expect_commands(0)
     # Get the controller on without a command: report the controller unpowered while switching it on.
-    rig.house.config_set(in2_invert=0)
+    rig.power.fake(True)
     rig.house.config_set(ctrl_power_sense=1)
     rig.wait_house(5, ctrl_power=False)
     m = rig.mark()
@@ -52,8 +52,10 @@ def test_house_reboot_controller_on_gate_closed(rig):
     rig.reboot("house")  # also re-applies the profile: ctrl_power_sense back off
     t_boot = rig.mark()
     rig.wait_house(30, link_up=True, gate="closed", armed=True)
-    # The controller is wrong (on, gate closed); the house fixes the controller, never the gate.
-    rig.wait_ctrl(False, timeout=45)
+    # The controller is wrong (on, gate closed); the house fixes the controller, never the gate. It does so as
+    # soon as the boot settle window (ctrl_settle_ms) closes, not after mismatch_timeout_s.
+    rig.wait_log("house", "resync", a=0, since=t_boot, timeout=18)  # mismatch_timeout_s alone would be ~25 s
+    rig.wait_ctrl(False, timeout=15)
     rig.wait_house(10, io__k1=False, io__k2=True, resyncing=False)
     rig.expect_no("gate", "cmd_rx", since=m)
     rig.expect_no("gate", "pulse", since=m)

@@ -25,6 +25,7 @@ struct PendingSlot {
   uint32_t seq;
   uint8_t attempts;
   uint32_t nextAt;
+  uint32_t ttl;
   uint32_t expiresAt;
 };
 
@@ -117,9 +118,15 @@ static void sendHello(uint32_t now, bool force) {
   helloSent = true;
 }
 
+// The TTL governs, not the retry count: the gaps double and the `retries` resends spread over the whole
+// TTL (cmd_ttl_s 10, retries 5: about 0.3, 0.9, 2.2, 4.7 and 9.7 s), so a lost frame is retried quickly
+// and an outage of nearly the TTL is still covered. The slot gives up when the TTL runs out.
 static uint32_t retryDelay(const PendingSlot &s) {
-  uint32_t base = radioAirtimeMs(s.frameLen) + radioAirtimeMs(HDR_LEN + 5 + TAG_LEN) + 100;
-  return base + random(0, 200 * (uint32_t)(s.attempts + 1));
+  uint32_t minGap = radioAirtimeMs(s.frameLen) + radioAirtimeMs(HDR_LEN + 5 + TAG_LEN) + 100;
+  uint32_t n = s.attempts - 1;  // gaps so far; the gap after the last resend is the whole TTL (clamped)
+  uint32_t gap = n >= (uint32_t)cfg.retries ? s.ttl : s.ttl >> (cfg.retries - n);
+  gap -= random(0, gap / 8 + 1);  // jitter, so two boards retrying at once drift apart; never past the TTL
+  return gap < minGap ? minGap : gap;
 }
 
 static void reframeSlots(uint32_t now) {
@@ -161,6 +168,7 @@ void linkSendReliable(Slot slot, uint8_t type, const uint8_t *payload, uint8_t l
   s.attempts = 0;
   uint32_t now = millis();
   s.nextAt = now;
+  s.ttl = ttlMs;
   s.expiresAt = now + ttlMs;
 }
 
@@ -321,17 +329,25 @@ void linkPoll(uint32_t now) {
   for (uint8_t i = 0; i < SLOT_COUNT; i++) {
     PendingSlot &s = slots[i];
     if (!s.active || (int32_t)(now - s.nextAt) < 0) continue;
-    if ((int32_t)(now - s.expiresAt) >= 0 || s.attempts > cfg.retries) {
+    if ((int32_t)(now - s.expiresAt) >= 0) {
       s.active = false;
       stats.giveups++;
       logEvent(EV_TX_GIVEUP, s.type, (int32_t)s.seq);
       if (ackHandler) ackHandler((Slot)i, s.type, false, 0);
       continue;
     }
+    if (s.attempts > cfg.retries) {
+      s.nextAt = s.expiresAt;  // out of resends: wait for a late ACK until the TTL ends
+      continue;
+    }
+    // Its ACK would be dropped until the peer is verified, so sending now only takes airtime from the
+    // handshake (at SF12 the retries crowded out the HELLO_ACK for good). Hold it; the TTL keeps running.
+    if (!peerOk) continue;
     if (s.attempts > 0) stats.retries++;
     transmit(s.frame, s.frameLen);
     s.attempts++;
     s.nextAt = millis() + retryDelay(s);
+    if ((int32_t)(s.nextAt - s.expiresAt) > 0) s.nextAt = s.expiresAt;
   }
 }
 

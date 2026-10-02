@@ -11,12 +11,13 @@ import time
 
 class Timeline:
     def __init__(self):
-        self._t0 = time.monotonic()
+        # perf_counter: time.monotonic() ticks in ~15.6 ms steps on Windows, enough to order events wrongly.
+        self._t0 = time.perf_counter()
         self._lock = threading.Lock()
         self._entries = []
 
     def now(self):
-        return time.monotonic() - self._t0
+        return time.perf_counter() - self._t0
 
     def add(self, src, kind, **data):
         e = {"t": round(self.now(), 3), "src": src, "kind": kind, **data}

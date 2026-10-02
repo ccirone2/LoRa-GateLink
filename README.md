@@ -157,7 +157,9 @@ Frame: `ver | type | net_id | src | dst | session | seq | payload | tag`, tag = 
 accepted only after it echoes a fresh challenge (HELLO / HELLO_ACK), and seq numbers must increase
 within a session, so recorded frames can't be replayed — even across reboots, with no counters in flash.
 A 32-frame sliding window tolerates reordering between retried messages. Commands and status are
-acknowledged and retried; duplicate commands are detected and not re-pulsed. Role changes take
+acknowledged and retried: the `retries` resends are spread over the message's lifetime with doubling gaps
+(`cmd_ttl_s` for commands: at 10 s and 5 retries about 0.3, 0.9, 2.2, 4.7 and 9.7 s), so a command survives an
+outage of nearly `cmd_ttl_s` and is dropped, never fired late, after it. Duplicate commands are detected and not re-pulsed. Role changes take
 effect after a reboot.
 
 ## Bench test checklist
@@ -171,37 +173,43 @@ bare board; turn it back off afterwards. On USB power, set `tx_power` to ~5 dBm 
 transmit while a relay is energized can crash the board (watchdog reset, shown as `reset_cause` in Status). Use **Identify** in the web console to strobe a board's LED
 and tell the two apart.
 
+Most of this list is automated by the end-to-end suite (`tests/e2e`, below), which runs it through the opener
+simulator and the real Shelly; the test covering each item is named after it. By hand, only what needs eyes on
+the hardware or the web page:
+
+- **Still manual:** status LED patterns and **Identify**; the web console itself (Config toggles: flip one → its
+  row is highlighted as unsaved, Apply → the highlight clears and Status reflects it, Save and reboot → it keeps
+  its position, Export shows it as 0/1; Tools → Send replay; Tools → remote setting); a board really unpowered
+  rather than a simulated outage; the Shelly's real 12 V removed (unless the suite has `GATELINK_HA_POWER_ENTITY`).
 - House IN1 to 3.3 V (Shelly ON) → gate K1 pulses once; release → gate K2 pulses once.
+  *e2e: `test_open_via_controller`, `test_close_via_controller`*
 - Gate IN1 to 3.3 V (open limit) → house K1 energizes, K2 releases; gate IN2 to 3.3 V → K1 releases, K2 energizes.
+  *e2e: `test_external_moves_followed_without_commands`*
 - Travel: from closed (gate IN2 jumpered), remove IN2 → house K2 releases at once but K1 stays off; jumper IN1 → K1
   energizes. Leave both off for `travel_timeout_s` instead → K1 energizes when it expires.
+  *e2e: every open/close (mid-travel outputs), `test_jammed_gate`*
 - External move: with no command sent, jumper gate IN1 to 3.3 V → house status shows `cause external`,
   **no command sent** (house log shows `sync`, not `cmd_sent`, if the Shelly or a jumper follows K1).
+  *e2e: `test_external_moves_followed_without_commands`, `test_external_move_right_after_our_command`*
 - Override: jumper gate IN1 (open), turn house IN1 off (CLOSE) → gate reports `timeout` after `travel_timeout_s`,
-  house log shows `resync`.
+  house log shows `resync`. *e2e: `test_opener_ignores_command`*
 - Power sense: release gate IN3 → gate `no_power` (`cause none`), house K2 releases and K1 energizes;
   toggle house IN1 → gate log `cmd_refused`, no `pulse`, house *Last command* shows *refused: opener unpowered*. Re-jumper IN3 → state
-  follows the limits again. Turn the gate's `power_sense` toggle off and Apply (or from the house: Tools → remote
-  setting `power_sense` = 0) → IN3 is ignored.
+  follows the limits again. *e2e: `test_power_loss_at_rest`, `test_power_loss_mid_travel`.* Manual: turn the
+  gate's `power_sense` toggle off and Apply (or from the house: Tools → remote setting `power_sense` = 0) → IN3 is
+  ignored.
 - Shelly power sense: with the gate open and the Shelly on, remove the Shelly's 12 V → house log `ctrl_power 0`
   (plus `ctrl` b=1, or `ctrl_power` b=2 if the relay dropped first), no `cmd_sent`, gate no `pulse`; restore it →
   `ctrl_power 1`, then `sync 1` when the Shelly comes back on. Compare the `ctrl` and `ctrl_power` times to check
-  `ctrl_confirm_ms` covers the gap.
-- Config toggles: flip any toggle → its row is highlighted as unsaved; Apply → the highlight clears and Status
-  reflects the change; Save, reboot → the toggle keeps its new position. Export config shows it as 0/1.
+  `ctrl_confirm_ms` covers the gap. *e2e: `test_controller_faults.py` (simulated unless
+  `GATELINK_HA_POWER_ENTITY` is set)*
 - Unpower the gate board → after `link_timeout_s` house K2 releases (sensor open), log `link_down`.
+  *e2e: `test_link_loss_at_rest` (simulated outage)*
 - Tools → Send replay on one board → the other board's replay counter increases (or it re-ACKs).
-- Different key on one board → *Peer verified* stays no and `mac_fail` climbs.
+  *e2e: `test_replayed_frames_rejected`*
+- Different key on one board → *Peer verified* stays no and `mac_fail` climbs. *e2e: `test_wrong_key_rejected`*
 - Reboot the house board with IN1 jumpered to 3.3 V → the gate does not move.
-
-With the opener simulator below wired in, the same checks run end to end without jumpers:
-
-- Shelly ON → gate pulses K1, simulator travels, gate `between` → `open` (`cause lora`); house K1 stays off during
-  travel and energizes at the open limit, K2 releases as soon as the gate leaves closed. Shelly OFF → reverse.
-- Shelly OFF a few seconds into an opening → gate pulses K2 and the simulator reverses to closed (`cause lora`).
-- Simulator `open`/`close` (even right after a Shelly command) → `cause external`, house log `sync`, no `cmd_sent`.
-- Simulator `power off` → gate `no_power`, house not-closed; Shelly OFF → gate `cmd_refused`. `power on` → back to
-  the limits.
+  *e2e: `test_house_reboot_controller_on_gate_closed`*
 
 ### Bench opener simulator (`tools/GateSim`)
 
@@ -253,17 +261,37 @@ export GATELINK_HA_URL=https://<home-assistant>:8123    # token read from ~/.ha_
 pytest tests/e2e -v                       # about 30 min; boards found by role, simulator on COM10 (--sim-port)
 pytest tests/e2e -m soak --cycles 20      # repeated open/close cycles with latency stats
 GATELINK_KEY=<32 hex> pytest tests/e2e -k wrong_key   # wrong-key test, opt-in (rewrites the gate's saved key)
+GATELINK_KEY=<32 hex> pytest tests/e2e --restore-key -k boards_and_link   # put the shared key back on both boards
+pytest tests/e2e -m longsoak --soak-minutes 120   # hours-long run, outages and opener faults mixed in
+pytest tests/e2e -m rf --rf-cycles 5      # marginal link (2 dBm, SF12); see "Real RF" below
 ```
+
+`--restore-key` reboots both boards (dropping any unsaved test profile an interrupted run left behind), then
+`key.set`s `GATELINK_KEY` on both and waits for the link. Use it if a wrong-key run was killed mid-test and left the
+gate with a random key. Keep the key itself somewhere safe (e.g. a password manager): boards can't read it back,
+and the web console's config export doesn't include it.
+
+Optional hardware:
+- **Real controller power.** Wire house IN2's opto to the Shelly's 12 V and put that supply on an HA smart plug,
+  then set `GATELINK_HA_POWER_ENTITY=switch.<plug>`. `test_controller_faults.py` then cuts real power, so the real
+  relay-drops-before-opto race is tested (either order passes as long as nothing is commanded). Without it,
+  controller power is simulated with house `in2_invert`.
+- **Real RF.** `-m rf` runs pings and open/close cycles at `tx_power` 2 and SF12 and reports pings, RSSI/SNR,
+  retries and giveups in the summary. Run it with an attenuator in line or the antennas off at the bench, and at
+  the install site; also check ping and RSSI from the web console there.
 
 Without the bench connected, every test is skipped. If `test_00_preflight` fails, the scenarios are skipped.
 
 | File | Covers |
 |---|---|
+| `test_00_preflight.py` | Boards, firmware, key and link. Bench-safe settings. Ping. Simulator wiring. The controller reachable and following K1 (its SW input in follow mode, not edge-toggle) |
 | `test_normal.py` | Open and close from the controller, with timing at every hop. Reversal mid-travel. Flip back before the gate leaves its limit. External moves, including one right after our command |
 | `test_opener_faults.py` | Opener power loss at rest and mid-travel. Jammed gate. Opener ignoring the command (siren/override). Both limits active. Limit chatter |
-| `test_link_faults.py` | Link loss and recovery. A command into a dead link (expires, never fires late). A short outage covered by retries. A gate move missed during an outage. Replayed frames. Wrong key |
+| `test_link_faults.py` | Link loss and recovery. A command into a dead link (expires, never fires late). Short and 4 s outages covered by retries within `cmd_ttl_s`. A gate move missed during an outage. Replayed frames. Wrong key |
 | `test_reboots.py` | Gate reset at rest and mid-travel. House reset with the controller wrong, and with the gate open |
 | `test_controller_faults.py` | Controller toggled while unpowered. Relay dropping before the power sense. Controller coming back at the wrong level. Rapid toggling |
+| `test_soak.py` | `-m longsoak`: open/close cycles, outages, opener power blips, external moves and jams in rotation; no resets or radio faults; counters to `soak_counters.csv` |
+| `test_rf.py` | `-m rf`: the full loop over a marginal link (minimum power, SF12) |
 
 How it works:
 - **Faster timings.** The suite applies shorter timings to both boards for the run, unsaved: `heartbeat_s` 5,
@@ -271,14 +299,14 @@ How it works:
   At the end it restores every param from `results/<run>/config_backup.json`. Saved config is never written,
   except by the opt-in wrong-key test.
 - **Simulated faults.** A radio outage is the gate moved to another `net_id`. Controller power is house
-  `in2_invert` (IN2 isn't wired on the bench).
+  `in2_invert` (IN2 isn't wired on the bench) unless `GATELINK_HA_POWER_ENTITY` is set.
 - **Baseline.** Each test starts from the same point: opener powered, gate closed, controller off, house armed
   and in sync.
 - **Invariant checks after every test.** OPEN and CLOSE are never pulsed together. Every gate pulse is `pulse_ms`
   long and answers a received command. No board resets or radio faults. No MAC failures or replays. The house sent
   exactly the number of commands the scenario expects.
 - **Results.** `tests/e2e/results/<run>/` holds a time-ordered timeline per test (all four devices, JSONL) and
-  `summary.md` (results, latencies, link quality, anomalies).
+  `summary.md` (results, latencies, link quality, anomalies such as a gate → house status that needed a retry).
 
 ## Troubleshooting
 

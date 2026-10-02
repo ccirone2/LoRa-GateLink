@@ -7,6 +7,8 @@
 #include "config.h"
 #include "log.h"
 
+#define STATUS_TTL_MS 10000
+
 static uint8_t state = GS_UNKNOWN;
 static uint8_t cause = CAUSE_NONE;
 static uint8_t lastResult = TR_NONE;
@@ -47,7 +49,10 @@ static void sendStatus(uint32_t now) {
   putU16(p + ST_RSSI, (uint16_t)houseRssi);
   p[ST_SNR] = (uint8_t)houseSnr;
   p[ST_TARGET] = target;
-  linkSendReliable(SLOT_STATUS, MSG_STATUS, p, ST_LEN, (uint32_t)cfg.heartbeat_s * 1000);
+  // Retries spread over the TTL: cap it so a lost status is retried within a fraction of a second even with a
+  // long heartbeat (the next heartbeat supersedes it anyway).
+  uint32_t ttl = (uint32_t)cfg.heartbeat_s * 1000;
+  linkSendReliable(SLOT_STATUS, MSG_STATUS, p, ST_LEN, ttl < STATUS_TTL_MS ? ttl : STATUS_TTL_MS);
   lastStatusAt = now;
 }
 

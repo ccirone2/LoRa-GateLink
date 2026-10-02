@@ -29,10 +29,32 @@ def pytest_addoption(parser):
     g.addoption("--gate-port", help="gate board COM port (default: auto-detect by role)")
     g.addoption("--sim-port", default=os.environ.get("GATELINK_SIM_PORT", "COM10"), help="GateSim Uno port")
     g.addoption("--cycles", type=int, default=20, help="open/close cycles for the soak test")
+    g.addoption("--soak-minutes", type=float, default=120, help="duration of the long soak (-m longsoak)")
+    g.addoption("--rf-cycles", type=int, default=5, help="open/close cycles on the marginal link (-m rf)")
+    g.addoption("--restore-key", action="store_true",
+                help="first reboot both boards and re-apply GATELINK_KEY, e.g. after an interrupted wrong-key test")
 
 
 def pytest_configure(config):
     config._gatelink = {"bench": None, "outcomes": {}, "preflight_failed": False, "run_dir": None}
+
+
+def _restore_key(boards):
+    """Put the shared key back on both boards (e.g. the wrong-key test was killed and left the gate's key random)."""
+    key = os.environ.get("GATELINK_KEY", "")
+    if len(key) != 32:
+        pytest.exit("--restore-key needs GATELINK_KEY (the 32-hex-char key both boards share)", returncode=4)
+    for b in boards.values():
+        # key.set saves the whole config. Reboot first so an interrupted run's unsaved test profile is dropped
+        # rather than saved along with the key.
+        b.reboot()
+        b.request("key.set", key=key)
+    deadline = time.monotonic() + 30
+    while not all(b.status()["link"]["verified"] for b in boards.values()):
+        if time.monotonic() > deadline:
+            pytest.exit("--restore-key: the link didn't come back verified within 30 s", returncode=4)
+        time.sleep(0.5)
+    print("\n--restore-key: GATELINK_KEY applied to both boards, link verified")
 
 
 def _open_board(port, timeline):
@@ -65,6 +87,8 @@ def bench(request):
                 o.close()
             pytest.skip(f"bench not connected: no {' or '.join(sorted(missing))} board found "
                         f"(close the web console; boards found: {sorted(boards) or 'none'})")
+        if cfg.getoption("--restore-key"):
+            _restore_key(boards)
         sim = GateSim(sim_port, tl)
         sim.open()
         opened.append(sim)

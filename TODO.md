@@ -1,55 +1,54 @@
 # TODO
 
-Issues flagged by the bench end-to-end suite (`tests/e2e`), first runs on 2026-09-30.
-Results of those runs:
-- Full suite: 31/31 passed, wrong-key test included.
-- Soak: 20 cycles, 40/40 moves.
-Per-run timelines are in `tests/e2e/results/` (not committed).
+Issues flagged by the bench end-to-end suite (`tests/e2e`), first runs on 2026-09-30. The suite-side fixes and
+firmware 0.3.2 landed on 2026-10-01; what's left needs hardware, the install site or a person.
 
 ## Firmware
 
-- [ ] **Boards re-receive the frame they just accepted.**
-  - **Symptom:** about 30 ms after accepting a frame, the peer sometimes receives the same frame again, logged as
-    `replay` with a == b. There is no link-level retransmission and no `radio_fail`.
-  - **How often:** 31–34 times per 8–9 minute run, on both boards.
-  - **Effect today:** the frames are rejected safely and nothing is processed twice. But the `replay` counter grows
-    and reads like an attack.
-  - **Suspect:** the RX-single re-arm in `radio.cpp` `radioReceive()` / LoRa `parsePacket()` polling.
-  - **After a fix:** make `Bench.check_invariants` (`tests/e2e/gatelink/bench.py`) fail on a == b replays too.
-    Today they're listed under "Anomalies" in `summary.md`.
-- [ ] **Commands give up long before `cmd_ttl_s`.**
-  - With `retries` = 5 the CMD slot exhausts its attempts about 4 s after `cmd_sent` (bench: dropped at 4.1 s),
-    while `cmd_ttl_s` is 10 (also the default).
-  - A radio outage of 4–10 s therefore drops a command that the TTL suggests would survive.
-  - Options: decide which limit should govern, then scale the CMD retries/backoff to the TTL, or document that
-    `retries` is the real limit.
-- [ ] **Slow resync after a house reboot with the controller out of step.**
-  - When the controller disagrees with the gate at boot, the house waits the full `mismatch_timeout_s` after arming
-    before resyncing: 27 s on the bench with 20 s, so about 80 s at the default 75 s. Alarm.com shows the wrong
-    state for that long.
-  - Consider resyncing as soon as the first status has settled after boot.
-- [ ] **One slow gate → house status in the soak.** It took 0.83 s; the median is 0.14 s. It looks like a lost
-  STATUS or ACK followed by a retry. Low priority: watch whether it grows at install range.
+- [x] **Boards re-received the frame they had just accepted** (`replay` with a == b, ~30 per run).
+  - **Cause (measured):** a FIFO re-read, not a second reception. The SX127x packet and header counters didn't
+    move, and the RSSI was identical. The LoRa lib's `parsePacket()` clears IRQ flags mid-packet; RX_DONE then
+    sometimes survived its clear, so the next poll returned the same packet again.
+  - **Fix (0.3.2):** `radioReceive()` does RX-single with its own register access and touches the flags only in
+    standby. It went from 0 replays in 4 min of pings vs ~25 before. `Bench.check_invariants` now fails on any
+    replay.
+- [x] **Commands gave up long before `cmd_ttl_s`.** The TTL governs now: the `retries` resends double their gaps
+  across the whole TTL (about 0.3, 0.9, 2.2, 4.7 and 9.7 s at 10 s and 5 retries), and the slot gives up when the
+  TTL ends. STATUS's TTL is `heartbeat_s` capped at 10 s, so its first retry stays quick. New test:
+  `test_long_outage_command_delivered_within_ttl` (4 s outage). An outage longer than ~4.7 s leaves only the last
+  retry (~9 s), so one lost frame then drops the command; raise `retries` if that matters.
+- [x] **Found by the new RF test: at SF12 the gate never verified the house.** Its STATUS retries, sent while it
+  wasn't verified yet (so their ACKs were dropped anyway), kept the channel busy, and the HELLO_ACK never got
+  through. Reliable slots now hold until the peer is verified. SF12 at 2 dBm now verifies in about 4 s.
+- [x] **Slow resync after a house boot with the controller out of step.** After a boot or controller power
+  return, the house resyncs as soon as the settle window (`ctrl_settle_ms`) closes, instead of after
+  `mismatch_timeout_s`.
+- [ ] **Frame loss on a strong link.** It shows up as an occasional slow gate → house status and as lost pings.
+  - Measured at the bench (−60 dBm): 2–3.5 % of pings at SF9 (4/200 and 7/200), the same on 0.3.1's driver.
+    At SF12 / 2 dBm with a 5 s heartbeat, 11/20.
+  - The latest 20-cycle soak had no slow status (max 0.135 s, was 0.83 s).
+  - Not the RX-single symbol timeout: raising it to 1023 symbols changed nothing (7/200).
+  - Next suspects: half-duplex collisions with heartbeats/ACKs (there's no listen-before-talk), and the 25 ms
+    turnaround.
+  - The suite lists any status slower than 0.5 s under "Anomalies" with the gate's retry count.
 
 ## Test suite
 
-- [ ] **Timeline timestamps:** `time.monotonic()` has about 15.6 ms resolution on Windows, which produced a
-  negative latency sample (cmd_sent → pulse −0.015 s). Switch `Timeline` to `time.perf_counter()`.
-- [ ] **Shelly SW mode is assumed, not checked.** Normal-operation tests assume follow mode: they expect no
-  `resync` after K1 changes. Add a preflight check that flags toggle mode clearly.
-- [ ] **Controller power loss is simulated** with house `in2_invert`, because IN2 isn't wired on the bench. Wire the
-  IN2 opto and a switchable 12 V supply (e.g. an HA smart plug), so the real relay-drop-before-opto race is tested.
-- [ ] **Radio outages are simulated** by changing the gate's `net_id`. Add a real RF test: antenna off or an
-  attenuator, and a marginal-link run at low `tx_power`/high SF. Repeat ping/RSSI at the install site.
-- [ ] **The wrong-key test rewrites the gate's saved key.** If it is interrupted mid-test, the gate keeps a random
-  key. Add a recovery helper, e.g. a `--restore-key` option that re-applies `GATELINK_KEY` to both boards.
-- [ ] **Longer soak:** hours, with periodic outages and opener faults mixed in, and watch for watchdog resets and
-  counter drift.
-- [ ] **README bench checklist:** mark the items the suite now automates, so the manual list only keeps what still
-  needs eyes on hardware (LEDs, web console UI).
+- [x] **Timeline timestamps** use `time.perf_counter()`.
+- [x] **Controller SW mode** is checked in preflight (`test_controller_follow_mode`).
+- [x] **Key recovery:** `--restore-key` (README "End-to-end tests").
+- [x] **README bench checklist** names the test that automates each item and keeps a "still manual" list.
+- [ ] **Controller power loss is still simulated** (house `in2_invert`). The code is ready: wire the IN2 opto to
+  the Shelly's 12 V on an HA smart plug and set `GATELINK_HA_POWER_ENTITY`. Then run `test_controller_faults.py`
+  and note which drops first (summary "Link" section).
+- [ ] **Real RF:** `test_rf.py` (`-m rf`) passes at the bench with antennas on: SF12, 2 dBm, 3 cycles. Still to
+  do: run it with an attenuator or the antennas off, and at the install site, and check ping/RSSI there from the
+  web console.
+- [ ] **Long soak:** a 15-minute smoke run passed (43 scenarios, no resets, radio faults or replays). Still to do:
+  run `pytest tests/e2e -m longsoak --soak-minutes 120` (or longer) and check `soak_counters.csv` for drift.
 
 ## Bench / housekeeping
 
 - [ ] **Record the link key.** It was rotated on 2026-09-30 so the wrong-key test could run. The new key is in
-  `~/.gatelink_key` (not in the repo). Store it somewhere safe; boards can't read it back, and the web console's
-  config export doesn't include it.
+  `~/.gatelink_key` (not in the repo). Store it somewhere safe, e.g. a password manager; boards can't read it
+  back, and the web console's config export doesn't include it.

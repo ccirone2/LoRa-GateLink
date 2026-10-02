@@ -1,8 +1,9 @@
 """Controller-side failures.
 
-House IN2 (controller power sense) isn't wired on the bench, so controller power is simulated with in2_invert:
-1 = powered (the open input reads active), 0 = unpowered. That's only safe because nothing is connected to IN2.
-The controller's own relay does not drop here; where the real one would, the test switches it off itself.
+Controller power goes through `bench.power` (gatelink.controller.CtrlPower). With GATELINK_HA_POWER_ENTITY set,
+an HA smart plug really cuts the controller's supply and house IN2 is wired to it, so the controller's relay
+drops by itself. Otherwise IN2 isn't wired and in2_invert simulates it; the relay doesn't drop, and where the real
+one would, the test switches it off itself.
 """
 import threading
 import time
@@ -13,14 +14,10 @@ from gatelink.bench import ACT_OPEN, SIM_TRAVEL_S
 from gatelink.flows import open_via_ctrl
 
 
-def set_power(b, on):
-    b.house.config_set(in2_invert=1 if on else 0)
-
-
 @pytest.fixture
 def powered(rig):
-    """ctrl_power_sense on, controller powered. Invert first so enabling the sense doesn't see a power cut."""
-    set_power(rig, True)
+    """ctrl_power_sense on, controller powered. Set IN2 up first so enabling the sense doesn't see a power cut."""
+    rig.power.fake(False)
     time.sleep(0.3)
     rig.house.config_set(ctrl_power_sense=1)
     rig.wait_house(5, ctrl_power=True, sync_window=False)
@@ -32,14 +29,14 @@ def test_toggle_while_unpowered_ignored(powered):
     rig = powered
     rig.expect_commands(0)
     m = rig.mark()
-    set_power(rig, False)
+    rig.power.fake(True)  # the house reads it unpowered, but it keeps its supply so it can still be switched
     rig.wait_log("house", "ctrl_power", a=0, b=0, since=m, timeout=5)
     rig.ctrl.on()
     rig.wait_log("house", "ctrl", a=1, b=1, since=m, timeout=10)
     rig.expect_no("house", "cmd_sent", seconds=3, since=m)
     rig.expect_no("house", "resync", since=m)  # resync pauses while unpowered
     m2 = rig.mark()
-    set_power(rig, True)
+    rig.power.fake(False)
     rig.wait_log("house", "ctrl_power", a=1, since=m2, timeout=5)
     rig.wait_house(5, sync_window=True)  # settle window (ctrl_settle_ms)
     rig.ctrl.off()
@@ -54,11 +51,14 @@ def test_relay_drops_before_power_sense(powered):
     open_via_ctrl(rig, record=False)
     rig.wait_house(10, "sync window closed", sync_window=False)
     m = rig.mark()
+    if rig.power.real:
+        _real_supply_cut(rig, m)
+        return
     # The relay dropping with the supply... (the HA call returns only after Z-Wave confirms, often after the
     # relay has already moved, so switch from a thread and react to the edge itself)
     threading.Thread(target=rig.ctrl.off, daemon=True).start()
     edge = rig.wait_log("house", "ctrl", a=0, b=0, since=m, timeout=10)
-    set_power(rig, False)  # ...and the power sense following inside ctrl_confirm_ms
+    rig.power.set(False)  # ...and the power sense following inside ctrl_confirm_ms
     lost = rig.wait_log("house", "ctrl_power", a=0, since=m, timeout=2)
     assert lost["b"] == 2, f"pending CLOSE should be discarded (ctrl_power b=2), got b={lost['b']}"
     rig.latency("controller edge -> power sense drop (must be < ctrl_confirm_ms)", lost["t"] - edge["t"])
@@ -66,9 +66,32 @@ def test_relay_drops_before_power_sense(powered):
     assert rig.gate.status()["gate"] == "open"
     # Power back: the controller is out of step (off, gate open) and gets resynced on.
     m2 = rig.mark()
-    set_power(rig, True)
+    rig.power.set(True)
     rig.wait_log("house", "resync", a=1, since=m2, timeout=45)
     rig.wait_ctrl(True, timeout=15)
+    rig.expect_no("gate", "cmd_rx", since=m)
+
+
+def _real_supply_cut(rig, m):
+    """Plug backend: cut the real supply. Whichever drops first (relay or opto), nothing may be commanded."""
+    rig.power.set(False)
+    lost = rig.wait_log("house", "ctrl_power", a=0, since=m, timeout=10)
+    edges = rig.logs("house", "ctrl", a=0, since=m)
+    if lost["b"] == 2:
+        order = "relay first, pending CLOSE discarded"
+        rig.latency("controller edge -> power sense drop (must be < ctrl_confirm_ms)", lost["t"] - edges[0]["t"])
+    else:
+        order = "opto first" + (", relay edge ignored" if rig.logs("house", "ctrl", a=0, b=1, since=m) else "")
+    rig.note(f"real supply cut: {order}")
+    rig.facts["controller supply cut"] = order
+    rig.expect_no("house", "cmd_sent", seconds=2, since=m)
+    assert rig.gate.status()["gate"] == "open"
+    m2 = rig.mark()
+    rig.power.set(True)
+    rig.wait_log("house", "ctrl_power", a=1, since=m2, timeout=10)
+    # It boots at whatever level it restores; if that isn't on, the house resyncs it (never commands the gate).
+    rig.wait_ctrl(True, timeout=45)
+    rig.wait_house(15, io__k1=True, resyncing=False)
     rig.expect_no("gate", "cmd_rx", since=m)
 
 
@@ -77,12 +100,13 @@ def test_controller_returns_at_wrong_level(powered):
     and the mismatch path then brings it back to the gate's state."""
     rig = powered
     rig.expect_commands(0)
-    set_power(rig, False)
-    rig.wait_house(5, ctrl_power=False)
+    rig.power.set(False)
+    rig.wait_house(10, ctrl_power=False)
     m = rig.mark()
-    set_power(rig, True)
-    rig.wait_house(5, ctrl_power=True, sync_window=True)
-    rig.ctrl.on()  # comes back on although the gate is closed
+    rig.power.set(True)
+    rig.wait_house(10, ctrl_power=True, sync_window=True)
+    # Comes back on although the gate is closed (a real one may still be booting: retry the switch).
+    rig.wait_for(lambda: rig.ctrl.on() or True, rig.power.BOOT_S + 5, "controller switchable after power-up")
     rig.wait_log("house", "sync", a=1, since=m, timeout=10)
     rig.wait_log("house", "resync", a=0, since=m, timeout=45)
     rig.wait_ctrl(False, timeout=15)

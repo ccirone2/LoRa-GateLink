@@ -37,6 +37,7 @@ static bool syncExpect = false;
 static bool resyncing = false;
 static uint32_t resyncUntil = 0;
 static uint32_t mismatchSince = 0;
+static bool checkSoon = false;  // boot or controller power return: resync at once if still out of step
 static bool k1WasPulsing = false;
 static bool ctrlPower = true;
 static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms
@@ -112,6 +113,7 @@ void houseBegin() {
   armed = false;
   armAt = 0;
   ctrlPower = !cfg.ctrl_power_sense || in2.active();
+  checkSoon = true;
   uint32_t now = millis();
   // A shared supply may have just powered up the Shelly too: let it settle to K1 first.
   openSyncWindow(now, k1.on(), cfg.ctrl_settle_ms);
@@ -124,7 +126,10 @@ static void updateCtrlPower(uint32_t now) {
   ctrlPower = p;
   logEvent(EV_CTRL_POWER, p, p ? 0 : pendingAction);
   if (!p) pendingAction = 0;  // the edge was the relay dropping with the supply
-  else openSyncWindow(now, k1.on(), cfg.ctrl_settle_ms);
+  else {
+    openSyncWindow(now, k1.on(), cfg.ctrl_settle_ms);
+    checkSoon = true;
+  }
 }
 
 void houseLoop(uint32_t now) {
@@ -186,6 +191,12 @@ void houseLoop(uint32_t now) {
     // Mid-travel the Shelly may already show a user's new command while K1 holds the old limit.
     if (shellyLevel == t || holdingTravel(now)) {
       mismatchSince = 0;
+      if (!syncActive) checkSoon = false;
+    } else if (checkSoon && !syncActive && !pendingAction) {
+      // Settled after a boot or power return and still wrong: K1 alone won't move it (the Shelly only
+      // follows SW edges), so resync now instead of waiting out mismatch_timeout_s.
+      mismatchSince = now - (uint32_t)cfg.mismatch_timeout_s * 1000;
+      checkSoon = false;
     } else if (mismatchSince == 0) {
       mismatchSince = now;
     } else if ((int32_t)(now - mismatchSince) >= cfg.mismatch_timeout_s * 1000) {

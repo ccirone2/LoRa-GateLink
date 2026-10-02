@@ -35,121 +35,79 @@ A gate reboot re-establishes the session in about 2.6 s (it was 3–4.6 s).
 - [x] **`radioRandom32()` no longer leaves RX** (it aborted a frame being received). It hashes into a chained
   state and doesn't sample during TX.
 
-### P2 — firmware
+### P2 and P3 (fixed in 0.3.5)
 
-- [ ] **A radio reset during RX is never detected** (`radioReceive`).
-  - **Problem:** after a reset the SX1276 is in FSK mode, and `startRx()` can't switch it to LoRa outside Sleep.
-    So `radioReceive()` re-arms forever, `radioChannelBusy()` reads false, and nothing is counted.
-  - **Scenario:** the house mostly listens, so it can go deaf with no `radio_fail`.
-  - **Fix:** if `REG_OP_MODE & 0x80` is clear, count a fault, log `radio_fail` a=2, and call `radioBegin()`.
-- [ ] **A failed `radioBegin()` is permanent** (`radio.cpp`). `ok` stays false until a reboot. **Fix:** retry
-  every 5–10 s while `!ok`.
-- [ ] **Gate `cause` ignores the direction of travel** (`role_gate.cpp` `gateLoop`, `gateRelayTest`).
-  - **Problem:** any move to `between` while `target` is set is labelled `lora`, even when the gate leaves the
-    target limit.
-  - **Scenarios:**
-    - A K1 relay test while the gate is already OPEN, then an AES close within `travel_timeout_s`.
-    - An OPEN overridden to CLOSED by the siren, after which the next external open reads `lora`.
-  - **Fix:**
-    - Count `between` as ours only when the previous state wasn't the target.
-    - Clear `target` (with `TR_TIMEOUT`) when the gate reaches the opposite limit.
-    - In `gateRelayTest`, don't set a target the gate is already at, and reset `lastResult`.
-- [ ] **The first matching IN1 edge closes the settle window early** (`role_house.cpp` IN1 handling).
-  - **Problem:** at boot or on controller power return, the `ctrl_settle_ms` window ends as soon as the Shelly
-    matches `syncExpect`.
-  - **Scenario:** a Shelly that restores its Z-Wave state or chatters a few seconds later has that edge sent as a
-    command. This goes against the purpose of the settle window.
-  - **Fix:** track `settleUntil` separately and allow the early close only after it has passed.
-- [ ] **`heartbeat_s` vs `link_timeout_s` is checked on the wrong board** (`paramSet`).
-  - **Problem:** only the gate uses `heartbeat_s`, and only the house uses `link_timeout_s`, but each board checks
-    its own pair.
-  - **Scenario:** gate `heartbeat_s=60` with house `link_timeout_s=100` gives false link loss, and K2 fails open.
-  - **Fix:** have the house use `max(link_timeout_s, 2.5 × the gate's heartbeat)`, learning the heartbeat from
-    STATUS/DIAG.
-- [ ] **Input inverts are remote-writable** (`PARAMS`: `in1_invert`–`in4_invert` have `P_REMOTE`). CLAUDE.md
-  says to keep them at 0. A remote `in2_invert=1` on the gate makes a cut closed-limit wire read CLOSED.
-  **Fix:** drop `P_REMOTE` from them. `cmd_ttl_s` is also `P_REMOTE` but the gate doesn't use it.
-- [ ] **A remote `CFG_SET` or `key.set` also saves unsaved console edits** (`configSave()` writes the whole
-  `cfg`).
-  - **Scenario:** a bench `in1_invert` flip gets persisted.
-  - **Fix:** save a copy of the persisted config with only that field changed.
-- [ ] **Small console and link fixes:**
-  - `remote.set` turns a missing or non-integer `value` into 0. **Fix:** require `is<int32_t>()`.
-  - A second `remote.set` replaces the CFG slot with no callback, so the first never gets a `remote_set` event.
-    **Fix:** reject it while `linkPending(SLOT_CFG)`, or fail the old request.
-  - An overlong console line (over 383 chars) gets no reply, and `bad json` replies have no `id`, so callers
-    just time out. **This affects users:** after a firmware upload wipes the config, importing a saved config in
-    the web console sends nearly every param in one `config.set`. That line is too long, so the import times
-    out (found while re-flashing the bench). **Fix:** reply with an error, raise `LINE_MAX`, and/or have
-    `applyConfig` send changes in chunks.
-  - The `updateLed` link-up check is unsigned (`GateLink.ino`), against the timing rule; it's only cosmetic.
-  - A `mismatchSince` of exactly 0 collides with the "not started" sentinel. **Fix:** OR it with 1, like `armAt`.
+Bench results: the full suite passes, 45 tests including the opt-in wrong-key test. That covers the new
+scenarios (`test_remote.py`, `test_options.py`) and the stricter invariant checks, which caught one more bug (the
+heartbeat item under Firmware). Two more suite fixes came out of the runs:
+- `Board.close()`/`GateSim.close()` now join the reader thread before closing the port. Closing it under a
+  blocked read crashed Python (access violation in pyserial) on the reopen after a reboot.
+- The wrong-key test no longer restores the saved timings before `key.set`. Older firmware needed that, but now
+  it stretched the house's link timeout past the test's wait.
 
-### P2 — web console
-
-- [ ] **The status poll timer can leak** (`app.js` `openPort`). `setInterval` runs after the awaited initial
-  queries without checking the port is still open, so a drop mid-connect leaves an orphan 2 s poll forever.
-  **Fix:** `if (port !== p) return;` before it.
-- [ ] **The Install tab says "Set `in1_invert` if ON and OFF come out reversed"** (`WIRING`, house IN1). That
-  contradicts the keep-at-0 rule. **Fix:** tell users to fix polarity in the wiring, and add "keep 0" to the
-  invert HELP text.
-
-### P2 — e2e suite
-
-- [ ] **The test profile doesn't pin timings the scenarios rely on** (`bench.py` `PROFILE_*`).
-  - Missing: `debounce_ms` (the limit-chatter test needs >30 ms), `ctrl_settle_ms`, `ctrl_confirm_ms`, `retries`,
-    `sync_window_ms` and `resync_ms`.
-  - **Fix:** add their defaults to the profile.
-- [ ] **The "pulse without a command" invariant can be masked** (`check_invariants`). Every gate `cmd_rx`
-  raises `pending`, including refused (`RES_NO_POWER`) and already-there commands that never pulse, so a later
-  stray pulse is absorbed. **Fix:** require each `pulse` to follow a matching `cmd_rx` directly.
-- [ ] **The interlock check rarely fires** (GateSim reports `pulse both` only when both press edges land in the
-  same loop pass). **Fix:** report it whenever one input is pressed while the other is still active.
-- [ ] **Pulse length isn't measured.** The check compares the firmware's own logged `pulse_ms`, so a relay
-  that stays held passes. **Fix:** have GateSim print the release time, and assert it.
-- [ ] **No continuous check of the K2 invariant.** **Fix:** flag any house status event in the timeline with
-  `k2` closed while the gate isn't `closed`.
-- [ ] **Untested features:**
-  - `remote.set`/`remote.diag` over LoRa, including P_REMOTE gating.
-  - A gate `relay.test` and its cause/target (`check_invariants` would currently flag it as a stray pulse).
-  - `power_sense=0`, `linkloss_open=0`, `sensor_invert=1` and `ctrl_sync=0`.
-- [ ] **Session teardown isn't protected** (`conftest.py` `bench` fixture).
-  - **Problem:** only `AssertionError` from `baseline()` is caught.
-  - **Scenario:** a `GateSimError`/`BoardError` skips `restore()`, so sim travel stays at 8 s in EEPROM and
-    the ports stay open.
-  - **Fix:** catch `Exception`, and put `restore()`, `dump()` and the closes in `finally`.
-
-### P3 — cleanup
-
-- [ ] Firmware:
-  - `transmit()` ignores `radioSend()`'s result, so failed sends still count as `tx` and still use up a retry.
-  - An all-0xFF SPI read counts as TX success. **Fix:** also check `OP_MODE` or `REG_VERSION`.
-  - Dead code: `linkCancel()` and `RES_BUSY` (never produced).
-  - The ACK memo is searched twice (`resendAck` plus the lookup). `linkAck` and `resendAck` build the same
-    payload.
-  - `log.cpp` `NAMES[EV_COUNT]` can't catch a missing name, which would emit `null`. **Fix:** declare it `NAMES[]`
-    and `static_assert` its size.
-  - Move the gate's signed `elapsed()` to a shared header and use it in `role_house.cpp`, which inlines the
-    pattern about 6 times, and in `updateLed`.
-  - `link.h` comments are out of date: they say "seq higher than the last accepted" (it's a 32-frame window),
-    and that the STATUS/DIAG formats are in role_gate.cpp (they're in `roles.h`).
-  - `startRx()` writes `REG_FIFO_ADDR_PTR` needlessly.
-- [ ] Web:
-  - `writer.write()` isn't awaited or caught, so a USB drop gives an unhandled rejection and a 4 s timeout.
-  - Remote diagnostics have no client-side timeout, because DIAG is unreliable.
-  - Device strings go into `innerHTML` for param options and attributes. **Fix:** use `esc()` or `textContent`.
-  - Accessibility: there are no tab ARIA roles, some inputs have no label, and `toast()` uses a blocking
-    `alert()` even for "Saved".
-  - `pages.yml` deploys without running `node --check web/app.js` first.
-- [ ] Tests:
-  - Serial ports leak on startup errors (`find_boards`, `sim.open()`, `Bench(...)` outside the try).
-  - Timings are hard-coded in `test_link_faults.py`, `test_opener_faults.py` and `test_soak.py`; derive them from
-    `PROFILE_COMMON`.
-  - The ping/pong loop is copied three times; add a `Bench.ping()` helper.
-  - Late replies stay in `_replies` forever.
-  - The HA client disables TLS verification; add an opt-in CA file.
-- [ ] README: the test table doesn't mention the `-m soak` test (`test_soak_open_close_cycles` in
-  `test_normal.py`).
+- [x] **Firmware**
+  - **Radio faults:**
+    - A radio reset seen while receiving (out of LoRa mode) is now logged as `radio_fail` a=2 and the radio is
+      re-initialised.
+    - A failed `radioBegin()` is retried every 5 s, and a success is logged as a=3.
+    - An all-0xFF SPI read is no longer taken as TX done.
+  - **Gate `cause` follows the direction of travel.** Leaving the target limit counts as `lora` only when our
+    pulse moves the gate off it (`leaving`, after a reversal). Reaching the opposite limit ends the command with
+    `timeout`, so the house resyncs at once. A relay test sets no target if the gate is already at that limit.
+  - **House settle window:** a matching IN1 edge can't end it before `ctrl_settle_ms` (`settleUntil`).
+  - **Heartbeat in STATUS** (`ST_HEARTBEAT`, `ST_LEN` 16; both boards need 0.3.5). The house's link timeout is
+    `max(link_timeout_s, 2.5 × gate heartbeat_s)` (status `link_timeout_eff_s`, `remote.heartbeat_s`). The
+    one-board cross-check is gone. **Found by the new test:** the gate now sends a STATUS as soon as its
+    `heartbeat_s` changes. Before, the house's old timeout ran out while it waited for the new, longer heartbeat.
+  - **Remote and saved config:**
+    - `inN_invert` and `cmd_ttl_s` are no longer remote-writable.
+    - A remote write saves only that param (`configSaveParam`), and `key.set` saves only the key.
+    - `remote.set` needs an integer value and is refused with `busy` while one is still pending.
+  - **Console:**
+    - The line buffer is 1024 characters.
+    - An overlong line is answered `line too long`, and bad JSON `bad json`. Both replies carry the request id
+      when it can be found in the line.
+  - **Cleanup:**
+    - Shared signed `elapsed()` (`link.h`), now also used by `updateLed` (which uses the house's effective
+      timeout).
+    - `mismatchSince` can no longer be 0 when running.
+    - `RES_BUSY` and `linkCancel()` removed (ACK code 3 is reserved).
+    - The ACK memo is searched once.
+    - `static_assert` on the log names.
+    - `startRx()` no longer writes the FIFO pointer.
+- [x] **Web console**
+  - **Fixes:**
+    - The poll timer can't leak.
+    - Write errors are caught.
+    - Remote diagnostics time out after 10 s.
+    - Device strings are escaped.
+  - **Config:** Apply/Import sends at most 8 params per `config.set`.
+  - **Wording:**
+    - The `in1_invert` advice is replaced by "fix polarity in the wiring, keep 0".
+    - The heartbeat/timeout help is updated, and a "Gate heartbeat / link timeout" row was added.
+  - **Accessibility:** ARIA tabs with keyboard support, labelled inputs, and a non-modal `role="status"` toast
+    instead of `alert()`.
+  - **Pages workflow:** runs `node --check` before deploying.
+- [x] **e2e suite and GateSim**
+  - **Test profile:** pins `retries`, `debounce_ms`, `sync_window_ms`, `resync_ms`, `ctrl_confirm_ms` and
+    `ctrl_settle_ms`, and `config.set` is sent in chunks.
+  - **Invariant checks:**
+    - Each gate pulse must follow a matching `cmd_rx` or a recorded relay test.
+    - GateSim reports any OPEN/CLOSE overlap as `pulse both`, and prints `release <input> <ms>`, so pulse
+      lengths are measured (±80 ms).
+    - Any house status with K2 closed while the gate isn't closed fails the test.
+  - **New scenarios:**
+    - `remote.set`, its refusal for local params, and `busy`.
+    - `remote.diag`.
+    - Slow gate heartbeat, and the console line limit.
+    - Gate relay tests, including at the open limit.
+    - `power_sense=0`, `linkloss_open=0`, `sensor_invert=1` and `ctrl_sync=0`.
+  - **Robustness:**
+    - Teardown and startup always close ports and restore config.
+    - Late replies are dropped.
+    - Timings come from the profile, and there's a `Bench.ping()` helper.
+    - Opt-in `GATELINK_HA_CA` for HA certificate checking.
+    - README test table updated.
 
 ## Bench suite findings
 

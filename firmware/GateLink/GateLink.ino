@@ -166,7 +166,8 @@ static void updateLed(uint32_t now) {
     level = 255;
   } else {
     const LinkStats &st = linkStats();
-    bool up = st.lastRxAt && now - st.lastRxAt < (uint32_t)cfg.link_timeout_s * 1000;
+    uint32_t timeout = activeRole == ROLE_HOUSE ? houseLinkTimeoutMs() : (uint32_t)cfg.link_timeout_s * 1000;
+    bool up = st.lastRxAt && !elapsed(now, st.lastRxAt, timeout);
     // Kept dim so neither reads as the solid "no role" light, and never fully dark between pulses.
     const uint8_t floorLevel = 2;
     if (up) {

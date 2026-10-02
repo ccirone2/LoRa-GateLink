@@ -9,12 +9,12 @@ import time
 
 import pytest
 
-from gatelink.bench import ACT_OPEN, GS, SIM_TRAVEL_S
+from gatelink.bench import ACT_OPEN, GS, PROFILE_COMMON, SIM_TRAVEL_S
 from gatelink.flows import close_via_ctrl, open_via_ctrl, outage
 
-LINK_TIMEOUT_S = 15  # PROFILE_COMMON
-HEARTBEAT_S = 5
-TRAVEL_TIMEOUT_S = 15
+LINK_TIMEOUT_S = PROFILE_COMMON["link_timeout_s"]
+HEARTBEAT_S = PROFILE_COMMON["heartbeat_s"]
+TRAVEL_TIMEOUT_S = PROFILE_COMMON["travel_timeout_s"]
 COUNTERS = ("tx", "rx", "retries", "giveups", "mac_fail", "replay", "sessions", "lbt_defers", "lbt_forced")
 
 

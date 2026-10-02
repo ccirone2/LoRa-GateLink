@@ -23,6 +23,7 @@ static uint8_t gateTarget = GS_UNKNOWN;
 static uint32_t gateUptime = 0;
 static int16_t gateRssi = 0;  // RSSI measured at the gate
 static int8_t gateSnr = 0;
+static uint16_t gateHeartbeat = 0;  // gate heartbeat_s, from its STATUS
 static bool haveStatus = false;
 static uint8_t lastEnd = GS_UNKNOWN;  // last limit reached (OPEN/CLOSED), held while BETWEEN
 static uint32_t betweenSince = 0;
@@ -34,6 +35,7 @@ static bool shellyLevel = false;
 static bool syncActive = false;
 static uint32_t syncUntil = 0;
 static bool syncExpect = false;
+static uint32_t settleUntil = 0;  // boot / controller power return: no early end of the sync window before this
 static bool resyncing = false;
 static uint32_t resyncUntil = 0;
 static uint32_t mismatchSince = 0;
@@ -50,7 +52,15 @@ static int cmdResult = -1;  // last ACK result, -2 = gave up, -1 = none
 // Gate in travel from a known limit: K1 keeps showing where it started.
 static bool holdingTravel(uint32_t now) {
   return gateState == GS_BETWEEN && lastEnd != GS_UNKNOWN
-         && (int32_t)(now - betweenSince) < cfg.travel_timeout_s * 1000;
+         && !elapsed(now, betweenSince, (uint32_t)cfg.travel_timeout_s * 1000);
+}
+
+// The gate only reports every heartbeat_s, so the link timeout must cover a few of them whatever this board's
+// link_timeout_s says (only the gate's heartbeat_s matters, and it can be changed remotely).
+uint32_t houseLinkTimeoutMs() {
+  uint32_t ms = (uint32_t)cfg.link_timeout_s * 1000;
+  uint32_t hb = (uint32_t)gateHeartbeat * 2500;
+  return hb > ms ? hb : ms;
 }
 
 static bool k1Target(uint32_t now) {
@@ -64,6 +74,14 @@ static void openSyncWindow(uint32_t now, bool expect, uint32_t extraMs) {
   if (!syncActive || (int32_t)(until - syncUntil) > 0) syncUntil = until;
   syncActive = true;
   syncExpect = expect;
+}
+
+// After boot or controller power return the Shelly may restore its own state or chatter, so the window
+// lasts at least ctrl_settle_ms even if it shows the K1 level early.
+static void openSettleWindow(uint32_t now) {
+  openSyncWindow(now, k1.on(), cfg.ctrl_settle_ms);
+  uint32_t until = now + cfg.ctrl_settle_ms;
+  if (elapsed(until, settleUntil, 0)) settleUntil = until;
 }
 
 // Every K1 change opens a sync window, even when the Shelly should already be at that level:
@@ -116,7 +134,8 @@ void houseBegin() {
   checkSoon = true;
   uint32_t now = millis();
   // A shared supply may have just powered up the Shelly too: let it settle to K1 first.
-  openSyncWindow(now, k1.on(), cfg.ctrl_settle_ms);
+  settleUntil = now;
+  openSettleWindow(now);
   applyOutputs(now);
 }
 
@@ -127,27 +146,27 @@ static void updateCtrlPower(uint32_t now) {
   logEvent(EV_CTRL_POWER, p, p ? 0 : pendingAction);
   if (!p) pendingAction = 0;  // the edge was the relay dropping with the supply
   else {
-    openSyncWindow(now, k1.on(), cfg.ctrl_settle_ms);
+    openSettleWindow(now);
     checkSoon = true;
   }
 }
 
 void houseLoop(uint32_t now) {
   const LinkStats &st = linkStats();
-  bool up = st.lastRxAt != 0 && (int32_t)(now - st.lastRxAt) < cfg.link_timeout_s * 1000;
+  bool up = st.lastRxAt != 0 && !elapsed(now, st.lastRxAt, houseLinkTimeoutMs());
   if (up != linkUp) {
     linkUp = up;
     logEvent(up ? EV_LINK_UP : EV_LINK_DOWN);
     applyOutputs(now);
   }
 
-  if (!armed && armAt && (int32_t)(now - armAt) >= 0) armed = true;
+  if (!armed && armAt && elapsed(now, armAt, 0)) armed = true;
   // The end of a K1 test pulse moves the Shelly too (the pulse may outlast arming): cover it with a window.
   bool k1Pulsing = k1.pulsing();
   if (k1WasPulsing && !k1Pulsing) openSyncWindow(now, k1.on(), 0);
   k1WasPulsing = k1Pulsing;
   applyOutputs(now);  // also restores K1/K2 after a relay test pulse
-  if (syncActive && (int32_t)(now - syncUntil) >= 0) syncActive = false;
+  if (syncActive && elapsed(now, syncUntil, 0)) syncActive = false;
 
   updateSpareInputs(now);
   // IN2 is the Shelly power sense; with ctrl_power_sense off it's a spare, only logged.
@@ -159,7 +178,7 @@ void houseLoop(uint32_t now) {
     // Any edge inside a sync window is attributed to K1 (e.g. a Shelly that toggles on every SW edge,
     // or one still booting); if the Shelly ends up wrong, the mismatch/resync logic below corrects it.
     if (syncActive) {
-      if (shellyLevel == syncExpect) syncActive = false;
+      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncActive = false;
       logEvent(EV_SYNC, shellyLevel);
     } else if (!ctrlPower) {
       logEvent(EV_CTRL, shellyLevel, 1);
@@ -172,7 +191,7 @@ void houseLoop(uint32_t now) {
     }
   }
   // The relay can drop before the power sense does: send only once power has held for ctrl_confirm_ms.
-  if (pendingAction && (!cfg.ctrl_power_sense || (int32_t)(now - pendingAt) >= cfg.ctrl_confirm_ms)) {
+  if (pendingAction && (!cfg.ctrl_power_sense || elapsed(now, pendingAt, cfg.ctrl_confirm_ms))) {
     sendCommand(pendingAction);
     pendingAction = 0;
   }
@@ -180,7 +199,7 @@ void houseLoop(uint32_t now) {
   // Resync the Shelly to the real gate if they disagree for too long
   // (e.g. a command was overridden by the siren input, or lost while the link was down).
   if (resyncing) {
-    if ((int32_t)(now - resyncUntil) >= 0) {
+    if (elapsed(now, resyncUntil, 0)) {
       resyncing = false;
       driveK1(now, k1Target(now));
     }
@@ -195,11 +214,11 @@ void houseLoop(uint32_t now) {
     } else if (checkSoon && !syncActive && !pendingAction) {
       // Settled after a boot or power return and still wrong: K1 alone won't move it (the Shelly only
       // follows SW edges), so resync now instead of waiting out mismatch_timeout_s.
-      mismatchSince = now - (uint32_t)cfg.mismatch_timeout_s * 1000;
+      mismatchSince = (now - (uint32_t)cfg.mismatch_timeout_s * 1000) | 1;  // 0 means "not started"
       checkSoon = false;
     } else if (mismatchSince == 0) {
-      mismatchSince = now;
-    } else if ((int32_t)(now - mismatchSince) >= cfg.mismatch_timeout_s * 1000) {
+      mismatchSince = now | 1;
+    } else if (elapsed(now, mismatchSince, (uint32_t)cfg.mismatch_timeout_s * 1000)) {
       // Shelly only reacts to SW transitions: drive K1 to the Shelly's current level, then to the target.
       logEvent(EV_RESYNC, t);
       resyncing = true;
@@ -227,6 +246,7 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   gateRssi = (int16_t)getU16(m.payload + ST_RSSI);
   gateSnr = (int8_t)m.payload[ST_SNR];
   gateTarget = m.payload[ST_TARGET];
+  gateHeartbeat = getU16(m.payload + ST_HEARTBEAT);
   bool first = !haveStatus;
   haveStatus = true;
 
@@ -236,7 +256,7 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   if (gateState == GS_BETWEEN && prevState != GS_BETWEEN) betweenSince = now;
   // Command overridden (e.g. siren holding the gate open): resync the Shelly right away.
   if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT && mismatchSince) {
-    mismatchSince = now - (uint32_t)cfg.mismatch_timeout_s * 1000;
+    mismatchSince = (now - (uint32_t)cfg.mismatch_timeout_s * 1000) | 1;
   }
   applyOutputs(now);
   // Accept user commands once the initial sync has settled.
@@ -267,6 +287,7 @@ void houseStatus(JsonObject o) {
   o["last_result"] = resultName(gateResult);
   o["target"] = gateTarget == GS_UNKNOWN ? "" : gateStateName(gateTarget);
   o["link_up"] = linkUp;
+  o["link_timeout_eff_s"] = houseLinkTimeoutMs() / 1000;
   o["armed"] = armed;
   o["ctrl"] = shellyLevel;
   o["ctrl_power"] = ctrlPower;
@@ -279,6 +300,7 @@ void houseStatus(JsonObject o) {
   g["uptime_s"] = gateUptime;
   g["rssi"] = gateRssi;
   g["snr"] = gateSnr;
+  g["heartbeat_s"] = gateHeartbeat;
   g["open_limit"] = (bool)(gateInputs & 1);
   g["close_limit"] = (bool)(gateInputs & 2);
   g["k1"] = (bool)(gateInputs & 4);
@@ -302,10 +324,9 @@ void houseRemoteDiag() {
   linkSend(MSG_DIAG_REQ, nullptr, 0);
 }
 
-bool houseRemoteSet(uint8_t id, int32_t value) {
+void houseRemoteSet(uint8_t id, int32_t value) {
   uint8_t p[5];
   p[0] = id;
   putU32(p + 1, (uint32_t)value);
   linkSendReliable(SLOT_CFG, MSG_CFG_SET, p, 5, 10000);
-  return true;
 }

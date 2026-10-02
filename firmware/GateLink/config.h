@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.3.4"
+#define FW_VERSION "0.3.5"
 
 enum Role : uint8_t { ROLE_UNSET = 0, ROLE_HOUSE = 1, ROLE_GATE = 2 };
 
@@ -76,6 +76,9 @@ extern const size_t PARAM_COUNT;
 void configDefaults(Config &c);
 bool configLoad();  // returns false if flash was empty/invalid (defaults loaded)
 void configSave();
+// Persist one param, or the key, on top of what is already saved, leaving other unsaved edits unsaved.
+void configSaveParam(const ParamDef *p);
+void configSaveKey();
 const ParamDef *paramByName(const char *name);
 const ParamDef *paramById(uint8_t id);
 bool paramSet(const ParamDef *p, int32_t value);  // range-checked

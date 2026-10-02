@@ -2,6 +2,8 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
+// Escape text for innerHTML (element content and quoted attributes).
+const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // ---------- Parameter presentation ----------
 const GROUPS = [
@@ -23,14 +25,14 @@ const HELP = {
   tx_power: 'dBm (2–20)',
   sync_word: 'Private network byte',
   retries: 'Resends, spread over the message’s lifetime (cmd_ttl_s for commands)',
-  heartbeat_s: 'Gate status interval',
-  link_timeout_s: 'No frames for this long = link down',
+  heartbeat_s: 'Status interval; set it on the gate',
+  link_timeout_s: 'No frames for this long = link down; set it on the house, which stretches it to at least 2.5 gate heartbeats',
   cmd_ttl_s: 'Keep resending a command for this long, then drop it',
   debounce_ms: 'Input debounce',
-  in1_invert: 'House: controller input · Gate: open limit',
-  in2_invert: 'House: controller power sense · Gate: closed limit',
-  in3_invert: 'House: spare IN3 · Gate: opener power sense',
-  in4_invert: 'Spare input IN4 (A4)',
+  in1_invert: 'House: controller input · Gate: open limit. Keep 0: fix polarity in the wiring',
+  in2_invert: 'House: controller power sense · Gate: closed limit. Keep 0: fix polarity in the wiring',
+  in3_invert: 'House: spare IN3 · Gate: opener power sense. Keep 0: fix polarity in the wiring',
+  in4_invert: 'Spare input IN4 (A4). Keep 0: inverted, a dead opto or cut wire reads active',
   power_sense: 'Gate: IN3 senses opener 24 V; without it the gate reads “no power” and refuses commands',
   pulse_ms: 'OPEN/CLOSE contact closure length',
   travel_timeout_s: 'Report timeout if limit not reached',
@@ -78,7 +80,7 @@ const WIRING = {
         rows: [['VIN (5 V)', '+5 V'], ['GND', '0 V']] },
     ],
     notes: [
-      'IN1 reads the controller’s relay contact switched to the board’s 3.3 V (internal pull-down; open = off). The controller output must be a potential-free contact, and nothing above 3.3 V may reach IN1. Set <code>in1_invert</code> if ON and OFF come out reversed.',
+      'IN1 reads the controller’s relay contact switched to the board’s 3.3 V (internal pull-down; open = off). The controller output must be a potential-free contact, and nothing above 3.3 V may reach IN1. If ON and OFF come out reversed, fix it in the wiring (use the other relay contact, or change the controller’s output mode), never with <code>in1_invert</code>: inverted, a cut wire would read as ON. Keep all <code>inN_invert</code> at 0.',
       'K1 mirrors the real gate back to the controller so its switch always shows the true state. Set the controller’s switch input to toggle/follow mode (contact closed = ON, open = OFF), not detached. Wire it per the controller’s switch-input diagram. Low voltage only; never switch mains with the shield.',
       'IN2 senses the controller’s supply through a PNP-output opto channel wired across it (use a channel rated for that voltage; output side from 3.3 V only). When the controller loses power its relay drops, which would otherwise look like a user turning the switch off: while IN2 is off, controller edges are logged but never sent, each edge waits <code>ctrl_confirm_ms</code> in case power is failing, and after power returns its edges count as sync for up to <code>ctrl_settle_ms</code>. Set <code>ctrl_power_sense</code> to 0 if IN2 isn’t wired.',
       'The contact sensor needs an external terminal input. K2 closes when the gate is closed and opens if the link is lost (<code>linkloss_open</code>). <code>sensor_invert</code> flips it.',
@@ -118,7 +120,6 @@ function renderWiring(r) {
   const W = WIRING[r];
   document.querySelectorAll('[data-wiring]').forEach((b) => b.classList.toggle('active', b.dataset.wiring === r));
 
-  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const rowH = 28, headH = 42, gap = 14, top = 70;
   const bx = 16, bw = 250, dx = 500, dw = 250, width = 766;
   let y = top;
@@ -220,6 +221,8 @@ async function openPort(p) {
   } catch (e) {
     logLine(`initial query failed: ${e.message}`, 'err');
   }
+  if (port !== p) return; // dropped while querying: disconnect() already ran; don't leave an orphan poll
+  clearInterval(pollTimer);
   pollTimer = setInterval(() => refreshStatus().catch(() => {}), 2000);
 }
 
@@ -264,6 +267,7 @@ async function disconnect(quiet = false) {
   port = null; // also stops readLoop from re-entering disconnect()
   clearInterval(pollTimer);
   clearInterval(pingTimer);
+  clearTimeout(diagTimer);
   $('pingAuto').checked = false;
   for (const req of pending.values()) req.reject(new Error('disconnected'));
   pending.clear();
@@ -326,7 +330,12 @@ function request(cmd, args = {}, timeoutMs = 4000) {
       reject(new Error(`${cmd}: timeout`));
     }, timeoutMs);
     pending.set(id, { resolve, reject, timer });
-    writer.write(JSON.stringify({ id, cmd, ...args }) + '\n');
+    // The write fails if the port drops mid-request; fail now rather than at the timeout.
+    writer.write(JSON.stringify({ id, cmd, ...args }) + '\n').catch((e) => {
+      clearTimeout(timer);
+      pending.delete(id);
+      reject(new Error(`${cmd}: ${e?.message || 'write failed'}`));
+    });
   });
 }
 
@@ -421,7 +430,8 @@ function renderStatus(s) {
   $('bFw').textContent = s.fw;
   $('bUp').textContent = fmtDur(s.uptime_ms);
   $('bReset').textContent = (s.reset_cause ?? '—').replace('_', ' ');
-  const faults = s.radio_faults ? ` <span class="bad">· ${s.radio_faults} TX fault${s.radio_faults === 1 ? '' : 's'}</span>` : '';
+  const nf = Number(s.radio_faults) || 0;
+  const faults = nf ? ` <span class="bad">· ${nf} TX fault${nf === 1 ? '' : 's'}</span>` : '';
   $('bRadio').innerHTML = (s.radio_ok ? '<span class="good">ok</span>' : '<span class="bad">not initialised</span>') + faults;
   $('keyWarn').hidden = s.key_set;
 
@@ -432,11 +442,13 @@ function renderStatus(s) {
     $('hCtrlPower').innerHTML = 'ctrl_power' in s ? (s.ctrl_power ? pill(true) : '<span class="bad">off · edges ignored</span>') : '—';
     $('hArmed').textContent = yesNo(s.armed);
     $('hSync').textContent = `${yesNo(s.sync_window)} / ${yesNo(s.resyncing)}`;
-    const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 3: 'busy', 4: 'refused: opener unpowered' };
+    const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 4: 'refused: opener unpowered' };
     $('hCmd').textContent = `#${s.cmd_id} · ${s.cmd_pending ? 'sending…' : cmdRes[s.cmd_result] ?? s.cmd_result}`;
     $('hLimits').textContent = r.uptime_s ? `open ${r.open_limit ? '●' : '○'}  closed ${r.close_limit ? '●' : '○'}` : '—';
     $('hSpare').textContent = r.uptime_s && 'in3' in r ? `power ${r.in3 ? '●' : '○'}  IN4 ${r.in4 ? '●' : '○'}` : '—';
     $('hGateUp').textContent = r.uptime_s ? fmtDur(r.uptime_s * 1000) : '—';
+    // The house waits max(link_timeout_s, 2.5 × the gate's heartbeat) before declaring the link down.
+    $('hTiming').textContent = `${r.heartbeat_s ? `${r.heartbeat_s} s` : '—'} / ${s.link_timeout_eff_s ? `${s.link_timeout_eff_s} s` : '—'}`;
   }
 }
 
@@ -446,8 +458,11 @@ async function loadConfig() {
   meta = res.meta;
   params = res.params;
   renderConfig();
+  // Remote-writable params come from the board's meta, so firmware changes to P_REMOTE follow automatically.
   const sel = $('remParam');
-  sel.innerHTML = meta.filter((m) => m.remote).map((m) => `<option value="${m.name}">${m.name}</option>`).join('');
+  const keep = sel.value;
+  sel.replaceChildren(...meta.filter((m) => m.remote).map((m) => new Option(m.name, m.name)));
+  if (keep && meta.some((m) => m.remote && m.name === keep)) sel.value = keep;
 }
 
 function renderConfig() {
@@ -471,9 +486,9 @@ function renderConfig() {
         const opts = SELECTS[name];
         input = `<select id="${id}">${opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
       } else {
-        input = `<input id="${id}" type="number" min="${m.min}" max="${m.max}" step="1">`;
+        input = `<input id="${id}" type="number" min="${esc(m.min)}" max="${esc(m.max)}" step="1">`;
       }
-      row.innerHTML = `<label for="${id}">${name}<small>${HELP[name] || ''}</small></label>${input}`;
+      row.innerHTML = `<label for="${id}">${esc(name)}<small>${HELP[name] || ''}</small></label>${input}`;
       card.appendChild(row);
       const el = row.querySelector('input, select');
       setField(el, params[name]);
@@ -504,17 +519,32 @@ function formValues(onlyDirty) {
   return out;
 }
 
+const CFG_CHUNK = 8;
+
 async function applyConfig() {
   const changes = formValues(true);
   if (!Object.keys(changes).length) return toast('No changes.');
   for (const [k, v] of Object.entries(changes)) {
     const m = meta.find((x) => x.name === k);
-    if (!Number.isInteger(v) || v < m.min || v > m.max) return toast(`${k} must be an integer ${m.min}–${m.max}`);
+    if (!Number.isInteger(v) || v < m.min || v > m.max) return toast(`${k} must be an integer ${m.min}–${m.max}`, 'err');
   }
-  const res = await request('config.set', { params: changes });
+  // Send at most CFG_CHUNK params per request so a full import stays well inside the board's line buffer.
+  const entries = Object.entries(changes);
+  const applied = [], errors = [];
+  let reboot = false;
+  for (let i = 0; i < entries.length; i += CFG_CHUNK) {
+    const chunk = Object.fromEntries(entries.slice(i, i + CFG_CHUNK));
+    const res = await request('config.set', { params: chunk });
+    applied.push(...(res.applied || []));
+    errors.push(...(res.errors || []));
+    // A request-level error (no per-param list) rejects the whole chunk.
+    if (!res.ok && !res.errors?.length) errors.push(...Object.keys(chunk).map((k) => `${k} (${res.error || 'failed'})`));
+    reboot ||= !!res.reboot_required;
+  }
   await loadConfig();
-  if (res.errors?.length) toast(`Rejected: ${res.errors.join(', ')}`);
-  else toast(`Applied ${res.applied.join(', ')}. ${res.reboot_required ? 'Save and reboot for role change.' : 'Remember to Save.'}`);
+  const done = applied.length ? `Applied ${applied.join(', ')}. ${reboot ? 'Save and reboot for role change.' : 'Remember to Save.'}` : '';
+  if (errors.length) toast(`Rejected: ${errors.join(', ')}. ${done}`, 'err');
+  else toast(done || 'Nothing changed.');
 }
 
 function download(name, text, type = 'application/json') {
@@ -527,7 +557,7 @@ function download(name, text, type = 'application/json') {
 
 async function importConfig(file) {
   let data;
-  try { data = JSON.parse(await file.text()); } catch { return toast('Not a valid JSON file.'); }
+  try { data = JSON.parse(await file.text()); } catch { return toast('Not a valid JSON file.', 'err'); }
   const src = data.params || data;
   for (const m of meta) {
     const el = $(`p_${m.name}`);
@@ -541,6 +571,9 @@ async function importConfig(file) {
 
 // ---------- Tools ----------
 const rssiHist = [];
+// DIAG over LoRa is best effort; give up on the reply after this long.
+const DIAG_TIMEOUT_MS = 10000;
+let diagTimer = null;
 
 function drawRssi() {
   const svg = $('rssiChart');
@@ -572,6 +605,7 @@ function onEvent(ev) {
       drawRssi();
       break;
     case 'remote_diag': {
+      clearTimeout(diagTimer);
       const c = ev.counters;
       $('diagOut').textContent =
         `fw ${ev.fw} · up ${fmtDur(ev.uptime_s * 1000)}\n` +
@@ -606,15 +640,26 @@ function logLine(text, cls = '') {
   if (atBottom) view.scrollTop = view.scrollHeight;
 }
 
-function toast(msg) {
-  logLine(msg);
-  alert(msg);
+// Non-modal notice in a role="status" region (always in the DOM so screen readers announce it; empty =
+// invisible). Errors stay up longer. Click to dismiss.
+let toastTimer = null;
+function hideToast() {
+  clearTimeout(toastTimer);
+  $('toast').textContent = '';
+}
+function toast(msg, kind = '') {
+  logLine(msg, kind === 'err' ? 'err' : '');
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = `toast ${kind}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, kind === 'err' ? 12000 : 5000);
 }
 
 // ---------- Wiring ----------
 function guard(fn) {
   return async (...a) => {
-    try { await fn(...a); } catch (e) { toast(e.message); }
+    try { await fn(...a); } catch (e) { toast(e.message, 'err'); }
   };
 }
 
@@ -628,11 +673,29 @@ function init() {
   applyRole('unset');
   document.querySelectorAll('[data-wiring]').forEach((b) => b.addEventListener('click', () => renderWiring(b.dataset.wiring)));
 
-  document.querySelectorAll('#tabs button').forEach((b) =>
-    b.addEventListener('click', () => {
-      document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('active', x === b));
-      document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${b.dataset.tab}`));
-    }));
+  // Tabs: click or arrow keys (roving tabindex, per the ARIA tabs pattern).
+  const tabs = [...document.querySelectorAll('#tabs [role=tab]')];
+  const selectTab = (b) => {
+    tabs.forEach((x) => {
+      const on = x === b;
+      x.classList.toggle('active', on);
+      x.setAttribute('aria-selected', String(on));
+      x.tabIndex = on ? 0 : -1;
+    });
+    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${b.dataset.tab}`));
+  };
+  tabs.forEach((b, i) => {
+    b.addEventListener('click', () => selectTab(b));
+    b.addEventListener('keydown', (e) => {
+      const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+      if (j === undefined) return;
+      e.preventDefault();
+      const next = tabs[(j + tabs.length) % tabs.length];
+      selectTab(next);
+      next.focus();
+    });
+  });
+  $('toast').onclick = hideToast;
 
   $('btnConnect').onclick = connect;
   $('btnDisconnect').onclick = () => { stopReconnect(); disconnect(); };
@@ -665,7 +728,7 @@ function init() {
   };
   $('btnKeySet').onclick = guard(async () => {
     const key = $('keyInput').value.trim().toLowerCase();
-    if (!/^[0-9a-f]{32}$/.test(key)) return toast('Key must be exactly 32 hex characters.');
+    if (!/^[0-9a-f]{32}$/.test(key)) return toast('Key must be exactly 32 hex characters.', 'err');
     await call('key.set', { key });
     await refreshInfo();
     toast('Key written and saved. Write the same key to the other board.');
@@ -678,12 +741,37 @@ function init() {
     clearInterval(pingTimer);
     if (e.target.checked) pingTimer = setInterval(() => call('radio.ping').catch(() => {}), 3000);
   };
-  $('btnDiag').onclick = guard(async () => { $('diagOut').textContent = 'waiting for gate…'; await call('remote.diag'); });
+  $('btnDiag').onclick = guard(async () => {
+    clearTimeout(diagTimer);
+    $('diagOut').textContent = 'waiting for gate…';
+    // Armed before the request: the remote_diag event clears it, however soon it arrives.
+    diagTimer = setTimeout(() => {
+      $('diagOut').textContent = `No reply from gate within ${DIAG_TIMEOUT_MS / 1000} s. Check the link and try again.`;
+    }, DIAG_TIMEOUT_MS);
+    try {
+      await call('remote.diag');
+    } catch (e) {
+      clearTimeout(diagTimer);
+      $('diagOut').textContent = `Failed: ${e.message}`;
+      throw e;
+    }
+  });
   $('btnRemSet').onclick = guard(async () => {
     const name = $('remParam').value;
-    const value = Number($('remValue').value);
+    const raw = $('remValue').value.trim();
+    const value = Number(raw);
+    if (raw === '' || !Number.isInteger(value)) {
+      $('remResult').textContent = 'Enter an integer value.';
+      return;
+    }
     $('remResult').textContent = 'sending…';
-    await call('remote.set', { name, value });
+    try {
+      await call('remote.set', { name, value });
+    } catch (e) {
+      // e.g. "busy" while the previous remote set is still pending, or an out-of-range value.
+      $('remResult').textContent = e.message === 'busy' ? 'Busy: the previous remote set is still pending; wait for its result.' : `Not sent: ${e.message}`;
+      throw e;
+    }
   });
   $('btnReplay').onclick = guard(() => call('debug.replay'));
 

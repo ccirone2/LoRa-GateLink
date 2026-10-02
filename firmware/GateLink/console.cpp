@@ -4,7 +4,7 @@
 #include "link.h"
 #include "roles.h"
 
-#define LINE_MAX 384
+#define LINE_MAX 1024  // a config.set with every param fits (a full import after a firmware upload)
 
 static char line[LINE_MAX];
 static size_t lineLen = 0;
@@ -76,19 +76,16 @@ static void handle(JsonDocument &req) {
     JsonArray applied = res["applied"].to<JsonArray>();
     JsonArray errors = res["errors"].to<JsonArray>();
     bool radio = false, reboot = false;
-    // Two passes, so related values (heartbeat_s vs link_timeout_s) can change together in any order.
-    for (int pass = 0; pass < 2; pass++) {
-      for (JsonPair kv : in) {
-        const ParamDef *p = paramByName(kv.key().c_str());
-        if (p && kv.value().is<int32_t>() && cfg.*(p->field) == kv.value().as<int32_t>()) continue;
-        if (!p || !kv.value().is<int32_t>() || !paramSet(p, kv.value().as<int32_t>())) {
-          if (pass == 1) errors.add(kv.key().c_str());
-          continue;
-        }
-        applied.add(p->name);
-        radio |= (p->flags & P_RADIO) != 0;
-        reboot |= (p->flags & P_REBOOT) != 0;
+    for (JsonPair kv : in) {
+      const ParamDef *p = paramByName(kv.key().c_str());
+      if (p && kv.value().is<int32_t>() && cfg.*(p->field) == kv.value().as<int32_t>()) continue;
+      if (!p || !kv.value().is<int32_t>() || !paramSet(p, kv.value().as<int32_t>())) {
+        errors.add(kv.key().c_str());
+        continue;
       }
+      applied.add(p->name);
+      radio |= (p->flags & P_RADIO) != 0;
+      reboot |= (p->flags & P_REBOOT) != 0;
     }
     if (radio) appRestartRadio();
     res["reboot_required"] = reboot;
@@ -111,7 +108,7 @@ static void handle(JsonDocument &req) {
     if (ok) {
       memcpy(cfg.key, key, 16);
       cfg.key_set = 1;
-      configSave();
+      configSaveKey();
       appRestartRadio();  // new key: re-establish sessions
     } else {
       res["ok"] = false;
@@ -141,12 +138,16 @@ static void handle(JsonDocument &req) {
   } else if (!strcmp(cmd, "remote.set")) {
     const ParamDef *p = paramByName(req["name"] | "");
     int32_t v = req["value"] | 0;
-    if (activeRole != ROLE_HOUSE || !p || !(p->flags & P_REMOTE) || v < p->minV || v > p->maxV) {
+    if (!req["value"].is<int32_t>()) {
+      res["ok"] = false;
+      res["error"] = "value must be an integer";
+    } else if (activeRole != ROLE_HOUSE || !p || !(p->flags & P_REMOTE) || v < p->minV || v > p->maxV) {
       res["ok"] = false;
       res["error"] = "house node only; param must be remote-writable and in range";
-    } else if (p->field == &Config::heartbeat_s && v * 2 > cfg.link_timeout_s) {
+    } else if (linkPending(SLOT_CFG)) {
+      // A new one would replace it in its slot, and the first would never get its remote_set event.
       res["ok"] = false;
-      res["error"] = "heartbeat_s must be at most half of this board's link_timeout_s";
+      res["error"] = "busy";
     } else {
       houseRemoteSet(p->id, v);
     }
@@ -183,6 +184,22 @@ void consoleBegin() {
   Serial.begin(115200);
 }
 
+// Reply to a request we couldn't parse, with its id if one can be found in the raw text, so the caller gets
+// the error instead of waiting for a timeout.
+static void sendError(const char *raw, const char *error) {
+  JsonDocument res;
+  const char *id = strstr(raw, "\"id\"");
+  if (id) {
+    id = strchr(id + 4, ':');
+    char *end;
+    long v = id ? strtol(id + 1, &end, 10) : 0;
+    if (id && end != id + 1) res["id"] = v;
+  }
+  res["ok"] = false;
+  res["error"] = error;
+  send(res);
+}
+
 void consolePoll() {
   while (Serial.available()) {
     char c = Serial.read();
@@ -193,16 +210,12 @@ void consolePoll() {
       continue;
     }
     line[lineLen] = 0;
-    if (lineLen && !overflow) {
+    if (overflow) {
+      sendError(line, "line too long");
+    } else if (lineLen) {
       JsonDocument req;
-      if (deserializeJson(req, line) == DeserializationError::Ok) {
-        handle(req);
-      } else {
-        JsonDocument res;
-        res["ok"] = false;
-        res["error"] = "bad json";
-        send(res);
-      }
+      if (deserializeJson(req, line) == DeserializationError::Ok) handle(req);
+      else sendError(line, "bad json");
     }
     lineLen = 0;
     overflow = false;

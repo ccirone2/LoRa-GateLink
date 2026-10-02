@@ -41,12 +41,9 @@ def test_marginal_link(rig, request):
         _set_radio(rig, {"house": MARGINAL, "gate": MARGINAL})
         pongs = []
         for _ in range(PINGS):
-            m = rig.mark()
-            rig.house.request("radio.ping")
-            try:
-                pongs.append(rig.wait_for(lambda: rig.timeline.first("house", "pong", m), 4, "pong", poll=0.05))
-            except AssertionError:
-                pass
+            pong = rig.ping("house", timeout=4, required=False)
+            if pong:
+                pongs.append(pong)
             time.sleep(0.5)
         assert len(pongs) >= MIN_PONGS, f"only {len(pongs)}/{PINGS} pongs on the marginal link"
         rig.facts["marginal link"] = f"tx_power {MARGINAL['tx_power']} dBm, SF{MARGINAL['sf']}"

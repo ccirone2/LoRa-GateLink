@@ -12,7 +12,9 @@
 // (dedicated open/close inputs, no single-button stop). Limits drop as soon as the gate leaves them.
 // Without power the limits drop, motion freezes and pulses are ignored.
 //
-// Serial 115200, one command per line (send "help"). Replies and "evt ..." lines are plain text.
+// Serial 115200, one command per line (send "help"). Replies and "evt ..." lines are plain text:
+// "evt pulse open|close|both" on each debounced press ("both" whenever one input closes while the other
+// is held), "evt release open|close <ms>" with the press length, "evt state <name>", "evt cmd ...".
 // Opening the port resets the Uno (DTR), which restarts the simulation closed and powered.
 #include <EEPROM.h>
 
@@ -50,22 +52,23 @@ int8_t override[3] = {-1, -1, -1};
 struct Sense {
   uint8_t pin;
   bool raw, stable;
-  uint32_t changedAt;
-  // True once per debounced press (contact closed pulls the pin LOW).
-  bool pressed(uint32_t now) {
+  uint32_t changedAt, pressedAt;
+  // Debounced edge: +1 pressed (contact closed pulls the pin LOW), -1 released, 0 none.
+  int8_t update(uint32_t now) {
     bool r = digitalRead(pin) == LOW;
     if (r != raw) {
       raw = r;
       changedAt = now;
     }
-    if (raw != stable && now - changedAt >= SENSE_DEBOUNCE_MS) {
-      stable = raw;
-      return stable;
-    }
-    return false;
+    if (raw == stable || now - changedAt < SENSE_DEBOUNCE_MS) return 0;
+    stable = raw;
+    if (stable) pressedAt = changedAt;
+    return stable ? 1 : -1;
   }
+  // Raw edge to raw edge, so the debounce delays both ends alike and cancels out.
+  uint32_t heldMs() const { return changedAt - pressedAt; }
 };
-Sense sOpen = {PIN_S_OPEN, false, false, 0}, sClose = {PIN_S_CLOSE, false, false, 0};
+Sense sOpen = {PIN_S_OPEN, false, false, 0, 0}, sClose = {PIN_S_CLOSE, false, false, 0, 0};
 
 uint32_t travelMs() { return (uint32_t)st.travelS * 1000; }
 
@@ -182,6 +185,14 @@ void printStatus() {
   Serial.println(st.activeLow ? F("low") : F("high"));
 }
 
+// How long an input was held, so the suite can check pulse lengths: "evt release open 502".
+void printRelease(const __FlashStringHelper *which, uint32_t ms) {
+  Serial.print(F("evt release "));
+  Serial.print(which);
+  Serial.print(' ');
+  Serial.println(ms);
+}
+
 void printHelp() {
   Serial.println(F("commands: status | open | close | stop | power on|off | travel <1-300 s>"));
   Serial.println(F("  fault none|stuck|both|flicker|deaf | polarity low|high | help"));
@@ -280,18 +291,22 @@ void setup() {
 void loop() {
   uint32_t now = millis();
   readSerial();
-  bool o = sOpen.pressed(now), c = sClose.pressed(now);
-  if (o || c) {
+  int8_t eo = sOpen.update(now), ec = sClose.update(now);
+  if (eo > 0 || ec > 0) {
+    // Overlap whenever one input closes while the other is still held, not only when both land together.
+    bool both = sOpen.stable && sClose.stable;
     Serial.print(F("evt pulse "));
-    Serial.println(o && c ? F("both") : o ? F("open") : F("close"));
+    Serial.println(both ? F("both") : eo > 0 ? F("open") : F("close"));
     if (fault == F_DEAF) {
       Serial.println(F("evt ignored (fault deaf)"));
-    } else if (o && c) {
+    } else if (both) {
       dir = 0;  // the gate board interlocks K1/K2, so this is a wiring or firmware fault
     } else {
-      command(o ? +1 : -1, F("gate"));
+      command(eo > 0 ? +1 : -1, F("gate"));
     }
   }
+  if (eo < 0) printRelease(F("open"), sOpen.heldMs());
+  if (ec < 0) printRelease(F("close"), sClose.heldMs());
   tick(now);
   applyRelays(now);
   reportState();

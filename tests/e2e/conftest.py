@@ -45,8 +45,8 @@ def _restore_key(boards):
     if len(key) != 32:
         pytest.exit("--restore-key needs GATELINK_KEY (the 32-hex-char key both boards share)", returncode=4)
     for b in boards.values():
-        # key.set saves the whole config. Reboot first so an interrupted run's unsaved test profile is dropped
-        # rather than saved along with the key.
+        # Reboot first so an interrupted run's unsaved test profile is dropped (since 0.3.5 key.set saves only
+        # the key, but older firmware saved the whole config with it).
         b.reboot()
         b.request("key.set", key=key)
     deadline = time.monotonic() + 30
@@ -60,8 +60,20 @@ def _restore_key(boards):
 def _open_board(port, timeline):
     b = Board(port, timeline)
     b.open()
-    b.name = b.info()["role"]
+    try:
+        b.name = b.info()["role"]
+    except BaseException:
+        b.close()
+        raise
     return b
+
+
+def _close_all(opened):
+    for o in opened:
+        try:
+            o.close()
+        except Exception as e:  # noqa: BLE001 - closing the rest matters more
+            print(f"\nWARNING: couldn't close {getattr(o, 'port', o)}: {e}")
 
 
 @pytest.fixture(scope="session")
@@ -77,45 +89,62 @@ def bench(request):
             for opt in ("--house-port", "--gate-port"):
                 if cfg.getoption(opt):
                     b = _open_board(cfg.getoption(opt), tl)
+                    opened.append(b)
                     boards[b.name] = b
         else:
             boards = find_boards(tl, exclude={sim_port})
-        opened += boards.values()
+            opened += boards.values()
         missing = {"house", "gate"} - boards.keys()
         if missing:
-            for o in opened:
-                o.close()
+            _close_all(opened)
             pytest.skip(f"bench not connected: no {' or '.join(sorted(missing))} board found "
                         f"(close the web console; boards found: {sorted(boards) or 'none'})")
         if cfg.getoption("--restore-key"):
             _restore_key(boards)
         sim = GateSim(sim_port, tl)
+        opened.append(sim)  # before open(): close() is safe on a port that never opened
         sim.open()
-        opened.append(sim)
         ctrl = Controller(tl)
         ctrl.state()
     except (serial.SerialException, BoardError, GateSimError, ControllerError) as e:
-        for o in opened:
-            o.close()
+        _close_all(opened)
         pytest.skip(f"bench not available: {e}")
+    except BaseException:
+        _close_all(opened)
+        raise
 
-    run_dir = RESULTS / time.strftime("%Y%m%d-%H%M%S")
-    run_dir.mkdir(parents=True, exist_ok=True)
-    state["run_dir"] = run_dir
-    b = Bench(boards["house"], boards["gate"], sim, ctrl, tl, run_dir)
-    (run_dir / "config_backup.json").write_text(json.dumps(b.backup, indent=2))
-    state["bench"] = b
-    b.apply_profile()
-    yield b
-    b.begin_test("teardown")
+    b = None
     try:
-        b.baseline()  # leave the bench at rest: gate closed, controller off
-    except AssertionError as e:
-        print(f"\nWARNING: couldn't return the bench to rest: {str(e).splitlines()[0]}")
-    b.restore()
-    tl.dump(run_dir / "session.jsonl")
-    for o in opened:
-        o.close()
+        run_dir = RESULTS / time.strftime("%Y%m%d-%H%M%S")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        state["run_dir"] = run_dir
+        b = Bench(boards["house"], boards["gate"], sim, ctrl, tl, run_dir)
+        (run_dir / "config_backup.json").write_text(json.dumps(b.backup, indent=2))
+        state["bench"] = b
+        b.apply_profile()
+    except BaseException:
+        try:
+            if b is not None:
+                b.restore()  # the profile may be half applied
+        finally:
+            _close_all(opened)
+        raise
+
+    try:
+        yield b
+    finally:
+        b.begin_test("teardown")
+        try:
+            b.baseline()  # leave the bench at rest: gate closed, controller off
+        except Exception as e:  # noqa: BLE001 - restore and close regardless
+            print(f"\nWARNING: couldn't return the bench to rest: {(str(e).splitlines() or [repr(e)])[0]}")
+        try:
+            b.restore()
+        finally:
+            try:
+                tl.dump(run_dir / "session.jsonl")
+            finally:
+                _close_all(opened)
 
 
 @pytest.fixture

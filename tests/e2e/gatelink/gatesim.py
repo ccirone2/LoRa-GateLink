@@ -34,16 +34,28 @@ class GateSim:
         s.rts = False
         s.open()
         self.ser = s
+        self._closing = False
         self._reader = threading.Thread(target=self._read_loop, name="gatesim", daemon=True)
         self._reader.start()
-        self.status()
+        try:
+            self.status()
+        except BaseException:
+            self.close()  # e.g. another sketch on the port: don't leave it open
+            raise
 
     def close(self):
+        # Let the reader leave its read (0.1 s timeout) before the port closes under it: closing a port another
+        # thread is reading crashed Python on Windows (access violation in pyserial on the next open).
         self._closing = True
-        if self.ser:
-            self.ser.close()
-        if self._reader:
+        if self._reader and self._reader is not threading.current_thread():
             self._reader.join(timeout=2)
+        if self.ser:
+            try:
+                self.ser.close()
+            except serial.SerialException:
+                pass
+        self.ser = None
+        self._reader = None
 
     def _read_loop(self):
         buf = b""

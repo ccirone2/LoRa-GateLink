@@ -19,7 +19,8 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 #define ST_RSSI 10    // i16, RSSI at gate of last frame from house
 #define ST_SNR 12     // i8
 #define ST_TARGET 13
-#define ST_LEN 14
+#define ST_HEARTBEAT 14  // u16, gate heartbeat_s: the house's link timeout must cover it
+#define ST_LEN 16
 
 extern Input in1, in2, in3, in4;
 extern Relay k1, k2;
@@ -38,7 +39,8 @@ void houseOnAck(Slot slot, uint8_t type, bool acked, uint8_t result);
 void houseStatus(JsonObject o);
 void houseRelayTest(uint8_t k, uint32_t ms);
 void houseRemoteDiag();
-bool houseRemoteSet(uint8_t id, int32_t value);
+void houseRemoteSet(uint8_t id, int32_t value);
+uint32_t houseLinkTimeoutMs();
 
 void gateBegin();
 void gateLoop(uint32_t now);

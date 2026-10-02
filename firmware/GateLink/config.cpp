@@ -23,10 +23,11 @@ const ParamDef PARAMS[] = {
   { 9, "retries", &Config::retries, 0, 10, P_REMOTE },
   { 10, "heartbeat_s", &Config::heartbeat_s, 5, 3600, P_REMOTE },
   { 11, "link_timeout_s", &Config::link_timeout_s, 15, 10800, P_REMOTE },
-  { 12, "cmd_ttl_s", &Config::cmd_ttl_s, 2, 120, P_REMOTE },
+  { 12, "cmd_ttl_s", &Config::cmd_ttl_s, 2, 120, 0 },  // house only
   { 13, "debounce_ms", &Config::debounce_ms, 10, 1000, P_REMOTE },
-  { 14, "in1_invert", &Config::in1_invert, 0, 1, P_REMOTE },
-  { 15, "in2_invert", &Config::in2_invert, 0, 1, P_REMOTE },
+  // Not remote: inverted, a dead opto or cut wire reads active (e.g. a closed limit). Keep at 0.
+  { 14, "in1_invert", &Config::in1_invert, 0, 1, 0 },
+  { 15, "in2_invert", &Config::in2_invert, 0, 1, 0 },
   { 16, "pulse_ms", &Config::pulse_ms, 100, 5000, P_REMOTE },
   { 17, "travel_timeout_s", &Config::travel_timeout_s, 5, 300, P_REMOTE },
   { 18, "ctrl_sync", &Config::ctrl_sync, 0, 1, 0 },
@@ -35,8 +36,8 @@ const ParamDef PARAMS[] = {
   { 21, "mismatch_timeout_s", &Config::mismatch_timeout_s, 10, 600, 0 },
   { 22, "sensor_invert", &Config::sensor_invert, 0, 1, 0 },
   { 23, "linkloss_open", &Config::linkloss_open, 0, 1, 0 },
-  { 24, "in3_invert", &Config::in3_invert, 0, 1, P_REMOTE },
-  { 25, "in4_invert", &Config::in4_invert, 0, 1, P_REMOTE },
+  { 24, "in3_invert", &Config::in3_invert, 0, 1, 0 },
+  { 25, "in4_invert", &Config::in4_invert, 0, 1, 0 },
   { 26, "power_sense", &Config::power_sense, 0, 1, P_REMOTE },
   { 27, "ctrl_power_sense", &Config::ctrl_power_sense, 0, 1, 0 },
   { 28, "ctrl_confirm_ms", &Config::ctrl_confirm_ms, 0, 5000, 0 },
@@ -55,6 +56,10 @@ static uint32_t crc32(const uint8_t *data, size_t len) {
 
 static uint32_t configCrc(const Config &c) {
   return crc32((const uint8_t *)&c, offsetof(Config, crc));
+}
+
+static bool valid(const Config &c) {
+  return c.magic == CFG_MAGIC && c.version == CFG_VERSION && c.crc == configCrc(c);
 }
 
 void configDefaults(Config &c) {
@@ -92,7 +97,7 @@ void configDefaults(Config &c) {
 bool configLoad() {
   Config c;
   cfgStore.read(&c);
-  if (c.magic != CFG_MAGIC || c.version != CFG_VERSION || c.crc != configCrc(c)) {
+  if (!valid(c)) {
     configDefaults(cfg);
     return false;
   }
@@ -100,11 +105,36 @@ bool configLoad() {
   return true;
 }
 
+static void store(Config &c) {
+  c.magic = CFG_MAGIC;
+  c.version = CFG_VERSION;
+  c.crc = configCrc(c);
+  cfgStore.write(c);
+}
+
 void configSave() {
-  cfg.magic = CFG_MAGIC;
-  cfg.version = CFG_VERSION;
-  cfg.crc = configCrc(cfg);
-  cfgStore.write(cfg);
+  store(cfg);
+}
+
+// What's in flash, or the running config if nothing valid is saved yet (nothing to protect then).
+static Config persisted() {
+  Config c;
+  cfgStore.read(&c);
+  if (!valid(c)) c = cfg;
+  return c;
+}
+
+void configSaveParam(const ParamDef *p) {
+  Config c = persisted();
+  c.*(p->field) = cfg.*(p->field);
+  store(c);
+}
+
+void configSaveKey() {
+  Config c = persisted();
+  memcpy(c.key, cfg.key, sizeof(c.key));
+  c.key_set = cfg.key_set;
+  store(c);
 }
 
 const ParamDef *paramByName(const char *name) {
@@ -122,14 +152,9 @@ const ParamDef *paramById(uint8_t id) {
 bool paramSet(const ParamDef *p, int32_t value) {
   if (!p || value < p->minV || value > p->maxV) return false;
   if (p->field == &Config::bw_hz && value != 125000 && value != 250000 && value != 500000) return false;
-  int32_t old = cfg.*(p->field);
+  // No heartbeat_s vs link_timeout_s check here: only the gate uses heartbeat_s and only the house
+  // link_timeout_s, and the house stretches its timeout to the gate's heartbeat (see houseLinkTimeoutMs).
   cfg.*(p->field) = value;
-  // The house declares the link down after link_timeout_s without frames; the gate's
-  // heartbeat must comfortably fit inside it.
-  if (cfg.heartbeat_s * 2 > cfg.link_timeout_s) {
-    cfg.*(p->field) = old;
-    return false;
-  }
   return true;
 }
 

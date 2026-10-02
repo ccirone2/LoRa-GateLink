@@ -13,19 +13,16 @@ static uint8_t state = GS_UNKNOWN;
 static uint8_t cause = CAUSE_NONE;
 static uint8_t lastResult = TR_NONE;
 static uint8_t target = GS_UNKNOWN;  // state we're waiting to reach after our pulse
+static uint8_t leaving = GS_UNKNOWN;  // limit our pulse is moving the gate off (it may be the target after a reversal)
 static uint32_t targetSince = 0;
 static bool haveCmd = false;
 static uint16_t lastCmdId = 0;
 static uint8_t lastCmdAck = RES_OK;
 static uint32_t lastStatusAt = 0;
+static int32_t reportedHeartbeat = 0;  // heartbeat_s in our last STATUS
 static int16_t houseRssi = 0;
 static int8_t houseSnr = 0;
 static uint32_t seenSessions = 0;
-
-// Signed elapsed-time check: safe when t was stamped slightly after the loop's `now`.
-static bool elapsed(uint32_t now, uint32_t t, uint32_t ms) {
-  return (int32_t)(now - t) >= (int32_t)ms;
-}
 
 static uint8_t readState() {
   // IN3 = opener 24 V present. Without power the AUX limit relays drop, which would read as BETWEEN.
@@ -49,11 +46,27 @@ static void sendStatus(uint32_t now) {
   putU16(p + ST_RSSI, (uint16_t)houseRssi);
   p[ST_SNR] = (uint8_t)houseSnr;
   p[ST_TARGET] = target;
+  putU16(p + ST_HEARTBEAT, cfg.heartbeat_s);
+  reportedHeartbeat = cfg.heartbeat_s;
   // Retries spread over the TTL: cap it so a lost status is retried within a fraction of a second even with a
   // long heartbeat (the next heartbeat supersedes it anyway).
   uint32_t ttl = (uint32_t)cfg.heartbeat_s * 1000;
   linkSendReliable(SLOT_STATUS, MSG_STATUS, p, ST_LEN, ttl < STATUS_TTL_MS ? ttl : STATUS_TTL_MS);
   lastStatusAt = now;
+}
+
+// Our pulse should take the gate to `want`: track it, so the movement it causes is attributed to us.
+static void setTarget(uint8_t want, uint32_t now) {
+  // When reversing before the gate left its limit, the earlier pulse is still what moves it off that limit.
+  if (state != want && (state == GS_OPEN || state == GS_CLOSED)) leaving = state;
+  target = want;
+  targetSince = now;
+  lastResult = TR_NONE;
+}
+
+static void clearTarget() {
+  target = GS_UNKNOWN;
+  leaving = GS_UNKNOWN;
 }
 
 static void pulse(Relay &r, Relay &other, uint8_t which, uint32_t now) {
@@ -77,14 +90,23 @@ void gateLoop(uint32_t now) {
   if (s != state) {
     // Power loss/return isn't a gate movement, so it has no cause.
     bool power = s == GS_NO_POWER || state == GS_NO_POWER;
+    uint8_t prev = state;
     state = s;
-    // Ours only while our pulse is still heading somewhere and the gate moves that way; anything
-    // else (a local button, the other controllers, an override to the far limit) is external.
-    bool ours = target != GS_UNKNOWN && (s == target || s == GS_BETWEEN);
+    // Ours only while our pulse is still heading somewhere and the gate moves that way: reaching the target,
+    // or leaving a limit toward it (or the limit our pulse is moving it off). Anything else (a local button,
+    // the other controllers, an override to the far limit) is external.
+    bool ours = target != GS_UNKNOWN
+                && (s == target || (s == GS_BETWEEN && (prev != target || prev == leaving)));
     cause = power ? CAUSE_NONE : ours ? CAUSE_LORA : CAUSE_EXTERNAL;
+    if (s == GS_BETWEEN) leaving = GS_UNKNOWN;
     if (target != GS_UNKNOWN && state == target) {
       lastResult = TR_REACHED;
-      target = GS_UNKNOWN;
+      clearTarget();
+    } else if (target != GS_UNKNOWN && (state == GS_OPEN || state == GS_CLOSED)) {
+      // Overridden to the other limit (siren, AES, local button): our command is over, and reporting it as
+      // a timeout makes the house resync its controller at once.
+      lastResult = TR_TIMEOUT;
+      clearTarget();
     }
     logEvent(EV_GATE_STATE, state, cause);
     sendStatus(now);
@@ -108,11 +130,15 @@ void gateLoop(uint32_t now) {
       logEvent(EV_TRAVEL_TIMEOUT, target);
       lastResult = TR_TIMEOUT;
     }
-    target = GS_UNKNOWN;
+    clearTarget();
     sendStatus(now);
   }
 
-  if (elapsed(now, lastStatusAt, (uint32_t)cfg.heartbeat_s * 1000)) sendStatus(now);
+  // A new heartbeat_s goes out at once: the house sizes its link timeout from it, and waiting for the next
+  // (longer) heartbeat would let its old timeout expire first.
+  if (elapsed(now, lastStatusAt, (uint32_t)cfg.heartbeat_s * 1000) || cfg.heartbeat_s != reportedHeartbeat) {
+    sendStatus(now);
+  }
 }
 
 static void handleCmd(const RxMsg &m, uint32_t now) {
@@ -146,9 +172,7 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   } else {
     if (action == ACT_OPEN) pulse(k1, k2, 1, now);
     else pulse(k2, k1, 2, now);
-    target = want;
-    targetSince = now;
-    lastResult = TR_NONE;
+    setTarget(want, now);
     lastCmdAck = RES_OK;
   }
   linkAck(m.seq, lastCmdAck);
@@ -164,7 +188,7 @@ static void handleCfgSet(const RxMsg &m) {
   int32_t v = (int32_t)getU32(m.payload + 1);
   bool ok = p && (p->flags & P_REMOTE) && paramSet(p, v);
   if (ok) {
-    configSave();
+    configSaveParam(p);  // not configSave(): that would also persist unsaved console edits
     logEvent(EV_CFG_REMOTE, p->id, v);
   }
   linkAck(m.seq, ok ? RES_OK : RES_BAD);
@@ -225,8 +249,9 @@ void gateRelayTest(uint8_t k, uint32_t ms) {
   Relay &other = k == 1 ? k2 : k1;
   other.set(false);
   r.pulse(now, ms);
-  // Track it like a command so the resulting movement is attributed to us, not external.
-  target = k == 1 ? GS_OPEN : GS_CLOSED;
-  targetSince = now;
+  // Track it like a command so the resulting movement is attributed to us, not external. A gate already at
+  // that limit won't move for it, so there's nothing to attribute (a later move off it is someone else's).
+  uint8_t want = k == 1 ? GS_OPEN : GS_CLOSED;
+  if (state != want) setTarget(want, now);
   logEvent(EV_PULSE, k, ms);
 }

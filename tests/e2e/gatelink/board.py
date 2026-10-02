@@ -13,6 +13,10 @@ import serial
 import serial.tools.list_ports
 
 ARDUINO_VID = 0x2341
+# config.set params per request: keeps each line far below the firmware's console line limit.
+CONFIG_CHUNK = 8
+# Checked against each other up to firmware 0.3.4 (heartbeat_s <= link_timeout_s / 2): keep them in one request.
+LINKED_PARAMS = ("heartbeat_s", "link_timeout_s")
 
 
 class BoardError(Exception):
@@ -29,6 +33,7 @@ class Board:
         self._lock = threading.Lock()
         self._cond = threading.Condition()
         self._replies = {}
+        self._waiting = set()  # ids of requests still waiting for their reply
         self._reader = None
         self._closing = False
         self.dropped = 0  # times the port vanished without us asking for a reboot
@@ -41,14 +46,16 @@ class Board:
         self._reader.start()
 
     def close(self):
+        # Let the reader leave its read (0.1 s timeout) before the port closes under it: closing a port another
+        # thread is reading crashed Python on Windows (access violation in pyserial on the next open).
         self._closing = True
+        if self._reader and self._reader is not threading.current_thread():
+            self._reader.join(timeout=2)
         if self.ser:
             try:
                 self.ser.close()
             except serial.SerialException:
                 pass
-        if self._reader:
-            self._reader.join(timeout=2)
         self.ser = None
 
     def _read_loop(self):
@@ -74,6 +81,8 @@ class Board:
         try:
             msg = json.loads(line)
         except ValueError:
+            msg = None
+        if not isinstance(msg, dict):
             self.timeline.add(self.name, "raw", line=line)
             return
         ev = msg.get("event")
@@ -89,8 +98,20 @@ class Board:
             self.timeline.add(self.name, ev, **{k: v for k, v in msg.items() if k != "event"})
         elif "id" in msg:
             with self._cond:
-                self._replies[msg["id"]] = msg
-                self._cond.notify_all()
+                if msg["id"] in self._waiting:
+                    self._replies[msg["id"]] = msg
+                    self._cond.notify_all()
+                    return
+            # Its request already timed out: drop it, or it would sit in _replies forever.
+            self.timeline.add(self.name, "note", text=f"late reply dropped: {line}")
+        elif "ok" in msg:
+            # The firmware couldn't read the request (`bad json`, `line too long`), so the reply has no id. With
+            # exactly one request waiting it can only be that one's: hand it over rather than let it time out.
+            self.timeline.add(self.name, "note", text=f"reply without id: {line}")
+            with self._cond:
+                if len(self._waiting) == 1:
+                    self._replies[next(iter(self._waiting))] = msg
+                    self._cond.notify_all()
 
     # --- requests ---------------------------------------------------------------------------------------------
     def request(self, cmd, timeout=3.0, check=True, **kw):
@@ -98,19 +119,26 @@ class Board:
             self._reconnect()
         rid = next(self._ids)
         data = (json.dumps({"id": rid, "cmd": cmd, **kw}) + "\n").encode()
-        with self._lock:
-            try:
-                self.ser.write(data)
-            except (serial.SerialException, OSError) as e:
-                raise BoardError(f"{self.name}: write failed: {e}") from e
-        deadline = time.monotonic() + timeout
         with self._cond:
-            while rid not in self._replies:
-                left = deadline - time.monotonic()
-                if left <= 0:
-                    raise BoardError(f"{self.name}: no reply to {cmd!r} within {timeout}s")
-                self._cond.wait(left)
-            res = self._replies.pop(rid)
+            self._waiting.add(rid)
+        try:
+            with self._lock:
+                try:
+                    self.ser.write(data)
+                except (serial.SerialException, OSError) as e:
+                    raise BoardError(f"{self.name}: write failed: {e}") from e
+            deadline = time.monotonic() + timeout
+            with self._cond:
+                while rid not in self._replies:
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        raise BoardError(f"{self.name}: no reply to {cmd!r} within {timeout}s")
+                    self._cond.wait(left)
+                res = self._replies.pop(rid)
+        finally:
+            with self._cond:
+                self._waiting.discard(rid)
+                self._replies.pop(rid, None)
         if check and not res.get("ok"):
             raise BoardError(f"{self.name}: {cmd} failed: {res}")
         return res
@@ -150,13 +178,20 @@ class Board:
         return self.request("config.get")["params"]
 
     def config_set(self, **params):
-        """Apply (not save) params. config.set skips unchanged values, so this is cheap to repeat."""
-        res = self.request("config.set", params=params, check=False)
-        if not res.get("ok"):
-            raise BoardError(f"{self.name}: config.set {params} rejected: {res.get('errors')}")
-        if res.get("applied"):
-            self.timeline.add("test", "action", text=f"{self.name} config.set {params}")
-        return res
+        """Apply (not save) params. config.set skips unchanged values, so this is cheap to repeat.
+
+        Sent CONFIG_CHUNK params per request, the linked ones together in the first. Returns the names applied."""
+        keys = [k for k in LINKED_PARAMS if k in params] + [k for k in params if k not in LINKED_PARAMS]
+        applied = []
+        for i in range(0, len(keys), CONFIG_CHUNK):
+            chunk = {k: params[k] for k in keys[i:i + CONFIG_CHUNK]}
+            res = self.request("config.set", params=chunk, check=False)
+            if not res.get("ok"):
+                raise BoardError(f"{self.name}: config.set {chunk} rejected: {res.get('errors') or res.get('error')}")
+            if res.get("applied"):
+                self.timeline.add("test", "action", text=f"{self.name} config.set {chunk}")
+                applied += res["applied"]
+        return applied
 
     def log_get(self):
         return self.request("log.get")
@@ -184,6 +219,8 @@ def find_boards(timeline, exclude=()):
             continue
         if role in found:
             b.close()
+            for other in found.values():
+                other.close()
             raise BoardError(f"two boards report role {role!r} ({found[role].port}, {p.device})")
         b.name = role
         found[role] = b

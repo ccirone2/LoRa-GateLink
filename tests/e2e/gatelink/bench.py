@@ -17,10 +17,16 @@ ACT_OPEN, ACT_CLOSE = 1, 2
 RES_OK, RES_ALREADY, RES_BAD, RES_BUSY, RES_NO_POWER = 0, 1, 2, 3, 4
 
 SIM_TRAVEL_S = 8
+SIM_DEBOUNCE_MS = 20  # GateSim SENSE_DEBOUNCE_MS
+PULSE_TOL_MS = 60  # measured pulse vs requested: relay operate/release and loop timing on both ends
 # Same order of timings as the defaults (heartbeat < link timeout, travel timeout < mismatch timeout), shorter.
-PROFILE_COMMON = {"heartbeat_s": 5, "link_timeout_s": 15, "travel_timeout_s": 15, "cmd_ttl_s": 10}
+# The rest are the firmware defaults (config.cpp), pinned because scenarios rely on them: the limit-chatter test
+# needs debounce_ms > the GateSim's 30 ms flicker steps, and the waits assume the default windows.
+PROFILE_COMMON = {"heartbeat_s": 5, "link_timeout_s": 15, "travel_timeout_s": 15, "cmd_ttl_s": 10,
+                  "retries": 5, "debounce_ms": 50}
 PROFILE_HOUSE = {"mismatch_timeout_s": 20, "ctrl_power_sense": 0, "in2_invert": 0, "ctrl_sync": 1,
-                 "sensor_invert": 0, "linkloss_open": 1}
+                 "sensor_invert": 0, "linkloss_open": 1, "sync_window_ms": 3000, "resync_ms": 1000,
+                 "ctrl_confirm_ms": 500, "ctrl_settle_ms": 10000}
 PROFILE_GATE = {"power_sense": 1, "in1_invert": 0, "in2_invert": 0, "in3_invert": 0}
 
 _ERRORS = (BoardError, GateSimError, ControllerError, KeyError, TypeError)
@@ -50,6 +56,7 @@ class Bench:
         self.latencies = defaultdict(list)
         self.facts = {}  # one-off measurements for the summary (RSSI, ping RTT, ...)
         self.anomalies = []  # tolerated oddities worth a look, listed in the summary
+        self.saved = set()  # boards whose saved config something overwrote (e.g. a remote CFG_SET): see resave()
         self.begin_test("session")
 
     # --- profile ----------------------------------------------------------------------------------------------
@@ -68,15 +75,30 @@ class Bench:
         self.board(name).reboot()
         self.board(name).config_set(**self.profile[name])
 
+    def _put_back(self, name):
+        """Apply the session-start backup on a board; save it too if something saved over it this session."""
+        b = self.board(name)
+        cur = b.config_get()
+        diff = {k: v for k, v in self.backup[name].items() if k in cur and cur[k] != v}
+        if diff:
+            b.config_set(**diff)
+        if name in self.saved:
+            b.request("config.save")
+            self.timeline.add("test", "action", text=f"{name} config.save (backup)")
+            self.saved.discard(name)
+
+    def resave(self, name):
+        """A remote CFG_SET makes the gate save (the param; the whole config, test profile included, up to 0.3.4):
+        save the backup again, then put the profile back on top, unsaved."""
+        self.saved.add(name)
+        self._put_back(name)
+        self.board(name).config_set(**self.profile[name])
+
     def restore(self):
         """Put back every param that differs from the session-start backup, and the simulator's travel time."""
         for n in ("house", "gate"):
-            b = self.board(n)
             try:
-                cur = b.config_get()
-                diff = {k: v for k, v in self.backup[n].items() if k in cur and cur[k] != v}
-                if diff:
-                    b.config_set(**diff)
+                self._put_back(n)
             except BoardError as e:
                 print(f"\nWARNING: couldn't restore {n} config: {e}")
         try:
@@ -158,6 +180,23 @@ class Bench:
         if found:
             self.fail(f"unexpected {src} {ev}: {found[0]}")
 
+    def ping(self, name="house", timeout=5, required=True):
+        """radio.ping from a board and wait for the pong event. Returns it, or None if lost and not `required`."""
+        m = self.mark()
+        self.board(name).request("radio.ping")
+        try:
+            return self.wait_for(lambda: self.timeline.first(name, "pong", m), timeout, f"pong at the {name}",
+                                 poll=0.05)
+        except AssertionError:
+            if required:
+                raise
+            return None
+
+    def relay_test(self, name, k, ms):
+        """relay.test, recorded so the invariant checks can tell its pulse from one without a command."""
+        self.timeline.add("test", "action", text=f"{name} relay.test K{k} {ms} ms", relay_test=name, k=k, ms=ms)
+        self.board(name).request("relay.test", k=k, ms=ms)
+
     def latency(self, name, seconds):
         self.latencies[name].append(seconds)
         self.note(f"latency {name}: {seconds:.3f}s")
@@ -169,6 +208,11 @@ class Bench:
         self._allowed_reboot = set()
         self._allowed_counters = set()
         self._expected_cmds = (0, 0)
+        self._k2_free = False
+
+    def allow_k2_inverted(self):
+        """The test changes sensor_invert: skip the "K2 closed only when the gate is closed" check."""
+        self._k2_free = True
 
     def allow_reboot(self, name):
         self._allowed_reboot.add(name)
@@ -218,17 +262,8 @@ class Bench:
         for e in self.timeline.select(src="sim", kind="evt", since=since):
             if e["line"] == "pulse both":
                 problems.append(f"opener saw OPEN and CLOSE together at {e['t']}s (K1/K2 interlock broken)")
-        pending = 0
-        for e in self.timeline.logs("gate", since=since):
-            if e["ev"] == "cmd_rx":
-                pending += 1
-            elif e["ev"] == "pulse":
-                if e["b"] != self.pulse_ms:
-                    problems.append(f"gate pulse of {e['b']} ms at {e['t']}s (pulse_ms {self.pulse_ms})")
-                if pending:
-                    pending -= 1
-                else:
-                    problems.append(f"gate pulsed relay {e['a']} at {e['t']}s without a received command")
+        self._check_pulses(since, problems)
+        self._check_k2(since, problems)
         for n in ("house", "gate"):
             for e in self.timeline.logs(n, "radio_fail", since):
                 problems.append(f"{n} radio_fail at {e['t']}s (a={e['a']})")
@@ -260,6 +295,71 @@ class Bench:
             problems.append(f"house sent {cmds} command(s), expected {want}")
         if problems:
             self.fail("invariant check failed:\n  " + "\n  ".join(problems), since=since)
+
+    def _check_pulses(self, since, problems):
+        """Every gate pulse answers a command or a relay test, and the opener saw it for as long as it should.
+
+        handleCmd logs cmd_rx and the pulse back to back, so a commanded pulse directly follows a cmd_rx for the
+        same action (OPEN = K1, CLOSE = K2) in the gate's log; a refused or already-there command logs no pulse.
+        A relay test logs its pulse with the requested ms instead of pulse_ms."""
+        tests = [e for e in self.timeline.select(src="test", kind="action", since=since)
+                 if e.get("relay_test") == "gate"]
+        gate_logs = self.timeline.logs("gate", since=since)
+        pulses = []  # (log entry, expected ms)
+        prev = None
+        for e in gate_logs:
+            if e["ev"] == "pulse":
+                if prev is not None and prev["ev"] == "cmd_rx" and prev["a"] == e["a"]:
+                    if e["b"] != self.pulse_ms:
+                        problems.append(f"gate pulse of {e['b']} ms at {e['t']}s (pulse_ms {self.pulse_ms})")
+                    pulses.append((e, self.pulse_ms))
+                else:
+                    rt = next((r for r in tests if r["k"] == e["a"] and r["ms"] == e["b"] and r["t"] <= e["t"]), None)
+                    if rt is None:
+                        problems.append(f"gate pulsed relay {e['a']} at {e['t']}s without a received command")
+                        continue
+                    tests.remove(rt)
+                    pulses.append((e, e["b"]))
+            prev = e
+        if not pulses:
+            return
+        # The release is reported when the pulse ends: give the last one time to arrive.
+        end = max(e["t"] + want / 1000 for e, want in pulses) + 0.5
+        if end > self.mark():
+            time.sleep(end - self.mark())
+        releases = {1: [], 2: []}  # relay -> [(t, held ms)]
+        for e in self.timeline.select(src="sim", kind="evt", since=since):
+            parts = e["line"].split()
+            if len(parts) == 3 and parts[0] == "release" and parts[1] in ("open", "close"):
+                releases[1 if parts[1] == "open" else 2].append((e["t"], int(parts[2])))
+        tol = PULSE_TOL_MS + SIM_DEBOUNCE_MS
+        for e, want in pulses:
+            found = next((r for r in releases[e["a"]] if e["t"] <= r[0] <= e["t"] + want / 1000 + 1.0), None)
+            if found is None:
+                problems.append(f"no simulator release for gate relay {e['a']}'s {want} ms pulse at {e['t']}s "
+                                "(GateSim older than `evt release`, or the pulse never reached it)")
+                continue
+            releases[e["a"]].remove(found)
+            held = found[1]
+            # Interlock: a pulse on the other relay while this one is on cuts it short.
+            cut = any(o["ev"] == "pulse" and o["a"] != e["a"] and e["t"] < o["t"] < e["t"] + want / 1000
+                      for o in gate_logs)
+            if held > want + tol or (not cut and held < want - tol):
+                problems.append(f"gate relay {e['a']} pulse at {e['t']}s held {held} ms at the opener, "
+                                f"expected {want} ms ±{tol}" + (" (cut short by the other relay)" if cut else ""))
+
+    def _check_k2(self, since, problems):
+        """House K2 (contact sensor) reads closed only while the gate is known closed. The status event is sent
+        after applyOutputs, so both fields are from the same instant; a house K2 relay test is exempt."""
+        if self._k2_free:
+            return
+        tests = [e for e in self.timeline.select(src="test", kind="action", since=since)
+                 if e.get("relay_test") == "house" and e["k"] == 2]
+        for e in self.timeline.select(src="house", kind="status", since=since):
+            if e["k2"] and e["gate"] != "closed":
+                if any(r["t"] <= e["t"] <= r["t"] + r["ms"] / 1000 + 0.5 for r in tests):
+                    continue
+                problems.append(f"house K2 read closed with the gate {e['gate']} at {e['t']}s")
 
     # --- summary ----------------------------------------------------------------------------------------------
     def latency_rows(self):

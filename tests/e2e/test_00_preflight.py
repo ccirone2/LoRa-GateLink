@@ -21,9 +21,7 @@ def test_bench_safe_settings(bench):
 
 
 def test_ping(bench):
-    m = bench.mark()
-    bench.house.request("radio.ping")
-    pong = bench.wait_for(lambda: bench.timeline.first("house", "pong", m), 5, "pong from the gate", poll=0.05)
+    pong = bench.ping("house")
     bench.facts["ping RTT"] = f"{pong['rtt_ms']} ms"
     bench.facts["RSSI/SNR at house"] = f"{pong['rssi']} dBm / {pong['snr']} dB"
     bench.facts["RSSI/SNR at gate"] = f"{pong['peer_rssi']} dBm / {pong['peer_snr']} dB"
@@ -70,7 +68,7 @@ def test_controller_follow_mode(bench):
         b.ctrl.on()
         b.wait_ctrl(True, timeout=15)
         time.sleep(1)
-        b.house.request("relay.test", k=1, ms=pulse_ms)
+        b.relay_test("house", 1, pulse_ms)
         time.sleep(pulse_ms / 2000)
         mid = b.house.status()["ctrl"]
         time.sleep(pulse_ms / 2000 + 2)

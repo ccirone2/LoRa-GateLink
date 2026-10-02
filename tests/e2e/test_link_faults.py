@@ -5,11 +5,12 @@ import time
 
 import pytest
 
-from gatelink.bench import ACT_OPEN, GS, SIM_TRAVEL_S
+from gatelink.bench import ACT_OPEN, GS, PROFILE_COMMON, SIM_TRAVEL_S
 from gatelink.flows import outage
 
-LINK_TIMEOUT_S = 15  # PROFILE_COMMON link_timeout_s
-HEARTBEAT_S = 5
+LINK_TIMEOUT_S = PROFILE_COMMON["link_timeout_s"]
+HEARTBEAT_S = PROFILE_COMMON["heartbeat_s"]
+CMD_TTL_S = PROFILE_COMMON["cmd_ttl_s"]
 
 
 def test_link_loss_at_rest(rig):
@@ -34,7 +35,7 @@ def test_command_during_outage_expires(rig):
         rig.wait_log("house", "link_down", since=m, timeout=LINK_TIMEOUT_S + HEARTBEAT_S + 5)
         rig.ctrl.on()
         sent = rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m, timeout=10)
-        dropped = rig.wait_log("house", "cmd_dropped", a=ACT_OPEN, since=m, timeout=15)
+        dropped = rig.wait_log("house", "cmd_dropped", a=ACT_OPEN, since=m, timeout=CMD_TTL_S + 5)
         rig.wait_house(5, cmd_result=-2, cmd_pending=False)
         rig.latency("cmd_sent -> cmd_dropped (dead link)", dropped["t"] - sent["t"])
     rig.wait_house(HEARTBEAT_S + 10, link_up=True, gate="closed")
@@ -75,7 +76,7 @@ def test_long_outage_command_delivered_within_ttl(rig):
         sent = rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m, timeout=10)
         time.sleep(max(0.0, 4 - (rig.mark() - sent["t"])))
     rx = rig.wait_log("gate", "cmd_rx", a=ACT_OPEN, since=m, timeout=10)
-    assert rx["t"] - sent["t"] < 10.5, "delivered after cmd_ttl_s"
+    assert rx["t"] - sent["t"] < CMD_TTL_S + 0.5, "delivered after cmd_ttl_s"
     rig.wait_gate("open", timeout=SIM_TRAVEL_S + 8)
     rig.wait_house(15, gate="open", io__k1=True, io__k2=False, cmd_result=0)
     assert len(rig.logs("gate", "pulse", since=m)) == 1
@@ -110,10 +111,7 @@ def test_replayed_frames_rejected(rig):
         for _ in range(5):  # a heartbeat or ACK can slip in between; then the replayed frame is a different one
             m = rig.mark()
             # A PING is never ACK-memoed, so its replay must be counted rather than re-ACKed.
-            rig.board(sender).request("radio.ping")
-            try:
-                rig.wait_for(lambda: rig.timeline.first(sender, "pong", m), 3, "pong", poll=0.05)
-            except AssertionError:
+            if not rig.ping(sender, timeout=3, required=False):
                 continue  # a lost ping or pong (a few % on the bench): try again
             rig.board(sender).request("debug.replay")
             time.sleep(1)
@@ -136,8 +134,9 @@ def test_wrong_key_rejected(rig):
     rig.expect_commands(1)
     rig.allow_counters("house")
     rig.allow_counters("gate")  # key.set restarts the gate's link, which resets its counters
-    # key.set saves the whole config, so put the gate's saved values back first; the profile goes on after.
-    rig.gate.config_set(**{k: rig.backup["gate"][k] for k in rig.profile["gate"]})
+    # key.set saves only the key (0.3.5), so the unsaved test profile stays unsaved. (Putting the saved timings
+    # back first, as older firmware needed, would now stretch the house's link timeout to 2.5 x the saved
+    # heartbeat and the link would outlast the wait below.)
     m = rig.mark()
     try:
         rig.gate.request("key.set", key=secrets.token_hex(16))
@@ -146,12 +145,11 @@ def test_wrong_key_rejected(rig):
         rig.wait_house(LINK_TIMEOUT_S + 10, link_up=False, io__k2=False)
         rig.ctrl.on()
         rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m, timeout=10)
-        rig.wait_log("house", "cmd_dropped", since=m, timeout=15)
+        rig.wait_log("house", "cmd_dropped", since=m, timeout=CMD_TTL_S + 5)
         rig.expect_no("gate", "cmd_rx", since=m)
         assert rig.sim.status()["state"] == "closed"
     finally:
         rig.gate.request("key.set", key=key)
-        rig.gate.config_set(**rig.profile["gate"])
     rig.wait_for(lambda: rig.house.status()["link_up"] and rig.gate.status()["link"]["verified"], 30,
                  "link back with the shared key (if not, GATELINK_KEY isn't the house's key)")
     rig.wait_ctrl(False, timeout=40)

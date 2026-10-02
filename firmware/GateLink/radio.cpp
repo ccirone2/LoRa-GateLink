@@ -7,6 +7,8 @@
 static bool ok = false;
 static bool begun = false;
 static uint32_t faults = 0;
+static uint32_t retryAt = 0;  // while !ok: when to try radioBegin() again
+#define RETRY_MS 5000
 // Transmission in progress. TX is asynchronous: a frame takes up to seconds at SF12, and blocking for it held
 // up the loop (relay pulses ran long by the airtime, and back-to-back frames could reach the watchdog).
 static volatile bool txActive = false;
@@ -32,6 +34,7 @@ static uint32_t txStart, txLimit;
 #define OPMODE_LORA_FSTX 0x82       // long-range mode | frequency synthesis (TX starting)
 #define OPMODE_LORA_TX 0x83         // long-range mode | TX
 #define OPMODE_LORA_RX_CONT 0x85    // long-range mode | RX continuous
+#define OPMODE_LONG_RANGE 0x80      // LoRa mode; clear after a radio reset (FSK is the power-on default)
 
 static uint8_t regAccess(uint8_t addr, uint8_t value) {
   LORA_DEFAULT_SPI.beginTransaction(SPISettings(LORA_DEFAULT_SPI_FREQUENCY, MSBFIRST, SPI_MODE0));
@@ -47,8 +50,15 @@ static void writeReg(uint8_t addr, uint8_t v) { regAccess(addr | 0x80, v); }
 
 static void startRx() {
   writeReg(REG_IRQ_FLAGS, 0xFF);
-  writeReg(REG_FIFO_ADDR_PTR, 0);
   writeReg(REG_OP_MODE, OPMODE_LORA_RX_CONT);
+}
+
+// The radio reset itself (supply dip) or stopped answering: count it, log it and start over.
+static void fault(int32_t kind) {
+  faults++;
+  logEvent(EV_RADIO_FAIL, kind, faults);
+  radioBegin();
+  txEndAt = millis();
 }
 
 static void finishTx() {
@@ -69,7 +79,11 @@ bool radioBegin() {
   if (begun) LoRa.end();
   begun = true;
   ok = LoRa.begin(cfg.freq_hz);
-  if (!ok) return false;
+  if (!ok) {
+    retryAt = (millis() + RETRY_MS) | 1;
+    return false;
+  }
+  retryAt = 0;
   int irq = digitalPinToInterrupt(LORA_DEFAULT_DIO0_PIN);
   LORA_DEFAULT_SPI.usingInterrupt(irq);
   attachInterrupt(irq, onDio0, RISING);
@@ -112,13 +126,11 @@ bool radioTxBusy() {
   bool stillTx = mode == OPMODE_LORA_TX || mode == OPMODE_LORA_FSTX;
   bool done = readReg(REG_IRQ_FLAGS) & IRQ_TX_DONE;  // read after the mode: catches a TX just finished
   if (!txActive) return false;  // the interrupt finished it between the reads (and cleared the flags)
-  if (done) {
+  // A dead SPI bus reads 0xFF everywhere, TX_DONE included.
+  if (done && mode != 0xFF) {
     finishTx();
   } else if (!stillTx || (int32_t)(millis() - txStart) >= (int32_t)txLimit) {
-    faults++;
-    logEvent(EV_RADIO_FAIL, 1, faults);
-    radioBegin();
-    txEndAt = millis();
+    fault(1);
   }
   return txActive;
 }
@@ -135,9 +147,20 @@ uint32_t radioTxEndAt() {
 // re-arms it, and a frame whose preamble straddled that moment was lost (~2 % of frames at SF9, more at
 // SF12, both directions).
 size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
-  if (!ok || radioTxBusy()) return 0;
-  if (readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) {  // after init
-    startRx();
+  if (!ok) {
+    // A radio that failed to initialise is retried, so a transient fault doesn't need a reboot.
+    if (retryAt && (int32_t)(millis() - retryAt) >= 0) {
+      if (radioBegin()) logEvent(EV_RADIO_FAIL, 3, faults);
+    }
+    return 0;
+  }
+  if (radioTxBusy()) return 0;
+  uint8_t mode = readReg(REG_OP_MODE);
+  if (mode != OPMODE_LORA_RX_CONT) {
+    // Out of LoRa mode (or no answer) means the radio reset: startRx() alone can't fix that, as LoRa mode can
+    // only be entered from sleep, and the board would stay deaf without ever logging a fault.
+    if (!(mode & OPMODE_LONG_RANGE) || mode == 0xFF) fault(2);
+    else startRx();  // after init
     return 0;
   }
   uint8_t irq = readReg(REG_IRQ_FLAGS);

@@ -287,21 +287,21 @@ void linkSendReliable(Slot slot, uint8_t type, const uint8_t *payload, uint8_t l
   s.expiresAt = now + ttlMs;
 }
 
-void linkCancel(Slot slot) {
-  slots[slot].active = false;
-}
-
 bool linkPending(Slot slot) {
   return slots[slot].active;
+}
+
+static void sendAck(uint32_t seq, uint8_t result) {
+  uint8_t p[5];
+  putU32(p, seq);
+  p[4] = result;
+  linkSend(MSG_ACK, p, 5);
 }
 
 void linkAck(uint32_t seq, uint8_t result) {
   acks[ackNext] = { true, seq, result };
   ackNext = (ackNext + 1) % ACK_MEMO;
-  uint8_t p[5];
-  putU32(p, seq);
-  p[4] = result;
-  linkSend(MSG_ACK, p, 5);
+  sendAck(seq, result);
 }
 
 static void handleAck(const uint8_t *p, uint8_t len) {
@@ -316,16 +316,15 @@ static void handleAck(const uint8_t *p, uint8_t len) {
   }
 }
 
-static void resendAck(uint32_t seq) {
+// Re-ACK a retransmission we already accepted (our ACK was lost). False if it isn't in the memo.
+static bool resendAck(uint32_t seq) {
   for (auto &m : acks) {
     if (m.valid && m.seq == seq) {
-      uint8_t p[5];
-      putU32(p, seq);
-      p[4] = m.result;
-      linkSend(MSG_ACK, p, 5);
-      return;
+      sendAck(seq, m.result);
+      return true;
     }
   }
+  return false;
 }
 
 // Sliding-window replay check: accepts each seq at most once, tolerating reordering
@@ -407,11 +406,7 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
   }
   if (!acceptSeq(seq)) {
     // Retransmission of a message we already acked (our ACK was lost)? Re-ACK, don't re-process.
-    bool memo = false;
-    for (auto &m : acks) memo |= m.valid && m.seq == seq;
-    if (memo) {
-      resendAck(seq);
-    } else {
+    if (!resendAck(seq)) {
       stats.replay++;
       logEvent(EV_REPLAY, (int32_t)seq, (int32_t)peerLastSeq);
     }

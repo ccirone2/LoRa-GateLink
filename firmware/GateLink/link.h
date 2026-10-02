@@ -33,7 +33,7 @@ enum AckResult : uint8_t {
   RES_OK = 0,
   RES_ALREADY = 1,   // command matched current state; no pulse
   RES_BAD = 2,       // malformed / rejected
-  RES_BUSY = 3,      // interlock: other relay pulsing
+  // 3 was RES_BUSY (never produced); the numbering is part of the wire format
   RES_NO_POWER = 4,  // opener unpowered (IN3 power sense); no pulse
 };
 
@@ -63,7 +63,6 @@ void linkPoll(uint32_t now);
 void linkSend(uint8_t type, const uint8_t *payload, uint8_t len);
 // Queue a reliable message; replaces any message pending in the same slot.
 void linkSendReliable(Slot slot, uint8_t type, const uint8_t *payload, uint8_t len, uint32_t ttlMs);
-void linkCancel(Slot slot);
 bool linkPending(Slot slot);
 // Acknowledge a reliable message (call from RxHandler).
 void linkAck(uint32_t seq, uint8_t result);
@@ -77,3 +76,7 @@ inline void putU16(uint8_t *p, uint16_t v) { p[0] = v; p[1] = v >> 8; }
 inline void putU32(uint8_t *p, uint32_t v) { p[0] = v; p[1] = v >> 8; p[2] = v >> 16; p[3] = v >> 24; }
 inline uint16_t getU16(const uint8_t *p) { return p[0] | (p[1] << 8); }
 inline uint32_t getU32(const uint8_t *p) { return p[0] | (p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
+
+// Signed elapsed-time check: safe across millis() wrap, and when t was stamped slightly after `now` (handlers
+// called from linkPoll use millis(), the loop's `now` is older).
+inline bool elapsed(uint32_t now, uint32_t t, uint32_t ms) { return (int32_t)(now - t) >= (int32_t)ms; }

@@ -6,6 +6,8 @@ Configured from the environment so no address or token lands in the repo:
   GATELINK_HA_TOKEN_FILE  default ~/.ha_token (long-lived access token)
   GATELINK_HA_POWER_ENTITY  optional: an HA switch (e.g. a smart plug) on the controller's supply, with house IN2
                             wired to it (see CtrlPower)
+  GATELINK_HA_CA          optional: CA bundle (PEM) to verify HA's certificate with; without it the certificate
+                            isn't checked (HA on the LAN with a self-signed certificate)
 The controller's real relay level is read from the house board (status `ctrl` = IN1), not from HA, which
 reports Z-Wave state with its own delay.
 """
@@ -33,7 +35,14 @@ class Controller:
                 self._token = f.read().strip()
         except OSError as e:
             raise ControllerError(f"can't read HA token file {token_file}: {e}") from e
-        self._ctx = ssl._create_unverified_context()  # HA on the LAN with a self-signed certificate
+        ca = os.environ.get("GATELINK_HA_CA", "")
+        if ca:
+            try:
+                self._ctx = ssl.create_default_context(cafile=ca)
+            except (OSError, ssl.SSLError) as e:
+                raise ControllerError(f"can't load GATELINK_HA_CA {ca}: {e}") from e
+        else:
+            self._ctx = ssl._create_unverified_context()  # HA on the LAN with a self-signed certificate
 
     def _call(self, method, path, body=None):
         req = urllib.request.Request(

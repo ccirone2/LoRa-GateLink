@@ -1,9 +1,9 @@
 """Opener-side failures, injected with the GateSim: power loss, a jammed or deaf opener, bad limit signals."""
 import time
 
-from gatelink.bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, RES_NO_POWER, SIM_TRAVEL_S
+from gatelink.bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, PROFILE_COMMON, RES_NO_POWER, SIM_TRAVEL_S
 
-TRAVEL_TIMEOUT_S = 15  # PROFILE_COMMON travel_timeout_s
+TRAVEL_TIMEOUT_S = PROFILE_COMMON["travel_timeout_s"]
 
 
 def test_power_loss_at_rest(rig):

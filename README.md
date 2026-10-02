@@ -140,7 +140,7 @@ table and notes for each board; works without a board connected).
 |---|---|
 | Solid, full brightness | No role set |
 | Dim breathing (2.5 s) | Link up |
-| Very dim, fast lub-dub heartbeat | No link (nothing heard for `link_timeout_s`) |
+| Very dim, fast lub-dub heartbeat | No link (nothing heard for `link_timeout_s`; on the house at least 2.5 gate heartbeats) |
 | Fast bright strobe (6 s) | **Identify** requested from the web console |
 
 The breathing and heartbeat patterns never go fully dark between pulses.
@@ -205,7 +205,8 @@ the hardware or the web page:
   `ctrl_power 1`, then `sync 1` when the Shelly comes back on. Compare the `ctrl` and `ctrl_power` times to check
   `ctrl_confirm_ms` covers the gap. *e2e: `test_controller_faults.py` (simulated unless
   `GATELINK_HA_POWER_ENTITY` is set)*
-- Unpower the gate board → after `link_timeout_s` house K2 releases (sensor open), log `link_down`.
+- Unpower the gate board → after `link_timeout_s` (at least 2.5 × the gate's `heartbeat_s`) house K2 releases (sensor
+  open), log `link_down`.
   *e2e: `test_link_loss_at_rest` (simulated outage)*
 - Tools → Send replay on one board → the other board's replay counter increases (or it re-ACKs).
   *e2e: `test_replayed_frames_rejected`*
@@ -235,8 +236,12 @@ arduino-cli upload  --fqbn arduino:avr:uno -p COMx tools/GateSim
 
 Serial 115200, one command per line: `status`, `open`, `close` (a local button, reported as an external
 move), `stop` (strand it between), `power on|off`, `travel <s>` (default 15), `fault none|stuck|both|flicker|deaf`,
-`polarity low|high`, `relay <1-3> on|off|auto` (force D2/D3/D4 for wiring checks, not saved), `help`. It prints `evt ...` lines for pulses and state changes. OPEN heads for open and
-CLOSE for closed, reversing mid-travel. Without power the limits drop, motion freezes and pulses are ignored.
+`polarity low|high`, `relay <1-3> on|off|auto` (force D2/D3/D4 for wiring checks, not saved), `help`. It prints
+`evt ...` lines: `evt pulse open|close` on each debounced press of an input (`evt pulse both` whenever one input
+closes while the other is still held: the K1/K2 interlock failed), `evt release open|close <ms>` when it opens
+again, with how long it was held (edge to edge, so the 20 ms debounce cancels out), `evt cmd ...` and
+`evt state <state>`. OPEN heads for open and CLOSE for closed, reversing mid-travel. Without power the limits
+drop, motion freezes and pulses are ignored.
 Faults: `stuck` leaves the limit and jams (exercises `travel_timeout_s`), `both` asserts both limits (gate
 `fault`), `flicker` chatters a limit on arrival (debounce), `deaf` ignores the gate's pulses. Opening the port
 resets the Uno, which restarts it closed and powered (the gate briefly sees `no_power`); scripts can avoid that
@@ -255,11 +260,13 @@ unit tests.
 
 Prerequisites:
 - Both boards are flashed and configured with role, shared key and `tx_power` of about 5.
-- The GateSim is wired to the gate board, and the web console is disconnected.
+- The GateSim is wired to the gate board and runs the current `tools/GateSim` (the pulse-length checks need its
+  `evt release` lines), and the web console is disconnected.
 - `pip install -r tests/e2e/requirements.txt`.
 
 ```sh
 export GATELINK_HA_URL=https://<home-assistant>:8123    # token read from ~/.ha_token (GATELINK_HA_TOKEN_FILE)
+export GATELINK_HA_CA=<ca.pem>            # optional: verify HA's certificate (by default it isn't checked)
 pytest tests/e2e -v                       # about 30 min; boards found by role, simulator on COM10 (--sim-port)
 pytest tests/e2e -m soak --cycles 20      # repeated open/close cycles with latency stats
 GATELINK_KEY=<32 hex> pytest tests/e2e -k wrong_key   # wrong-key test, opt-in (rewrites the gate's saved key)
@@ -287,26 +294,35 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
 | File | Covers |
 |---|---|
 | `test_00_preflight.py` | Boards, firmware, key and link. Bench-safe settings. Ping. Simulator wiring. The controller reachable and following K1 (its SW input in follow mode, not edge-toggle) |
-| `test_normal.py` | Open and close from the controller, with timing at every hop. Reversal mid-travel. Flip back before the gate leaves its limit. External moves, including one right after our command |
+| `test_normal.py` | Open and close from the controller, with timing at every hop. Reversal mid-travel. Flip back before the gate leaves its limit. External moves, including one right after our command. `-m soak`: `test_soak_open_close_cycles`, `--cycles` open/close cycles with latency stats |
 | `test_opener_faults.py` | Opener power loss at rest and mid-travel. Jammed gate. Opener ignoring the command (siren/override). Both limits active. Limit chatter |
 | `test_link_faults.py` | Link loss and recovery. A command into a dead link (expires, never fires late). Short and 4 s outages covered by retries within `cmd_ttl_s`. A gate move missed during an outage. Replayed frames. Wrong key |
 | `test_reboots.py` | Gate reset at rest and mid-travel. House reset with the controller wrong, and with the gate open |
 | `test_controller_faults.py` | Controller toggled while unpowered. Relay dropping before the power sense. Controller coming back at the wrong level. Rapid toggling |
+| `test_options.py` | Gate relay test on a closed gate (our move, house follows) and at the open limit (no target: a local close right after is external). `power_sense` 0 (IN3 ignored), `linkloss_open` 0 (K2 held through an outage), `sensor_invert` 1, `ctrl_sync` 0 |
+| `test_remote.py` | `remote.set` over LoRa (applied, saved by the gate, put back), refused for non-remote params, `busy` while one is pending. `remote.diag`. A gate heartbeat longer than the house's `link_timeout_s` (house `link_timeout_eff_s`). The console's `line too long` reply |
 | `test_soak.py` | `-m longsoak`: open/close cycles, outages, opener power blips, external moves and jams in rotation; no resets or radio faults; counters to `soak_counters.csv` |
 | `test_rf.py` | `-m rf`: the full loop over a marginal link (minimum power, SF12) |
 
 How it works:
 - **Faster timings.** The suite applies shorter timings to both boards for the run, unsaved: `heartbeat_s` 5,
   `link_timeout_s` 15, `travel_timeout_s` 15, `mismatch_timeout_s` 20, `cmd_ttl_s` 10, and simulator travel 8 s.
-  At the end it restores every param from `results/<run>/config_backup.json`. Saved config is never written,
-  except by the opt-in wrong-key test.
+  It also pins the settings scenarios rely on at the firmware defaults (`retries`, `debounce_ms`,
+  `sync_window_ms`, `resync_ms`, `ctrl_confirm_ms`, `ctrl_settle_ms`, the input inverts, `power_sense`,
+  `ctrl_sync`, `sensor_invert`, `linkloss_open`; see `PROFILE_*` in `gatelink/bench.py`). At the end it restores
+  every param from `results/<run>/config_backup.json`. Saved config is never written, except by the opt-in
+  wrong-key test and `test_remote_set` (the gate saves a remote write): the latter saves the backup again
+  afterwards, and so does the end of the session.
 - **Simulated faults.** A radio outage is the gate moved to another `net_id`. Controller power is house
   `in2_invert` (IN2 isn't wired on the bench) unless `GATELINK_HA_POWER_ENTITY` is set.
 - **Baseline.** Each test starts from the same point: opener powered, gate closed, controller off, house armed
   and in sync.
-- **Invariant checks after every test.** OPEN and CLOSE are never pulsed together. Every gate pulse is `pulse_ms`
-  long and answers a received command. No board resets or radio faults. No MAC failures or replays. The house sent
-  exactly the number of commands the scenario expects.
+- **Invariant checks after every test.** OPEN and CLOSE are never pulsed together (the simulator reports any
+  overlap). Every gate pulse directly follows a received command for that relay (OPEN = K1, CLOSE = K2) or is a
+  relay test the scenario issued; a commanded pulse is `pulse_ms` long, and the simulator measured it at that
+  length (a relay test at its requested length), ±80 ms. House K2 never reads closed unless the gate is closed.
+  No board resets or radio faults. No MAC failures or replays. The house sent exactly the number of commands the
+  scenario expects.
 - **Results.** `tests/e2e/results/<run>/` holds a time-ordered timeline per test (all four devices, JSONL) and
   `summary.md` (results, latencies, link quality, anomalies such as a gate → house status that needed a retry).
 

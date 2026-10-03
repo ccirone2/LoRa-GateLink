@@ -212,6 +212,14 @@ let opening = false;
 
 async function connect() {
   stopReconnect();
+  if (!(await knownPorts()).length) return addBoard();
+  $('boardPicker').showModal();
+  pickRefresh();
+}
+
+// Grants a new port through Chrome's chooser and connects to it.
+async function addBoard() {
+  closePicker();
   let p;
   try {
     p = await navigator.serial.requestPort();
@@ -223,12 +231,166 @@ async function connect() {
     toast('That board is in its bootloader, waiting for firmware: flash it from Tools → Firmware update, or press its reset button once.', 'err');
     return;
   }
+  await connectTo(p);
+}
+
+async function connectTo(p) {
+  closePicker();
+  await portLocks.get(p); // a picker probe may still hold it open
   try {
     await openPort(p);
   } catch (e) {
     // Usually another program (Arduino IDE serial monitor, arduino-cli upload, a script) holds the port.
     toast(`Connect failed: ${e.message}${e.name === 'NetworkError' || e.name === 'InvalidStateError' ? ' Is another program using the port?' : ''}`, 'err');
   }
+}
+
+// ---------- Board picker ----------
+// Chrome's chooser names both boards after the USB driver ("Arduino MKR WAN 1310 (COMx)") and Web Serial
+// doesn't expose the COM name, so for ports already granted the page asks each board for its role and
+// lists them itself. The chooser is only needed to grant a new board (Add board…).
+const PROBE_MS = 1500;
+const ROLE_RANK = { house: 0, gate: 1, unset: 2 };
+const portLocks = new WeakMap(); // port -> promise of the probe holding it open
+let pickEntries = []; // { port, state: 'probing' | 'ok' | 'err', info, err, strobing }
+let pickGen = 0; // bumped on every refresh/close so late probe results don't redraw a stale list
+let pickSoonTimer = null;
+
+async function knownPorts() {
+  return (await navigator.serial.getPorts()).filter((p) => {
+    const i = p.getInfo();
+    return i.usbVendorId === USB_VID && i.usbProductId !== BOOT_PID;
+  });
+}
+
+// Runs fn with the port to itself: probes of the same port queue up instead of failing as "in use".
+function withPort(p, fn) {
+  const run = (portLocks.get(p) || Promise.resolve()).then(fn);
+  portLocks.set(p, run.catch(() => {}));
+  return run;
+}
+
+// Opens the port just long enough to send one console command and read its reply.
+function probePort(p, cmd = 'info') {
+  return withPort(p, async () => {
+    let timer;
+    const timeout = new Promise((r) => { timer = setTimeout(() => r({ timedOut: true }), PROBE_MS); });
+    await p.open({ baudRate: 115200 });
+    let reader, writer;
+    try {
+      await p.setSignals({ dataTerminalReady: true, requestToSend: true }); // the console is silent without DTR
+      reader = p.readable.getReader();
+      writer = p.writable.getWriter();
+      const id = nextId++;
+      const sent = await Promise.race([writer.write(new TextEncoder().encode(JSON.stringify({ id, cmd }) + '\n')), timeout]);
+      if (sent?.timedOut) throw new Error('no answer');
+      const dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { value, done, timedOut } = await Promise.race([reader.read(), timeout]);
+        if (timedOut) throw new Error('no answer');
+        if (done) throw new Error('port closed');
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim();
+          buf = buf.slice(i + 1);
+          let msg;
+          try { msg = JSON.parse(line); } catch { continue; }
+          if (msg.id === id) return msg;
+        }
+      }
+    } finally {
+      clearTimeout(timer);
+      try { await reader?.cancel(); } catch {}
+      reader?.releaseLock();
+      writer?.releaseLock();
+      await p.close().catch(() => {});
+    }
+  });
+}
+
+async function pickRefresh() {
+  const gen = ++pickGen;
+  const ports = await knownPorts();
+  if (gen !== pickGen) return;
+  if (!ports.length) return addBoard(); // the last board was unplugged or forgotten
+  pickEntries = ports.map((port) => ({ port, state: 'probing' }));
+  renderPicker();
+  for (const e of pickEntries) {
+    probePort(e.port).then((info) => {
+      if (info.ok) Object.assign(e, { state: 'ok', info });
+      else Object.assign(e, { state: 'err', err: new Error(info.error || 'no answer') });
+    }, (err) => Object.assign(e, { state: 'err', err })).finally(() => { if (gen === pickGen) renderPicker(); });
+  }
+}
+
+// A board plugged in or out while the picker is open; one that just enumerated may still be booting.
+function pickRefreshSoon() {
+  clearTimeout(pickSoonTimer);
+  pickSoonTimer = setTimeout(() => { if ($('boardPicker').open) pickRefresh(); }, 1000);
+}
+
+function closePicker() {
+  pickGen++;
+  clearTimeout(pickSoonTimer);
+  if ($('boardPicker').open) $('boardPicker').close();
+}
+
+function pickText(e) {
+  if (e.state === 'probing') return ['LoRa GateLink board', 'checking…'];
+  if (e.state === 'err') {
+    const busy = e.err.name === 'NetworkError' || e.err.name === 'InvalidStateError';
+    return ['Arduino board', busy ? 'in use by another program'
+      : e.err.message === 'no answer' ? 'no answer: still booting, or not GateLink firmware' : e.err.message];
+  }
+  const i = e.info;
+  const sub = [`fw ${i.fw}`, i.key_set ? 'key set' : 'no key'];
+  if (i.saved_role && i.saved_role !== i.role) sub.push(`${i.saved_role} after reboot`);
+  return [`LoRa GateLink – ${i.role[0].toUpperCase()}${i.role.slice(1)}`, sub.join(' · ')];
+}
+
+function renderPicker() {
+  const rank = (e) => (e.state === 'ok' ? ROLE_RANK[e.info.role] ?? 3 : e.state === 'probing' ? 4 : 5);
+  const focusKey = document.activeElement?.dataset.pick; // the list is redrawn; keep keyboard focus
+  const list = $('pickList');
+  list.innerHTML = '';
+  const button = (key, text, title, onclick) => {
+    const b = document.createElement('button');
+    b.dataset.pick = key;
+    b.textContent = text;
+    b.title = title;
+    b.onclick = onclick;
+    return b;
+  };
+  pickEntries.map((e, k) => [e, k]).sort(([a], [b]) => rank(a) - rank(b)).forEach(([e, k]) => {
+    const li = document.createElement('li');
+    li.className = `pick-item ${e.state}`;
+    const [title, sub] = pickText(e);
+    const main = button(`${k}:main`, '', 'Connect to this board', () => connectTo(e.port));
+    main.className = 'pick-main';
+    main.innerHTML = `<b>${esc(title)}</b><small>${esc(sub)}</small>`;
+    li.append(main);
+    if (e.state === 'ok') {
+      const id = button(`${k}:id`, e.strobing ? 'Strobing…' : 'Identify', 'Strobe this board\'s LED for 6 s', () => {
+        e.strobing = true;
+        renderPicker();
+        probePort(e.port, 'identify').catch((err) => Object.assign(e, { state: 'err', err }));
+        setTimeout(() => { e.strobing = false; renderPicker(); }, 6000);
+      });
+      id.disabled = !!e.strobing;
+      li.append(id);
+    }
+    if (e.port.forget) {
+      li.append(button(`${k}:forget`, 'Forget', 'Remove this page\'s access to the port (Add board… grants it again)', async () => {
+        await portLocks.get(e.port);
+        await e.port.forget().catch(() => {});
+        pickRefresh();
+      }));
+    }
+    list.append(li);
+  });
+  if (focusKey) list.querySelector(`[data-pick="${focusKey}"]`)?.focus();
 }
 
 async function openPort(p) {
@@ -1570,6 +1732,14 @@ function init() {
   window.addEventListener('beforeunload', (e) => { if (flashing || (meta.length && dirtyCount())) e.preventDefault(); });
 
   $('btnConnect').onclick = connect;
+  $('btnPickAdd').onclick = addBoard;
+  $('btnPickRefresh').onclick = pickRefresh;
+  $('btnPickCancel').onclick = closePicker;
+  $('boardPicker').addEventListener('close', () => pickGen++); // Escape
+  $('boardPicker').addEventListener('click', (e) => { // backdrop clicks land on the dialog too, outside its box
+    const r = $('boardPicker').getBoundingClientRect();
+    if (e.target === $('boardPicker') && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) closePicker();
+  });
   $('btnDisconnect').onclick = () => { stopReconnect(); disconnect(); };
   $('btnIdentify').onclick = guard(async () => { await call('identify'); toast('LED strobing for 6 s.'); });
 
@@ -1737,10 +1907,14 @@ function init() {
     download(`gatelink-${role}-log-${stamp}.txt`, logLines.join('\n'), 'text/plain');
   };
 
-  navigator.serial?.addEventListener('disconnect', (e) => { if (e.target === port) connectionLost(); });
+  navigator.serial?.addEventListener('disconnect', (e) => {
+    if ($('boardPicker').open) pickRefreshSoon();
+    if (e.target === port) connectionLost();
+  });
   // A granted port reappearing while we're waiting for a reboot is the board coming back (the other
   // board never left, so it can't fire this).
   navigator.serial?.addEventListener('connect', (e) => {
+    if ($('boardPicker').open) pickRefreshSoon();
     if (!reconnectUntil || port || isBootPort(e.target)) return;
     lastPort = e.target;
     tryReconnect(lastPort);

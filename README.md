@@ -100,7 +100,9 @@ defaults** in the web console (`config.reset`) erases the saved config and key.
 
 Hosted at **https://ccirone2.github.io/LoRa-GateLink/** (deployed from `web/` by GitHub Actions on push to `main`).
 To run it locally, serve `web/` over `http://localhost` (`python -m http.server 8000 -d web`). It needs desktop
-Chrome or Edge (Web Serial). Click **Connect board** and pick the board's COM port.
+Chrome or Edge (Web Serial). Click **Connect board** and pick the board's COM port. Once a
+board has been granted, **Connect board** lists the granted boards by role ("LoRa GateLink – House"), with an
+**Identify** button to strobe a board's LED; **Add board…** opens Chrome's port chooser for a new one.
 
 The console uses generic names so it isn't tied to one product: the house-side device is the **controller**
 (here the Shelly: *controller input* = IN1, *controller sync* = K1, `ctrl_sync`), and K2 drives the **contact sensor**.

@@ -25,6 +25,11 @@ once its fix is merged and record it in the pull request.
   doubling gaps (about 0.3, 0.9, 2.2, 4.7 and 9.7 s at the defaults), so after a ~4.7 s outage only the last
   retry is left and one lost frame drops the command. Decide whether to raise the default `retries` or change
   the spacing once the install-site RF numbers are in.
+- [ ] **USB stalls cut console lines.** In the 120-minute soak on 0.4.1, 13 replies (11 house, 2 gate) were cut
+  off at 192, 256 or 320 bytes: the host stopped taking IN packets for over 70 ms and the SAMD core dropped the
+  rest of the line. Since 0.4.1 only that line is lost (the suite retries), but the web console and
+  `tools/gatelink.py` see a timed-out request. Unknown whether the host (Windows usbser, pyserial) or the board
+  is to blame. To check: count cut lines with only one board connected, and with the radio idle.
 
 ## Bench and field tests
 
@@ -34,8 +39,6 @@ once its fix is merged and record it in the pull request.
 - [ ] **Real RF.** `test_rf.py` (`-m rf`) passes at the bench with antennas on: SF12, 2 dBm, 3 cycles. Still to
   do: run it with an attenuator or the antennas off, and at the install site, and check ping/RSSI there from the
   web console.
-- [ ] **Long soak.** A 15-minute smoke run passed (43 scenarios, no resets, radio faults or replays). Still to do:
-  `pytest tests/e2e -m longsoak --soak-minutes 120` (or longer); check `soak_counters.csv` for drift.
 - [ ] **Full power on a real supply.** Bench boards run at `tx_power` 5 on USB because 17 dBm with a relay
   energized caused watchdog resets. Verify 17 dBm is stable on the install supplies (24 V→5 V buck at the gate,
   and the house supply), with the antenna placed away from the relay shield.

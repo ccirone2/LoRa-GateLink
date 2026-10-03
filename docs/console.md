@@ -7,6 +7,10 @@ Each board speaks newline-delimited JSON over USB serial (115200 baud). The web 
 Only one program can hold the port: disconnect the web console before scripting. The firmware writes only while
 DTR is asserted (pyserial does that by default).
 
+If the host stops reading for more than 70 ms mid-line, the SAMD USB core drops the rest of that line. The
+firmware then starts its next line with an extra newline, so a client sees one cut line (not valid JSON; skip it)
+and then an empty line. Clients should ignore both and time out the request the cut line belonged to.
+
 ## Requests
 
 A request is `{"id": <int>, "cmd": "<name>", ...}`; the reply echoes the id: `{"id": <int>, "ok": true|false, ...}`,

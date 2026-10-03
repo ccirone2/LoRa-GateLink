@@ -10,8 +10,11 @@
   --warn: #9a6700;
   --warn-bg: #fff8c5;
   --bad: #cf222e;
+  /* Here/peer pass the dataviz palette checks (CVD, contrast) on both surfaces; heat = the problem strip's hue. */
   --chart-here: #1f6feb;
-  --chart-peer: #bf5af2;
+  --chart-peer: #eb6834;
+  --chart-heat: #4a3aa7;
+  --chart-axis: #b9c0c8;
   --wire-out: #bc4c00;
   --wire-in: #1f6feb;
   --wire-pwr: #cf222e;
@@ -31,7 +34,9 @@
     --warn-bg: #2d2511;
     --bad: #f85149;
     --chart-here: #4c8dff;
-    --chart-peer: #d68bff;
+    --chart-peer: #d95926;
+    --chart-heat: #9085e9;
+    --chart-axis: #46505c;
     --wire-out: #f0883e;
     --wire-in: #4c8dff;
     --wire-pwr: #f85149;
@@ -131,6 +136,51 @@ body.offline #tab-status .grid { opacity: .55; }
 .sw { display: inline-block; width: 12px; height: 3px; border-radius: 2px; }
 .sw.here { background: var(--chart-here); }
 .sw.peer { background: var(--chart-peer); }
+
+/* Link history (Tools tab) */
+.card.wide { grid-column: 1 / -1; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 4px 0 10px; }
+.tile { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.tile .t-label { font-size: 12px; color: var(--muted); }
+.tile .t-value { font-size: 22px; font-weight: 600; line-height: 1.3; }
+.tile .t-sub { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.sw.line { height: 2px; }
+.sw.band { height: 10px; opacity: .25; background: var(--muted); }
+.sw.heat { height: 10px; background: var(--chart-heat); }
+.hist-plot { position: relative; margin-top: 6px; transition: opacity .15s; }
+.hist-plot.loading { opacity: .5; }
+#histChart { display: block; width: 100%; touch-action: pan-y; }
+#histChart:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+#histChart text { fill: var(--muted); font: 11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; }
+#histChart text.ptitle { fill: var(--text); font-size: 12px; font-weight: 600; }
+#histChart .grid { stroke: var(--border); stroke-width: 1; }
+#histChart .zero { stroke: var(--chart-axis); stroke-width: 1; }
+#histChart .ln { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+#histChart .ln.here { stroke: var(--chart-here); }
+#histChart .ln.peer { stroke: var(--chart-peer); }
+#histChart .band { stroke: none; opacity: .12; }
+#histChart .band.here, #histChart .dot.here { fill: var(--chart-here); }
+#histChart .band.peer, #histChart .dot.peer { fill: var(--chart-peer); }
+#histChart .dot { stroke: var(--surface); stroke-width: 2; }
+#histChart .track { fill: var(--bg); }
+#histChart .cross { stroke: var(--muted); stroke-width: 1; }
+#histChart .hit { fill: transparent; }
+.hist-tip {
+  position: absolute; top: 0; z-index: 2; pointer-events: none; min-width: 190px; padding: 8px 10px; font-size: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+}
+.hist-tip .tt { font-weight: 600; margin-bottom: 2px; }
+.hist-tip .sec { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+.hist-tip .r { display: flex; align-items: center; gap: 6px; }
+.hist-tip .r b { min-width: 72px; text-align: right; font-variant-numeric: tabular-nums; }
+.hist-tip .r span:last-child { color: var(--muted); }
+.hist-tip .key { display: inline-block; width: 12px; height: 2px; border-radius: 1px; background: var(--muted); }
+.hist-tip .key:not(.here):not(.peer) { visibility: hidden; }
+.hist-tip .key.here { background: var(--chart-here); }
+.hist-tip .key.peer { background: var(--chart-peer); }
+.hist-table { margin-top: 10px; }
+.hist-table summary { cursor: pointer; color: var(--muted); }
+.hist-table td, .hist-table th { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 .log { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; height: 60vh; overflow: auto; font-size: 12px; }

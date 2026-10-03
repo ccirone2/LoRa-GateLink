@@ -93,6 +93,16 @@ reboot from the console, or if the board drops off USB, the page reconnects to i
 (no re-pairing); **Disconnect** releases the port so `arduino-cli upload` can use it. The browser tab
 title shows the board's role.
 
+**Tools → Link history** charts the board's hourly link record (firmware 0.4.0+, up to four days since its
+boot):
+- received signal and SNR margin above the spreading factor's limit, with the house board also showing what the
+  gate received;
+- the noise floor;
+- a strip of resends, give-ups, CRC errors and link-down time.
+
+Summary figures above the chart give link-up %, worst SNR margin, resend rate and messages lost. Hover the
+chart or use the arrow keys to read an hour. There is also a table view and CSV download.
+
 Tabs: **Status** (gate, link quality, I/O incl. opener power and spare inputs, house bridge state, board uptime,
 last reset cause, radio TX faults), **Config** (all parameters, with toggle switches for on/off settings;
 apply/save, export/import JSON), **Security** (generate and write the link key), **Tools** (relay tests, ping with

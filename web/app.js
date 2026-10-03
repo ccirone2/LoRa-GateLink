@@ -1230,7 +1230,10 @@ class SamBa {
       }
       if (this.ended) throw new Error(`${what}: the board went away`);
       const left = until - Date.now();
-      if (left <= 0) throw new Error(`${what}: no answer from the bootloader`);
+      if (left <= 0) {
+        const got = this.buf.length ? ` (got ${JSON.stringify(new TextDecoder('latin1').decode(this.buf.subarray(0, 32)))})` : '';
+        throw new Error(`${what}: no answer from the bootloader${got}.`);
+      }
       await new Promise((r) => { this.wake = r; setTimeout(r, left); });
       this.wake = null;
     }
@@ -1257,14 +1260,19 @@ class SamBa {
     if (r !== 'X') throw new Error(`erase: unexpected reply "${r}"`);
   }
 
-  // Stage bytes in RAM, then copy them to flash. The data must be a separate USB write from its S command
-  // (the bootloader mishandles both in one packet; bossac flushes in between for the same reason).
+  // Stage bytes in RAM, then copy them to flash. The data must reach the board as separate USB transfers
+  // from its S command and from the next command (the bootloader mishandles them sharing packets; bossac
+  // flushes in between). Web Serial's write() resolves once the bytes are queued, not sent, so back-to-back
+  // writes can merge: wait for each to drain.
   async program(dst, data) {
+    const at = `write at 0x${hex8(dst)}`;
     await this.write(`S${hex8(RAM_BUF)},${hex8(data.length)}#`);
-    await this.write(data);
-    let r = await this.cmd(`Y${hex8(RAM_BUF)},0#`, 'write');
-    if (r === 'Y') r = await this.cmd(`Y${hex8(dst)},${hex8(data.length)}#`, 'write', 5000);
-    if (r !== 'Y') throw new Error(`write at 0x${hex8(dst)}: unexpected reply "${r}"`);
+    await sleep(20);
+    await this.write(data.slice()); // own buffer: the caller's view is reused
+    await sleep(30);
+    let r = await this.cmd(`Y${hex8(RAM_BUF)},0#`, at);
+    if (r === 'Y') r = await this.cmd(`Y${hex8(dst)},${hex8(data.length)}#`, at, 5000);
+    if (r !== 'Y') throw new Error(`${at}: unexpected reply "${r}"`);
   }
 
   async crc(addr, len) {

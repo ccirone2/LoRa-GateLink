@@ -241,6 +241,17 @@
     </section>
   </main>
 
+  <dialog id="boardPicker" aria-labelledby="pickTitle">
+    <div class="label" id="pickTitle">Connect a board</div>
+    <ul id="pickList" class="pick-list"></ul>
+    <div class="row">
+      <button id="btnPickAdd" title="Give this page access to another board (Chrome's port chooser)">Add board…</button>
+      <span class="spacer"></span>
+      <button id="btnPickRefresh">Refresh</button>
+      <button id="btnPickCancel">Cancel</button>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite" title="Click to dismiss"></div>
 
   <script src="app.js"></script>

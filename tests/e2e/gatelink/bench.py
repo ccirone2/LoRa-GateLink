@@ -18,6 +18,8 @@ RES_OK, RES_ALREADY, RES_BAD, RES_BUSY, RES_NO_POWER = 0, 1, 2, 3, 4
 
 SIM_TRAVEL_S = 8
 SIM_DEBOUNCE_MS = 20  # GateSim SENSE_DEBOUNCE_MS
+# A status poll inside a wait: replies take ~0.1 s, so a lost one (a USB stall cut the line) mustn't use up the wait.
+WAIT_STATUS_S = 1.5
 PULSE_TOL_MS = 60  # measured pulse vs requested: relay operate/release and loop timing on both ends
 # Same order of timings as the defaults (heartbeat < link timeout, travel timeout < mismatch timeout), shorter.
 # The rest are the firmware defaults (config.cpp), pinned because scenarios rely on them: the limit-chatter test
@@ -141,7 +143,7 @@ class Bench:
     def wait_house(self, timeout=20, what=None, **fields):
         """Wait for house status fields (nested with __, e.g. io__k1=True). Returns the matching status."""
         def ok():
-            st = self.house.status()
+            st = self.house.status(timeout=WAIT_STATUS_S)
             return st if all(_get(st, k) == v for k, v in fields.items()) else None
         return self.wait_for(ok, timeout, what or f"house {fields}")
 
@@ -149,7 +151,7 @@ class Bench:
         want = {"gate": state, **({"cause": cause} if cause else {}), **fields}
 
         def ok():
-            st = self.gate.status()
+            st = self.gate.status(timeout=WAIT_STATUS_S)
             return st if all(_get(st, k) == v for k, v in want.items()) else None
         return self.wait_for(ok, timeout, f"gate {want}")
 

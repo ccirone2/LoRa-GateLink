@@ -82,6 +82,14 @@ class Board:
             msg = json.loads(line)
         except ValueError:
             msg = None
+        if msg is None:
+            # A line cut short by a USB stall (no newline; firmware before 0.4.1) runs into the next one: keep the
+            # whole line that follows it.
+            start = max(line.rfind('{"id":'), line.rfind('{"event":'))
+            if start > 0:
+                self.timeline.add(self.name, "raw", line=line[:start])
+                self._handle_line(line[start:])
+                return
         if not isinstance(msg, dict):
             self.timeline.add(self.name, "raw", line=line)
             return
@@ -171,8 +179,8 @@ class Board:
     def info(self):
         return self.request("info")
 
-    def status(self):
-        return self.request("status")["status"]
+    def status(self, timeout=3.0):
+        return self.request("status", timeout=timeout)["status"]
 
     def config_get(self):
         return self.request("config.get")["params"]

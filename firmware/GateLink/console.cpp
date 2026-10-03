@@ -13,18 +13,27 @@ static bool overflow = false;
 
 // One USB write per line: serialized straight to Serial, every character was its own USB transfer, and with the
 // radio transmitting asynchronously single bytes went missing on the bench (lines like `{"event":"lo",...`).
+// If the host doesn't take a USB packet within 70 ms, the core drops the rest of the write (send() returns -1,
+// which Serial.write passes on as a huge count). The cut line has no newline, so the next line would run into it
+// and be lost too: start the next one with a newline instead, so the host discards only the cut line.
+static bool lineCut = false;
+
 static void send(JsonDocument &doc) {
   if (!Serial.dtr()) return;  // not Serial's bool operator: it delays 10 ms
   static char out[4096];
   size_t n = measureJson(doc);
-  if (n + 1 > sizeof(out)) {  // doesn't fit: stream it
+  if (n + 2 > sizeof(out)) {  // doesn't fit: stream it
+    if (lineCut) Serial.write('\n');
     serializeJson(doc, Serial);
-    Serial.write('\n');
+    lineCut = Serial.write('\n') != 1;
     return;
   }
-  serializeJson(doc, out, sizeof(out));
+  size_t start = lineCut ? 1 : 0;
+  out[0] = '\n';
+  serializeJson(doc, out + start, sizeof(out) - start);
+  n += start;
   out[n++] = '\n';
-  Serial.write((const uint8_t *)out, n);
+  lineCut = Serial.write((const uint8_t *)out, n) != n;
 }
 
 static int hexVal(char c) {

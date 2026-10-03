@@ -35,7 +35,10 @@ once its fix is merged and record it in the pull request.
   do: run it with an attenuator or the antennas off, and at the install site, and check ping/RSSI there from the
   web console.
 - [ ] **Long soak.** A 15-minute smoke run passed (43 scenarios, no resets, radio faults or replays). Still to do:
-  `pytest tests/e2e -m longsoak --soak-minutes 120` (or longer); check `soak_counters.csv` for drift.
+  `pytest tests/e2e -m longsoak --soak-minutes 120` (or longer); check `soak_counters.csv` for drift. The
+  120-minute run on 2026-10-02 stopped after 18 minutes (51 scenarios). The link and gate were fine: no resets,
+  radio faults, lbt_forced or new replays. It stopped because a USB stall cut off a house console reply
+  and the next reply ran into it (fixed in 0.4.1).
 - [ ] **Full power on a real supply.** Bench boards run at `tx_power` 5 on USB because 17 dBm with a relay
   energized caused watchdog resets. Verify 17 dBm is stable on the install supplies (24 V→5 V buck at the gate,
   and the house supply), with the antenna placed away from the relay shield.

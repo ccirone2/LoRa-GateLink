@@ -16,11 +16,17 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 #define ST_RESULT 3
 #define ST_CMD_ID 4   // u16
 #define ST_UPTIME 6   // u32 seconds
-#define ST_RSSI 10    // i16, RSSI at gate of last frame from house
+#define ST_RSSI 10    // i16, RSSI at gate of last frame from house (0 = none yet)
 #define ST_SNR 12     // i8
 #define ST_TARGET 13
 #define ST_HEARTBEAT 14  // u16, gate heartbeat_s: the house's link timeout must cover it
-#define ST_LEN 16
+#define ST_LEN_V1 16     // up to 0.3.x; the fields below were added in 0.4.0
+#define ST_RETRIES 16    // u16, gate link retries (running total, low 16 bits; resets when its link restarts)
+#define ST_GIVEUPS 18    // u16, gate link giveups (same)
+#define ST_CRC 20        // u16, CRC errors at the gate radio (same)
+#define ST_NOISE 22      // i8, gate noise floor since its previous STATUS, dBm (0 = no sample)
+#define ST_NOISE_MAX 23  // i8, its peak
+#define ST_LEN 24
 
 extern Input in1, in2, in3, in4;
 extern Relay k1, k2;

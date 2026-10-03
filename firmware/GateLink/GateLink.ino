@@ -14,6 +14,7 @@
 #include "roles.h"
 #include "console.h"
 #include "app.h"
+#include "history.h"
 
 Input in1, in2, in3, in4;
 static uint8_t resetCause = 0;  // PM->RCAUSE at boot
@@ -93,6 +94,19 @@ void appRelayTest(uint8_t k, uint32_t ms) {
   else if (activeRole == ROLE_GATE) gateRelayTest(k, ms);
 }
 
+// Gap between the heap's high-water mark and the stack: what's left for the deepest stack and a bigger reply.
+extern "C" char *sbrk(int incr);
+static uint32_t freeRam() {
+  char top;
+  return &top - sbrk(0);
+}
+
+bool appLinkUp(uint32_t now) {
+  const LinkStats &st = linkStats();
+  uint32_t timeout = activeRole == ROLE_HOUSE ? houseLinkTimeoutMs() : (uint32_t)cfg.link_timeout_s * 1000;
+  return st.lastRxAt && !elapsed(now, st.lastRxAt, timeout);
+}
+
 void appFillStatus(JsonObject o) {
   uint32_t now = millis();
   o["fw"] = FW_VERSION;
@@ -104,6 +118,7 @@ void appFillStatus(JsonObject o) {
   o["reset_cause"] = resetCauseName(resetCause);
   o["cfg_loaded"] = cfgLoaded;
   o["key_set"] = (bool)cfg.key_set;
+  o["free_ram"] = freeRam();
   JsonObject io = o["io"].to<JsonObject>();
   io["in1"] = in1.active();
   io["in2"] = in2.active();
@@ -126,6 +141,10 @@ void appFillStatus(JsonObject o) {
   l["sessions"] = st.sessions;
   l["lbt_defers"] = st.lbtDefers;
   l["lbt_forced"] = st.lbtForced;
+  l["crc_err"] = radioCrcErrors();
+  int16_t noise = histNoiseNow();
+  if (noise == NOISE_NONE) l["noise"] = nullptr;
+  else l["noise"] = noise;
   if (activeRole == ROLE_HOUSE) houseStatus(o);
   else if (activeRole == ROLE_GATE) gateStatus(o);
 }
@@ -165,9 +184,7 @@ static void updateLed(uint32_t now) {
   } else if (activeRole == ROLE_UNSET) {
     level = 255;
   } else {
-    const LinkStats &st = linkStats();
-    uint32_t timeout = activeRole == ROLE_HOUSE ? houseLinkTimeoutMs() : (uint32_t)cfg.link_timeout_s * 1000;
-    bool up = st.lastRxAt && !elapsed(now, st.lastRxAt, timeout);
+    bool up = appLinkUp(now);
     // Kept dim so neither reads as the solid "no role" light, and never fully dark between pulses.
     const uint8_t floorLevel = 2;
     if (up) {
@@ -198,6 +215,7 @@ void setup() {
   in3.begin(PIN_IN3, cfg.in3_invert);
   in4.begin(PIN_IN4, cfg.in4_invert);
   logEvent(EV_BOOT, resetCause, activeRole);
+  histBegin();
 
   if (activeRole != ROLE_UNSET) {
     appRestartRadio();
@@ -217,6 +235,7 @@ void loop() {
     linkPoll(now);
     if (activeRole == ROLE_HOUSE) houseLoop(now);
     else gateLoop(now);
+    histPoll(now, appLinkUp(now));
   }
   updateLed(now);
 }

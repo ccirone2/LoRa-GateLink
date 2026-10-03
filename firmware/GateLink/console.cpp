@@ -3,6 +3,7 @@
 #include "config.h"
 #include "link.h"
 #include "roles.h"
+#include "history.h"
 
 #define LINE_MAX 1024  // a config.set with every param fits (a full import after a firmware upload)
 
@@ -163,6 +164,13 @@ static void handle(JsonDocument &req) {
       e["b"] = entries[i].b;
     }
     res["now"] = millis();
+  } else if (!strcmp(cmd, "hist.get")) {
+    histGet(res.as<JsonObject>(), req["from"] | -1, req["n"] | HIST_PAGE);
+  } else if (!strcmp(cmd, "hist.clear")) {
+    if (!histClear(req["period_s"] | histPeriod())) {
+      res["ok"] = false;
+      res["error"] = "period_s must be 60..3600";
+    }
   } else if (!strcmp(cmd, "reboot")) {
     send(res);
     Serial.flush();

@@ -58,6 +58,7 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
 | `test_controller_faults.py` | Controller toggled while unpowered. Relay dropping before the power sense. Controller coming back at the wrong level. Rapid toggling |
 | `test_options.py` | Gate relay test on a closed gate (our move, house follows) and at the open limit (no target: a local close right after is external). `power_sense` 0 (IN3 ignored), `linkloss_open` 0 (K2 held through an outage), `sensor_invert` 1, `ctrl_sync` 0 |
 | `test_remote.py` | `remote.set` over LoRa (applied, saved by the gate, put back), refused for non-remote params, `busy` while one is pending. `remote.diag`. A gate heartbeat longer than the house's `link_timeout_s` (house `link_timeout_eff_s`). The console's `line too long` reply |
+| `test_history.py` | Link history: bucket counters against the status totals, levels and the gate's side filled in. Rollover with 60 s buckets, and `hist.get` paging. Link-down seconds and the gate's STATUS retries across an outage |
 | `test_soak.py` | `-m longsoak`: open/close cycles, outages, opener power blips, external moves and jams in rotation; no resets or radio faults; counters to `soak_counters.csv` |
 | `test_rf.py` | `-m rf`: the full loop over a marginal link (minimum power, SF12) |
 

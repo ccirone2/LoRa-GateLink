@@ -12,8 +12,15 @@ once its fix is merged and record it in the pull request.
 - [ ] **The house still misses ~2–3 % of pongs at SF9.** Only the house board has shown CRC errors, and moving
   the channel to 903 or 925 MHz made no difference. Ruled out on the bench: turnaround length, USB activity, the
   LED PWM. Suspect: the bench Shelly's Z-Wave radio (916 MHz, centimetres away) blocking the house receiver in
-  bursts. Check with the Shelly moved away, and at the install site (`-m rf`). To debug RX, read the SX127x
-  packet/header counters (0x14–0x17) with `readReg()` in `radio.cpp`.
+  bursts. Since 0.4.0 the noise floor is measured (status `link.noise`, history `noise_avg`/`noise_max`), and
+  it fits. On the bench on 2026-10-02, 2 minutes of pings both ways gave:
+  - house: noise peaks of −56 dBm (stronger than the gate's frames at −66) and 3 CRC errors;
+  - gate: peaks of −95 dBm and no CRC errors;
+  - both: an average near −110 dBm.
+  In one test run that drove the Shelly through HA, the house averaged −94 dBm against −111 at the gate. That
+  was on a build that still counted frame starts as noise; a later run gave −110 at both. Check with the Shelly
+  moved away, comparing `tools/gatelink.py house hist` (`noise_max`, `crc_err`), and at the install site
+  (`-m rf`). To debug RX, read the SX127x packet/header counters (0x14–0x17) with `readReg()` in `radio.cpp`.
 - [ ] **Commands don't survive outages longer than ~4.7 s well.** Retries are spread over `cmd_ttl_s` with
   doubling gaps (about 0.3, 0.9, 2.2, 4.7 and 9.7 s at the defaults), so after a ~4.7 s outage only the last
   retry is left and one lost frame drops the command. Decide whether to raise the default `retries` or change

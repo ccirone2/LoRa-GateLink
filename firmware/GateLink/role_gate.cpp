@@ -6,6 +6,8 @@
 #include "roles.h"
 #include "config.h"
 #include "log.h"
+#include "radio.h"
+#include "history.h"
 
 #define STATUS_TTL_MS 10000
 
@@ -20,8 +22,6 @@ static uint16_t lastCmdId = 0;
 static uint8_t lastCmdAck = RES_OK;
 static uint32_t lastStatusAt = 0;
 static int32_t reportedHeartbeat = 0;  // heartbeat_s in our last STATUS
-static int16_t houseRssi = 0;
-static int8_t houseSnr = 0;
 static uint32_t seenSessions = 0;
 
 static uint8_t readState() {
@@ -43,10 +43,19 @@ static void sendStatus(uint32_t now) {
   p[ST_RESULT] = lastResult;
   putU16(p + ST_CMD_ID, lastCmdId);
   putU32(p + ST_UPTIME, now / 1000);
-  putU16(p + ST_RSSI, (uint16_t)houseRssi);
-  p[ST_SNR] = (uint8_t)houseSnr;
+  // Every authenticated frame from the house counts, ACKs included (most of what it sends).
+  const LinkStats &st = linkStats();
+  putU16(p + ST_RSSI, st.lastRxAt ? (uint16_t)st.lastRssi : 0);
+  p[ST_SNR] = st.lastRxAt ? (uint8_t)(int8_t)st.lastSnr : 0;
   p[ST_TARGET] = target;
   putU16(p + ST_HEARTBEAT, cfg.heartbeat_s);
+  putU16(p + ST_RETRIES, (uint16_t)st.retries);
+  putU16(p + ST_GIVEUPS, (uint16_t)st.giveups);
+  putU16(p + ST_CRC, (uint16_t)radioCrcErrors());
+  int8_t noise, noiseMax;
+  histNoiseTake(noise, noiseMax);
+  p[ST_NOISE] = (uint8_t)noise;
+  p[ST_NOISE_MAX] = (uint8_t)noiseMax;
   reportedHeartbeat = cfg.heartbeat_s;
   // Retries spread over the TTL: cap it so a lost status is retried within a fraction of a second even with a
   // long heartbeat (the next heartbeat supersedes it anyway).
@@ -222,8 +231,6 @@ static void sendDiag() {
 
 void gateOnRx(const RxMsg &m) {
   uint32_t now = millis();
-  houseRssi = m.rssi;
-  houseSnr = (int8_t)m.snr;
   switch (m.type) {
     case MSG_CMD: handleCmd(m, now); break;
     case MSG_CFG_SET: handleCfgSet(m); break;

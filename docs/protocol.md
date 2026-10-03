@@ -45,3 +45,9 @@ and then fails its contact sensor open (`linkloss_open`).
 
 STATUS and DIAG payload layouts are defined in `firmware/GateLink/roles.h` and parsed in `role_house.cpp` and
 `console.cpp`. A change to them needs both boards updated together; say so in the release notes.
+
+Since 0.4.0, STATUS is 24 bytes: the gate also reports its link retries, giveups and CRC errors (running totals,
+low 16 bits) and its noise floor since the previous STATUS (average and peak). The house uses them for the link
+history and still accepts the 16-byte STATUS of 0.3.x gates (without those). The RSSI/SNR in STATUS are now
+those of the gate's last authenticated frame from the house, ACKs included (before, only commands, config writes
+and diagnostics requests updated them).

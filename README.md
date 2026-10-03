@@ -88,6 +88,7 @@ arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 firmware/GateLink   #
 ```
 
 Or flash a release binary: `arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COM5 --input-file GateLink-v0.3.5.bin`.
+Without any tools, use the web console's **Tools → Firmware update** (below).
 
 Flash the same firmware to both boards. From 0.5.0 the config and key are kept in the board's SPI flash chip
 and **survive firmware uploads**; settings a new firmware doesn't know are dropped and new ones take their
@@ -108,6 +109,14 @@ Header: **Identify** strobes the connected board's LED for 6 s, to tell boards a
 reboot from the console, or if the board drops off USB, the page reconnects to it automatically for 30 s
 (no re-pairing); **Disconnect** releases the port so `arduino-cli upload` can use it. The browser tab
 title shows the board's role.
+
+**Tools → Firmware update** flashes a board from the browser: **Install** the latest release (the page
+carries its `.bin`) or pick a `.bin` file. The page restarts the board into its bootloader and writes, verifies
+and restarts it, then reconnects and checks it kept its role and key. The first time on a computer the browser
+asks for the bootloader's port (a separate USB device) once. A board already in its bootloader (reset pressed
+twice; the LED fades in and out), for example after an interrupted update, can be flashed without connecting
+first. The page refuses files that aren't GateLink firmware for this board; files from before 0.5.1 (no version
+marker) need a confirm.
 
 **Tools → Link history** charts the board's hourly link record (firmware 0.4.0+, up to four days since its
 boot):

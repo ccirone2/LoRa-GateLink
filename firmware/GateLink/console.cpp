@@ -78,7 +78,7 @@ static void handle(JsonDocument &req) {
   const char *cmd = req["cmd"] | "";
 
   if (!strcmp(cmd, "info")) {
-    res["fw"] = FW_VERSION;
+    res["fw"] = fwVersion();
     res["board"] = "MKR WAN 1310";
     res["role"] = roleName(activeRole);
     res["saved_role"] = roleName(cfg.role);

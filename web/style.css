@@ -111,6 +111,7 @@ body.offline #tab-status .grid { opacity: .55; }
 .gate-state.fault, .gate-state.unknown, .gate-state.no_power { color: var(--bad); }
 .good { color: var(--ok); }
 .bad { color: var(--bad); }
+progress { width: 100%; height: 8px; accent-color: var(--accent); }
 
 .pill { display: inline-block; min-width: 38px; text-align: center; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); }
 .pill.on { background: var(--ok); color: var(--surface); border-color: var(--ok); }

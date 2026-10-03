@@ -79,7 +79,16 @@ After the pull request carrying a new `FW_VERSION` is merged (`/release` in Clau
    ```sh
    gh release create vX.Y.Z --target main --title "vX.Y.Z — <one-line summary>" --notes-file notes.md
    ```
-2. The `release` workflow builds the firmware at the tag and attaches `GateLink-vX.Y.Z.bin`.
+2. The `release` workflow builds the firmware at the tag and attaches `GateLink-vX.Y.Z.bin`. When it succeeds the
+   `pages` workflow redeploys the web console with that `.bin` and a `firmware/latest.json` (version, file,
+   sha256, size) bundled in (the page can't fetch release assets from github.com: no CORS), so **Tools →
+   Firmware update** offers it. They are never committed (`web/firmware/` is ignored).
+
+The web console flashes over Web Serial by speaking the Arduino SAM-BA bootloader protocol itself (`SamBa` in
+`web/app.js`): a 1200-baud open/close resets the board into the bootloader (USB PID 0x0059, a separate port
+grant), then erase from 0x2000 (`X`), 4 KB chunks staged in RAM and written (`S` + `Y`), CRC-16 check (`Z`)
+and a reset. It recognises GateLink images by the `GATELINK_FW=x.y.z` marker (`FW_MARKER`, `config.cpp`; the
+version reported by `info`/`status` is read from it so the linker keeps it).
 
 Release notes template:
 

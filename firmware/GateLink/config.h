@@ -1,7 +1,12 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.5.0"
+#define FW_VERSION "0.5.1"
+#define FW_MARKER_PREFIX "GATELINK_FW="
+// FW_MARKER_PREFIX FW_VERSION: the web console looks for it in a .bin to check the file is GateLink and
+// read its version. The version is reported from it (fwVersion()) so the linker keeps it in the image.
+extern const char FW_MARKER[];
+inline const char *fwVersion() { return FW_MARKER + sizeof(FW_MARKER_PREFIX) - 1; }
 
 enum Role : uint8_t { ROLE_UNSET = 0, ROLE_HOUSE = 1, ROLE_GATE = 2 };
 

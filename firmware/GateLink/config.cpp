@@ -12,6 +12,7 @@
 #define CFG_MAGIC 0x47544C4Bu  // "GTLK"
 #define CFG_VERSION 4
 
+const char FW_MARKER[] = FW_MARKER_PREFIX FW_VERSION;
 Config cfg;
 int32_t activeRole = ROLE_UNSET;
 FlashStorage(cfgStore, Config);

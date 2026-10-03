@@ -8,3 +8,6 @@ build/
 tests/e2e/results/
 __pycache__/
 .pytest_cache/
+
+# Bundled into the Pages deploy from the latest release
+web/firmware/

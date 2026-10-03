@@ -219,6 +219,10 @@ async function connect() {
     if (e.name !== 'NotFoundError') toast(`Connect failed: ${e.message}`, 'err'); // NotFoundError = chooser cancelled
     return;
   }
+  if (isBootPort(p)) {
+    toast('That board is in its bootloader, waiting for firmware: flash it from Tools → Firmware update, or press its reset button once.', 'err');
+    return;
+  }
   try {
     await openPort(p);
   } catch (e) {
@@ -258,8 +262,8 @@ async function openPort(p) {
   pollTimer = setInterval(pollStatus, 2000);
 }
 
+// Without a lastPort (an update started from the bootloader) only the connect event can find the board.
 function startReconnect() {
-  if (!lastPort) return;
   reconnectUntil = Date.now() + RECONNECT_MS;
   $('devline').textContent = 'reconnecting…';
   clearInterval(reconnectTimer);
@@ -280,6 +284,7 @@ async function tryReconnect(p) {
     toast('The board didn’t come back within 30 s. Click Connect board.', 'err');
     return;
   }
+  if (!p) return;
   try {
     await openPort(p);
     stopReconnect();
@@ -381,7 +386,7 @@ async function call(cmd, args) {
 
 // ---------- UI state ----------
 // Controls that work without a board.
-const OFFLINE_OK = ['logRaw', 'btnLogClear', 'btnLogSave', 'keyInput', 'btnKeyGen', 'btnKeyCopy'];
+const OFFLINE_OK = ['logRaw', 'btnLogClear', 'btnLogSave', 'keyInput', 'btnKeyGen', 'btnKeyCopy', 'btnFwLatest', 'fwFile', 'btnBootPort'];
 
 function setConnected(on) {
   $('btnConnect').hidden = on;
@@ -397,6 +402,8 @@ function setConnected(on) {
   if (!on) clearHistoryView(); // another board (or this one after a reset) has a different record
   $('btnHistCsv').disabled = !hist?.buckets.length;
   if (!on) {
+    boardInfo = null;
+    updateFwCard();
     $('devline').textContent = 'not connected';
     $('keyWarn').hidden = true;
     document.title = 'GateLink Console';
@@ -420,6 +427,9 @@ function applyRole(r) {
 
 async function refreshInfo() {
   const info = await call('info');
+  boardInfo = info;
+  updateFwCard();
+  if (flashCheck) reportFlash(info);
   devline = `${info.board} · fw ${info.fw} · ${info.role}`;
   $('devline').textContent = devline;
   keySet = !!info.key_set;
@@ -455,6 +465,7 @@ async function refreshStatus() {
 // like a disconnect, and the header says so, so stale values don't read as live.
 let pollMisses = 0;
 let devline = '';
+let boardInfo = null; // last info reply
 async function pollStatus() {
   try {
     await refreshStatus();
@@ -1102,6 +1113,353 @@ async function relayTest(k) {
   toast(`K${k} pulsed for ${ms} ms.`);
 }
 
+// ---------- Firmware update ----------
+// The board's Arduino bootloader (SAM-BA with the Arduino X/Y/Z extensions, what bossac talks to) is
+// driven over Web Serial. A 1200-baud open/close makes the running firmware reset into it; it then
+// enumerates as a different USB device (PID 0x0059), which needs its own one-time port grant. Config and
+// key live in the SPI flash chip (0.5.0 on), which the bootloader never touches. A failed or interrupted
+// update leaves the application erased, so the bootloader stays in charge and flashing again finishes it.
+const USB_VID = 0x2341;
+const BOOT_PID = 0x0059;
+const APP_START = 0x2000; // after the 8 KB bootloader
+const APP_MAX = 0x40000 - APP_START;
+const RAM_BUF = 0x20005000; // bootloader's free RAM, staged here before each flash write
+const CHUNK = 4096;
+const FW_MARKER = 'GATELINK_FW='; // config.h FW_MARKER_PREFIX; firmware 0.5.1 on
+
+let flashing = false;
+let latestFw = null; // firmware/latest.json, written by the Pages deploy from the latest release
+let bootPick = null; // { resolve, reject } while waiting for the user to grant the bootloader port
+let flashCheck = null; // what the board should report once it's back on new firmware
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const hex8 = (n) => n.toString(16).toUpperCase().padStart(8, '0');
+const isBootPort = (p) => {
+  const i = p.getInfo();
+  return i.usbVendorId === USB_VID && i.usbProductId === BOOT_PID;
+};
+
+function cmpVer(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  return 0;
+}
+
+// CRC-16/XMODEM, as the bootloader's Z command computes it.
+function crc16(bytes) {
+  let crc = 0;
+  for (const b of bytes) {
+    crc ^= b << 8;
+    for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
+}
+
+// Checks a .bin is an application image for this board and finds its GateLink version marker.
+// Returns { bytes (padded to whole 64-byte flash pages), version or null }.
+function parseFirmware(buf, name) {
+  const raw = new Uint8Array(buf);
+  if (raw.length < 1024 || raw.length > APP_MAX) throw new Error(`${name}: ${raw.length} bytes is not a firmware image for this board.`);
+  const dv = new DataView(buf);
+  const sp = dv.getUint32(0, true);
+  const reset = dv.getUint32(4, true);
+  if (sp <= 0x20000000 || sp > 0x20008000 || !(reset & 1) || reset < APP_START || reset >= 0x40000) {
+    throw new Error(`${name} is not a firmware image for this board (a .bin built for the MKR WAN 1310 is needed, not .hex or .elf).`);
+  }
+  let version = null;
+  const text = new TextDecoder('latin1').decode(raw);
+  const at = text.indexOf(FW_MARKER);
+  if (at >= 0) version = /^[0-9]+\.[0-9]+\.[0-9]+/.exec(text.slice(at + FW_MARKER.length, at + FW_MARKER.length + 16))?.[0] || null;
+  const bytes = new Uint8Array(Math.ceil(raw.length / 64) * 64).fill(0xff);
+  bytes.set(raw);
+  return { bytes, version, name };
+}
+
+class SamBa {
+  constructor(p) {
+    this.port = p;
+    this.buf = new Uint8Array(0);
+    this.wake = null;
+    this.ended = false;
+  }
+
+  async open() {
+    await this.port.open({ baudRate: 115200 }); // USB CDC: the rate is ignored
+    this.writer = this.port.writable.getWriter();
+    this.reader = this.port.readable.getReader();
+    this.loop = (async () => {
+      try {
+        for (;;) {
+          const { value, done } = await this.reader.read();
+          if (done) break;
+          const b = new Uint8Array(this.buf.length + value.length);
+          b.set(this.buf);
+          b.set(value, this.buf.length);
+          this.buf = b;
+          this.wake?.();
+        }
+      } catch {}
+      this.ended = true;
+      this.wake?.();
+    })();
+  }
+
+  async close() {
+    try { await this.reader.cancel(); } catch {}
+    await this.loop;
+    try { this.reader.releaseLock(); } catch {}
+    try { this.writer.releaseLock(); } catch {}
+    await this.port.close().catch(() => {});
+  }
+
+  async write(data) {
+    await this.writer.write(typeof data === 'string' ? new TextEncoder().encode(data) : data);
+  }
+
+  // Replies end in "\n\r".
+  async reply(what, ms) {
+    const until = Date.now() + ms;
+    for (;;) {
+      for (let i = 1; i < this.buf.length; i++) {
+        if (this.buf[i - 1] === 10 && this.buf[i] === 13) {
+          const line = new TextDecoder('latin1').decode(this.buf.subarray(0, i - 1));
+          this.buf = this.buf.slice(i + 1);
+          return line;
+        }
+      }
+      if (this.ended) throw new Error(`${what}: the board went away`);
+      const left = until - Date.now();
+      if (left <= 0) throw new Error(`${what}: no answer from the bootloader`);
+      await new Promise((r) => { this.wake = r; setTimeout(r, left); });
+      this.wake = null;
+    }
+  }
+
+  async cmd(text, what, ms = 2000) {
+    await this.write(text);
+    return this.reply(what, ms);
+  }
+
+  // Binary mode, then the version line, which must advertise the Arduino extensions used here.
+  async hello() {
+    await this.write('N#');
+    await this.reply('N', 500).catch(() => {}); // only answered if the mode was already binary
+    this.buf = new Uint8Array(0);
+    const v = (await this.cmd('V#', 'version')).trim();
+    const ext = /\[Arduino:([A-Z]+)\]/.exec(v)?.[1] || '';
+    if (!['X', 'Y', 'Z'].every((c) => ext.includes(c))) throw new Error(`Unsupported bootloader: ${v}`);
+    return v;
+  }
+
+  async erase(addr) {
+    const r = await this.cmd(`X${hex8(addr)}#`, 'erase', 20000);
+    if (r !== 'X') throw new Error(`erase: unexpected reply "${r}"`);
+  }
+
+  // Stage bytes in RAM, then copy them to flash. The data must be a separate USB write from its S command
+  // (the bootloader mishandles both in one packet; bossac flushes in between for the same reason).
+  async program(dst, data) {
+    await this.write(`S${hex8(RAM_BUF)},${hex8(data.length)}#`);
+    await this.write(data);
+    let r = await this.cmd(`Y${hex8(RAM_BUF)},0#`, 'write');
+    if (r === 'Y') r = await this.cmd(`Y${hex8(dst)},${hex8(data.length)}#`, 'write', 5000);
+    if (r !== 'Y') throw new Error(`write at 0x${hex8(dst)}: unexpected reply "${r}"`);
+  }
+
+  async crc(addr, len) {
+    const r = await this.cmd(`Z${hex8(addr)},${hex8(len)}#`, 'verify', 10000);
+    const m = /^Z([0-9A-Fa-f]{8})#$/.exec(r);
+    if (!m) throw new Error(`verify: unexpected reply "${r}"`);
+    return parseInt(m[1], 16);
+  }
+
+  // SYSRESETREQ: the bootloader sees a valid application and starts it. No reply.
+  async reset() {
+    await this.write('WE000ED0C,05FA0004#');
+  }
+}
+
+function fwStep(text, cls = '') {
+  $('fwStep').textContent = text;
+  $('fwStep').className = `small ${cls || 'muted'}`;
+  if (text) logLine(`firmware: ${text}`, cls === 'bad' ? 'err' : '');
+}
+
+function setFlashing(on) {
+  flashing = on;
+  $('btnFwLatest').disabled = on;
+  $('fwFile').disabled = on;
+  $('btnConnect').disabled = on || !('serial' in navigator);
+  $('fwProgress').hidden = !on;
+  if (!on) $('fwBootRow').hidden = true;
+}
+
+function updateFwCard() {
+  $('fwBoard').textContent = boardInfo ? `${boardInfo.fw} (${boardInfo.role})` : '—';
+  if (!latestFw) return;
+  const newer = boardInfo && cmpVer(latestFw.version, boardInfo.fw) > 0;
+  $('fwLatest').textContent = `${latestFw.version}${newer ? ' · update available' : ''}`;
+  $('fwLatest').className = newer ? 'good' : '';
+}
+
+async function loadLatest() {
+  try {
+    const r = await fetch('firmware/latest.json', { cache: 'no-cache' });
+    if (!r.ok) return;
+    latestFw = await r.json();
+    $('btnFwLatest').textContent = `Install ${latestFw.version}`;
+    $('btnFwLatest').hidden = false;
+    updateFwCard();
+  } catch {} // served without the bundle (local copy): the file picker still works
+}
+
+async function installLatest() {
+  const r = await fetch(`firmware/${latestFw.file}`, { cache: 'no-cache' });
+  if (!r.ok) throw new Error(`Couldn't download ${latestFw.file} (${r.status}).`);
+  const buf = await r.arrayBuffer();
+  const sum = [...new Uint8Array(await crypto.subtle.digest('SHA-256', buf))].map((x) => x.toString(16).padStart(2, '0')).join('');
+  if (sum !== latestFw.sha256) throw new Error(`${latestFw.file} is damaged (checksum mismatch). Reload the page and try again.`);
+  await flashFirmware(parseFirmware(buf, latestFw.file));
+}
+
+async function flashFile(file) {
+  const fw = parseFirmware(await file.arrayBuffer(), file.name);
+  if (!fw.version && !confirm(`${file.name} has no GateLink version marker (firmware before 0.5.1 has none, other sketches neither). Flash it anyway?`)) return;
+  await flashFirmware(fw);
+}
+
+// Waits for the board to show up in its bootloader. Without a grant for that port (first time on this
+// computer) the browser can only offer its chooser from a click, so the user gets a button.
+async function findBootPort() {
+  for (const until = Date.now() + 5000; Date.now() < until; await sleep(300)) {
+    const p = (await navigator.serial.getPorts()).find(isBootPort);
+    if (p) return p;
+  }
+  fwStep('The board is in its bootloader. Click “Select bootloader port” and pick the board (once per computer).');
+  $('fwBootRow').hidden = false;
+  try {
+    return await new Promise((resolve, reject) => { bootPick = { resolve, reject }; });
+  } finally {
+    bootPick = null;
+    $('fwBootRow').hidden = true;
+  }
+}
+
+async function pickBootPort() {
+  try {
+    const p = await navigator.serial.requestPort({ filters: [{ usbVendorId: USB_VID, usbProductId: BOOT_PID }] });
+    bootPick?.resolve(p);
+  } catch (e) {
+    if (e.name === 'NotFoundError') {
+      bootPick?.reject(new Error('No bootloader port chosen. The board waits in its bootloader: flash again, or press its reset button once to run the old firmware.'));
+    } else bootPick?.reject(e);
+  }
+}
+
+async function flashFirmware(fw) {
+  if (flashing) return;
+  const label = fw.version ? `firmware ${fw.version}` : fw.name;
+  let target = port;
+  if (port) {
+    const info = boardInfo || {};
+    let msg = `Flash ${label} to this ${info.role || ''} board (running ${info.fw || '?'})?`;
+    if (fw.version && info.fw && cmpVer(fw.version, info.fw) < 0) msg += '\n\nThat is older than the firmware it runs now.';
+    msg += '\n\nRelays release and the link is down for about a minute.';
+    if (info.cfg_store !== 'spi') msg += '\n\nThis board keeps config and key in program flash, which the update erases: export the config (Config tab) and have the key ready.';
+    else if (appliedUnsaved) msg += '\n\nApplied settings that haven’t been saved to flash will be lost.';
+    if (!confirm(msg)) return;
+  } else {
+    // No console session: a board already in its bootloader (double-tapped reset, or a failed update)
+    // or one the user picks now.
+    target = (await navigator.serial.getPorts()).find(isBootPort);
+    if (!target) {
+      try {
+        target = await navigator.serial.requestPort({ filters: [{ usbVendorId: USB_VID }] });
+      } catch (e) {
+        if (e.name !== 'NotFoundError') throw e;
+        return;
+      }
+    }
+    if (!confirm(`Flash ${label} to the selected board? Relays release and the link is down for about a minute.`)) return;
+  }
+
+  setFlashing(true);
+  stopReconnect();
+  $('fwProgress').value = 0;
+  let sb = null;
+  try {
+    let boot = isBootPort(target) ? target : null;
+    if (!boot) {
+      if (port) await disconnect(true);
+      lastPort = target;
+      fwStep('Restarting the board into its bootloader…');
+      // The firmware's USB serial resets into the bootloader when DTR drops at 1200 baud.
+      await target.open({ baudRate: 1200 });
+      try {
+        await target.setSignals({ dataTerminalReady: true });
+        await target.setSignals({ dataTerminalReady: false });
+      } finally {
+        await target.close().catch(() => {});
+      }
+      await sleep(500);
+      boot = await findBootPort();
+    }
+    fwStep('Connecting to the bootloader…');
+    sb = new SamBa(boot);
+    for (let i = 0; ; i++) {
+      try {
+        await sb.open();
+        break;
+      } catch (e) {
+        if (i >= 10) throw new Error(`Couldn't open the bootloader port: ${e.message}`);
+        await sleep(300); // just enumerated; Windows may not have it ready yet
+      }
+    }
+    logLine(`bootloader: ${await sb.hello()}`);
+    fwStep('Erasing…');
+    await sb.erase(APP_START);
+    for (let off = 0; off < fw.bytes.length; off += CHUNK) {
+      fwStep(`Writing… ${Math.round((100 * off) / fw.bytes.length)} %`);
+      await sb.program(APP_START + off, fw.bytes.subarray(off, off + CHUNK));
+      $('fwProgress').value = (off + CHUNK) / fw.bytes.length;
+    }
+    fwStep('Verifying…');
+    const want = crc16(fw.bytes);
+    const got = await sb.crc(APP_START, fw.bytes.length);
+    if (got !== want) throw new Error(`Verify failed: the board's CRC is ${got.toString(16)}, expected ${want.toString(16)}.`);
+    await sb.reset();
+    await sb.close();
+    sb = null;
+    fwStep(`${label} written and verified. Waiting for the board to start…`, 'good');
+    flashCheck = { version: fw.version, label };
+    startReconnect();
+  } catch (e) {
+    fwStep(`${e.message} If the update had started, the board waits in its bootloader (LED fading): flash again to finish it.`, 'bad');
+    throw new Error(`Firmware update failed: ${e.message}`);
+  } finally {
+    await sb?.close();
+    setFlashing(false);
+  }
+}
+
+// After an update the board comes back on its new firmware: show what it reports.
+function reportFlash(info) {
+  const c = flashCheck;
+  flashCheck = null;
+  const problems = [];
+  if (c.version && info.fw !== c.version) problems.push(`reports firmware ${info.fw}, expected ${c.version}`);
+  if (info.role === 'unset') problems.push('has no role');
+  if (!info.key_set) problems.push('has no link key');
+  if (problems.length) {
+    fwStep(`Updated, but the board ${problems.join(', ')}. Restore its config and key.`, 'bad');
+    toast(`Board is back but ${problems.join(', ')}.`, 'err');
+  } else {
+    fwStep(`Updated to ${info.fw}. Role, config and key kept.`, 'good');
+    toast(`Firmware ${info.fw} running on the ${info.role} board.`);
+  }
+}
+
 // ---------- Log ----------
 const logLines = [];
 function logLine(text, cls = '') {
@@ -1201,7 +1559,7 @@ function init() {
   $('toast').onclick = hideToast;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('toast').textContent) hideToast(); });
   // Unapplied form edits are lost on reload/close.
-  window.addEventListener('beforeunload', (e) => { if (meta.length && dirtyCount()) e.preventDefault(); });
+  window.addEventListener('beforeunload', (e) => { if (flashing || (meta.length && dirtyCount())) e.preventDefault(); });
 
   $('btnConnect').onclick = connect;
   $('btnDisconnect').onclick = () => { stopReconnect(); disconnect(); };
@@ -1351,6 +1709,15 @@ function init() {
     histWidth = w;
   }).observe($('histPlot'));
 
+  loadLatest();
+  $('btnFwLatest').onclick = guard(installLatest);
+  $('fwFile').onchange = guard(async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (f) await flashFile(f);
+  });
+  $('btnBootPort').onclick = pickBootPort;
+
   $('btnLogGet').onclick = guard(async () => {
     const res = await call('log.get');
     logLine(`--- board log (${res.log.length} entries, board uptime ${fmtDur(res.now)}) ---`);
@@ -1366,7 +1733,7 @@ function init() {
   // A granted port reappearing while we're waiting for a reboot is the board coming back (the other
   // board never left, so it can't fire this).
   navigator.serial?.addEventListener('connect', (e) => {
-    if (!reconnectUntil || port) return;
+    if (!reconnectUntil || port || isBootPort(e.target)) return;
     lastPort = e.target;
     tryReconnect(lastPort);
   });

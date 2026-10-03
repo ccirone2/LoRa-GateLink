@@ -97,7 +97,7 @@
         <label class="button">Import JSON<input id="fileImport" type="file" accept=".json,application/json" hidden></label>
         <button id="btnCfgReset" class="danger">Factory reset</button>
       </div>
-      <p class="muted">Apply updates the running settings (radio settings take effect immediately); Save writes them to flash. Uploading new firmware erases saved config and key — export first. Both boards must share net_id, radio settings and key.</p>
+      <p class="muted">Apply updates the running settings (radio settings take effect immediately); Save writes them to flash. Saved config and key survive firmware updates (firmware 0.5.0 or later); export a copy anyway. Both boards must share net_id, radio settings and key.</p>
       <div id="cfgForm" class="cfg-groups"></div>
     </section>
 
@@ -177,6 +177,19 @@
               <div class="table-wrap"><table id="histTable" class="wtable"></table></div>
             </details>
           </div>
+        </div>
+        <div class="card">
+          <div class="label">Firmware update</div>
+          <div class="kv"><span>This board</span><b id="fwBoard">—</b></div>
+          <div class="kv"><span>Latest release</span><b id="fwLatest">—</b></div>
+          <div class="row">
+            <button id="btnFwLatest" class="primary" hidden>Install latest</button>
+            <label class="button">Flash .bin file…<input id="fwFile" type="file" accept=".bin" hidden></label>
+          </div>
+          <div class="row" id="fwBootRow" hidden><button id="btnBootPort" class="primary">Select bootloader port</button></div>
+          <progress id="fwProgress" max="1" value="0" hidden></progress>
+          <p class="muted small" id="fwStep" role="status"></p>
+          <p class="muted small">Connect the board to update, or start with it in its bootloader (press reset twice quickly; the LED fades in and out). Role, config and key stay on the board (firmware 0.5.0 or later). If an update fails, the board stays in its bootloader: flash again.</p>
         </div>
         <div class="card">
           <div class="label">Security self-test</div>

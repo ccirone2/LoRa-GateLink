@@ -109,7 +109,7 @@ bool appLinkUp(uint32_t now) {
 
 void appFillStatus(JsonObject o) {
   uint32_t now = millis();
-  o["fw"] = FW_VERSION;
+  o["fw"] = fwVersion();
   o["role"] = activeRole == ROLE_HOUSE ? "house" : activeRole == ROLE_GATE ? "gate" : "unset";
   o["reboot_pending"] = cfg.role != activeRole;
   o["uptime_ms"] = now;

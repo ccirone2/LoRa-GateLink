@@ -4,15 +4,29 @@ Two Arduino MKR WAN 1310 boards on MKR Relay Proto Shields link an Alarm.com / 2
 system at the house to a LiftMaster CSW24UL swing-gate opener over point-to-point LoRa.
 
 ```
- Alarm.com ─Z-Wave─ Shelly Wave 1 ──relay contact (O/I)──▶ HOUSE IN1   (switch state → OPEN/CLOSE)
-                    Shelly SW input ◀──────────────────── HOUSE K1    (mirror real gate state)
-                    2GIG contact sensor ◀──────────────── HOUSE K2    (closed = gate closed)
-                                  ~~~~ LoRa 915 MHz, HMAC-signed ~~~~
- CSW24UL OPEN  + COM ◀── GATE K1 (pulse)      CSW24UL AUX "open limit"   ─opto─▶ GATE IN1
- CSW24UL CLOSE + COM ◀── GATE K2 (pulse)      CSW24UL AUX "closed limit" ─opto─▶ GATE IN2
-  (OPEN/CLOSE shared with AES Prime Edge      CSW24UL 24 V accessory     ─opto─▶ GATE IN3 (opener powered)
-   + siren sensor)
+Alarm.com ── Z-Wave ── Shelly Wave 1
+
+HOUSE board
+  IN1 <── Shelly relay contact (O/I)
+          switch state → OPEN/CLOSE
+  K1  ──> Shelly SW input
+          mirrors the real gate state
+  K2  ──> 2GIG contact sensor
+          closed = gate closed
+   │
+   │  LoRa 915 MHz, HMAC-signed
+   │
+GATE board
+  K1  ──> CSW24UL OPEN + COM    (pulse)
+  K2  ──> CSW24UL CLOSE + COM   (pulse)
+  IN1 <── AUX "open limit"      (opto)
+  IN2 <── AUX "closed limit"    (opto)
+  IN3 <── 24 V accessory        (opto)
+          = opener powered
 ```
+
+The opener's OPEN/CLOSE inputs are shared with an AES Prime Edge cellular controller and a
+siren sensor.
 
 ## Repository
 

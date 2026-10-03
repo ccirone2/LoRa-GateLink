@@ -47,6 +47,9 @@
 [hidden] { display: none !important; }
 body {
   margin: 0;
+  /* Text stays selectable, but clicking it shows no I-beam or caret; fields keep theirs. */
+  cursor: default;
+  caret-color: transparent;
   background: var(--bg);
   color: var(--text);
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -71,6 +74,8 @@ button:disabled { opacity: .5; cursor: default; }
 button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 button.danger { color: var(--bad); }
 input[type=number] { width: 110px; }
+input, textarea, select { caret-color: auto; }
+input:not([type]), input[type=text], input[type=number], textarea { cursor: text; }
 input[aria-invalid=true] { border-color: var(--bad); }
 
 .banner { padding: 10px 16px; border-bottom: 1px solid var(--border); }
@@ -111,9 +116,22 @@ body.offline #tab-status .grid { opacity: .55; }
 .pill.on { background: var(--ok); color: var(--surface); border-color: var(--ok); }
 
 .cfg-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
-.field { display: grid; grid-template-columns: 1fr 130px; gap: 8px; align-items: center; padding: 4px 0; }
-.field label { overflow-wrap: anywhere; }
-.field label small { display: block; color: var(--muted); }
+.field { position: relative; display: grid; grid-template-columns: 1fr 130px; gap: 8px; align-items: center; padding: 4px 0; }
+.flabel { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.flabel label { overflow-wrap: anywhere; }
+/* Info icon + tooltip for each setting: shown on hover, keyboard focus, or pinned by a tap/click. */
+.info {
+  flex: none; width: 18px; height: 18px; padding: 0; border-radius: 50%; font: italic 600 11px/16px Georgia, serif;
+  text-align: center; color: var(--muted); background: none; border: 1px solid var(--border); cursor: help;
+}
+.info:hover, .info:focus-visible { color: var(--accent); border-color: var(--accent); }
+.info:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tip {
+  display: none; position: absolute; left: 0; right: 0; top: calc(100% - 2px); z-index: 5; padding: 8px 10px;
+  font-size: 13px; line-height: 1.4; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+}
+.info:hover + .tip, .info:focus-visible + .tip, .tip.show { display: block; }
 .field input, .field select { width: 100%; }
 .field.dirty input, .field.dirty select { border-color: var(--warn); }
 .field input.toggle {
@@ -194,7 +212,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button.active { background: var(--accent); color: var(--accent-text); }
 .wiring { overflow-x: auto; }
-.wiring svg { display: block; width: 100%; max-width: 860px; min-width: 560px; height: auto; }
+.wiring svg { display: block; width: 100%; max-width: 860px; height: auto; }
 .wiring text { fill: var(--text); font: 13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .wiring text.dim { fill: var(--muted); font-size: 11.5px; }
 .wiring text.title { font-weight: 600; font-size: 14px; }
@@ -229,6 +247,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 
 @media (max-width: 520px) {
   .install-grid { grid-template-columns: 1fr; }
-  .field { grid-template-columns: 1fr; }
+  .field { grid-template-columns: 1fr 112px; }
   .gate-state { font-size: 28px; }
 }

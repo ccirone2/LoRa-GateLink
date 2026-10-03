@@ -15,36 +15,38 @@ const GROUPS = [
   ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open',
     'ctrl_power_sense', 'ctrl_confirm_ms', 'ctrl_settle_ms']],
 ];
+// Config tooltips: what the setting does, then when you'd change it.
+const NO_INVERT = 'Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead.';
 const HELP = {
-  role: 'Reboot after saving',
-  net_id: 'Frames with another id are ignored',
-  freq_hz: 'US: 902–928 MHz, EU: 863–870 MHz',
-  sf: 'Higher = longer range, slower',
-  bw_hz: '500 kHz recommended for US single channel',
-  cr: 'Coding rate 4/x',
-  tx_power: 'dBm (2–20)',
-  sync_word: 'Private network byte',
-  retries: 'Resends, spread over the message’s lifetime (cmd_ttl_s for commands)',
-  heartbeat_s: 'Status interval; set it on the gate',
-  link_timeout_s: 'No frames for this long = link down; set it on the house, which stretches it to at least 2.5 gate heartbeats',
-  cmd_ttl_s: 'Keep resending a command for this long, then drop it',
-  debounce_ms: 'Input debounce',
-  in1_invert: 'House: controller input · Gate: open limit. Keep 0: fix polarity in the wiring',
-  in2_invert: 'House: controller power sense · Gate: closed limit. Keep 0: fix polarity in the wiring',
-  in3_invert: 'House: spare IN3 · Gate: opener power sense. Keep 0: fix polarity in the wiring',
-  in4_invert: 'Spare input IN4 (A4). Keep 0: inverted, a dead opto or cut wire reads active',
-  power_sense: 'Gate: IN3 senses opener 24 V; without it the gate reads “no power” and refuses commands',
-  pulse_ms: 'OPEN/CLOSE contact closure length',
-  travel_timeout_s: 'Report timeout if limit not reached',
-  ctrl_sync: 'Drive K1 so the controller mirrors the gate',
-  sync_window_ms: 'Ignore controller edges caused by K1',
-  resync_ms: 'K1 off-time when forcing a resync',
-  mismatch_timeout_s: 'Controller ≠ gate this long → resync (at once after boot or power return)',
-  sensor_invert: 'Invert contact sensor output (K2)',
-  linkloss_open: 'Sensor reads open when link is down',
-  ctrl_power_sense: 'House: IN2 senses the controller’s supply; while it’s off, controller edges never become commands',
-  ctrl_confirm_ms: 'Hold each controller edge this long; dropped if controller power fails meanwhile',
-  ctrl_settle_ms: 'After controller power returns (or house boot), treat its edges as sync this long',
+  role: 'Which end this board is: house (next to the controller) or gate (at the opener). Takes effect after Save and reboot.',
+  net_id: 'Both boards must match. Change it only if another GateLink pair shares the channel nearby.',
+  freq_hz: 'Both boards must match. US 902–928 MHz, EU 863–870 MHz. Move off the default only if Link history shows a high noise floor.',
+  sf: 'Both boards must match. Raise it a step at a time if the link is weak or drops; each step roughly doubles airtime, so replies get slower. Lower it for faster replies on a strong link.',
+  bw_hz: 'Both boards must match. Keep 500 kHz in the US (keeps a single-channel link within FCC rules). Narrower reaches further but every frame takes longer.',
+  cr: 'Both boards must match. Extra error correction, 4/5 to 4/8. Raise it if Link history shows CRC errors with a decent signal; frames get longer.',
+  tx_power: 'Transmit power in dBm. Lower it on USB power or at short range (full power can brown out a weak supply); raise it if the link is marginal.',
+  sync_word: 'Both boards must match. Rarely changed: it filters out other LoRa networks on the same channel.',
+  retries: 'Resends of an unacknowledged message, spread over its lifetime. Raise it on a lossy link; lower it to keep the channel quieter.',
+  heartbeat_s: 'Gate: how often it reports status when nothing changes. Shorter spots a dead link sooner but uses more airtime. The house waits at least 2.5 heartbeats before calling the link lost.',
+  link_timeout_s: 'House: silence from the gate this long = link lost (the contact sensor then reads open). Raise it if short dropouts cause false alarms; it is never shorter than 2.5 gate heartbeats.',
+  cmd_ttl_s: 'House: how long a gate command keeps being retried before it is dropped (never fired late). Raise it if commands give up during short dropouts; lower it so a stale command isn’t delivered seconds later.',
+  debounce_ms: 'How long an input must hold steady before it counts. Raise it if long field wires or a bouncy contact show up as flicker in the log.',
+  in1_invert: `IN1 (house: controller output; gate: open limit). ${NO_INVERT}`,
+  in2_invert: `IN2 (house: controller power; gate: closed limit). ${NO_INVERT}`,
+  in3_invert: `IN3 (house: spare; gate: opener power). ${NO_INVERT}`,
+  in4_invert: `IN4 (spare on both boards). ${NO_INVERT}`,
+  power_sense: 'Gate: IN3 watches the opener’s 24 V, so a dead opener reads “no power” instead of a stuck gate, and commands are refused. Turn off only if IN3 isn’t wired.',
+  pulse_ms: 'Gate: how long the OPEN/CLOSE contact closes. Raise it if the opener misses short presses; keep it short, as other devices share these inputs.',
+  travel_timeout_s: 'Longest a full open or close should take. Set it a little above your gate’s real travel time; past it, the gate counts as stuck.',
+  ctrl_sync: 'House: K1 drives the controller’s switch input so the controller always shows the real gate state. Turn off only if the controller has no switch input.',
+  sync_window_ms: 'House: after K1 changes, controller changes count as its echo, not a command, for this long. Raise it if a slow controller’s echo turns into an unwanted gate command.',
+  resync_ms: 'House: how long K1 is released when re-syncing a controller that is out of step. Raise it if the controller doesn’t notice a short blip.',
+  mismatch_timeout_s: 'House: how long the controller may disagree with the gate before K1 re-syncs it (at once after boot or power return). Lower it for faster correction; raise it if re-syncs fight someone using the controller.',
+  sensor_invert: 'House: flips the contact sensor output (K2). Use it if the alarm shows open while the gate is closed.',
+  linkloss_open: 'House: the contact sensor reads open while the link is lost, so the alarm never trusts a stale “closed”. Turn off only if dropouts cause too many false alerts.',
+  ctrl_power_sense: 'House: IN2 watches the controller’s supply, so a power cut (which drops its relay) isn’t mistaken for a close command. Turn off only if IN2 isn’t wired.',
+  ctrl_confirm_ms: 'House: each controller change waits this long before becoming a command, so one caused by a failing supply can be discarded. Raise it if power cuts still send commands; lower it for a snappier response.',
+  ctrl_settle_ms: 'House: after the controller powers up (or the house boots), its changes count as sync for this long. Raise it if the controller takes longer to settle after power returns.',
 };
 const SELECTS = {
   role: [[0, 'unset'], [1, 'house'], [2, 'gate']],
@@ -115,20 +117,46 @@ const WIRING = {
 
 let wiringShown = 'house';
 
+// Greedy word wrap for SVG text (no auto-wrap there); `max` is in characters.
+function wrapText(text, max) {
+  const lines = [];
+  let line = '';
+  for (const w of text.split(' ')) {
+    if (line && line.length + 1 + w.length > max) {
+      lines.push(line);
+      line = w;
+    } else line = line ? `${line} ${w}` : w;
+  }
+  return line ? [...lines, line] : lines;
+}
+
+// Two layouts: side by side, or a compact one for phones that fits ~360 px without scrolling (text wraps).
+const WIRING_LAYOUT = {
+  wide: { bx: 16, bw: 250, dx: 500, dw: 250, width: 766, rowH: 28, title: 30, hint: 38, sub: 40 },
+  narrow: { bx: 4, bw: 118, dx: 150, dw: 206, width: 360, rowH: 26, title: 23, hint: 30, sub: 16 },
+};
+let wiringNarrow = false;
+
 function renderWiring(r) {
   wiringShown = r;
   const W = WIRING[r];
   document.querySelectorAll('[data-wiring]').forEach((b) => b.classList.toggle('active', b.dataset.wiring === r));
 
-  const rowH = 28, headH = 42, gap = 14, top = 70;
-  const bx = 16, bw = 250, dx = 500, dw = 250, width = 766;
+  const L = WIRING_LAYOUT[wiringNarrow ? 'narrow' : 'wide'];
+  const { bx, bw, dx, dw, width, rowH } = L;
+  const gap = 14;
+  const sub = wrapText('MKR WAN 1310 + Relay Proto Shield', L.sub);
+  const top = 54 + sub.length * 15;
   let y = top;
   let blocks = '', wires = '';
   for (const g of W.groups) {
+    let ty = y + 19, head = '';
+    for (const t of wrapText(g.name, L.title)) { head += `<text class="title" x="${dx + 12}" y="${ty}">${esc(t)}</text>`; ty += 17; }
+    ty -= 2;
+    for (const t of wrapText(g.hint, L.hint)) { head += `<text class="dim" x="${dx + 12}" y="${ty}">${esc(t)}</text>`; ty += 14; }
+    const headH = ty - 14 - y + 8;
     const h = headH + g.rows.length * rowH;
-    blocks += `<rect class="blk" x="${dx}" y="${y}" width="${dw}" height="${h}" rx="8"/>`
-      + `<text class="title" x="${dx + 12}" y="${y + 19}">${esc(g.name)}</text>`
-      + `<text class="dim" x="${dx + 12}" y="${y + 34}">${esc(g.hint)}</text>`;
+    blocks += `<rect class="blk" x="${dx}" y="${y}" width="${dw}" height="${h}" rx="8"/>${head}`;
     g.rows.forEach(([bt, dt], i) => {
       const cy = y + headH + i * rowH + rowH / 2;
       wires += `<line class="w-${g.kind}" x1="${bx + bw}" y1="${cy}" x2="${dx}" y2="${cy}"/>`
@@ -142,7 +170,7 @@ function renderWiring(r) {
   const height = y - gap + 16;
   const board = `<rect class="blk board" x="${bx}" y="16" width="${bw}" height="${height - 32}" rx="8"/>`
     + `<text class="title" x="${bx + 12}" y="38">${r === 'house' ? 'House' : 'Gate'} board</text>`
-    + `<text class="dim" x="${bx + 12}" y="54">MKR WAN 1310 + Relay Proto Shield</text>`;
+    + sub.map((t, i) => `<text class="dim" x="${bx + 12}" y="${54 + i * 15}">${esc(t)}</text>`).join('');
   const svg = $('wiringSvg');
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.innerHTML = board + blocks + wires;
@@ -360,7 +388,7 @@ function setConnected(on) {
   $('btnDisconnect').hidden = !on;
   $('btnIdentify').hidden = !on;
   document.querySelectorAll('main button, main input, main select').forEach((el) => {
-    if (el.closest('#tab-install')) return; // static reference, usable without a board
+    if (el.closest('#tab-install') || el.classList.contains('info')) return; // reference, usable without a board
     if (!OFFLINE_OK.includes(el.id)) el.disabled = !on;
   });
   document.body.classList.toggle('offline', !on);
@@ -532,7 +560,11 @@ function renderConfig() {
       } else {
         input = `<input id="${id}" type="number" min="${esc(m.min)}" max="${esc(m.max)}" step="1">`;
       }
-      row.innerHTML = `<label for="${id}">${esc(name)}<small>${HELP[name] || ''}</small></label>${input}`;
+      const help = HELP[name]
+        ? `<button type="button" class="info" aria-label="About ${esc(name)}" aria-describedby="${id}_tip">i</button>`
+          + `<span class="tip" role="tooltip" id="${id}_tip">${esc(HELP[name])}</span>`
+        : '';
+      row.innerHTML = `<div class="flabel"><label for="${id}">${esc(name)}</label>${help}</div>${input}`;
       card.appendChild(row);
       const el = row.querySelector('input, select');
       setField(el, params[name]);
@@ -1130,6 +1162,12 @@ function init() {
   renderWiring(wiringShown);
   applyRole('unset');
   document.querySelectorAll('[data-wiring]').forEach((b) => b.addEventListener('click', () => renderWiring(b.dataset.wiring)));
+  new ResizeObserver(([e]) => {
+    const w = e.contentRect.width;
+    if (!w || (w < 600) === wiringNarrow) return; // 0 = Install tab hidden
+    wiringNarrow = w < 600;
+    renderWiring(wiringShown);
+  }).observe(document.querySelector('.wiring'));
 
   // Tabs: click or arrow keys (roving tabindex, per the ARIA tabs pattern).
   const tabs = [...document.querySelectorAll('#tabs [role=tab]')];
@@ -1171,6 +1209,19 @@ function init() {
     await loadConfig();
   });
   $('btnCfgApply').onclick = guard(applyConfig);
+  // Setting tooltips show on hover or focus; a tap or click pins one open (touch has no hover).
+  const closeTips = (except) => document.querySelectorAll('.tip.show').forEach((t) => t !== except && t.classList.remove('show'));
+  document.addEventListener('click', (e) => {
+    const info = e.target.closest('.info');
+    const tip = info?.nextElementSibling;
+    closeTips(tip);
+    tip?.classList.toggle('show');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    closeTips();
+    if (document.activeElement?.classList.contains('info')) document.activeElement.blur();
+  });
   $('btnCfgSave').onclick = guard(async () => {
     // Save writes what the board is running; edits still in the form would silently be left out.
     const n = dirtyCount();

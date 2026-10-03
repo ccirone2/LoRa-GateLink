@@ -43,8 +43,9 @@ are built from the pull requests since the last tag.
    - Log events (`log.h`/`log.cpp`) ↔ the suite ↔ docs/console.md.
    - STATUS/DIAG wire format (`roles.h`) ↔ `role_house.cpp` / `console.cpp`; both boards need the new firmware.
    - Pins or role behaviour (`pins.h`) ↔ the `WIRING` table in `web/app.js` ↔ [docs/hardware.md](hardware.md).
-   - A new setting: field in `Config` + default + `PARAMS` row + group/help text in `web/app.js`; bump
-     `CFG_VERSION` if the struct layout changes.
+   - A new setting: field in `Config` + default + `PARAMS` row with a new, never reused id + group/help text
+     in `web/app.js`. Saved config is stored by param id, so a changed meaning or unit needs a new id; bump
+     `CFG_VERSION` (it only guards the program-flash fallback) if the struct layout changes.
 3. Bump `FW_VERSION` in `firmware/GateLink/config.h` for any firmware change (see Versioning).
 4. Verify:
    ```sh
@@ -66,8 +67,9 @@ are built from the pull requests since the last tag.
   (STATUS/DIAG layout, frame format).
 - **MAJOR:** reserved for a protocol break with no upgrade path, or 1.0 at the install.
 
-Every upload erases the config anyway, but a `CFG_VERSION` bump also means a config exported from the old
-version may not import cleanly; say so in the release notes.
+Saved config survives uploads (from 0.5.0) and is matched by param id, so an added setting takes its default
+and a removed one is dropped (log event `cfg`, b). Say so in the release notes when that happens, and when a
+config exported from the old version may not import cleanly.
 
 ## Releasing
 

@@ -32,8 +32,9 @@ def test_history_counts(rig):
     assert len(pongs) >= PINGS - 2, f"only {len(pongs)}/{PINGS} pongs"
     # A STATUS with the gate's view after the clear (one per heartbeat). Its noise covers the time since the
     # previous one, which can have had no reading kept during the pings: then the next heartbeat brings one.
-    rig.wait_for(lambda: _current(rig.house)["peer_noise_avg"] is not None, 2 * HEARTBEAT_S + 5,
-                 "a gate STATUS with its noise floor in the house history")
+    # The house's own reading likewise needs ~0.5 s without frames, which a STATUS right after the pings denies.
+    rig.wait_for(lambda: all(_current(rig.house)[k] is not None for k in ("peer_noise_avg", "noise_avg")),
+                 2 * HEARTBEAT_S + 5, "a gate STATUS with its noise floor, and the house's own, in the history")
     h, g = _current(rig.house), _current(rig.gate)
     s1 = {n: rig.board(n).status()["link"] for n in ("house", "gate")}
 

@@ -117,6 +117,7 @@ void appFillStatus(JsonObject o) {
   o["radio_faults"] = radioFaults();
   o["reset_cause"] = resetCauseName(resetCause);
   o["cfg_loaded"] = cfgLoaded;
+  o["cfg_store"] = configStoreName();
   o["key_set"] = (bool)cfg.key_set;
   o["free_ram"] = freeRam();
   JsonObject io = o["io"].to<JsonObject>();
@@ -215,6 +216,7 @@ void setup() {
   in3.begin(PIN_IN3, cfg.in3_invert);
   in4.begin(PIN_IN4, cfg.in4_invert);
   logEvent(EV_BOOT, resetCause, activeRole);
+  logEvent(EV_CFG, configSource(), configDropped());
   histBegin();
 
   if (activeRole != ROLE_UNSET) {

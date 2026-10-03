@@ -107,6 +107,7 @@
         <div class="label">Link key</div>
         <p>Every frame is authenticated with HMAC-SHA256 using a shared 128-bit key. Both boards must have the same key. The key is write-only; it can't be read back from a board.</p>
         <div class="kv"><span>Key set on this board</span><b id="secKeySet">—</b></div>
+        <div class="kv"><span>Config and key saved in</span><b id="secStore">—</b></div>
         <div class="row">
           <input id="keyInput" class="mono" aria-label="Link key (32 hex characters)" placeholder="32 hex characters" spellcheck="false" autocomplete="off">
           <button id="btnKeyGen">Generate</button>

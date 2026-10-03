@@ -10,6 +10,8 @@ def test_boards_and_link(bench):
     bench.wait_for(lambda: bench.house.status()["link"]["verified"] and bench.gate.status()["link"]["verified"],
                    30, "peer verified on both boards")
     bench.facts["firmware"] = h["fw"]
+    # From 0.5.0 config lives in the SPI flash chip; "internal" means it's lost on the next upload.
+    bench.facts["config store"] = f"house {h.get('cfg_store', 'internal')}, gate {g.get('cfg_store', 'internal')}"
 
 
 def test_bench_safe_settings(bench):

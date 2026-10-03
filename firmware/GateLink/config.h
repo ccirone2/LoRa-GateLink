@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.4.1"
+#define FW_VERSION "0.5.0"
 
 enum Role : uint8_t { ROLE_UNSET = 0, ROLE_HOUSE = 1, ROLE_GATE = 2 };
 
@@ -73,12 +73,20 @@ extern int32_t activeRole;
 extern const ParamDef PARAMS[];
 extern const size_t PARAM_COUNT;
 
+// Where the running config came from at boot (log event `cfg`, a).
+enum CfgSource : uint8_t { CFG_DEFAULTS = 0, CFG_FROM_SPI = 1, CFG_FROM_INTERNAL = 2 };
+
 void configDefaults(Config &c);
-bool configLoad();  // returns false if flash was empty/invalid (defaults loaded)
-void configSave();
+bool configLoad();  // returns false if nothing valid was saved (defaults loaded)
+uint8_t configSource();
+int32_t configDropped();        // saved settings this firmware didn't accept (unknown id or out of range)
+const char *configStoreName();  // "spi" (survives uploads) or "internal" (SPI flash missing; erased by uploads)
+// The saves return false if the write didn't verify.
+bool configSave();
 // Persist one param, or the key, on top of what is already saved, leaving other unsaved edits unsaved.
-void configSaveParam(const ParamDef *p);
-void configSaveKey();
+bool configSaveParam(const ParamDef *p);
+bool configSaveKey();
+bool configFactoryReset();  // defaults in RAM; saved config and key erased
 const ParamDef *paramByName(const char *name);
 const ParamDef *paramById(uint8_t id);
 bool paramSet(const ParamDef *p, int32_t value);  // range-checked

@@ -78,6 +78,10 @@ static void onDio0() {
   if (txActive && (readReg(REG_IRQ_FLAGS) & IRQ_TX_DONE)) finishTx();
 }
 
+void radioRestart() {
+  if (begun) radioBegin();
+}
+
 bool radioBegin() {
   txActive = false;
   if (begun) LoRa.end();

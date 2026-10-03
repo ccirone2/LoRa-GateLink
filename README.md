@@ -75,9 +75,11 @@ arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 firmware/GateLink   #
 
 Or flash a release binary: `arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COM5 --input-file GateLink-v0.3.5.bin`.
 
-Flash the same firmware to both boards. **Uploading erases the saved config and key** (they live in
-program flash): export config from the web page first and re-apply after, or use
-`python tools/gatelink.py snapshot` / `restore`.
+Flash the same firmware to both boards. From 0.5.0 the config and key are kept in the board's SPI flash chip
+and **survive firmware uploads**; settings a new firmware doesn't know are dropped and new ones take their
+defaults. Upgrading from an older version erases them once (they lived in program flash), so export config from
+the web page first and re-apply after, or use `python tools/gatelink.py snapshot` / `restore`. **Reset to
+defaults** in the web console (`config.reset`) erases the saved config and key.
 
 ## Web console
 

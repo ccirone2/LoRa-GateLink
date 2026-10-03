@@ -1,6 +1,7 @@
 #include "console.h"
 #include "app.h"
 #include "config.h"
+#include "extflash.h"
 #include "link.h"
 #include "roles.h"
 #include "history.h"
@@ -65,6 +66,11 @@ static void fillParams(JsonDocument &res) {
   res["key_set"] = (bool)cfg.key_set;
 }
 
+static void saveFailed(JsonDocument &res) {
+  res["ok"] = false;
+  res["error"] = "flash write failed";
+}
+
 static void handle(JsonDocument &req) {
   JsonDocument res;
   res["id"] = req["id"];
@@ -77,6 +83,10 @@ static void handle(JsonDocument &req) {
     res["role"] = roleName(activeRole);
     res["saved_role"] = roleName(cfg.role);
     res["key_set"] = (bool)cfg.key_set;
+    res["cfg_store"] = configStoreName();
+    char id[7];
+    snprintf(id, sizeof(id), "%06lx", (unsigned long)extFlashId());
+    res["flash_id"] = id;
   } else if (!strcmp(cmd, "status")) {
     appFillStatus(res["status"].to<JsonObject>());
   } else if (!strcmp(cmd, "config.get")) {
@@ -101,10 +111,9 @@ static void handle(JsonDocument &req) {
     res["reboot_required"] = reboot;
     res["ok"] = errors.size() == 0;
   } else if (!strcmp(cmd, "config.save")) {
-    configSave();
+    if (!configSave()) saveFailed(res);
   } else if (!strcmp(cmd, "config.reset")) {
-    configDefaults(cfg);
-    configSave();
+    if (!configFactoryReset()) saveFailed(res);
     res["reboot_required"] = true;
   } else if (!strcmp(cmd, "key.set")) {
     const char *hex = req["key"] | "";
@@ -118,7 +127,7 @@ static void handle(JsonDocument &req) {
     if (ok) {
       memcpy(cfg.key, key, 16);
       cfg.key_set = 1;
-      configSaveKey();
+      if (!configSaveKey()) saveFailed(res);
       appRestartRadio();  // new key: re-establish sessions
     } else {
       res["ok"] = false;

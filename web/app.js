@@ -387,6 +387,10 @@ async function refreshInfo() {
   $('devline').textContent = `${info.board} · fw ${info.fw} · ${info.role}`;
   $('keyWarn').hidden = info.key_set;
   $('secKeySet').textContent = info.key_set ? 'yes' : 'no (link disabled)';
+  // Boards before 0.5.0 don't report it: program flash, erased by uploads.
+  const spi = info.cfg_store === 'spi';
+  $('secStore').textContent = spi ? 'flash chip (kept across firmware updates)' : 'program flash (erased by firmware updates)';
+  $('secStore').className = spi ? '' : 'bad';
   applyRole(info.role);
 }
 

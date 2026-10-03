@@ -7,7 +7,9 @@
     python tools/gatelink.py restore                    # after flashing: config + key back, reboot, wait for link
     python tools/gatelink.py house hist --csv link.csv  # link quality history (every bucket) as CSV
 
-Uploading firmware erases the saved config and key. `snapshot` stores each board's running config by port
+From firmware 0.5.0 the config and key live in the board's SPI flash chip and survive uploads (`ports` shows
+`cfg spi`); older firmware, or a board whose chip doesn't answer (`cfg internal`), loses them on every upload.
+`snapshot`/`restore` remain the safety net. `snapshot` stores each board's running config by port
 (default ~/.gatelink_config.json); `restore` applies it to the board on the same port, saves it, sets the key
 from ~/.gatelink_key and reboots. Take the snapshot from boards in their normal state, not mid-test: an
 interrupted e2e run can leave its unsaved test profile running. Close the web console first; only one program
@@ -93,7 +95,7 @@ def cmd_ports(_):
             tx_power = b.config_get()["tx_power"]
             print(f"{port:6} {s['role']:5} fw {s['fw']:7} key {'set' if s['key_set'] else 'NOT SET':7} "
                   f"verified {link['verified']!s:5} rssi {link['rssi']:4} tx_power {tx_power:2} "
-                  f"last reset {s['reset_cause']}")
+                  f"cfg {s.get('cfg_store', 'internal')} last reset {s['reset_cause']}")
         finally:
             b.close()
 

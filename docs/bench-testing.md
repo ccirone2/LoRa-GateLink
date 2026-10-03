@@ -7,10 +7,11 @@ it.
 
 ## Bench rules
 
-- **After every upload** the saved config and key are gone (role, key, `tx_power`; `power_sense` and
-  `ctrl_power_sense` back on). `python tools/gatelink.py snapshot` before flashing and `restore` after puts
-  them back; the key is read from `~/.gatelink_key`. Boards can't read the key back, so keep it safe (e.g. a
-  password manager).
+- **Uploads keep the saved config and key** from 0.5.0 (SPI flash; `ports` shows `cfg spi`). Uploading 0.5.0
+  over an older version, a board showing `cfg internal`, or `config.reset` leaves defaults (no role or key,
+  `tx_power` 17; `power_sense` and `ctrl_power_sense` on). `python tools/gatelink.py snapshot` before flashing
+  and `restore` after puts them back; the key is read from `~/.gatelink_key`. Boards can't read the key back,
+  so keep it safe (e.g. a password manager).
 - **On USB power, keep `tx_power` at about 5 dBm** on both boards: a full-power transmit while a relay is
   energized crashed the board into watchdog resets (`reset_cause` in Status).
 - Inputs are active when jumpered to **3.3 V** (not GND). With `power_sense` on, keep gate IN3 at 3.3 V (or the

@@ -19,7 +19,7 @@ with `"error"` on failure. A line that isn't valid JSON is answered `bad json`, 
 
 | Command | Arguments | Reply / effect |
 |---|---|---|
-| `info` | | `fw`, `board`, `role` (running), `saved_role`, `key_set` |
+| `info` | | `fw`, `board`, `role` (running), `saved_role`, `key_set`, `cfg_store`, `flash_id` (SPI flash JEDEC id, hex; `000000` if it doesn't answer) |
 | `status` | | `status` object (below) |
 | `config.get` | | `params` (name → value), `meta` (per param: `name`, `id`, `min`, `max`, `radio`, `remote`, `reboot`), `key_set` |
 | `config.set` | `params`: {name: int} | Applies (doesn't save). `applied`, `errors` (names rejected), `reboot_required`. Unchanged values are skipped. Send at most ~8 params per request |
@@ -38,12 +38,20 @@ with `"error"` on failure. A line that isn't valid JSON is answered `bad json`, 
 | `debug.replay` | | Re-sends the last frame as-is, to test the peer's replay protection |
 
 Settings are listed in the `PARAMS[]` table in `firmware/GateLink/config.cpp`; the web console's Config tab
-shows each with help text. Every firmware upload erases saved config and the key.
+shows each with help text. Saved config and the key live in the board's SPI flash chip (`cfg_store` `spi`) and
+survive firmware uploads; they're stored per param id, so a newer firmware keeps every setting it still knows
+(the `cfg` log event counts the ones it dropped). If the chip doesn't answer, config falls back to program
+flash (`cfg_store` `internal`), which every upload erases. `config.save`, `config.reset` and `key.set` reply
+`ok: false`, `error: "flash write failed"` if the write doesn't verify (the change still applies until reboot).
+Each save re-initialises the radio (the flash chip shares its bus): about 0.5 s off the air, which the link's
+retries cover.
+`config.reset` erases the saved config and key.
 
 ## Status
 
 Common fields: `fw`, `role`, `reboot_pending`, `uptime_ms`, `radio_ok`, `radio_faults`, `reset_cause`
-(`watchdog`, `brownout`, `power_on`, `reset_pin`, `software`), `cfg_loaded`, `key_set`, `io` (`in1`–`in4`, `k1`,
+(`watchdog`, `brownout`, `power_on`, `reset_pin`, `software`), `cfg_loaded`, `cfg_store` (`spi` or
+`internal`, as in `info`), `key_set`, `io` (`in1`–`in4`, `k1`,
 `k2`) and `link` (`verified`, `age_ms`, `rssi`, `snr`, `tx`, `rx`, `retries`, `giveups`, `mac_fail`, `replay`,
 `sessions`, `lbt_defers`, `lbt_forced`, `crc_err` (frames received with a bad CRC), `noise` (smoothed noise floor,
 dBm; null before the first sample)), and `free_ram` (bytes between the heap's high-water mark and the stack).
@@ -125,6 +133,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `cfg_remote` | param id | value |
 | `input` | spare input number (house 2/3/4, gate 3/4) | level |
 | `lbt_forced` | message type | ms the channel stayed busy |
+| `cfg` | at boot, config source: 0 defaults, 1 SPI flash, 2 program flash | saved settings dropped (unknown id or out of range) |
 
 ## Example
 

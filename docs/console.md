@@ -58,7 +58,8 @@ dBm; null before the first sample)), and `free_ram` (bytes between the heap's hi
 Each board keeps a RAM ring of buckets: by default an hour each, the last 96 plus the one in progress (four
 days). Buckets are numbered from boot (or `hist.clear`), so bucket `i` started `now_s − i × period_s` seconds
 before the reply. Everything is lost on a reset; the reboot is in the log. It is for diagnostics only and never
-affects the gate or the outputs. `tools/gatelink.py <board> hist [--csv FILE]` fetches every page as CSV.
+affects the gate or the outputs. The web console charts it (Tools → Link history), and
+`tools/gatelink.py <board> hist [--csv FILE]` fetches every page as CSV.
 
 Each row lists the values in `fields` order. Counters are what happened during the bucket:
 

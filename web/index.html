@@ -152,6 +152,28 @@
           </div>
           <p class="muted" id="remResult" role="status"></p>
         </div>
+        <div class="card wide" id="histCard">
+          <div class="label">Link history</div>
+          <div class="toolbar">
+            <button id="btnHistLoad">Load history</button>
+            <button id="btnHistCsv" disabled>Download CSV</button>
+            <span class="spacer"></span>
+            <button id="btnHistClear" class="danger" title="Empty this board's history and start again from now">Clear</button>
+          </div>
+          <p class="muted small" id="histNote">The board records the link hour by hour since it booted (up to four days; lost on reset). Firmware 0.4.0 or later.</p>
+          <div id="histBody" hidden>
+            <div class="tiles" id="histTiles"></div>
+            <div class="legend" id="histLegend"></div>
+            <div class="hist-plot" id="histPlot">
+              <svg id="histChart" tabindex="0" role="img" aria-label="Link history chart. Use the left and right arrow keys to read each hour."></svg>
+              <div id="histTip" class="hist-tip" hidden></div>
+            </div>
+            <details class="hist-table">
+              <summary>Table view</summary>
+              <div class="table-wrap"><table id="histTable" class="wtable"></table></div>
+            </details>
+          </div>
+        </div>
         <div class="card">
           <div class="label">Security self-test</div>
           <p class="muted">Re-transmits this board's last frame verbatim. The peer must reject it (its replay counter goes up), unless it was a message it already ACKed, in which case it only re-sends the ACK.</p>

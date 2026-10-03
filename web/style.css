@@ -66,6 +66,7 @@ button:disabled { opacity: .5; cursor: default; }
 button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 button.danger { color: var(--bad); }
 input[type=number] { width: 110px; }
+input[aria-invalid=true] { border-color: var(--bad); }
 
 .banner { padding: 10px 16px; border-bottom: 1px solid var(--border); }
 .banner.warn { background: var(--warn-bg); color: var(--text); }
@@ -78,6 +79,8 @@ nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2p
 main { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .tab { display: none; }
 .tab.active { display: block; }
+/* Disconnected: the status cards still show the last values; dim them so they don't read as live. */
+body.offline #tab-status .grid { opacity: .55; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; min-width: 0; }

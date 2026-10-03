@@ -165,6 +165,9 @@ let pollTimer = null;
 let pingTimer = null;
 
 let role = 'unset';
+let keySet = false;
+// Settings applied to the running config since the last Save (this page's own record; lost on reboot).
+let appliedUnsaved = false;
 let meta = [];
 let params = {};
 // Stream pipes to/from the port; they must finish (unlocking the port streams) before port.close() works.
@@ -185,13 +188,14 @@ async function connect() {
   try {
     p = await navigator.serial.requestPort();
   } catch (e) {
-    logLine(`connect failed: ${e.message}`, 'err');
+    if (e.name !== 'NotFoundError') toast(`Connect failed: ${e.message}`, 'err'); // NotFoundError = chooser cancelled
     return;
   }
   try {
     await openPort(p);
   } catch (e) {
-    logLine(`connect failed: ${e.message}`, 'err');
+    // Usually another program (Arduino IDE serial monitor, arduino-cli upload, a script) holds the port.
+    toast(`Connect failed: ${e.message}${e.name === 'NetworkError' || e.name === 'InvalidStateError' ? ' Is another program using the port?' : ''}`, 'err');
   }
 }
 
@@ -219,11 +223,11 @@ async function openPort(p) {
     await loadConfig();
     await refreshStatus();
   } catch (e) {
-    logLine(`initial query failed: ${e.message}`, 'err');
+    toast(`Connected, but the board didn't answer: ${e.message}`, 'err');
   }
   if (port !== p) return; // dropped while querying: disconnect() already ran; don't leave an orphan poll
   clearInterval(pollTimer);
-  pollTimer = setInterval(() => refreshStatus().catch(() => {}), 2000);
+  pollTimer = setInterval(pollStatus, 2000);
 }
 
 function startReconnect() {
@@ -245,7 +249,7 @@ async function tryReconnect(p) {
   if (Date.now() > reconnectUntil) {
     stopReconnect();
     $('devline').textContent = 'not connected';
-    logLine('auto-reconnect gave up; click Connect board', 'err');
+    toast('The board didn’t come back within 30 s. Click Connect board.', 'err');
     return;
   }
   try {
@@ -268,6 +272,8 @@ async function disconnect(quiet = false) {
   clearInterval(pollTimer);
   clearInterval(pingTimer);
   clearTimeout(diagTimer);
+  clearTimeout(pingWait);
+  pingWait = null;
   $('pingAuto').checked = false;
   for (const req of pending.values()) req.reject(new Error('disconnected'));
   pending.clear();
@@ -358,6 +364,8 @@ function setConnected(on) {
     if (!OFFLINE_OK.includes(el.id)) el.disabled = !on;
   });
   document.body.classList.toggle('offline', !on);
+  pollMisses = 0;
+  if (!on) markUnsaved(false); // a reboot drops them; another board never had them
   if (!on) clearHistoryView(); // another board (or this one after a reset) has a different record
   $('btnHistCsv').disabled = !hist?.buckets.length;
   if (!on) {
@@ -384,7 +392,9 @@ function applyRole(r) {
 
 async function refreshInfo() {
   const info = await call('info');
-  $('devline').textContent = `${info.board} · fw ${info.fw} · ${info.role}`;
+  devline = `${info.board} · fw ${info.fw} · ${info.role}`;
+  $('devline').textContent = devline;
+  keySet = !!info.key_set;
   $('keyWarn').hidden = info.key_set;
   $('secKeySet').textContent = info.key_set ? 'yes' : 'no (link disabled)';
   applyRole(info.role);
@@ -407,6 +417,23 @@ const pill = (on) => `<span class="pill ${on ? 'on' : ''}">${on ? 'ON' : 'off'}<
 async function refreshStatus() {
   const res = await call('status');
   renderStatus(res.status);
+}
+
+// Status poll. Two misses in a row (the port is open but the board doesn't answer) dim the status cards
+// like a disconnect, and the header says so, so stale values don't read as live.
+let pollMisses = 0;
+let devline = '';
+async function pollStatus() {
+  try {
+    await refreshStatus();
+    pollMisses = 0;
+  } catch {
+    pollMisses++;
+  }
+  if (!port) return;
+  const stale = pollMisses >= 2;
+  document.body.classList.toggle('offline', stale);
+  $('devline').textContent = stale ? `${devline} · not responding` : devline;
 }
 
 function renderStatus(s) {
@@ -510,9 +537,12 @@ function renderConfig() {
       const el = row.querySelector('input, select');
       setField(el, params[name]);
       el.addEventListener('input', () => {
-        row.classList.toggle('dirty', fieldValue(el) !== params[name]);
+        const v = fieldValue(el);
+        row.classList.toggle('dirty', v !== params[name]);
+        if (el.type === 'number') el.setAttribute('aria-invalid', String(!Number.isInteger(v) || v < m.min || v > m.max || el.value === ''));
         updateDirtyCount();
       });
+      if (el.type === 'number') el.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnCfgApply').click(); });
     }
     form.appendChild(card);
   }
@@ -524,6 +554,13 @@ const dirtyCount = () => Object.keys(formValues(true)).length;
 function updateDirtyCount() {
   const n = dirtyCount();
   $('btnCfgApply').textContent = n ? `Apply (${n})` : 'Apply';
+}
+
+function markUnsaved(on) {
+  appliedUnsaved = on;
+  const b = $('btnCfgSave');
+  b.textContent = on ? 'Save to flash •' : 'Save to flash';
+  b.title = on ? 'Applied settings are running but not saved yet: a reboot or power cut loses them' : '';
 }
 
 // On/off parameters are checkbox toggles; everything else carries its value in .value.
@@ -570,6 +607,7 @@ async function applyConfig() {
     reboot ||= !!res.reboot_required;
   }
   await loadConfig();
+  if (applied.length) markUnsaved(true);
   const done = applied.length ? `Applied ${applied.join(', ')}. ${reboot ? 'Save and reboot for role change.' : 'Remember to Save.'}` : '';
   if (errors.length) toast(`Rejected: ${errors.join(', ')}. ${done}`, 'err');
   else toast(done || 'Nothing changed.');
@@ -587,14 +625,18 @@ async function importConfig(file) {
   let data;
   try { data = JSON.parse(await file.text()); } catch { return toast('Not a valid JSON file.', 'err'); }
   const src = data.params || data;
+  let found = 0;
   for (const m of meta) {
     const el = $(`p_${m.name}`);
     if (el && Number.isInteger(src[m.name])) {
       setField(el, src[m.name]);
       el.dispatchEvent(new Event('input'));
+      found++;
     }
   }
-  toast('Imported into the form. Review, then Apply and Save.');
+  if (!found) return toast('No GateLink settings found in that file.', 'err');
+  const n = dirtyCount();
+  toast(`Imported ${found} setting${found === 1 ? '' : 's'}; ${n ? `${n} differ${n === 1 ? 's' : ''} from the board. Review, then Apply and Save.` : 'all match the board already.'}`);
 }
 
 // ---------- Tools ----------
@@ -602,6 +644,19 @@ const rssiHist = [];
 // DIAG over LoRa is best effort; give up on the reply after this long.
 const DIAG_TIMEOUT_MS = 10000;
 let diagTimer = null;
+// A ping is one unacknowledged frame each way; at SF12 the round trip takes a few seconds.
+const PING_TIMEOUT_MS = 8000;
+let pingWait = null;
+
+async function ping() {
+  await call('radio.ping');
+  if (pingWait) return; // timed from the oldest unanswered ping, or auto-ping would never time out
+  if (!$('pingAuto').checked) $('pingRtt').textContent = 'waiting…';
+  pingWait = setTimeout(() => {
+    pingWait = null;
+    $('pingRtt').textContent = 'no reply';
+  }, PING_TIMEOUT_MS);
+}
 
 function drawRssi() {
   const svg = $('rssiChart');
@@ -979,6 +1034,8 @@ function onEvent(ev) {
       renderStatus(ev.status);
       break;
     case 'pong':
+      clearTimeout(pingWait);
+      pingWait = null;
       $('pingRtt').textContent = `${ev.rtt_ms} ms`;
       $('pingHere').textContent = `${ev.rssi} dBm / ${Number(ev.snr).toFixed(1)} dB`;
       $('pingPeer').textContent = `${ev.peer_rssi} dBm / ${ev.peer_snr} dB`;
@@ -1006,6 +1063,7 @@ async function relayTest(k) {
   if (!Number.isInteger(ms) || ms < 50 || ms > 5000) return toast('Pulse length must be 50–5000 ms.', 'err');
   if (role === 'gate' && !confirm(`This will pulse the opener ${k === 1 ? 'OPEN' : 'CLOSE'} input and move the gate. Continue?`)) return;
   await call('relay.test', { k, ms });
+  toast(`K${k} pulsed for ${ms} ms.`);
 }
 
 // ---------- Log ----------
@@ -1113,9 +1171,17 @@ function init() {
     await loadConfig();
   });
   $('btnCfgApply').onclick = guard(applyConfig);
-  $('btnCfgSave').onclick = guard(async () => { await call('config.save'); toast('Saved to flash.'); });
+  $('btnCfgSave').onclick = guard(async () => {
+    // Save writes what the board is running; edits still in the form would silently be left out.
+    const n = dirtyCount();
+    if (n) return toast(`${n} edit${n === 1 ? ' isn’t' : 's aren’t'} applied yet. Apply first, then Save.`, 'err');
+    await call('config.save');
+    markUnsaved(false);
+    toast('Saved to flash.');
+  });
   $('btnReboot').onclick = guard(async () => {
-    if (!confirm('Reboot the board? Relays release during reboot.')) return;
+    const lose = appliedUnsaved ? '\n\nApplied settings haven’t been saved to flash and will be lost.' : '';
+    if (!confirm(`Reboot the board? Relays release during reboot.${lose}`)) return;
     await request('reboot', {}, 1500).catch(() => {});
     await disconnect(true);
     startReconnect();
@@ -1124,12 +1190,13 @@ function init() {
   $('btnCfgReset').onclick = guard(async () => {
     if (!confirm('Erase config and key and restore defaults?')) return;
     await call('config.reset');
+    markUnsaved(false); // reset saves the defaults
     await loadConfig();
     await refreshInfo();
     toast('Defaults restored. Reboot to apply role.');
   });
   $('btnCfgExport').onclick = () =>
-    download(`gatelink-${role}-config.json`, JSON.stringify({ role, params: formValues(false) }, null, 2));
+    download(`gatelink-${role}-config-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ role, params: formValues(false) }, null, 2));
   $('fileImport').onchange = (e) => { if (e.target.files[0]) importConfig(e.target.files[0]); e.target.value = ''; };
 
   $('btnKeyGen').onclick = () => {
@@ -1152,6 +1219,7 @@ function init() {
   $('btnKeySet').onclick = guard(async () => {
     const key = keyValue();
     if (!/^[0-9a-f]{32}$/.test(key)) return toast('Key must be exactly 32 hex characters.', 'err');
+    if (keySet && !confirm('This board already has a key. Replacing it takes the link down until the other board gets the same key. Continue?')) return;
     await call('key.set', { key });
     await refreshInfo();
     toast('Key written and saved. Write the same key to the other board.');
@@ -1159,10 +1227,10 @@ function init() {
 
   $('btnK1').onclick = guard(() => relayTest(1));
   $('btnK2').onclick = guard(() => relayTest(2));
-  $('btnPing').onclick = guard(() => call('radio.ping'));
+  $('btnPing').onclick = guard(ping);
   $('pingAuto').onchange = (e) => {
     clearInterval(pingTimer);
-    if (e.target.checked) pingTimer = setInterval(() => call('radio.ping').catch(() => {}), 3000);
+    if (e.target.checked) pingTimer = setInterval(() => ping().catch(() => {}), 3000);
   };
   $('btnDiag').onclick = guard(async () => {
     clearTimeout(diagTimer);
@@ -1198,7 +1266,10 @@ function init() {
       throw e;
     }
   });
-  $('btnReplay').onclick = guard(() => call('debug.replay'));
+  $('btnReplay').onclick = guard(async () => {
+    await call('debug.replay');
+    toast('Replay sent. Check the other board’s replay counter (Status → Link).');
+  });
 
   $('btnHistLoad').onclick = guard(async () => {
     await loadHistory();

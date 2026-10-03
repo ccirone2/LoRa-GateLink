@@ -33,6 +33,10 @@ once its fix is merged and record it in the pull request.
 
 ## Bench and field tests
 
+- [ ] **SPI flash on both boards.** 0.5.0 keeps config in the on-board SPI flash. Check `info` `flash_id` and
+  `cfg_store` `spi` on both bench boards and on any replacement board (an unexpected chip falls back to
+  program flash, which uploads erase).
+
 - [ ] **Real controller power loss.** It's still simulated (house `in2_invert`). The suite is ready: wire the IN2
   opto to the Shelly's 12 V on an HA smart plug and set `GATELINK_HA_POWER_ENTITY`. Then run
   `test_controller_faults.py` and note which drops first (summary "Link" section).

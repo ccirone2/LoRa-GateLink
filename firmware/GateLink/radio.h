@@ -3,6 +3,7 @@
 
 // Thin wrapper over the sandeepmistry LoRa library (raw point-to-point, not LoRaWAN).
 bool radioBegin();  // (re)initialise with current cfg radio params
+void radioRestart();  // radioBegin() again if it has been started (after the module was held in reset)
 bool radioOk();
 // Starts transmitting and returns at once (false if the radio is down or still transmitting). The radio
 // goes back to RX continuous as soon as TX is done.

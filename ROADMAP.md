@@ -13,11 +13,6 @@ _Nothing decided yet. Move items here from Ideas._
 
 ## Ideas
 
-- **Keep config and key across firmware uploads.** Every upload erases program flash, so role, key and
-  `tx_power` must be re-applied after each flash (`tools/gatelink.py snapshot`/`restore` papers over it on the
-  bench). The MKR WAN 1310 has a 2 MB SPI flash chip that uploads don't touch; storing `Config` there (with the
-  existing CRC and `CFG_VERSION` check, migrating or falling back to defaults on a version change) would make
-  field updates much safer. Open question: should a version change keep the key even when the rest resets?
 - **Use the spare inputs.** Gate IN4 and house IN3/IN4 are wired, debounced, logged and reported but have no
   behaviour. Candidates: a beam-break or vehicle-presence sensor at the gate reported to the house (and on to
   Alarm.com), or the alarm panel's armed state at the house. Needs a decision on what Alarm.com should see and
@@ -33,14 +28,15 @@ _Nothing decided yet. Move items here from Ideas._
   warn before it runs flat.
 - **Longer or persistent link history.** The boards keep 96 hourly buckets in RAM (since 0.4.0), and every
   reset wipes them. Open questions:
-  - Persist them? Saving hourly to the SPI flash would pair with keeping config across uploads. The linker
+  - Persist them? Hourly saves could go to the SPI flash that holds config since 0.5.0 (`extflash.cpp`; config
+    uses sectors 0–1). The linker
     script has no `.noinit` section, so even a watchdog reset clears RAM.
   - Go deeper? A week needs a slimmer bucket (64 B now) or 2 h buckets: a `config.get` reply takes ~5 KB of
     heap (`free_ram` in status).
   - Should the gate's own history be fetchable over LoRa (paged, like DIAG), or are the counters in STATUS
     enough?
 - **Flash firmware from the web console.** The SAMD bootloader (BOSSA) can be driven over Web Serial, so a field
-  update wouldn't need `arduino-cli`. Pairs well with keeping config across uploads, and with the `.bin` attached
+  update wouldn't need `arduino-cli`. Config and key survive uploads since 0.5.0; pairs well with the `.bin` attached
   to each release.
 - **Key backup in config export.** The exported config leaves out the key, so restoring a board needs the key
   from elsewhere. An export option that includes the key encrypted with a passphrase would keep one backup file

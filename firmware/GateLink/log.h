@@ -27,6 +27,8 @@ enum LogCode : uint8_t {
   EV_CMD_REFUSED,    // a = action, b = cmd id (opener unpowered)
   EV_CTRL_POWER,     // a = controller power level, b = action discarded by the power loss (0 = none)
   EV_LBT_FORCED,     // a = msg type, b = ms the channel stayed busy (sent anyway)
+  EV_CFG,            // at boot: a = config source (CfgSource: 0 defaults, 1 SPI flash, 2 program flash),
+                     //   b = saved settings dropped (unknown or out of range)
   EV_COUNT
 };
 

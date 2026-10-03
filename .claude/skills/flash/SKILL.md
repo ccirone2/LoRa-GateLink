@@ -1,12 +1,13 @@
 ---
 name: flash
-description: Flash GateLink firmware to the bench boards (and optionally the GateSim Uno), then restore each board's role, config and link key and confirm the link. Use whenever firmware needs uploading to the MKR boards on the bench, e.g. before a bench test of a firmware change.
+description: Flash GateLink firmware to the bench boards (and optionally the GateSim Uno), then check each board kept its role, config and link key (restoring them if not) and confirm the link. Use whenever firmware needs uploading to the MKR boards on the bench, e.g. before a bench test of a firmware change.
 ---
 
 # Flash the bench boards
 
-Uploading erases each board's saved config and key (program flash). This procedure snapshots them first and
-puts them back afterwards. Bench facts: the MKR boards are usually COM5/COM6 (which is which can change; boards
+From 0.5.0 the saved config and key live in the board's SPI flash chip and survive uploads. Uploading over
+older firmware, or onto a board whose chip doesn't answer (`cfg internal` in `ports`), still erases them, so
+this procedure always snapshots first and restores when needed. Bench facts: the MKR boards are usually COM5/COM6 (which is which can change; boards
 are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink_key`.
 
 1. **Free the ports.** The web console (or a running pytest) holding a port makes everything below fail with
@@ -28,10 +29,13 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
    ```
    A board in the bootloader can re-enumerate on another COM number; `arduino-cli board list` shows it. If an
    upload fails with the port busy, double-tap the board's reset button and retry on the port it shows.
-4. **Restore** role, config and key, reboot, and wait for the link:
+4. **Check, then restore if needed.** Run `python tools/gatelink.py ports`. If both boards show their role,
+   `key set`, `tx_power` 5 and `cfg spi`, the config survived: skip to the link check below. Otherwise restore
+   role, config and key, reboot, and wait for the link:
    ```sh
    python tools/gatelink.py restore
    ```
+   Link check without a restore: `ports` again after ~15 s should show `verified True` on both.
    It matches boards by port, so if a board came back on a different COM number, edit the port keys in
    `~/.gatelink_config.json` first. It ends with `link verified on gate, house`; anything else is a failure to
    report, with `python tools/gatelink.py ports` output.

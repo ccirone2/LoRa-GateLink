@@ -12,6 +12,9 @@ and `firmware/GateLink/pins.h` in sync.
   pull-down**: an input is active when driven to 3.3 V (a PNP opto output or a contact to the board's 3.3 V) and
   reads off when open. **Never put more than 3.3 V on an input.** Change pins in `firmware/GateLink/pins.h` if your
   wiring differs; check the shield silkscreen.
+- The saved config and key live in the board's on-board flash chip (W25Q16JV, select on internal pin 32). It
+  shares the radio module's internal SPI bus, so no header pins are used. Each save holds the radio module in
+  reset and re-initialises the radio: about 0.5 s off the air.
 - Use relay NO/COM contacts for everything. Add TVS/RC suppression on long input runs.
 
 | Terminal | House board | Gate board |

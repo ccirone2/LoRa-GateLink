@@ -346,14 +346,18 @@ async function call(cmd, args) {
 }
 
 // ---------- UI state ----------
+// Controls that work without a board.
+const OFFLINE_OK = ['logRaw', 'btnLogClear', 'btnLogSave', 'keyInput', 'btnKeyGen', 'btnKeyCopy'];
+
 function setConnected(on) {
   $('btnConnect').hidden = on;
   $('btnDisconnect').hidden = !on;
   $('btnIdentify').hidden = !on;
   document.querySelectorAll('main button, main input, main select').forEach((el) => {
     if (el.closest('#tab-install')) return; // static reference, usable without a board
-    if (!['logRaw', 'btnLogClear', 'btnLogSave'].includes(el.id)) el.disabled = !on;
+    if (!OFFLINE_OK.includes(el.id)) el.disabled = !on;
   });
+  document.body.classList.toggle('offline', !on);
   if (!on) clearHistoryView(); // another board (or this one after a reset) has a different record
   $('btnHistCsv').disabled = !hist?.buckets.length;
   if (!on) {
@@ -465,6 +469,17 @@ async function loadConfig() {
   const keep = sel.value;
   sel.replaceChildren(...meta.filter((m) => m.remote).map((m) => new Option(m.name, m.name)));
   if (keep && meta.some((m) => m.remote && m.name === keep)) sel.value = keep;
+  syncRemValue();
+}
+
+// Show the selected remote param's range on the value box (the board still validates it).
+function syncRemValue() {
+  const m = meta.find((x) => x.name === $('remParam').value);
+  const el = $('remValue');
+  if (!m) return;
+  el.min = m.min;
+  el.max = m.max;
+  el.placeholder = `${m.min}–${m.max}`;
 }
 
 function renderConfig() {
@@ -494,10 +509,21 @@ function renderConfig() {
       card.appendChild(row);
       const el = row.querySelector('input, select');
       setField(el, params[name]);
-      el.addEventListener('input', () => row.classList.toggle('dirty', fieldValue(el) !== params[name]));
+      el.addEventListener('input', () => {
+        row.classList.toggle('dirty', fieldValue(el) !== params[name]);
+        updateDirtyCount();
+      });
     }
     form.appendChild(card);
   }
+  updateDirtyCount();
+}
+
+// Edits in the form not yet applied to the board.
+const dirtyCount = () => Object.keys(formValues(true)).length;
+function updateDirtyCount() {
+  const n = dirtyCount();
+  $('btnCfgApply').textContent = n ? `Apply (${n})` : 'Apply';
 }
 
 // On/off parameters are checkbox toggles; everything else carries its value in .value.
@@ -977,6 +1003,7 @@ function onEvent(ev) {
 
 async function relayTest(k) {
   const ms = Number($('relayMs').value);
+  if (!Number.isInteger(ms) || ms < 50 || ms > 5000) return toast('Pulse length must be 50–5000 ms.', 'err');
   if (role === 'gate' && !confirm(`This will pulse the opener ${k === 1 ? 'OPEN' : 'CLOSE'} input and move the gate. Continue?`)) return;
   await call('relay.test', { k, ms });
 }
@@ -1013,10 +1040,27 @@ function toast(msg, kind = '') {
 }
 
 // ---------- Wiring ----------
+// Runs a click handler, reporting errors as a toast. The clicked button is disabled until the handler
+// finishes so a slow board reply can't be double-submitted.
 function guard(fn) {
   return async (...a) => {
-    try { await fn(...a); } catch (e) { toast(e.message, 'err'); }
+    const b = a[0]?.currentTarget instanceof HTMLButtonElement ? a[0].currentTarget : null;
+    if (b) b.disabled = true;
+    try { await fn(...a); } catch (e) { toast(e.message, 'err'); } finally {
+      if (b) b.disabled = !port && !OFFLINE_OK.includes(b.id);
+    }
   };
+}
+
+// Key input: accept pasted keys with spaces, colons or dashes; flag anything that isn't 32 hex chars.
+function keyValue() {
+  return $('keyInput').value.replace(/[\s:-]/g, '').toLowerCase();
+}
+function checkKeyInput() {
+  const k = keyValue();
+  const ok = /^[0-9a-f]{32}$/.test(k);
+  $('keyInput').setAttribute('aria-invalid', String(!!k && !ok));
+  $('keyHint').textContent = !k || ok ? '' : `${k.length}/32 characters${/[^0-9a-f]/.test(k) ? ', hex digits only (0–9, a–f)' : ''}`;
 }
 
 function init() {
@@ -1039,6 +1083,7 @@ function init() {
       x.tabIndex = on ? 0 : -1;
     });
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${b.dataset.tab}`));
+    history.replaceState(null, '', `#${b.dataset.tab}`); // survives a page reload
   };
   tabs.forEach((b, i) => {
     b.addEventListener('click', () => selectTab(b));
@@ -1051,13 +1096,22 @@ function init() {
       next.focus();
     });
   });
+  const fromHash = tabs.find((b) => `#${b.dataset.tab}` === location.hash);
+  if (fromHash) selectTab(fromHash);
   $('toast').onclick = hideToast;
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('toast').textContent) hideToast(); });
+  // Unapplied form edits are lost on reload/close.
+  window.addEventListener('beforeunload', (e) => { if (meta.length && dirtyCount()) e.preventDefault(); });
 
   $('btnConnect').onclick = connect;
   $('btnDisconnect').onclick = () => { stopReconnect(); disconnect(); };
   $('btnIdentify').onclick = guard(async () => { await call('identify'); toast('LED strobing for 6 s.'); });
 
-  $('btnCfgLoad').onclick = guard(loadConfig);
+  $('btnCfgLoad').onclick = guard(async () => {
+    const n = dirtyCount();
+    if (n && !confirm(`Discard ${n} unapplied edit${n === 1 ? '' : 's'} and reload from the board?`)) return;
+    await loadConfig();
+  });
   $('btnCfgApply').onclick = guard(applyConfig);
   $('btnCfgSave').onclick = guard(async () => { await call('config.save'); toast('Saved to flash.'); });
   $('btnReboot').onclick = guard(async () => {
@@ -1081,9 +1135,22 @@ function init() {
   $('btnKeyGen').onclick = () => {
     const b = crypto.getRandomValues(new Uint8Array(16));
     $('keyInput').value = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+    checkKeyInput();
+  };
+  $('keyInput').addEventListener('input', checkKeyInput);
+  $('keyInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('btnKeySet').disabled) $('btnKeySet').click(); });
+  $('btnKeyCopy').onclick = async () => {
+    const key = keyValue();
+    if (!key) return toast('Nothing to copy: generate or enter a key first.', 'err');
+    try {
+      await navigator.clipboard.writeText(key);
+      toast('Key copied to the clipboard.');
+    } catch (e) {
+      toast(`Copy failed: ${e.message}`, 'err');
+    }
   };
   $('btnKeySet').onclick = guard(async () => {
-    const key = $('keyInput').value.trim().toLowerCase();
+    const key = keyValue();
     if (!/^[0-9a-f]{32}$/.test(key)) return toast('Key must be exactly 32 hex characters.', 'err');
     await call('key.set', { key });
     await refreshInfo();
@@ -1112,6 +1179,8 @@ function init() {
       throw e;
     }
   });
+  $('remParam').onchange = syncRemValue;
+  $('remValue').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('btnRemSet').disabled) $('btnRemSet').click(); });
   $('btnRemSet').onclick = guard(async () => {
     const name = $('remParam').value;
     const raw = $('remValue').value.trim();
@@ -1162,7 +1231,10 @@ function init() {
     for (const e of res.log) logLine(`[${fmtDur(e.t)}] ${e.ev} a=${e.a} b=${e.b}`);
   });
   $('btnLogClear').onclick = () => { $('logView').innerHTML = ''; logLines.length = 0; };
-  $('btnLogSave').onclick = () => download('gatelink-log.txt', logLines.join('\n'), 'text/plain');
+  $('btnLogSave').onclick = () => {
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    download(`gatelink-${role}-log-${stamp}.txt`, logLines.join('\n'), 'text/plain');
+  };
 
   navigator.serial?.addEventListener('disconnect', (e) => { if (e.target === port) connectionLost(); });
   // A granted port reappearing while we're waiting for a reboot is the board coming back (the other

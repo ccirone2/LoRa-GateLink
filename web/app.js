@@ -741,7 +741,8 @@ function renderConfig() {
         ? `<button type="button" class="info" aria-label="About ${esc(name)}" aria-describedby="${id}_tip">i</button>`
           + `<span class="tip" role="tooltip" id="${id}_tip">${esc(HELP[name])}</span>`
         : '';
-      row.innerHTML = `<div class="flabel"><label for="${id}">${esc(name)}</label>${help}</div>${input}`;
+      // Info icon in its own column at the far right, after the entry field (an empty cell keeps rows aligned).
+      row.innerHTML = `<label for="${id}">${esc(name)}</label>${input}${help || '<span></span>'}`;
       card.appendChild(row);
       const el = row.querySelector('input, select');
       setField(el, params[name]);

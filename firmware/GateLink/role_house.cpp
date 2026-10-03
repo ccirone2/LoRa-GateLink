@@ -14,6 +14,8 @@
 #include "log.h"
 #include "console.h"
 #include "radio.h"
+#include "history.h"
+#include "app.h"
 
 static uint8_t gateState = GS_UNKNOWN;
 static uint8_t gateInputs = 0;
@@ -24,6 +26,9 @@ static uint32_t gateUptime = 0;
 static int16_t gateRssi = 0;  // RSSI measured at the gate
 static int8_t gateSnr = 0;
 static uint16_t gateHeartbeat = 0;  // gate heartbeat_s, from its STATUS
+static bool gateExt = false;  // its STATUS carries the link counters and noise (0.4.0 on)
+static uint16_t gateRetries = 0, gateGiveups = 0, gateCrc = 0;
+static int8_t gateNoise = 0;  // dBm, 0 = no sample
 static bool haveStatus = false;
 static uint8_t lastEnd = GS_UNKNOWN;  // last limit reached (OPEN/CLOSED), held while BETWEEN
 static uint32_t betweenSince = 0;
@@ -152,8 +157,7 @@ static void updateCtrlPower(uint32_t now) {
 }
 
 void houseLoop(uint32_t now) {
-  const LinkStats &st = linkStats();
-  bool up = st.lastRxAt != 0 && !elapsed(now, st.lastRxAt, houseLinkTimeoutMs());
+  bool up = appLinkUp(now);
   if (up != linkUp) {
     linkUp = up;
     logEvent(up ? EV_LINK_UP : EV_LINK_DOWN);
@@ -231,7 +235,7 @@ void houseLoop(uint32_t now) {
 }
 
 static void handleStatus(const RxMsg &m, uint32_t now) {
-  if (m.len < ST_LEN) {
+  if (m.len < ST_LEN_V1) {
     linkAck(m.seq, RES_BAD);
     return;
   }
@@ -247,6 +251,16 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   gateSnr = (int8_t)m.payload[ST_SNR];
   gateTarget = m.payload[ST_TARGET];
   gateHeartbeat = getU16(m.payload + ST_HEARTBEAT);
+  PeerReport r = { gateRssi, gateSnr, m.len >= ST_LEN, 0, 0, 0, 0, 0 };
+  gateExt = r.ext;
+  if (r.ext) {
+    r.retries = gateRetries = getU16(m.payload + ST_RETRIES);
+    r.giveups = gateGiveups = getU16(m.payload + ST_GIVEUPS);
+    r.crcErr = gateCrc = getU16(m.payload + ST_CRC);
+    r.noiseAvg = gateNoise = (int8_t)m.payload[ST_NOISE];
+    r.noiseMax = (int8_t)m.payload[ST_NOISE_MAX];
+  }
+  histPeer(r);
   bool first = !haveStatus;
   haveStatus = true;
 
@@ -307,6 +321,13 @@ void houseStatus(JsonObject o) {
   g["k2"] = (bool)(gateInputs & 8);
   g["in3"] = (bool)(gateInputs & 16);
   g["in4"] = (bool)(gateInputs & 32);
+  if (gateExt) {
+    g["retries"] = gateRetries;
+    g["giveups"] = gateGiveups;
+    g["crc_err"] = gateCrc;
+    if (gateNoise) g["noise"] = gateNoise;
+    else g["noise"] = nullptr;
+  }
 }
 
 void houseRelayTest(uint8_t k, uint32_t ms) {

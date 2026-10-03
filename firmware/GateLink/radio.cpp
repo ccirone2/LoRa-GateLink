@@ -7,6 +7,8 @@
 static bool ok = false;
 static bool begun = false;
 static uint32_t faults = 0;
+static uint32_t crcErrors = 0;  // frames received with a bad CRC, since boot
+static uint32_t rxDone = 0;     // frames received, good or not, since boot
 static uint32_t retryAt = 0;  // while !ok: when to try radioBegin() again
 #define RETRY_MS 5000
 // Transmission in progress. TX is asynchronous: a frame takes up to seconds at SF12, and blocking for it held
@@ -23,6 +25,8 @@ static uint32_t txStart, txLimit;
 #define REG_IRQ_FLAGS 0x12
 #define REG_RX_NB_BYTES 0x13
 #define REG_MODEM_STAT 0x18
+#define REG_RSSI_VALUE 0x1B
+#define RSSI_OFFSET_HF 157  // HF port: freq_hz is never below 862 MHz
 #define REG_DIO_MAPPING_1 0x40
 #define DIO0_TX_DONE 0x40
 // Signal detected | signal synchronized | header info valid. Bit 2 (RX on-going) is set whenever the
@@ -105,6 +109,14 @@ uint32_t radioFaults() {
   return faults;
 }
 
+uint32_t radioCrcErrors() {
+  return crcErrors;
+}
+
+uint32_t radioRxDoneCount() {
+  return rxDone;
+}
+
 bool radioSend(const uint8_t *buf, size_t len) {
   if (!ok || radioTxBusy()) return false;
   LoRa.beginPacket();
@@ -165,6 +177,7 @@ size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
   }
   uint8_t irq = readReg(REG_IRQ_FLAGS);
   if (!(irq & IRQ_RX_DONE)) return 0;  // nothing finished; never touch the flags mid-packet
+  rxDone++;
   size_t n = 0;
   if (!(irq & IRQ_CRC_ERROR)) {
     uint8_t len = readReg(REG_RX_NB_BYTES);
@@ -174,6 +187,8 @@ size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
       rssi = LoRa.packetRssi();
       snr = LoRa.packetSnr();
     }
+  } else {
+    crcErrors++;
   }
   writeReg(REG_IRQ_FLAGS, irq);
   return n;
@@ -186,6 +201,16 @@ bool radioChannelBusy() {
   if (readReg(REG_IRQ_FLAGS) & IRQ_RX_DONE) return true;
   if (readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) return false;
   return (readReg(REG_MODEM_STAT) & MODEM_STAT_BUSY) != 0;
+}
+
+// In-channel RSSI while listening with no LoRa frame under way: the noise floor, plus anything that isn't LoRa
+// (FSK bursts such as Z-Wave), which the modem doesn't flag.
+int16_t radioNoiseDbm() {
+  if (!ok || txActive) return INT16_MIN;
+  if (readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) return INT16_MIN;
+  if (readReg(REG_IRQ_FLAGS) & IRQ_RX_DONE) return INT16_MIN;
+  if (readReg(REG_MODEM_STAT) & MODEM_STAT_BUSY) return INT16_MIN;
+  return (int16_t)readReg(REG_RSSI_VALUE) - RSSI_OFFSET_HF;
 }
 
 uint32_t radioAirtimeMs(size_t payloadLen) {

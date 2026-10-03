@@ -5,6 +5,7 @@
     python tools/gatelink.py gate relay.test k=1 ms=500 # arguments as key=value (values parsed as JSON)
     python tools/gatelink.py snapshot                   # save every board's config before flashing
     python tools/gatelink.py restore                    # after flashing: config + key back, reboot, wait for link
+    python tools/gatelink.py house hist --csv link.csv  # link quality history (every bucket) as CSV
 
 Uploading firmware erases the saved config and key. `snapshot` stores each board's running config by port
 (default ~/.gatelink_config.json); `restore` applies it to the board on the same port, saves it, sets the key
@@ -15,6 +16,7 @@ can hold a port.
 Uses the e2e suite's console client (tests/e2e/gatelink/board.py), so needs pyserial.
 """
 import argparse
+import csv
 import json
 import os
 import sys
@@ -105,6 +107,31 @@ def cmd_request(args):
     res.pop("id", None)
     print(json.dumps(res, indent=2))
     return 0 if res.get("ok") else 1
+
+
+def cmd_hist(args):
+    """Every history bucket as CSV, with each bucket's start in local time (the board counts from its boot)."""
+    b = open_target(args.target)
+    try:
+        buckets, head = b.history()
+    finally:
+        b.close()
+    fetched = time.time()
+    out = open(args.csv, "w", newline="") if args.csv else sys.stdout
+    try:
+        w = csv.writer(out)
+        fields = list(buckets[0]) if buckets else []
+        w.writerow(["start"] + fields)
+        for bk in buckets:
+            start = fetched - (head["now_s"] - bk["idx"] * head["period_s"])
+            w.writerow([time.strftime("%Y-%m-%d %H:%M", time.localtime(start))]
+                       + ["" if bk[f] is None else bk[f] for f in fields])
+    finally:
+        if args.csv:
+            out.close()
+    if args.csv:
+        print(f"{len(buckets)} buckets of {head['period_s']} s to {args.csv}")
+    return 0
 
 
 def cmd_snapshot(args):
@@ -199,10 +226,14 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] not in ("ports", "snapshot", "restore", "-h", "--help"):
         rp = argparse.ArgumentParser(prog="gatelink.py <target>")
         rp.add_argument("target", help="house, gate or a port (COMx)")
-        rp.add_argument("cmd", help="console command, e.g. status, log.get, config.set")
+        rp.add_argument("cmd", help="console command, e.g. status, log.get, config.set; or hist (history as CSV)")
         rp.add_argument("args", nargs="*", help="key=value arguments; values are JSON (params={\"sf\":9})")
         rp.add_argument("--timeout", type=float, default=3.0)
-        return cmd_request(rp.parse_args())
+        rp.add_argument("--csv", help="with `hist`: write the CSV to this file instead of stdout")
+        args = rp.parse_args()
+        if args.cmd == "hist":
+            return cmd_hist(args)
+        return cmd_request(args)
     args = ap.parse_args()
     return args.fn(args)
 

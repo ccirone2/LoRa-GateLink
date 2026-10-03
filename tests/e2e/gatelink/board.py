@@ -196,6 +196,20 @@ class Board:
     def log_get(self):
         return self.request("log.get")
 
+    def history(self):
+        """The link history (hist.get, every page), oldest bucket first, each a dict keyed by the reply's `fields`.
+
+        Returns (buckets, header): header has `period_s`, `now_s` (seconds since the history started), `oldest` and
+        `current` from the last page."""
+        buckets, frm = [], None
+        while True:
+            res = self.request("hist.get", **({} if frm is None else {"from": frm}))
+            buckets += [dict(zip(res["fields"], r)) for r in res["rows"]]
+            # A bucket that closes while paging moves `current` on: keep going until the last page reaches it.
+            if not res["rows"] or res["rows"][-1][0] >= res["current"]:
+                return buckets, {k: res[k] for k in ("period_s", "now_s", "oldest", "current")}
+            frm = res["rows"][-1][0] + 1
+
     def reboot(self):
         self.timeline.add("test", "action", text=f"{self.name} reboot")
         self.request("reboot")

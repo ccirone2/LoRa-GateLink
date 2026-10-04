@@ -8,7 +8,7 @@ const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 // ---------- Parameter presentation ----------
 const GROUPS = [
   ['General', ['role', 'net_id']],
-  ['Radio (must match on both boards)', ['freq_hz', 'sf', 'bw_hz', 'cr', 'tx_power', 'sync_word']],
+  ['Radio', ['freq_hz', 'sf', 'bw_hz', 'cr', 'tx_power', 'sync_word']],
   ['Link', ['retries', 'heartbeat_s', 'link_timeout_s', 'cmd_ttl_s']],
   ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert', 'in3_invert', 'in4_invert', 'power_sense']],
   ['Gate node', ['pulse_ms', 'travel_timeout_s']],
@@ -24,7 +24,7 @@ const HELP = {
   sf: 'Both boards must match. Raise it a step at a time if the link is weak or drops; each step roughly doubles airtime, so replies get slower. Lower it for faster replies on a strong link.',
   bw_hz: 'Both boards must match. Keep 500 kHz in the US (keeps a single-channel link within FCC rules). Narrower reaches further but every frame takes longer.',
   cr: 'Both boards must match. Extra error correction, 4/5 to 4/8. Raise it if Link history shows CRC errors with a decent signal; frames get longer.',
-  tx_power: 'Transmit power in dBm. Lower it on USB power or at short range (full power can brown out a weak supply); raise it if the link is marginal.',
+  tx_power: 'Transmit power in dBm; may differ between the boards. Lower it on USB power or at short range (full power can brown out a weak supply); raise it if the link is marginal.',
   sync_word: 'Both boards must match. Rarely changed: it filters out other LoRa networks on the same channel.',
   retries: 'Resends of an unacknowledged message, spread over its lifetime. Raise it on a lossy link; lower it to keep the channel quieter.',
   heartbeat_s: 'Gate: how often it reports status when nothing changes. Shorter spots a dead link sooner but uses more airtime. The house waits at least 2.5 heartbeats before calling the link lost.',
@@ -48,6 +48,10 @@ const HELP = {
   ctrl_confirm_ms: 'House: each controller change waits this long before becoming a command, so one caused by a failing supply can be discarded. Raise it if power cuts still send commands; lower it for a snappier response.',
   ctrl_settle_ms: 'House: after the controller powers up (or the house boots), its changes count as sync for at least this long. Raise it if the controller takes longer to settle after power returns.',
 };
+// Settings that must be identical on both boards (marked * in the form). The link's retry and response timing
+// assumes the peer's frames use the same air settings, so cr counts even though the LoRa header carries it.
+// tx_power only sets how loud each board transmits and may differ.
+const MUST_MATCH = new Set(['net_id', 'freq_hz', 'sf', 'bw_hz', 'cr', 'sync_word']);
 const SELECTS = {
   role: [[0, 'unset'], [1, 'house'], [2, 'gate']],
   bw_hz: [[125000, '125 kHz'], [250000, '250 kHz'], [500000, '500 kHz']],
@@ -759,7 +763,8 @@ function renderConfig() {
           + `<span class="tip" role="tooltip" id="${id}_tip">${esc(HELP[name])}</span>`
         : '';
       // Info icon in its own column at the far right, after the entry field (an empty cell keeps rows aligned).
-      row.innerHTML = `<label for="${id}">${esc(name)}</label>${input}${help || '<span></span>'}`;
+      const star = MUST_MATCH.has(name) ? '<span class="must" title="Must match on both boards" aria-label="must match on both boards">*</span>' : '';
+      row.innerHTML = `<label for="${id}">${esc(name)}${star}</label>${input}${help || '<span></span>'}`;
       card.appendChild(row);
       const el = row.querySelector('input, select');
       setField(el, params[name]);

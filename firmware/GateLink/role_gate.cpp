@@ -195,12 +195,13 @@ static void handleCfgSet(const RxMsg &m) {
   }
   const ParamDef *p = paramById(m.payload[0]);
   int32_t v = (int32_t)getU32(m.payload + 1);
-  bool ok = p && (p->flags & P_REMOTE) && paramSet(p, v);
-  if (ok) {
-    configSaveParam(p);  // not configSave(): that would also persist unsaved console edits
-    logEvent(EV_CFG_REMOTE, p->id, v);
+  if (!p || !(p->flags & P_REMOTE) || !paramSet(p, v)) {
+    linkAck(m.seq, RES_BAD);
+    return;
   }
-  linkAck(m.seq, ok ? RES_OK : RES_BAD);
+  bool saved = configSaveParam(p);  // not configSave(): that would also persist unsaved console edits
+  logEvent(EV_CFG_REMOTE, p->id, v);
+  linkAck(m.seq, saved ? RES_OK : RES_NOT_SAVED);
 }
 
 static void sendDiag() {
@@ -258,7 +259,8 @@ void gateRelayTest(uint8_t k, uint32_t ms) {
   r.pulse(now, ms);
   // Track it like a command so the resulting movement is attributed to us, not external. A gate already at
   // that limit won't move for it, so there's nothing to attribute (a later move off it is someone else's).
+  // With the opener unpowered the pulse is only a wiring check: the limit read when power returns isn't ours.
   uint8_t want = k == 1 ? GS_OPEN : GS_CLOSED;
-  if (state != want) setTarget(want, now);
+  if (state != want && state != GS_NO_POWER) setTarget(want, now);
   logEvent(EV_PULSE, k, ms);
 }

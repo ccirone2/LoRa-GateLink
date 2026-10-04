@@ -76,7 +76,7 @@ static void onAck(Slot slot, uint8_t type, bool acked, uint8_t result) {
 }
 
 void appRestartRadio() {
-  if (!radioBegin()) logEvent(EV_RADIO_FAIL);
+  radioBegin();  // logs radio_fail itself
   linkBegin(onRx, onAck);
 }
 

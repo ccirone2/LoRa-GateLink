@@ -41,7 +41,8 @@ and `firmware/GateLink/pins.h` in sync.
 - **Gate IN3 = opener power sense** (`power_sense`, default on). Without power the CSW24UL's AUX limit relays
   drop and the gate would read `between`, the same as a gate stopped mid-travel. The opto channel across the
   opener's 24 V accessory output drives IN3 to tell them apart: IN3 off → gate state `no_power`, which overrides
-  the limits, and OPEN/CLOSE commands are acknowledged as refused without pulsing. Turn the `power_sense` toggle
+  the limits, and OPEN/CLOSE commands are acknowledged as refused without pulsing. A relay test still pulses
+  (a wiring check) but sets no target, so the limit read when power returns isn't attributed to it. Turn the `power_sense` toggle
   off (also possible remotely over LoRa) if IN3 isn't wired.
 - **MKR VIN is 5 V max.** Power the gate board from the opener's 24 V accessory supply through a 24 V→5 V buck.
 

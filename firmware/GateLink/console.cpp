@@ -303,5 +303,6 @@ void consoleEventRemoteSet(bool acked, uint8_t result) {
   doc["event"] = "remote_set";
   doc["acked"] = acked;
   doc["ok"] = acked && result == RES_OK;
+  doc["applied"] = acked && (result == RES_OK || result == RES_NOT_SAVED);
   send(doc);
 }

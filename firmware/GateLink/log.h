@@ -3,8 +3,8 @@
 
 enum LogCode : uint8_t {
   EV_BOOT = 0,       // a = reset cause (PM RCAUSE bits), b = role
-  EV_RADIO_FAIL,     // a = 0 init failed, 1 TX fault, 2 reset seen in RX (both re-initialised), 3 init retry
-                     //   succeeded; b = fault count
+  EV_RADIO_FAIL,     // a = 0 init failed (once until a retry succeeds), 1 TX fault, 2 reset seen in RX (both
+                     //   re-initialised), 3 init retry succeeded; b = fault count
   EV_LINK_UP,
   EV_LINK_DOWN,
   EV_SESSION,        // a = peer session accepted

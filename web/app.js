@@ -631,6 +631,12 @@ function fmtDur(ms) {
 }
 
 const yesNo = (v) => (v ? 'yes' : 'no');
+// Frequency error in Hz, signed, with the crystal offset it means at our carrier (ppm).
+function fmtFei(hz) {
+  if (hz === undefined || hz === null) return '—';
+  const ppm = params.freq_hz ? ` (${(Math.abs(hz) / (params.freq_hz / 1e6)).toFixed(2)} ppm)` : '';
+  return `${hz > 0 ? '+' : ''}${Math.round(hz)} Hz${ppm}`;
+}
 const pill = (on) => `<span class="pill ${on ? 'on' : ''}">${on ? 'ON' : 'off'}</span>`;
 
 async function refreshStatus(timeoutMs) {
@@ -682,6 +688,10 @@ function renderStatus(s) {
   $('lnkRetry').textContent = `${l.retries} / ${l.giveups}`;
   $('lnkBad').textContent = `${l.mac_fail} / ${l.replay}`;
   $('lnkLbt').textContent = l.lbt_defers === undefined ? '—' : `${l.lbt_defers} / ${l.lbt_forced}`;
+  // Newer fields: absent on older firmware; noise is null before its first sample, fei before the first frame.
+  $('lnkCrc').textContent = l.crc_err ?? '—';
+  $('lnkNoise').textContent = l.noise === undefined || l.noise === null ? '—' : `${fmtNum(l.noise)} dBm`;
+  $('lnkFei').textContent = fmtFei(l.age_ms < 0 ? null : l.fei);
 
   const labels = IO_LABELS[s.role] || IO_LABELS.unset;
   $('ioList').innerHTML = ['in1', 'in2', 'in3', 'in4', 'k1', 'k2'].filter((k) => k in s.io)
@@ -788,6 +798,16 @@ const dirtyCount = () => Object.keys(formValues(true)).length;
 function updateDirtyCount() {
   const n = dirtyCount();
   $('btnCfgApply').textContent = n ? `Apply (${n})` : 'Apply';
+  markConfigTab();
+}
+
+// A dot on the Config tab while edits are unapplied or applied settings are unsaved, seen from any tab.
+function markConfigTab() {
+  const t = $('tabbtn-config');
+  const n = meta.length ? dirtyCount() : 0;
+  const pending = n > 0 || appliedUnsaved;
+  t.classList.toggle('pending', pending);
+  t.title = n ? `${n} unapplied edit${n === 1 ? '' : 's'}` : appliedUnsaved ? 'Applied settings not saved to flash yet' : '';
 }
 
 function markUnsaved(on) {
@@ -795,6 +815,7 @@ function markUnsaved(on) {
   const b = $('btnCfgSave');
   b.textContent = on ? 'Save to flash •' : 'Save to flash';
   b.title = on ? 'Applied settings are running but not saved yet: a reboot or power cut loses them' : '';
+  markConfigTab();
 }
 
 // On/off parameters are checkbox toggles; everything else carries its value in .value.
@@ -1283,6 +1304,7 @@ function onEvent(ev) {
       $('pingRtt').textContent = `${ev.rtt_ms} ms`;
       $('pingHere').textContent = `${ev.rssi} dBm / ${Number(ev.snr).toFixed(1)} dB`;
       $('pingPeer').textContent = `${ev.peer_rssi} dBm / ${ev.peer_snr} dB`;
+      $('pingFei').textContent = fmtFei(ev.fei);
       rssiHist.push({ here: ev.rssi, peer: ev.peer_rssi });
       if (rssiHist.length > 60) rssiHist.shift();
       drawRssi();
@@ -1505,9 +1527,14 @@ function setFlashing(on) {
 function updateFwCard() {
   $('fwBoard').textContent = boardInfo ? `${boardInfo.fw} (${boardInfo.role})` : '—';
   if (!latestFw) return;
-  const newer = boardInfo && cmpVer(latestFw.version, boardInfo.fw) > 0;
+  const rel = boardInfo ? cmpVer(latestFw.version, boardInfo.fw) : 1;
+  const newer = boardInfo && rel > 0;
   $('fwLatest').textContent = `${latestFw.version}${newer ? ' · update available' : ''}`;
   $('fwLatest').className = newer ? 'good' : '';
+  // Only an update is the primary action; reinstalling the same version or going back is offered plainly.
+  const b = $('btnFwLatest');
+  b.textContent = rel > 0 ? `Install ${latestFw.version}` : rel === 0 ? `Reinstall ${latestFw.version}` : `Install ${latestFw.version} (older)`;
+  b.classList.toggle('primary', rel > 0);
 }
 
 async function loadLatest() {
@@ -1515,7 +1542,6 @@ async function loadLatest() {
     const r = await fetch('firmware/latest.json', { cache: 'no-cache' });
     if (!r.ok) return;
     latestFw = await r.json();
-    $('btnFwLatest').textContent = `Install ${latestFw.version}`;
     $('btnFwLatest').hidden = false;
     updateFwCard();
   } catch {} // served without the bundle (local copy): the file picker still works
@@ -1770,6 +1796,11 @@ function init() {
   tabFromHash();
   window.addEventListener('hashchange', tabFromHash); // back/forward, or a #tab link
   $('toast').onclick = hideToast;
+  // Chrome steps a focused number field on mouse wheel: scrolling the page past one (freq_hz, say) would
+  // silently change it. Drop focus instead, so the wheel scrolls the page.
+  document.addEventListener('wheel', (e) => {
+    if (e.target instanceof HTMLInputElement && e.target.type === 'number' && e.target === document.activeElement) e.target.blur();
+  }, { passive: true });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('toast').textContent) hideToast(); });
   // Unapplied form edits are lost on reload/close.
   window.addEventListener('beforeunload', (e) => { if (flashing || (meta.length && dirtyCount())) e.preventDefault(); });

@@ -57,6 +57,9 @@
           <div class="kv"><span>Retries / give-ups</span><b id="lnkRetry">—</b></div>
           <div class="kv"><span>MAC fail / replays</span><b id="lnkBad">—</b></div>
           <div class="kv"><span>Channel busy: held / sent anyway</span><b id="lnkLbt">—</b></div>
+          <div class="kv"><span>CRC errors</span><b id="lnkCrc">—</b></div>
+          <div class="kv" title="Smoothed background RF level on the channel; a rise means local interference"><span>Noise floor</span><b id="lnkNoise">—</b></div>
+          <div class="kv" title="The peer's carrier against ours, i.e. the two boards' crystal offset. A few hundred Hz is normal"><span>Frequency error</span><b id="lnkFei">—</b></div>
         </div>
         <div class="card">
           <div class="label">I/O</div>
@@ -142,6 +145,7 @@
           <div class="kv"><span>Last RTT</span><b id="pingRtt">—</b></div>
           <div class="kv"><span>RSSI/SNR here</span><b id="pingHere">—</b></div>
           <div class="kv"><span>RSSI/SNR at peer</span><b id="pingPeer">—</b></div>
+          <div class="kv"><span>Frequency error</span><b id="pingFei">—</b></div>
           <svg id="rssiChart" viewBox="0 0 300 90" preserveAspectRatio="none" role="img" aria-label="RSSI history"></svg>
           <div class="legend"><span class="sw here"></span>here <span class="sw peer"></span>peer <span class="muted" id="rssiRange"></span></div>
         </div>

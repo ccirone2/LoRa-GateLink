@@ -85,6 +85,7 @@ input[aria-invalid=true] { border-color: var(--bad); }
 nav { display: flex; gap: 4px; padding: 8px 16px 0; overflow-x: auto; border-bottom: 1px solid var(--border); }
 nav button { border: none; border-radius: 7px 7px 0 0; background: none; color: var(--muted); padding: 8px 14px; }
 nav button.active { color: var(--text); background: var(--surface); box-shadow: inset 0 -2px 0 var(--accent); }
+nav button.pending::after { content: ' •'; color: var(--warn); font-weight: 700; }
 nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 main { padding: 16px; max-width: 1200px; margin: 0 auto; }
@@ -97,9 +98,12 @@ body.offline #tab-status .grid { opacity: .55; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; min-width: 0; }
 .card.narrow { max-width: 640px; }
 .label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 8px; }
-.kv { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+.kv { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
 .kv:last-child { border-bottom: none; }
-.kv b { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+/* A reading keeps its one-line width ("-60 dBm / 9.0 dB" split mid-unit before) and the label wraps instead;
+   only a value wider than 70 % of the row wraps, at spaces. */
+.kv span:first-child { flex: 1 1 auto; min-width: 0; }
+.kv b { flex: 0 0 auto; max-width: 70%; font-weight: 600; text-align: right; overflow-wrap: break-word; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
 .row input.mono { flex: 1 1 260px; min-width: 0; }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }

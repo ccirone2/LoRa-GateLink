@@ -15,19 +15,20 @@ and then an empty line. Clients should ignore both and time out the request the 
 
 A request is `{"id": <int>, "cmd": "<name>", ...}`; the reply echoes the id: `{"id": <int>, "ok": true|false, ...}`,
 with `"error"` on failure. A line that isn't valid JSON is answered `bad json`, one over 1023 characters
-`line too long`, both with the id if it can be found in the raw text.
+`line too long`, both with the id if it can be found in the raw text. An unrecognised command is answered
+`unknown cmd`.
 
 | Command | Arguments | Reply / effect |
 |---|---|---|
 | `info` | | `fw`, `board`, `role` (running), `saved_role`, `key_set`, `cfg_store`, `flash_id` (SPI flash JEDEC id, hex; `000000` if it doesn't answer) |
 | `status` | | `status` object (below) |
 | `config.get` | | `params` (name → value), `meta` (per param: `name`, `id`, `min`, `max`, `radio`, `remote`, `reboot`), `key_set` |
-| `config.set` | `params`: {name: int} | Applies (doesn't save). `applied`, `errors` (names rejected), `reboot_required`. Unchanged values are skipped. Send at most ~8 params per request |
+| `config.set` | `params`: {name: int} | Applies (doesn't save). `applied`, `errors` (names rejected: unknown, not an integer or out of range; `ok` is false if any), `reboot_required`. Unchanged values are skipped. Radio params restart the radio. Send at most ~8 params per request |
 | `config.save` | | Writes the running config to flash |
-| `config.reset` | | Defaults, saved (key cleared); reboot required |
+| `config.reset` | | Running config back to defaults at once (key cleared, so the link stops) and the saved config and key erased; `reboot_required` |
 | `key.set` | `key`: 32 hex chars | Sets and saves only the key; restarts the radio and sessions. The key can't be read back |
-| `relay.test` | `k`: 1\|2, `ms`: 50–5000 | Pulses a relay (a gate test pulse sets a target like a command) |
-| `radio.ping` | | Sends a PING; a `pong` event follows if the peer answers |
+| `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command). Needs a role |
+| `radio.ping` | | Sends a PING; a `pong` event follows if the peer answers. Needs a role, a key and a working radio |
 | `remote.diag` | | House only. Requests the gate's diagnostics; a `remote_diag` event follows |
 | `remote.set` | `name`, `value` (int) | House only, remote-writable params only. `busy` while one is pending; a `remote_set` event follows |
 | `log.get` | | `log`: the ring buffer (64 entries: `t`, `ev`, `a`, `b`), `now` (board millis) |
@@ -50,7 +51,7 @@ retries cover.
 ## Status
 
 Common fields: `fw`, `role`, `reboot_pending`, `uptime_ms`, `radio_ok`, `radio_faults`, `reset_cause`
-(`watchdog`, `brownout`, `power_on`, `reset_pin`, `software`), `cfg_loaded`, `cfg_store` (`spi` or
+(`watchdog`, `brownout`, `power_on`, `reset_pin`, `software`, `unknown`), `cfg_loaded`, `cfg_store` (`spi` or
 `internal`, as in `info`), `key_set`, `io` (`in1`–`in4`, `k1`,
 `k2`) and `link` (`verified`, `age_ms`, `rssi`, `snr`, `tx`, `rx`, `retries`, `giveups`, `mac_fail`, `replay`,
 `sessions`, `lbt_defers`, `lbt_forced`, `crc_err` (frames received with a bad CRC), `noise` (smoothed noise floor,
@@ -58,13 +59,14 @@ dBm; null before the first sample), `fei` (frequency error of the last good fram
 ours, i.e. the two boards' crystal offset)), and `free_ram` (bytes between the heap's high-water mark and the stack).
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
-  `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target`, `last_cmd_id`, `power_sense`.
+  `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,
+  `power_sense`.
 - **House:** the gate's `gate`, `cause`, `last_result` and `target` as last reported, plus `link_up`,
   `link_timeout_eff_s`, `armed`, `ctrl` (controller level), `ctrl_power`, `sync_window`, `resyncing`, `cmd_id`,
   `cmd_pending`, `cmd_result` (ACK result: 0 ok, 1 already, 2 rejected, 4 opener unpowered; −1 none, −2 gave up)
   and `remote` (the gate's `uptime_s`, `rssi`, `snr`, `heartbeat_s`, `open_limit`, `close_limit`, `k1`, `k2`,
   `in3`, `in4`; from gate firmware 0.4.0 also its `retries`, `giveups`, `crc_err` (running totals, low 16 bits)
-  and `noise`).
+  and `noise` (its average since the previous STATUS; null if it had no sample)).
 
 ## Link history
 
@@ -103,8 +105,8 @@ Unsolicited lines carry `"event"` instead of `"id"`:
 | `log` | `t`, `ev`, `a`, `b` | Every log entry, as it is logged |
 | `status` | `status` | House: each STATUS received from the gate |
 | `pong` | `ping_id`, `rtt_ms`, `rssi`, `snr`, `peer_rssi`, `peer_snr`, `fei` (Hz, as in status) | Answer to `radio.ping` |
-| `remote_diag` | `fw`, `uptime_s`, `counters`, `params` | Answer to `remote.diag` |
-| `remote_set` | `acked`, `ok` | Outcome of `remote.set` |
+| `remote_diag` | `fw`, `uptime_s`, `counters` (`tx`, `rx`, `mac_fail`, `replay`, `retries`, `giveups`), `params` (the gate's remote-writable params) | Answer to `remote.diag` |
+| `remote_set` | `acked`, `ok` (the gate accepted it) | Outcome of `remote.set` |
 
 ## Log events
 
@@ -113,14 +115,15 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | Event | a | b |
 |---|---|---|
 | `boot` | reset cause (PM RCAUSE bits) | role |
-| `radio_fail` | 0 init failed, 1 TX fault, 2 reset seen in RX, 3 init retry succeeded | fault count |
-| `link_up`, `link_down`, `mac_fail` | | |
-| `session` | peer session accepted | |
+| `radio_fail` | 0 init failed, 1 TX fault, 2 reset seen in RX, 3 init retry succeeded | fault count (0 for a failed init) |
+| `link_up`, `link_down` | (house) | |
+| `mac_fail` | message type | RSSI |
+| `session` | peer session id (accepted) | |
 | `replay` | seq | last seq |
 | `tx_giveup` | message type | seq |
 | `cmd_sent` | action (1 open, 2 close) | command id |
 | `cmd_suppressed` | action | gate state |
-| `cmd_dropped` | action (link down / TTL) | |
+| `cmd_dropped` | action (not ACKed within `cmd_ttl_s`, or the link restarted) | command id |
 | `cmd_rx` | action | command id |
 | `cmd_dup` | command id | |
 | `cmd_refused` | action | command id (opener unpowered) |
@@ -132,7 +135,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `sync` | level (edge caused by our K1 sync) | |
 | `resync` | target level | |
 | `cfg_remote` | param id | value |
-| `input` | spare input number (house 2/3/4, gate 3/4) | level |
+| `input` | spare input number (house 2/3/4, 2 only with `ctrl_power_sense` off; gate 3/4) | level |
 | `lbt_forced` | message type | ms the channel stayed busy |
 | `cfg` | at boot, config source: 0 defaults, 1 SPI flash, 2 program flash | saved settings dropped (unknown id or out of range) |
 

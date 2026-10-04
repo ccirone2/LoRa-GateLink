@@ -7,8 +7,8 @@ The implementation notes (radio driver details, why things are done the way they
 
 915.0 MHz, 500 kHz bandwidth, SF9, CR 4/5, 17 dBm. 500 kHz keeps a fixed-channel LoRa link in the
 FCC 15.247 digital-modulation category in the US. For EU use 868.x MHz and stay within the band's duty-cycle
-limits. Radio settings (`freq_hz`, `sf`, `bw_hz`, `cr`, `tx_power`, `sync_word`) must match on both boards and
-are never writable over LoRa.
+limits. Radio settings (`freq_hz`, `sf`, `bw_hz`, `cr`, `sync_word`) must match on both boards (`tx_power`
+may differ) and, with `tx_power`, are never writable over LoRa.
 
 LoRa runs point-to-point with the `LoRa` library, not LoRaWAN. At the install site aim for ≥10 dB margin above
 the SF's sensitivity; raise `sf` (and/or `tx_power`) on **both** boards if the link is marginal.
@@ -31,7 +31,7 @@ is challenged, but the verified session stays in place until the new one answers
 
 Commands, status and remote config writes are acknowledged and retried: the `retries` resends are spread over
 the message's lifetime with doubling gaps (`cmd_ttl_s` for commands: at 10 s and 5 retries about 0.3, 0.9, 2.2,
-4.7 and 9.7 s), so a command survives an outage of nearly `cmd_ttl_s` and is dropped, never fired late, after
+4.7 and 9.7 s; STATUS: `heartbeat_s` capped at 10 s; config writes: 10 s), so a command survives an outage of nearly `cmd_ttl_s` and is dropped, never fired late, after
 it. Duplicate commands are detected and not re-pulsed. Every transmission listens before talking: responses go
 after a 25 ms turnaround, new frames after the response slot plus a random backoff.
 
@@ -43,8 +43,9 @@ and then fails its contact sensor open (`linkloss_open`).
 
 ## Wire formats
 
-STATUS and DIAG payload layouts are defined in `firmware/GateLink/roles.h` and parsed in `role_house.cpp` and
-`console.cpp`. A change to them needs both boards updated together; say so in the release notes.
+The STATUS payload layout is defined in `firmware/GateLink/roles.h` and parsed in `role_house.cpp`; the DIAG
+layout is built in `role_gate.cpp` (`sendDiag`) and parsed in `console.cpp`. Message types and the other
+payloads (CMD, ACK, CFG_SET, PING/PONG, HELLO) are listed in `link.h`. A change to them needs both boards updated together; say so in the release notes.
 
 Since 0.4.0, STATUS is 24 bytes: the gate also reports its link retries, giveups and CRC errors (running totals,
 low 16 bits) and its noise floor since the previous STATUS (average and peak). The house uses them for the link

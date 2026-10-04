@@ -131,6 +131,10 @@ class GateSim:
     def travel(self, seconds):
         self._ok(f"travel {seconds}")
 
+    def ac(self, on):
+        """AC lost with the opener on its battery: IN3 (relay 3) off while the limits and motion carry on."""
+        self._ok(f"relay 3 {'auto' if on else 'off'}")
+
     def relay_auto(self):
         for n in (1, 2, 3):
             self._ok(f"relay {n} auto")

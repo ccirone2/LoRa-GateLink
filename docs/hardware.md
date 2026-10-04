@@ -21,7 +21,7 @@ and `firmware/GateLink/pins.h` in sync.
 |---|---|---|
 | IN1 (A1) | Shelly relay output (O) — the Alarm.com switch state | CSW24UL AUX "open limit" (via opto) |
 | IN2 (A2) | Shelly 12 V supply (via opto) — `ctrl_power_sense` | CSW24UL AUX "closed limit" (via opto) |
-| IN3 (A3) | spare | CSW24UL 24 V accessory power (via opto) — `power_sense` |
+| IN3 (A3) | spare | AC power: the 24 V supply on mains (via opto) — `power_sense` |
 | IN4 (A4) | spare | spare |
 | K1 (D1) | Shelly SW input (energized = gate not closed) | CSW24UL OPEN + COM (pulsed only) |
 | K2 (D2) | 2GIG contact sensor terminals (energized = gate closed) | CSW24UL CLOSE + COM (pulsed only) |
@@ -38,13 +38,16 @@ and `firmware/GateLink/pins.h` in sync.
   across the 24 V; OUT4 is spare. A lit opto reads active; power loss, a dead opto or a cut wire reads off — "not
   at a limit", never closed. Leave the gate's `inN_invert` toggles off: inverting would make those faults read
   active.
-- **Gate IN3 = opener power sense** (`power_sense`, default on). Without power the CSW24UL's AUX limit relays
-  drop and the gate would read `between`, the same as a gate stopped mid-travel. The opto channel across the
-  opener's 24 V accessory output drives IN3 to tell them apart: IN3 off → gate state `no_power`, which overrides
-  the limits, and OPEN/CLOSE commands are acknowledged as refused without pulsing. A relay test still pulses
-  (a wiring check) but sets no target, so the limit read when power returns isn't attributed to it. Turn the `power_sense` toggle
-  off (also possible remotely over LoRa) if IN3 isn't wired.
-- **MKR VIN is 5 V max.** Power the gate board from the opener's 24 V accessory supply through a 24 V→5 V buck.
+- **Gate IN3 = AC power sense** (`power_sense`, default on). An opto channel across the 120 VAC → 24 V supply
+  (the one feeding the AES controller) drives IN3; the CSW24UL has battery backup and keeps running without AC.
+  IN3 off → OPEN/CLOSE commands are acknowledged as refused without pulsing, and STATUS reports AC lost (status
+  `ac_power`). A limit that still reads is trusted; with none reading the gate reads `no_power` instead of
+  `between`, since the opener's battery may be dead too (its AUX limit relays drop without power). Moves into or
+  out of `no_power` have cause none. A relay test while `no_power` still pulses (a wiring check) but sets no
+  target, so the limit read when power returns isn't attributed to it. Turn the `power_sense` toggle off (also
+  possible remotely over LoRa) if IN3 isn't wired.
+- **MKR VIN is 5 V max.** Power the gate board through a 24 V→5 V buck from the opener's 24 V accessory output
+  (battery-backed) or the AC 24 V supply (dies with AC; add a LiPo to ride through).
 
 ## House board
 

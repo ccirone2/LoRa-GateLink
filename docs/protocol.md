@@ -47,7 +47,8 @@ The STATUS payload layout is defined in `firmware/GateLink/roles.h` and parsed i
 layout is built in `role_gate.cpp` (`sendDiag`) and parsed in `console.cpp`. Message types and the other
 payloads (CMD, ACK, CFG_SET, PING/PONG, HELLO) are listed in `link.h`. A change to them needs both boards updated together; say so in the release notes.
 
-Since 0.4.0, STATUS is 24 bytes: the gate also reports its link retries, giveups and CRC errors (running totals,
+Since 0.7.0, bit 6 of the STATUS inputs byte is set while the gate has no AC power (IN3 off with `power_sense` on);
+an older house ignores it. Since 0.4.0, STATUS is 24 bytes: the gate also reports its link retries, giveups and CRC errors (running totals,
 low 16 bits) and its noise floor since the previous STATUS (average and peak). The house uses them for the link
 history and still accepts the 16-byte STATUS of 0.3.x gates (without those). The RSSI/SNR in STATUS are now
 those of the gate's last authenticated frame from the house, ACKs included (before, only commands, config writes

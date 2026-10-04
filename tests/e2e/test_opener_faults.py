@@ -1,7 +1,7 @@
 """Opener-side failures, injected with the GateSim: power loss, a jammed or deaf opener, bad limit signals."""
 import time
 
-from gatelink.bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, PROFILE_COMMON, RES_NO_POWER, SIM_TRAVEL_S
+from gatelink.bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, PROFILE_COMMON, PROFILE_HOUSE, RES_NO_POWER, SIM_TRAVEL_S
 
 TRAVEL_TIMEOUT_S = PROFILE_COMMON["travel_timeout_s"]
 
@@ -30,6 +30,51 @@ def test_power_loss_at_rest(rig):
     rig.wait_house(10, gate="closed", io__k2=True)
     rig.wait_ctrl(False, timeout=45)
     rig.wait_house(10, io__k1=False, resyncing=False)
+
+
+def test_ac_loss_limits_trusted(rig):
+    """AC lost, opener on battery: the closed limit is still trusted (house unchanged), commands are refused and
+    the controller is put back; AC return changes nothing."""
+    rig.expect_commands(1)
+    m = rig.mark()
+    rig.sim.ac(False)
+    rig.wait_gate("closed", ac_power=False, timeout=5)
+    rig.wait_house(10, gate="closed", io__k2=True, io__k1=False, remote__ac_power=False)
+    rig.expect_no("gate", "gate_state", since=m)
+
+    m2 = rig.mark()
+    rig.ctrl.on()
+    rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m2, timeout=10)
+    rig.wait_log("gate", "cmd_refused", a=ACT_OPEN, since=m2, timeout=5)
+    rig.wait_house(5, cmd_result=RES_NO_POWER)
+    rig.wait_log("house", "resync", since=m2, timeout=PROFILE_HOUSE["mismatch_timeout_s"] + 10)
+    rig.wait_ctrl(False, timeout=30)
+    rig.expect_no("gate", "pulse", since=m)
+
+    m3 = rig.mark()
+    rig.sim.ac(True)
+    rig.wait_gate("closed", ac_power=True, timeout=5)
+    rig.wait_house(10, gate="closed", io__k2=True, remote__ac_power=True)
+    rig.expect_no("gate", "gate_state", seconds=1, since=m)
+
+
+def test_ac_loss_mid_travel(rig):
+    """AC lost while our command opens the gate: it carries on (no limit reads meanwhile: no_power), and reaching
+    the open limit is trusted and ends the command."""
+    rig.expect_commands(1)
+    m = rig.mark()
+    rig.ctrl.on()
+    rig.wait_log("gate", "gate_state", a=GS["between"], b=CAUSE["lora"], since=m, timeout=15)
+    m2 = rig.mark()
+    rig.sim.ac(False)
+    rig.wait_log("gate", "gate_state", a=GS["no_power"], b=CAUSE["none"], since=m2, timeout=5)
+    rig.wait_house(10, gate="no_power", io__k1=True, io__k2=False)
+    rig.wait_log("gate", "gate_state", a=GS["open"], b=CAUSE["none"], since=m2, timeout=SIM_TRAVEL_S + 5)
+    rig.wait_gate("open", last_result="reached", target="", ac_power=False, timeout=5)
+    rig.wait_house(10, gate="open", io__k1=True, io__k2=False)
+    rig.sim.ac(True)
+    rig.wait_gate("open", ac_power=True, timeout=5)
+    rig.expect_no("house", "resync", seconds=2, since=m)
 
 
 def test_relay_test_without_power(rig):

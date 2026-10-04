@@ -60,12 +60,12 @@ ours, i.e. the two boards' crystal offset)), and `free_ram` (bytes between the h
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,
-  `power_sense`.
+  `power_sense`, `ac_power` (IN3, or true with `power_sense` off).
 - **House:** the gate's `gate`, `cause`, `last_result` and `target` as last reported, plus `link_up`,
   `link_timeout_eff_s`, `armed`, `ctrl` (controller level), `ctrl_power`, `sync_window`, `resyncing`, `cmd_id`,
-  `cmd_pending`, `cmd_result` (ACK result: 0 ok, 1 already, 2 rejected, 4 opener unpowered; −1 none, −2 gave up)
+  `cmd_pending`, `cmd_result` (ACK result: 0 ok, 1 already, 2 rejected, 4 no AC power; −1 none, −2 gave up)
   and `remote` (the gate's `uptime_s`, `rssi`, `snr`, `heartbeat_s`, `open_limit`, `close_limit`, `k1`, `k2`,
-  `in3`, `in4`; from gate firmware 0.4.0 also its `retries`, `giveups`, `crc_err` (running totals, low 16 bits)
+  `in3`, `in4`, `ac_power` (from gate firmware 0.7.0; true from older gates); from gate firmware 0.4.0 also its `retries`, `giveups`, `crc_err` (running totals, low 16 bits)
   and `noise` (its average since the previous STATUS; null if it had no sample)).
 
 ## Link history
@@ -126,7 +126,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `cmd_dropped` | action (not ACKed within `cmd_ttl_s`, or the link restarted) | command id |
 | `cmd_rx` | action | command id |
 | `cmd_dup` | command id | |
-| `cmd_refused` | action | command id (opener unpowered) |
+| `cmd_refused` | action | command id (no AC power) |
 | `pulse` | relay | ms |
 | `gate_state` | state | cause |
 | `travel_timeout` | target state | |

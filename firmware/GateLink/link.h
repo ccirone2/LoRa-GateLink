@@ -34,7 +34,7 @@ enum AckResult : uint8_t {
   RES_ALREADY = 1,   // command matched current state; no pulse
   RES_BAD = 2,       // malformed / rejected
   // 3 was RES_BUSY (never produced); the numbering is part of the wire format
-  RES_NO_POWER = 4,  // opener unpowered (IN3 power sense); no pulse
+  RES_NO_POWER = 4,  // no AC power (IN3 power sense); no pulse
   RES_NOT_SAVED = 5,  // CFG_SET applied, but the flash save failed: reverts at the next reboot
 };
 

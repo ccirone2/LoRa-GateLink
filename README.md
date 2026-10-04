@@ -21,8 +21,8 @@ GATE board
   K2  ──> CSW24UL CLOSE + COM   (pulse)
   IN1 <── AUX "open limit"      (opto)
   IN2 <── AUX "closed limit"    (opto)
-  IN3 <── 24 V accessory        (opto)
-          = opener powered
+  IN3 <── 24 V supply on AC     (opto)
+          = AC power present
 ```
 
 The opener's OPEN/CLOSE inputs are shared with an AES Prime Edge cellular controller and a
@@ -67,7 +67,7 @@ siren sensor.
 | Command ignored by opener (e.g. siren holding gate open) | Gate reports `timeout`; house re-syncs the Shelly to the real state |
 | Command already satisfied (OPEN while open) | Suppressed at the house, or acknowledged as `already` at the gate — unless the opposite command is still in flight (switch flipped and straight back), which is sent and pulsed to reverse it |
 | Link lost | Contact sensor reads **open** (fail-safe, configurable); commands expire after `cmd_ttl_s` rather than firing late |
-| Opener loses power (gate IN3 off) | Gate reports `no_power` instead of `between`. The gate doesn't move, but its position can't be verified (and it may be moved by hand), so the house shows not-closed: contact sensor open, K1 energized and the Shelly shows on. Commands are refused (gate log `cmd_refused`; house shows *refused: opener unpowered*). When power returns everything follows the limits again |
+| AC power lost (gate IN3 off) | The opener runs on its battery, so a limit that still reads is trusted and the house shows the real state. Commands are refused (gate log `cmd_refused`; house shows *refused: no AC power*) and the Shelly is resynced to the gate. With no limit reading (moving, or the opener's battery dead too) the gate reports `no_power` instead of `between`: its position can't be verified, so the house shows not-closed (contact sensor open, K1 energized, the Shelly on). When AC returns everything follows the limits again |
 | Shelly loses power (house IN2 off) | Its relay drops, but that edge is never sent as a command (house log `ctrl_power 0`, then `ctrl` with b=1); an edge seen up to `ctrl_confirm_ms` before the power sense drops is discarded too. When power returns the Shelly comes back at the K1 level and that edge is logged `sync` |
 | House board reboots | Never commands the gate from the Shelly's level at power-up; waits for gate status first |
 
@@ -130,7 +130,7 @@ boot):
 Summary figures above the chart give link-up %, worst SNR margin, resend rate and messages lost. Hover the
 chart or use the arrow keys to read an hour. There is also a table view and CSV download.
 
-Tabs: **Status** (gate, link quality, I/O incl. opener power and spare inputs, house bridge state, board uptime,
+Tabs: **Status** (gate, link quality, I/O incl. AC power and spare inputs, house bridge state, board uptime,
 last reset cause, radio TX faults), **Config** (all parameters, with toggle switches for on/off settings;
 apply/save, export/import JSON), **Security** (generate and write the link key), **Tools** (relay tests, ping with
 RSSI chart, remote gate diagnostics and settings over LoRa from the house board, replay self-test),

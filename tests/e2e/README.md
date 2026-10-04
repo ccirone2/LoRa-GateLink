@@ -52,7 +52,7 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
 |---|---|
 | `test_00_preflight.py` | Boards, firmware, key and link. Bench-safe settings. Ping. Simulator wiring. The controller reachable and following K1 (its SW input in follow mode, not edge-toggle) |
 | `test_normal.py` | Open and close from the controller, with timing at every hop. Reversal mid-travel. Flip back before the gate leaves its limit. External moves, including one right after our command. `-m soak`: `test_soak_open_close_cycles`, `--cycles` open/close cycles with latency stats |
-| `test_opener_faults.py` | Opener power loss at rest and mid-travel. Jammed gate. Opener ignoring the command (siren/override). Both limits active. Limit chatter |
+| `test_opener_faults.py` | AC loss with the opener on battery (limits trusted, commands refused, controller resynced; and mid-travel). Opener power loss at rest and mid-travel. Relay test without power. Jammed gate. Opener ignoring the command (siren/override). Both limits active. Limit chatter |
 | `test_link_faults.py` | Link loss and recovery. A command into a dead link (expires, never fires late). Short and 4 s outages covered by retries within `cmd_ttl_s`. A gate move missed during an outage. Replayed frames. Wrong key |
 | `test_reboots.py` | Gate reset at rest and mid-travel. House reset with the controller wrong, and with the gate open |
 | `test_controller_faults.py` | Controller toggled while unpowered. Relay dropping before the power sense. Controller coming back at the wrong level. Rapid toggling |

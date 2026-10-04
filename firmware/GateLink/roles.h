@@ -11,7 +11,7 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 
 // STATUS payload layout (gate -> house)
 #define ST_STATE 0
-#define ST_INPUTS 1   // bit0 in1, bit1 in2, bit2 k1, bit3 k2, bit4 in3, bit5 in4
+#define ST_INPUTS 1   // bit0 in1, bit1 in2, bit2 k1, bit3 k2, bit4 in3, bit5 in4, bit6 AC lost (0.7.0)
 #define ST_CAUSE 2
 #define ST_RESULT 3
 #define ST_CMD_ID 4   // u16
@@ -31,7 +31,7 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 extern Input in1, in2, in3, in4;
 extern Relay k1, k2;
 
-// Debounce IN3/IN4 (gate IN3 = opener power sense) and log edges. Returns true if either changed.
+// Debounce IN3/IN4 (gate IN3 = AC power sense) and log edges. Returns true if either changed.
 bool updateSpareInputs(uint32_t now);
 
 const char *gateStateName(uint8_t s);

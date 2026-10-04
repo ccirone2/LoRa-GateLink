@@ -266,7 +266,7 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
 
   if (gateState != prevState) logEvent(EV_GATE_STATE, gateState, gateCause);
   if (gateState == GS_OPEN || gateState == GS_CLOSED) lastEnd = gateState;
-  else if (gateState != GS_BETWEEN) lastEnd = GS_UNKNOWN;  // fault/no power: show not-closed
+  else if (gateState != GS_BETWEEN) lastEnd = GS_UNKNOWN;  // fault/no power (no AC, no limit): show not-closed
   if (gateState == GS_BETWEEN && prevState != GS_BETWEEN) betweenSince = now;
   // Command overridden (e.g. siren holding the gate open): resync the Shelly right away.
   if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT && mismatchSince) {
@@ -321,6 +321,7 @@ void houseStatus(JsonObject o) {
   g["k2"] = (bool)(gateInputs & 8);
   g["in3"] = (bool)(gateInputs & 16);
   g["in4"] = (bool)(gateInputs & 32);
+  g["ac_power"] = !(gateInputs & 64);
   if (gateExt) {
     g["retries"] = gateRetries;
     g["giveups"] = gateGiveups;

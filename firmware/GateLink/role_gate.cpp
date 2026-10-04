@@ -24,13 +24,19 @@ static uint32_t lastStatusAt = 0;
 static int32_t reportedHeartbeat = 0;  // heartbeat_s in our last STATUS
 static uint32_t seenSessions = 0;
 
+// IN3 = AC power (the 24 V supply on mains). The opener has battery backup, so it keeps running without AC.
+static bool acPower() {
+  return !cfg.power_sense || in3.active();
+}
+
 static uint8_t readState() {
-  // IN3 = opener 24 V present. Without power the AUX limit relays drop, which would read as BETWEEN.
-  if (cfg.power_sense && !in3.active()) return GS_NO_POWER;
   bool open = in1.active(), closed = in2.active();
   if (open && closed) return GS_FAULT;
   if (closed) return GS_CLOSED;
   if (open) return GS_OPEN;
+  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may
+  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.
+  if (!acPower()) return GS_NO_POWER;
   return GS_BETWEEN;
 }
 
@@ -38,7 +44,7 @@ static void sendStatus(uint32_t now) {
   uint8_t p[ST_LEN];
   p[ST_STATE] = state;
   p[ST_INPUTS] = in1.active() | (in2.active() << 1) | (k1.on() << 2) | (k2.on() << 3)
-                 | (in3.active() << 4) | (in4.active() << 5);
+                 | (in3.active() << 4) | (in4.active() << 5) | (!acPower() << 6);
   p[ST_CAUSE] = cause;
   p[ST_RESULT] = lastResult;
   putU16(p + ST_CMD_ID, lastCmdId);
@@ -97,7 +103,8 @@ void gateLoop(uint32_t now) {
 
   uint8_t s = readState();
   if (s != state) {
-    // Power loss/return isn't a gate movement, so it has no cause.
+    // Into or out of no_power there's no telling a movement from the power changing (on battery the gate may
+    // have moved while no limit read; on AC return the limits and IN3 settle in either order): no cause.
     bool power = s == GS_NO_POWER || state == GS_NO_POWER;
     uint8_t prev = state;
     state = s;
@@ -172,7 +179,9 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
   // Still at this limit, but our last pulse is heading for the other one: pulse to reverse it.
   bool reversing = target != GS_UNKNOWN && target != want;
-  if (state == GS_NO_POWER) {
+  // Without AC the opener may be on its last battery reserve, and the AES controller sharing the inputs is
+  // unpowered: refuse, even with a limit reading.
+  if (!acPower()) {
     logEvent(EV_CMD_REFUSED, action, id);
     lastCmdAck = RES_NO_POWER;
   } else if (state == want && !reversing) {
@@ -249,6 +258,7 @@ void gateStatus(JsonObject o) {
   o["target"] = target == GS_UNKNOWN ? "" : gateStateName(target);
   o["last_cmd_id"] = lastCmdId;
   o["power_sense"] = (bool)cfg.power_sense;
+  o["ac_power"] = acPower();
 }
 
 void gateRelayTest(uint8_t k, uint32_t ms) {
@@ -259,7 +269,8 @@ void gateRelayTest(uint8_t k, uint32_t ms) {
   r.pulse(now, ms);
   // Track it like a command so the resulting movement is attributed to us, not external. A gate already at
   // that limit won't move for it, so there's nothing to attribute (a later move off it is someone else's).
-  // With the opener unpowered the pulse is only a wiring check: the limit read when power returns isn't ours.
+  // With no AC and no limit reading the opener may be dead: the pulse is only a wiring check, and the limit read
+  // when power returns isn't ours.
   uint8_t want = k == 1 ? GS_OPEN : GS_CLOSED;
   if (state != want && state != GS_NO_POWER) setTarget(want, now);
   logEvent(EV_PULSE, k, ms);

@@ -33,9 +33,9 @@ const HELP = {
   debounce_ms: 'How long an input must hold steady before it counts. Raise it if long field wires or a bouncy contact show up as flicker in the log.',
   in1_invert: `IN1 (house: controller output; gate: open limit). ${NO_INVERT}`,
   in2_invert: `IN2 (house: controller power; gate: closed limit). ${NO_INVERT}`,
-  in3_invert: `IN3 (house: spare; gate: opener power). ${NO_INVERT}`,
+  in3_invert: `IN3 (house: spare; gate: AC power). ${NO_INVERT}`,
   in4_invert: `IN4 (spare on both boards). ${NO_INVERT}`,
-  power_sense: 'Gate: IN3 watches the opener’s 24 V, so a dead opener reads “no power” instead of a stuck gate, and commands are refused. Turn off only if IN3 isn’t wired.',
+  power_sense: 'Gate: IN3 watches the AC-powered 24 V supply. Without AC, commands are refused; a limit that still reads (the opener runs on its battery) is trusted, and with none the gate reads “no power” instead of between. Turn off only if IN3 isn’t wired.',
   pulse_ms: 'Gate: how long the OPEN/CLOSE contact closes. Raise it if the opener misses short presses; keep it short, as other devices share these inputs.',
   travel_timeout_s: 'Longest a full open or close should take. Set it a little above your gate’s real travel time; past it, the gate counts as stuck.',
   ctrl_sync: 'House: K1 drives the controller’s switch input so the controller always shows the real gate state. Turn off only if the controller has no switch input.',
@@ -58,7 +58,7 @@ const SELECTS = {
 };
 const IO_LABELS = {
   house: { in1: 'IN1 · Controller input', in2: 'IN2 · Controller power', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
-  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Closed limit', in3: 'IN3 · Opener power', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
+  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Closed limit', in3: 'IN3 · AC power', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
   unset: { in1: 'IN1', in2: 'IN2', in3: 'IN3', in4: 'IN4', k1: 'K1', k2: 'K2' },
 };
 
@@ -101,16 +101,16 @@ const WIRING = {
       { name: 'Opener CLOSE input', hint: 'Pulsed only · shared with other devices', kind: 'out',
         rows: [['K2 NO', 'CLOSE'], ['K2 COM', 'COM']] },
       { name: 'Opto board outputs (PNP)', hint: 'Output side powered from 3.3 V only', kind: 'in',
-        rows: [['IN1 (A1)', 'OUT1 · open limit'], ['IN2 (A2)', 'OUT2 · closed limit'], ['IN3 (A3)', 'OUT3 · opener 24 V'],
+        rows: [['IN1 (A1)', 'OUT1 · open limit'], ['IN2 (A2)', 'OUT2 · closed limit'], ['IN3 (A3)', 'OUT3 · AC 24 V supply'],
           ['IN4 (A4)', 'OUT4 · spare'], [V33, 'VCC (output side)'], ['GND', 'GND (output side)']] },
-      { name: '24 V → 5 V buck', hint: 'Fed from opener 24 V accessory power', kind: 'pwr',
+      { name: '24 V → 5 V buck', hint: 'Fed from the opener’s 24 V accessory output or the AC 24 V supply', kind: 'pwr',
         rows: [['VIN (5 V)', '+5 V out'], ['GND', '0 V out']] },
     ],
     notes: [
       'K1/K2 go in parallel with whatever else is already on the opener’s OPEN/CLOSE inputs. GateLink only pulses them (<code>pulse_ms</code>) and never holds them, so the other devices keep working.',
       'All gate inputs go through a PNP-output opto board. Power its output side from the board’s 3.3 V, never 5 V or 24 V: a PNP output passes that voltage straight to the input pin. A lit opto drives its input to 3.3 V (active); a dead opto, missing 24 V or cut wire reads off.',
-      'Opto input side (24 V): wet each limit contact from the opener’s 24 V accessory output — 24 V to AUX C, AUX NO to the opto channel input — and connect the third channel across the 24 V itself. Follow the opto board’s input markings for the common. Set AUX relay A to <em>open limit</em> and AUX relay B to <em>closed limit</em> in the opener’s menu.',
-      'Gate state comes only from the limit inputs. IN3 senses opener power so a dead opener isn’t mistaken for a gate stopped between limits: with no power the gate reads “no power” and refuses commands. Set <code>power_sense</code> to 0 if IN3 isn’t wired.',
+      'Opto input side (24 V): wet each limit contact from the opener’s 24 V accessory output — 24 V to AUX C, AUX NO to the opto channel input — and connect the third channel across the AC-powered 24 V supply (not the battery-backed accessory output). Follow the opto board’s input markings for the common. Set AUX relay A to <em>open limit</em> and AUX relay B to <em>closed limit</em> in the opener’s menu.',
+      'Gate state comes only from the limit inputs. IN3 senses AC power: without it commands are refused. The opener runs on its battery, so a limit that still reads is trusted; with none reading the gate shows “no power” (it may be moving, or the opener may be dead) rather than between. Set <code>power_sense</code> to 0 if IN3 isn’t wired.',
       'VIN is 5 V max. Never connect the opener’s 24 V directly to the board.',
       'Use the relays’ NO/COM contacts only. Add TVS or RC suppression on long field runs.',
       'Keep the antenna vertical and outside any metal enclosure.',
@@ -701,10 +701,10 @@ function renderStatus(s) {
     $('hCtrlPower').innerHTML = 'ctrl_power' in s ? (s.ctrl_power ? pill(true) : '<span class="bad">off · edges ignored</span>') : '—';
     $('hArmed').textContent = yesNo(s.armed);
     $('hSync').textContent = `${yesNo(s.sync_window)} / ${yesNo(s.resyncing)}`;
-    const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 4: 'refused: opener unpowered' };
+    const cmdRes = { '-1': 'none', '-2': 'gave up', 0: 'ok', 1: 'already there', 2: 'rejected', 4: 'refused: no AC power' };
     $('hCmd').textContent = `#${s.cmd_id} · ${s.cmd_pending ? 'sending…' : cmdRes[s.cmd_result] ?? s.cmd_result}`;
     $('hLimits').textContent = r.uptime_s ? `open ${r.open_limit ? '●' : '○'}  closed ${r.close_limit ? '●' : '○'}` : '—';
-    $('hSpare').textContent = r.uptime_s && 'in3' in r ? `power ${r.in3 ? '●' : '○'}  IN4 ${r.in4 ? '●' : '○'}` : '—';
+    $('hSpare').textContent = r.uptime_s && 'in3' in r ? `AC ${r.ac_power ?? r.in3 ? '●' : '○'}  IN4 ${r.in4 ? '●' : '○'}` : '—';
     $('hGateUp').textContent = r.uptime_s ? fmtDur(r.uptime_s * 1000) : '—';
     // The house waits max(link_timeout_s, 2.5 × the gate's heartbeat) before declaring the link down.
     $('hTiming').textContent = `${r.heartbeat_s ? `${r.heartbeat_s} s` : '—'} / ${s.link_timeout_eff_s ? `${s.link_timeout_eff_s} s` : '—'}`;

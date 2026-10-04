@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.7.0"
+#define FW_VERSION "0.8.0"
 #define FW_MARKER_PREFIX "GATELINK_FW="
 // FW_MARKER_PREFIX FW_VERSION: the web console looks for it in a .bin to check the file is GateLink and
 // read its version. The version is reported from it (fwVersion()) so the linker keeps it in the image.
@@ -38,7 +38,7 @@ struct Config {
   int32_t in2_invert;
   int32_t in3_invert;
   int32_t in4_invert;
-  int32_t power_sense;  // gate: IN3 = opener power present
+  int32_t power_sense;  // gate: IN3 = AC power present
   // Gate node
   int32_t pulse_ms;
   int32_t travel_timeout_s;
@@ -52,6 +52,8 @@ struct Config {
   int32_t ctrl_power_sense;  // house: IN2 = controller supply present
   int32_t ctrl_confirm_ms;
   int32_t ctrl_settle_ms;
+  // Board
+  int32_t uart_console;  // also run the console on Serial1 (pins 13 RX / 14 TX), for bench power tests
   // Security
   uint8_t key[16];
   int32_t key_set;

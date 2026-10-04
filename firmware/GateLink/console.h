@@ -2,11 +2,13 @@
 #include <Arduino.h>
 #include "log.h"
 
-// USB serial JSON-lines API used by the web UI.
+// JSON-lines API used by the web UI, over USB serial and, with uart_console, Serial1 too.
+// A reply goes to the port the request came from; events go to both.
 // Request:  {"id":1,"cmd":"status", ...}\n
 // Response: {"id":1,"ok":true, ...}\n
 // Events:   {"event":"log"|"status"|"pong"|"remote_diag"|"remote_set", ...}\n
 void consoleBegin();
+void consoleConfigure();  // start or stop the Serial1 console to match cfg.uart_console
 void consolePoll();
 void consoleEmitLog(const LogEntry &e);
 void consoleEventStatus();

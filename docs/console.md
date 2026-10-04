@@ -7,6 +7,15 @@ Each board speaks newline-delimited JSON over USB serial (115200 baud). The web 
 Only one program can hold the port: disconnect the web console before scripting. The firmware writes only while
 DTR is asserted (pyserial does that by default).
 
+**UART console.** With `uart_console` 1 the same console also runs on Serial1 (pins 13 RX / 14 TX, 3.3 V,
+1,000,000 baud, 8N1), for a USB-to-UART adapter on the bench: the adapter's port survives the board losing power,
+so a power test sees the `boot` event as soon as the board is back, without waiting for USB to re-enumerate. Each
+port has its own request line; a reply goes to the port the request came from, and events and log lines go to
+both. The UART is always written (no DTR), and a write waits while its 256-byte buffer is full: a ~5 KB
+`config.get` reply holds the loop for ~50 ms. Wire adapter TX → 1 kΩ → pin 13 (so an unpowered board isn't fed
+through its input protection), pin 14 → adapter RX, GND to GND, and leave the adapter's VCC unconnected.
+`uart_console` takes effect at once; it is off by default and should stay off at the install.
+
 If the host stops reading for more than 70 ms mid-line, the SAMD USB core drops the rest of that line. The
 firmware then starts its next line with an extra newline, so a client sees one cut line (not valid JSON; skip it)
 and then an empty line. Clients should ignore both and time out the request the cut line belonged to.

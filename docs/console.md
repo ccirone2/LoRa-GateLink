@@ -27,7 +27,7 @@ with `"error"` on failure. A line that isn't valid JSON is answered `bad json`, 
 | `config.save` | | Writes the running config to flash |
 | `config.reset` | | Running config back to defaults at once (key cleared, so the link stops) and the saved config and key erased; `reboot_required` |
 | `key.set` | `key`: 32 hex chars | Sets and saves only the key; restarts the radio and sessions. The key can't be read back |
-| `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command). Needs a role |
+| `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command, except while the opener is unpowered). Needs a role |
 | `radio.ping` | | Sends a PING; a `pong` event follows if the peer answers. Needs a role, a key and a working radio |
 | `remote.diag` | | House only. Requests the gate's diagnostics; a `remote_diag` event follows |
 | `remote.set` | `name`, `value` (int) | House only, remote-writable params only. `busy` while one is pending; a `remote_set` event follows |
@@ -106,7 +106,7 @@ Unsolicited lines carry `"event"` instead of `"id"`:
 | `status` | `status` | House: each STATUS received from the gate |
 | `pong` | `ping_id`, `rtt_ms`, `rssi`, `snr`, `peer_rssi`, `peer_snr`, `fei` (Hz, as in status) | Answer to `radio.ping` |
 | `remote_diag` | `fw`, `uptime_s`, `counters` (`tx`, `rx`, `mac_fail`, `replay`, `retries`, `giveups`), `params` (the gate's remote-writable params) | Answer to `remote.diag` |
-| `remote_set` | `acked`, `ok` (the gate accepted it) | Outcome of `remote.set` |
+| `remote_set` | `acked`, `ok` (the gate accepted and saved it), `applied` (accepted, maybe not saved: it reverts when the gate reboots) | Outcome of `remote.set` |
 
 ## Log events
 
@@ -115,7 +115,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | Event | a | b |
 |---|---|---|
 | `boot` | reset cause (PM RCAUSE bits) | role |
-| `radio_fail` | 0 init failed, 1 TX fault, 2 reset seen in RX, 3 init retry succeeded | fault count (0 for a failed init) |
+| `radio_fail` | 0 init failed (once until a retry succeeds), 1 TX fault, 2 reset seen in RX, 3 init retry succeeded | fault count |
 | `link_up`, `link_down` | (house) | |
 | `mac_fail` | message type | RSSI |
 | `session` | peer session id (accepted) | |

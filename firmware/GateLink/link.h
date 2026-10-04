@@ -22,7 +22,7 @@ enum MsgType : uint8_t {
   MSG_PING = 6,       // ping_id u16
   MSG_PONG = 7,       // ping_id u16, rssi i16, snr i8
   MSG_DIAG_REQ = 8,   //                                       (house->gate)
-  MSG_DIAG = 9,       // see roles.h                          (gate->house)
+  MSG_DIAG = 9,       // see sendDiag() in role_gate.cpp      (gate->house)
   MSG_CFG_SET = 10,   // param id u8, value i32               (reliable, house->gate)
 };
 
@@ -35,6 +35,7 @@ enum AckResult : uint8_t {
   RES_BAD = 2,       // malformed / rejected
   // 3 was RES_BUSY (never produced); the numbering is part of the wire format
   RES_NO_POWER = 4,  // opener unpowered (IN3 power sense); no pulse
+  RES_NOT_SAVED = 5,  // CFG_SET applied, but the flash save failed: reverts at the next reboot
 };
 
 struct RxMsg {

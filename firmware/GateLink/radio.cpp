@@ -89,6 +89,7 @@ bool radioBegin() {
   begun = true;
   ok = LoRa.begin(cfg.freq_hz);
   if (!ok) {
+    if (!retryAt) logEvent(EV_RADIO_FAIL, 0, faults);  // once, not on every failed retry
     retryAt = (millis() + RETRY_MS) | 1;
     return false;
   }

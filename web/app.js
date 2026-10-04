@@ -1290,7 +1290,9 @@ function onEvent(ev) {
       break;
     }
     case 'remote_set':
-      $('remResult').textContent = ev.ok ? 'Gate accepted and saved the value.' : ev.acked ? 'Gate rejected the value.' : 'No reply from gate.';
+      $('remResult').textContent = ev.ok ? 'Gate accepted and saved the value.'
+        : ev.applied ? 'Gate applied the value but couldn’t save it; it reverts when the gate reboots.'
+        : ev.acked ? 'Gate rejected the value.' : 'No reply from gate.';
       break;
   }
 }

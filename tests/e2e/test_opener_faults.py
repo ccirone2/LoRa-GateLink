@@ -32,6 +32,33 @@ def test_power_loss_at_rest(rig):
     rig.wait_house(10, io__k1=False, resyncing=False)
 
 
+def test_relay_test_without_power(rig):
+    """A gate relay test while the opener is unpowered still pulses (wiring check) but sets no target, so the
+    limit read when power returns is neither reached nor a timeout, and the house doesn't resync."""
+    rig.expect_commands(0)
+    m = rig.mark()
+    rig.sim.power(False)
+    rig.wait_log("gate", "gate_state", a=GS["no_power"], b=CAUSE["none"], since=m, timeout=5)
+    rig.wait_ctrl(True, timeout=30)
+    rig.wait_house(10, "sync window closed", sync_window=False, resyncing=False)
+
+    before = rig.gate.status()["last_result"]
+    m2 = rig.mark()
+    rig.relay_test("gate", 1, rig.pulse_ms)
+    rig.wait_log("gate", "pulse", a=1, b=rig.pulse_ms, since=m2, timeout=5)
+    rig.wait_gate("no_power", target="", timeout=5)
+
+    m3 = rig.mark()
+    rig.sim.power(True)
+    rig.wait_log("gate", "gate_state", a=GS["closed"], b=CAUSE["none"], since=m3, timeout=5)
+    rig.wait_gate("closed", target="", timeout=5)
+    assert rig.gate.status()["last_result"] == before, "the test pulse had no target to reach or time out"
+    rig.wait_house(10, gate="closed", io__k2=True)
+    rig.wait_ctrl(False, timeout=45)
+    rig.wait_house(10, io__k1=False, resyncing=False)
+    rig.expect_no("gate", "travel_timeout", since=m2)
+
+
 def test_power_loss_mid_travel(rig):
     """Power dies while opening and comes back with the gate stranded part-way."""
     rig.expect_commands(1)

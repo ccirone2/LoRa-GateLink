@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light dark; /* native controls (scrollbars, spinners, dialogs) follow the theme */
   --bg: #f6f7f9;
   --surface: #ffffff;
   --text: #1b1f24;

@@ -347,7 +347,7 @@ function pickText(e) {
   const i = e.info;
   const sub = [`fw ${i.fw}`, i.key_set ? 'key set' : 'no key'];
   if (i.saved_role && i.saved_role !== i.role) sub.push(`${i.saved_role} after reboot`);
-  return [`LoRa GateLink – ${i.role[0].toUpperCase()}${i.role.slice(1)}`, sub.join(' · ')];
+  return [`LoRa GateLink – ${cap(i.role)}`, sub.join(' · ')];
 }
 
 function renderPicker() {
@@ -406,6 +406,7 @@ async function openPort(p) {
   } finally {
     opening = false;
   }
+  if (p !== lastPort) resetToolsView(); // another board: its ping/diag results don't apply
   port = lastPort = p;
   const enc = new TextEncoderStream();
   writePipe = enc.readable.pipeTo(port.writable).catch(() => {});
@@ -421,7 +422,7 @@ async function openPort(p) {
   }
   if (port !== p) return; // dropped while querying: disconnect() already ran; don't leave an orphan poll
   clearInterval(pollTimer);
-  pollTimer = setInterval(pollStatus, 2000);
+  pollTimer = setInterval(pollStatus, POLL_MS);
 }
 
 // Without a lastPort (an update started from the bootloader) only the connect event can find the board.
@@ -540,8 +541,8 @@ function request(cmd, args = {}, timeoutMs = 4000) {
   });
 }
 
-async function call(cmd, args) {
-  const res = await request(cmd, args);
+async function call(cmd, args, timeoutMs) {
+  const res = await request(cmd, args, timeoutMs);
   if (!res.ok) throw new Error(res.error || `${cmd} failed`);
   return res;
 }
@@ -572,9 +573,17 @@ function setConnected(on) {
   }
 }
 
+const cap = (t) => t[0].toUpperCase() + t.slice(1);
+
+// Tab title: the gate state first, so a background tab still shows it.
+function updateTitle(gate) {
+  const parts = [gate, role !== 'unset' && cap(role), 'GateLink'].filter(Boolean);
+  document.title = parts.length > 1 ? parts.join(' · ') : 'GateLink Console';
+}
+
 function applyRole(r) {
   role = r;
-  document.title = role === 'unset' ? 'GateLink Console' : `${role[0].toUpperCase()}${role.slice(1)} · GateLink`;
+  updateTitle();
   document.querySelectorAll('[data-role]').forEach((el) => { el.hidden = el.dataset.role !== role; });
   const hint = {
     gate: 'K1 pulses the opener OPEN input and K2 the CLOSE input — this moves the real gate.',
@@ -618,8 +627,8 @@ function fmtDur(ms) {
 const yesNo = (v) => (v ? 'yes' : 'no');
 const pill = (on) => `<span class="pill ${on ? 'on' : ''}">${on ? 'ON' : 'off'}</span>`;
 
-async function refreshStatus() {
-  const res = await call('status');
+async function refreshStatus(timeoutMs) {
+  const res = await call('status', {}, timeoutMs);
   renderStatus(res.status);
 }
 
@@ -628,12 +637,19 @@ async function refreshStatus() {
 let pollMisses = 0;
 let devline = '';
 let boardInfo = null; // last info reply
+// The board answers status at once; a timeout under the poll interval keeps polls from piling up.
+const POLL_MS = 2000;
+let polling = false;
 async function pollStatus() {
+  if (polling) return;
+  polling = true;
   try {
-    await refreshStatus();
+    await refreshStatus(POLL_MS - 100);
     pollMisses = 0;
   } catch {
     pollMisses++;
+  } finally {
+    polling = false;
   }
   if (!port) return;
   const stale = pollMisses >= 2;
@@ -645,8 +661,9 @@ function renderStatus(s) {
   if (s.role !== role) applyRole(s.role);
   const gs = s.gate || 'unknown';
   const g = $('gateState');
-  g.textContent = s.role === 'unset' ? 'role not set' : gs.replace('_', ' ');
+  g.textContent = s.role === 'unset' ? 'role not set' : gs.replaceAll('_', ' ');
   g.className = `gate-state ${gs}`;
+  updateTitle(s.role === 'unset' ? '' : cap(gs.replaceAll('_', ' ')));
   $('gateCause').textContent = s.cause ?? '—';
   $('gateResult').textContent = s.last_result ?? '—';
   $('gateTarget').textContent = s.target || '—';
@@ -667,7 +684,7 @@ function renderStatus(s) {
   $('bRole').textContent = s.reboot_pending ? `${s.role} (reboot to apply saved role)` : s.role;
   $('bFw').textContent = s.fw;
   $('bUp').textContent = fmtDur(s.uptime_ms);
-  $('bReset').textContent = (s.reset_cause ?? '—').replace('_', ' ');
+  $('bReset').textContent = (s.reset_cause ?? '—').replaceAll('_', ' ');
   const nf = Number(s.radio_faults) || 0;
   const faults = nf ? ` <span class="bad">· ${nf} TX fault${nf === 1 ? '' : 's'}</span>` : '';
   $('bRadio').innerHTML = (s.radio_ok ? '<span class="good">ok</span>' : '<span class="bad">not initialised</span>') + faults;
@@ -675,7 +692,7 @@ function renderStatus(s) {
 
   if (s.role === 'house') {
     const r = s.remote || {};
-    $('lnkRemoteRssi').textContent = r.uptime_s ? `${r.rssi} dBm / ${r.snr} dB` : '—';
+    $('lnkRemoteRssi').textContent = r.uptime_s ? `${r.rssi} dBm / ${Number(r.snr).toFixed(1)} dB` : '—';
     $('hCtrl').innerHTML = pill(s.ctrl);
     $('hCtrlPower').innerHTML = 'ctrl_power' in s ? (s.ctrl_power ? pill(true) : '<span class="bad">off · edges ignored</span>') : '—';
     $('hArmed').textContent = yesNo(s.armed);
@@ -834,7 +851,8 @@ function download(name, text, type = 'application/json') {
 async function importConfig(file) {
   let data;
   try { data = JSON.parse(await file.text()); } catch { return toast('Not a valid JSON file.', 'err'); }
-  const src = data.params || data;
+  const src = data?.params || data;
+  if (!src || typeof src !== 'object') return toast('No GateLink settings found in that file.', 'err');
   let found = 0;
   for (const m of meta) {
     const el = $(`p_${m.name}`);
@@ -870,7 +888,7 @@ async function ping() {
 
 function drawRssi() {
   const svg = $('rssiChart');
-  if (!rssiHist.length) { svg.innerHTML = ''; return; }
+  if (!rssiHist.length) { svg.innerHTML = ''; $('rssiRange').textContent = ''; return; }
   const all = rssiHist.flatMap((p) => [p.here, p.peer]);
   const lo = Math.min(...all) - 3, hi = Math.max(...all) + 3;
   const x = (i) => (rssiHist.length === 1 ? 150 : (i / (rssiHist.length - 1)) * 300);
@@ -879,6 +897,15 @@ function drawRssi() {
     `<polyline stroke="var(${color})" points="${rssiHist.map((p, i) => `${x(i)},${y(p[k])}`).join(' ')}"/>`;
   svg.innerHTML = line('here', '--chart-here') + line('peer', '--chart-peer');
   $('rssiRange').textContent = `${Math.round(lo + 3)} … ${Math.round(hi - 3)} dBm`;
+}
+
+// Results that belong to one board.
+function resetToolsView() {
+  rssiHist.length = 0;
+  drawRssi();
+  for (const id of ['pingRtt', 'pingHere', 'pingPeer']) $(id).textContent = '—';
+  $('diagOut').textContent = '—';
+  $('remResult').textContent = '';
 }
 
 // ---------- Link history (Tools tab) ----------
@@ -1632,10 +1659,12 @@ function reportFlash(info) {
 }
 
 // ---------- Log ----------
-const logLines = [];
+const logLines = []; // what Download saves; the view keeps only the last 1000
+const LOG_KEEP = 20000;
 function logLine(text, cls = '') {
   const stamp = new Date().toLocaleTimeString();
   logLines.push(`${stamp} ${text}`);
+  if (logLines.length > LOG_KEEP) logLines.splice(0, logLines.length - LOG_KEEP);
   const div = document.createElement('div');
   div.textContent = `${stamp} ${text}`;
   if (cls) div.className = cls;
@@ -1725,8 +1754,12 @@ function init() {
       next.focus();
     });
   });
-  const fromHash = tabs.find((b) => `#${b.dataset.tab}` === location.hash);
-  if (fromHash) selectTab(fromHash);
+  const tabFromHash = () => {
+    const b = tabs.find((x) => `#${x.dataset.tab}` === location.hash);
+    if (b) selectTab(b);
+  };
+  tabFromHash();
+  window.addEventListener('hashchange', tabFromHash); // back/forward, or a #tab link
   $('toast').onclick = hideToast;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('toast').textContent) hideToast(); });
   // Unapplied form edits are lost on reload/close.
@@ -1905,7 +1938,7 @@ function init() {
   $('btnLogClear').onclick = () => { $('logView').innerHTML = ''; logLines.length = 0; };
   $('btnLogSave').onclick = () => {
     const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-    download(`gatelink-${role}-log-${stamp}.txt`, logLines.join('\n'), 'text/plain');
+    download(`gatelink-${role}-log-${stamp}.txt`, logLines.join('\n') + '\n', 'text/plain');
   };
 
   navigator.serial?.addEventListener('disconnect', (e) => {

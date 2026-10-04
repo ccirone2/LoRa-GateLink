@@ -5,6 +5,7 @@
 #include "link.h"
 #include "roles.h"
 #include "history.h"
+#include "radio.h"
 
 #define LINE_MAX 1024  // a config.set with every param fits (a full import after a firmware upload)
 
@@ -274,6 +275,7 @@ void consoleEventPong(uint16_t id, uint32_t rttMs, int16_t rssi, float snr, int1
   doc["snr"] = snr;
   doc["peer_rssi"] = peerRssi;
   doc["peer_snr"] = peerSnr;
+  doc["fei"] = radioLastFei();  // the pong was the last frame received
   send(doc);
 }
 

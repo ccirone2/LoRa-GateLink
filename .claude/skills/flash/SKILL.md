@@ -19,8 +19,8 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
    python tools/gatelink.py snapshot
    ```
    Check `ports` first: both boards should show their role, `key set` and the bench `tx_power` 5. If a board
-   shows a test profile left behind by an interrupted e2e run (short `heartbeat_s` 5 / `link_timeout_s` 15),
-   reboot it (`python tools/gatelink.py <role> reboot`) before the snapshot so the saved config is captured.
+   runs a test profile left behind by an interrupted e2e run (`python tools/gatelink.py <role> config.get`
+   shows short `heartbeat_s` 5 / `link_timeout_s` 15), reboot it (`python tools/gatelink.py <role> reboot`) before the snapshot so the saved config is captured.
 3. **Compile once, upload to each board.** Clean compile means no warnings in project files:
    ```sh
    arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all --output-dir <scratchpad>/build firmware/GateLink 2>&1 | grep -E "GateLink[\\/].*warning|Sketch uses"
@@ -35,10 +35,10 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
    ```sh
    python tools/gatelink.py restore
    ```
-   Link check without a restore: `ports` again after ~15 s should show `verified True` on both.
    It matches boards by port, so if a board came back on a different COM number, edit the port keys in
-   `~/.gatelink_config.json` first. It ends with `link verified on gate, house`; anything else is a failure to
-   report, with `python tools/gatelink.py ports` output.
+   `~/.gatelink_config.json` first. It ends with `link verified on ...` naming both roles; anything else is a
+   failure to report, with `python tools/gatelink.py ports` output.
+   Link check without a restore: `ports` again after ~15 s should show `verified True` on both.
 5. **GateSim** (only if `tools/GateSim` changed): `arduino-cli compile --fqbn arduino:avr:uno --warnings all
    tools/GateSim` then `arduino-cli upload --fqbn arduino:avr:uno -p COM10 tools/GateSim`. Its settings live in
    EEPROM and survive. After boot the closed-limit (D3) and power (D4) relays are on.

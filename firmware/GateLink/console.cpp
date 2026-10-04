@@ -246,6 +246,9 @@ void consoleConfigure() {
     return;
   }
   Serial1.begin(UART_BAUD);
+  // While we were unpowered the adapter could pick up junk (its own TX leaking through our pins): start on a
+  // fresh line, so it doesn't swallow the boot event.
+  uartPort.lineCut = true;
   // Pull RX up, so an unplugged adapter reads as an idle line rather than noise.
   const PinDescription &rx = g_APinDescription[PIN_SERIAL1_RX];
   PORT->Group[rx.ulPort].PINCFG[rx.ulPin].bit.PULLEN = 1;

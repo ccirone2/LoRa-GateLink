@@ -73,7 +73,7 @@ and `firmware/GateLink/pins.h` in sync.
 ## Bench UART console
 
 Pins 13 (RX) and 14 (TX) carry an optional second console (`uart_console`, off by default) for bench power
-tests with a 3.3 V USB-to-UART adapter: adapter TX → 1 kΩ → pin 13, pin 14 → adapter RX, GND to GND, adapter VCC
+tests with a 3.3 V USB-to-UART adapter: adapter TX → 10 kΩ → pin 13, pin 14 → adapter RX, GND to GND, adapter VCC
 unconnected. See [console.md](console.md). Leave the pins unused and `uart_console` at 0 at the install.
 
 ## Spare inputs

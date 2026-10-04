@@ -12,8 +12,12 @@ DTR is asserted (pyserial does that by default).
 so a power test sees the `boot` event as soon as the board is back, without waiting for USB to re-enumerate. Each
 port has its own request line; a reply goes to the port the request came from, and events and log lines go to
 both. The UART is always written (no DTR), and a write waits while its 256-byte buffer is full: a ~5 KB
-`config.get` reply holds the loop for ~50 ms. Wire adapter TX → 1 kΩ → pin 13 (so an unpowered board isn't fed
-through its input protection), pin 14 → adapter RX, GND to GND, and leave the adapter's VCC unconnected.
+`config.get` reply holds the loop for ~50 ms. Wire adapter TX → 10 kΩ → pin 13, pin 14 → adapter RX, GND to GND,
+and leave the adapter's VCC unconnected. Without the resistor the bench gate board still powered down and came
+back with a clean `power_on` reset, but the adapter's TX drove current into the unpowered chip's pins (its own
+bytes came back garbled while the board was off); the resistor keeps that small. Expect junk on the adapter
+around a power cut: the firmware starts its first UART line with a newline, so the junk ends there and the
+`boot` event arrives intact, and a request garbled by it is answered `bad json`.
 `uart_console` takes effect at once; it is off by default and should stay off at the install.
 
 If the host stops reading for more than 70 ms mid-line, the SAMD USB core drops the rest of that line. The

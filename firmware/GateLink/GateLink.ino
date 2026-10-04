@@ -133,6 +133,7 @@ void appFillStatus(JsonObject o) {
   l["age_ms"] = st.lastRxAt ? (int32_t)(now - st.lastRxAt) : -1;
   l["rssi"] = st.lastRssi;
   l["snr"] = st.lastSnr;
+  l["fei"] = radioLastFei();
   l["tx"] = st.tx;
   l["rx"] = st.rx;
   l["retries"] = st.retries;

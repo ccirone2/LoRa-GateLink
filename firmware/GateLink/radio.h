@@ -15,6 +15,9 @@ uint32_t radioTxEndAt();  // millis() when the last TX ended
 uint32_t radioFaults();  // TX faults since boot
 uint32_t radioCrcErrors();  // frames received with a bad CRC since boot
 uint32_t radioRxDoneCount();  // frames received (any CRC) since boot
+// Frequency error of the last good frame (Hz, the modem's estimate): the sender's carrier relative to ours,
+// i.e. the two boards' crystal offset. Diagnostics only.
+int32_t radioLastFei();
 // Listen-before-talk: true while a LoRa frame is being received (preamble detected onward) or a received
 // packet is still waiting to be read. Blind for the first few preamble symbols.
 bool radioChannelBusy();

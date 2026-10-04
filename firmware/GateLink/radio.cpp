@@ -9,6 +9,7 @@ static bool begun = false;
 static uint32_t faults = 0;
 static uint32_t crcErrors = 0;  // frames received with a bad CRC, since boot
 static uint32_t rxDone = 0;     // frames received, good or not, since boot
+static int32_t lastFei = 0;     // frequency error of the last good frame (Hz)
 static uint32_t retryAt = 0;  // while !ok: when to try radioBegin() again
 #define RETRY_MS 5000
 // Transmission in progress. TX is asynchronous: a frame takes up to seconds at SF12, and blocking for it held
@@ -117,6 +118,10 @@ uint32_t radioCrcErrors() {
   return crcErrors;
 }
 
+int32_t radioLastFei() {
+  return lastFei;
+}
+
 uint32_t radioRxDoneCount() {
   return rxDone;
 }
@@ -190,6 +195,7 @@ size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
       while (n < len) buf[n++] = readReg(REG_FIFO);
       rssi = LoRa.packetRssi();
       snr = LoRa.packetSnr();
+      lastFei = LoRa.packetFrequencyError();
     }
   } else {
     crcErrors++;

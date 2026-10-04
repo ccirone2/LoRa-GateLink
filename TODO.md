@@ -18,9 +18,27 @@ once its fix is merged and record it in the pull request.
   - gate: peaks of −95 dBm and no CRC errors;
   - both: an average near −110 dBm.
   In one test run that drove the Shelly through HA, the house averaged −94 dBm against −111 at the gate. That
-  was on a build that still counted frame starts as noise; a later run gave −110 at both. Check with the Shelly
-  moved away, comparing `tools/gatelink.py house hist` (`noise_max`, `crc_err`), and at the install site
-  (`-m rf`). To debug RX, read the SX127x packet/header counters (0x14–0x17) with `readReg()` in `radio.cpp`.
+  was on a build that still counted frame starts as noise; a later run gave −110 at both.
+  **Z-Wave ruled out (2026-10-03, 0.5.1, SF9, tx_power 5):** 5 minutes of pings both ways with the Shelly
+  powered, then unplugged. Powered: house 2.4 % / gate 2.8 % pong loss, 6 house CRC errors. Unplugged: 2.9 % /
+  2.9 %, 6 house CRC errors. The gate had no CRC errors either time, and the noise floor was the same on both
+  boards (avg ≈ −109/−110, max ≈ −94 dBm). The gate's lost pongs are most likely pings the house never received,
+  so the loss is at the house receiver whichever side pings. With the antennas swapped between the boards:
+  1.2 % / 4.1 % loss, 8 house CRC errors, still none at the gate, so it isn't the antenna. With the roles
+  swapped in config (boards left in place): 2.3 % / 1.2 % loss, 0 CRC errors at the new house and 5 at the new
+  gate, so the errors follow the physical board (the old house board, on COM6 on the bench), not the role. Left
+  to separate: that board's radio, its shield and wiring, or its spot on the bench. With the MKR boards then
+  swapped between the shields (COM6 now the gate on the gate shield): 0.4 % / 1.9 % loss, 0 CRC errors on
+  COM5 (now on the house shield), 2 on COM6. So the CRC errors follow the COM6 MKR board itself, whatever
+  shield, antenna or role it has. Its receive SNR was also lower in most runs (5.5–7.75 dB against 7.75–8 on
+  COM5). Loss without any CRC error remains on both boards (frames never detected). In this run COM5 saw noise
+  peaks of −38 dBm on the house shield with no CRC errors. Frequency error (0.5.2, `fei` in status and `pong`):
+  COM5 hears COM6 at −343 Hz, COM6 hears COM5 at +343 Hz (spread ±35 Hz over 5 minutes), i.e. the crystals
+  differ by 0.4 ppm: not the cause. That run: 8 CRC errors on COM6, none on COM5. The shield swap also swapped
+  the USB cables and ports, so those are ruled out too. What's left is the COM6 MKR board itself (its radio
+  module or on-board supply). Next: try a spare MKR WAN 1310 in its place; keep COM6 out of the install if it's
+  confirmed. To debug RX, read the SX127x packet/header counters
+  (0x14–0x17) with `readReg()` in `radio.cpp`.
 - [ ] **Commands don't survive outages longer than ~4.7 s well.** Retries are spread over `cmd_ttl_s` with
   doubling gaps (about 0.3, 0.9, 2.2, 4.7 and 9.7 s at the defaults), so after a ~4.7 s outage only the last
   retry is left and one lost frame drops the command. Decide whether to raise the default `retries` or change

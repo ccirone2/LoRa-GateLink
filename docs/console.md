@@ -54,7 +54,8 @@ Common fields: `fw`, `role`, `reboot_pending`, `uptime_ms`, `radio_ok`, `radio_f
 `internal`, as in `info`), `key_set`, `io` (`in1`–`in4`, `k1`,
 `k2`) and `link` (`verified`, `age_ms`, `rssi`, `snr`, `tx`, `rx`, `retries`, `giveups`, `mac_fail`, `replay`,
 `sessions`, `lbt_defers`, `lbt_forced`, `crc_err` (frames received with a bad CRC), `noise` (smoothed noise floor,
-dBm; null before the first sample)), and `free_ram` (bytes between the heap's high-water mark and the stack).
+dBm; null before the first sample), `fei` (frequency error of the last good frame, Hz: the peer's carrier against
+ours, i.e. the two boards' crystal offset)), and `free_ram` (bytes between the heap's high-water mark and the stack).
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target`, `last_cmd_id`, `power_sense`.
@@ -101,7 +102,7 @@ Unsolicited lines carry `"event"` instead of `"id"`:
 |---|---|---|
 | `log` | `t`, `ev`, `a`, `b` | Every log entry, as it is logged |
 | `status` | `status` | House: each STATUS received from the gate |
-| `pong` | `ping_id`, `rtt_ms`, `rssi`, `snr`, `peer_rssi`, `peer_snr` | Answer to `radio.ping` |
+| `pong` | `ping_id`, `rtt_ms`, `rssi`, `snr`, `peer_rssi`, `peer_snr`, `fei` (Hz, as in status) | Answer to `radio.ping` |
 | `remote_diag` | `fw`, `uptime_s`, `counters`, `params` | Answer to `remote.diag` |
 | `remote_set` | `acked`, `ok` | Outcome of `remote.set` |
 

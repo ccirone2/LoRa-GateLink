@@ -86,9 +86,18 @@ static void clearTarget() {
   leaving = GS_UNKNOWN;
 }
 
+// Interlock: never both. Releasing one relay and energizing the other in the same instant isn't enough (a contact
+// can make before the other has broken: the bench opener saw OPEN and CLOSE together), so wait for the release.
+#define INTERLOCK_MS 100
+
+static void interlockedPulse(Relay &r, Relay &other, uint32_t now, uint32_t ms) {
+  bool wasOn = other.on() || other.pulsing();
+  other.set(false);
+  r.pulse(now, ms, wasOn ? INTERLOCK_MS : 0);
+}
+
 static void pulse(Relay &r, Relay &other, uint8_t which, uint32_t now) {
-  other.set(false);  // interlock: never both
-  r.pulse(now, cfg.pulse_ms);
+  interlockedPulse(r, other, now, cfg.pulse_ms);
   logEvent(EV_PULSE, which, cfg.pulse_ms);
 }
 
@@ -278,8 +287,7 @@ void gateRelayTest(uint8_t k, uint32_t ms) {
   uint32_t now = millis();
   Relay &r = k == 1 ? k1 : k2;
   Relay &other = k == 1 ? k2 : k1;
-  other.set(false);
-  r.pulse(now, ms);
+  interlockedPulse(r, other, now, ms);
   // Track it like a command so the resulting movement is attributed to us, not external. A gate already at
   // that limit won't move for it, so there's nothing to attribute (a later move off it is someone else's).
   // With no AC and no limit reading the opener may be dead: the pulse is only a wiring check, and the limit read

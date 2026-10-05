@@ -18,17 +18,18 @@ private:
   uint32_t _since = 0;
 };
 
-// Relay output with optional non-blocking pulse.
+// Relay output with optional non-blocking pulse, which can start after a delay (the coil stays off until then).
 class Relay {
 public:
   void begin(uint8_t pin);
   void set(bool on);
-  void pulse(uint32_t now, uint32_t ms);
+  void pulse(uint32_t now, uint32_t ms, uint32_t delayMs = 0);
   void update(uint32_t now);
   bool on() const { return _on; }
   bool pulsing() const { return _pulseUntil != 0; }
 private:
   uint8_t _pin = 0;
   bool _on = false;
+  uint32_t _startAt = 0;  // delayed pulse: when the coil goes on (0 = not waiting)
   uint32_t _pulseUntil = 0;
 };

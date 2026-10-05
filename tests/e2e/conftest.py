@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import serial
 
-from gatelink.board import Board, BoardError, find_boards
+from gatelink.board import Board, BoardError, find_boards, find_uarts
 from gatelink.bench import Bench
 from gatelink.controller import Controller, ControllerError
 from gatelink.gatesim import GateSim, GateSimError
@@ -28,6 +28,9 @@ def pytest_addoption(parser):
     g.addoption("--house-port", help="house board COM port (default: auto-detect by role)")
     g.addoption("--gate-port", help="gate board COM port (default: auto-detect by role)")
     g.addoption("--sim-port", default=os.environ.get("GATELINK_SIM_PORT", "COM10"), help="GateSim Uno port")
+    g.addoption("--house-uart", help="house board's USB-to-UART adapter port (default: auto-detect FTDI ports)")
+    g.addoption("--gate-uart", help="gate board's USB-to-UART adapter port (default: auto-detect FTDI ports)")
+    g.addoption("--no-uart", action="store_true", help="drive the boards over USB even if a UART console answers")
     g.addoption("--cycles", type=int, default=20, help="open/close cycles for the soak test")
     g.addoption("--soak-minutes", type=float, default=120, help="duration of the long soak (-m longsoak)")
     g.addoption("--rf-cycles", type=int, default=5, help="open/close cycles on the marginal link (-m rf)")
@@ -68,6 +71,28 @@ def _open_board(port, timeline):
     return b
 
 
+def _use_uarts(cfg, boards, tl, opened, sim_port):
+    """Drive a board over its UART console when one answers: its adapter keeps the port while the board is
+    unpowered, so power tests see the boot at once instead of waiting for USB to come back. Returns a summary."""
+    uarts = {} if cfg.getoption("--no-uart") else find_uarts(tl, exclude={sim_port})
+    for role in ("house", "gate"):
+        if cfg.getoption(f"--{role}-uart"):
+            uarts[role] = cfg.getoption(f"--{role}-uart")
+    for role, port in uarts.items():
+        if role not in boards:
+            continue
+        b = _open_board(port, tl)
+        if b.name != role:
+            b.close()
+            raise BoardError(f"{port} answers as {b.name!r}, not {role!r}")
+        usb = boards[role]
+        usb.close()
+        opened.remove(usb)
+        opened.append(b)
+        boards[role] = b
+    return ", ".join(f"{r} {'UART' if r in uarts else 'USB'} {boards[r].port}" for r in ("house", "gate"))
+
+
 def _close_all(opened):
     for o in opened:
         try:
@@ -99,6 +124,7 @@ def bench(request):
             _close_all(opened)
             pytest.skip(f"bench not connected: no {' or '.join(sorted(missing))} board found "
                         f"(close the web console; boards found: {sorted(boards) or 'none'})")
+        consoles = _use_uarts(cfg, boards, tl, opened, sim_port)
         if cfg.getoption("--restore-key"):
             _restore_key(boards)
         sim = GateSim(sim_port, tl)
@@ -119,6 +145,7 @@ def bench(request):
         run_dir.mkdir(parents=True, exist_ok=True)
         state["run_dir"] = run_dir
         b = Bench(boards["house"], boards["gate"], sim, ctrl, tl, run_dir)
+        b.facts["consoles"] = consoles
         (run_dir / "config_backup.json").write_text(json.dumps(b.backup, indent=2))
         state["bench"] = b
         b.apply_profile()

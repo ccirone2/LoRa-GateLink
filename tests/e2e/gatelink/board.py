@@ -1,4 +1,5 @@
-"""Client for a GateLink board's USB JSON console (the same contract web/app.js uses).
+"""Client for a GateLink board's JSON console (the same contract web/app.js uses), over USB or, with the board's
+`uart_console` on, a USB-to-UART adapter on its Serial1 pins.
 
 Requests are `{"id","cmd",...}` lines answered by `{"id","ok",...}`; unsolicited `{"event":...}` lines (log
 entries, house status updates, pongs) go to the shared timeline. The firmware only writes while DTR is asserted,
@@ -13,6 +14,7 @@ import serial
 import serial.tools.list_ports
 
 ARDUINO_VID = 0x2341
+FTDI_VID = 0x0403  # USB-to-UART adapters on the boards' Serial1 consoles (not the GateSim's CH340)
 # USB CDC ignores the rate; a USB-to-UART adapter on the board's Serial1 console (uart_console) needs it.
 BAUD = 1_000_000
 # config.set params per request: keeps each line far below the firmware's console line limit.
@@ -226,6 +228,24 @@ class Board:
         self.close()
         time.sleep(1.5)
         self._reconnect()
+
+
+def find_uarts(timeline, exclude=()):
+    """Ask every FTDI port not in `exclude` for its board's role (the board needs uart_console on). Returns
+    {role: port}; ports that don't answer are skipped."""
+    found = {}
+    for p in serial.tools.list_ports.comports():
+        if p.vid != FTDI_VID or p.device in exclude:
+            continue
+        b = Board(p.device, timeline)
+        try:
+            b.open()
+            found.setdefault(b.request("info", timeout=1.5)["role"], p.device)
+        except (serial.SerialException, BoardError):
+            pass
+        finally:
+            b.close()
+    return found
 
 
 def find_boards(timeline, exclude=()):

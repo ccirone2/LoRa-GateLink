@@ -29,6 +29,12 @@ pytest tests/e2e -m rf --rf-cycles 5      # marginal link (2 dBm, SF12); see "Re
 Other options: `--house-port` / `--gate-port` (default: found by role), `GATELINK_SIM_PORT`,
 `GATELINK_HA_ENTITY` (default `switch.wave_1`).
 
+**UART consoles.** A board with `uart_console` on and a USB-to-UART adapter on its Serial1 pins (see
+[docs/console.md](../../docs/console.md)) is driven over the adapter instead of USB: FTDI ports (VID 0x0403) are
+asked for their role at the start, or name them with `--house-uart` / `--gate-uart`; `--no-uart` keeps USB. The
+adapter keeps its port while the board is unpowered, so power tests see the `boot` event at once. The summary
+lists which console each board used.
+
 `--restore-key` reboots both boards (dropping any unsaved test profile an interrupted run left behind), then
 `key.set`s `GATELINK_KEY` on both and waits for the link. Use it if a wrong-key run was killed mid-test and left the
 gate with a random key. Keep the key itself somewhere safe (e.g. a password manager): boards can't read it back,
@@ -84,7 +90,8 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
   relay test the scenario issued; a commanded pulse is `pulse_ms` long, and the simulator measured it at that
   length (a relay test at its requested length), ±80 ms. House K2 never reads closed unless the gate is closed.
   No board resets or radio faults. No MAC failures or replays. The house sent exactly the number of commands the
-  scenario expects.
+  scenario expects. The opener saw no press the gate didn't log as a pulse (relay chatter, e.g. while a board
+  powers up or down).
 - **Results.** `tests/e2e/results/<run>/` holds a time-ordered timeline per test (all four devices, JSONL) and
   `summary.md` (results, latencies, link quality, anomalies such as a gate → house status that needed a retry).
 

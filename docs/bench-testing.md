@@ -1,5 +1,8 @@
 # Bench testing
 
+Every bench wire, and whether it's confirmed, is in [tools/bench-wiring](../tools/bench-wiring/README.md)
+(`wiring.json`, viewed and edited in a local page).
+
 The bench: both MKR boards on USB, the [GateSim](../tools/GateSim/README.md) Uno standing in for the opener on
 the gate board, and the real Shelly on the house board (driven through Home Assistant). Most of the checklist
 below is automated by the [end-to-end suite](../tests/e2e/README.md); the test covering each item is named after

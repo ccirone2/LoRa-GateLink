@@ -13,12 +13,12 @@
       "name": "Gate side and GateSim",
       "devices": [
         "psu24",
+        "gate_buck",
+        "gate_lipo",
         "uno",
         "sim_relays",
         "gate_opto",
         "gate",
-        "gate_buck",
-        "gate_lipo",
         "rig"
       ]
     },
@@ -27,12 +27,12 @@
       "name": "House side",
       "devices": [
         "psu12",
+        "house_buck",
+        "house_lipo",
         "house_opto",
         "shelly",
         "house",
-        "house_buck",
-        "sensor",
-        "house_lipo"
+        "sensor"
       ]
     }
   ],

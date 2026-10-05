@@ -18,14 +18,19 @@ python -m http.server 8001 -d tools/bench-wiring   # then open http://localhost:
 - **Lanes:** signal wires run box to box. Wires that would cross a box detour through lanes under the row.
 - **Off-diagram ends** are labelled at the end of a short stub; × marks a terminal that's deliberately unused.
 
-## Wire status (line style)
+## Wire colour and status
+**Colour** is the wire's insulation colour (`color`: red, black, white, yellow, orange, green, blue, brown,
+purple, grey, pink). Until it's set, a wire gets a default: rails red, ground black, 3.3 V orange, USB grey, and
+light grey for any other signal.
+
+**Status** is the dash pattern:
 - **Solid:** `connected`, confirmed by eye, a meter or the e2e suite.
-- **Orange dashes:** `unverified`, believed to be there from the docs but not checked.
-- **Blue dots:** `planned`, agreed but not wired yet.
-- **Grey dots:** `open`, deliberately unconnected.
+- **Long dashes:** `unverified`, believed to be there from the docs but not checked.
+- **Short dashes:** `planned`, agreed but not wired yet.
+- **Sparse dots:** `open`, deliberately unconnected.
 
 ## Editing
-- **In the page:** click a wire to open its card and set its status or note. To save straight back to the file,
+- **In the page:** click a wire to open its card and set its status, colour or note. To save straight back to the file,
   click **Open wiring.json…** once and pick this folder's `wiring.json`, then use Save or Ctrl+S (Chrome or
   Edge). **Reload** re-reads the file after an edit made elsewhere.
 - **In the JSON:** structural changes go here.
@@ -33,6 +38,6 @@ python -m http.server 8001 -d tools/bench-wiring   # then open http://localhost:
   - `bands` sets each row's device order.
   - `comms` places a device under another one.
   - A wire is `{from: "device:terminal", to: "device:terminal" | "pc", bus: id, label: text, via: text, status,
-    signal, note}`. Give it one of `to`, `bus` or `label`; with none of them, the terminal is shown unconnected.
+    color, signal, note}`. Give it one of `to`, `bus` or `label`; with none of them, the terminal is shown unconnected.
 
 Keep it in step with the bench: when a wire moves or gets confirmed, change it here in the same session.

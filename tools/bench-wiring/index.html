@@ -41,7 +41,8 @@
   .tlabel { fill: var(--muted); font-size: 10px; }
   .busline { stroke: var(--bus); stroke-width: 3; }
   .buslabel { font-size: 11px; font-weight: 600; fill: var(--muted); }
-  .wire { fill: none; stroke-width: 1.8; stroke-linejoin: round; }
+  .wire { fill: none; stroke-width: 2.2; stroke-linejoin: round; }
+  .halo { fill: none; stroke: var(--muted); stroke-width: 4; stroke-linejoin: round; opacity: .55; }
   .hit { fill: none; stroke: transparent; stroke-width: 10; cursor: pointer; }
   .wire.sel { stroke: var(--sel) !important; stroke-width: 3.2; }
   .dot { stroke: none; }
@@ -78,6 +79,7 @@
   <h3 id="pSig"></h3>
   <div class="ends" id="pEnds"></div>
   <label>Status <select id="pStatus"></select></label>
+  <label>Wire colour <select id="pColor"></select></label>
   <label>Note <textarea id="pNote"></textarea></label>
   <div style="display:flex;justify-content:space-between;margin-top:8px">
     <span id="pDesc" style="font-size:12px;color:var(--muted)"></span>
@@ -90,7 +92,17 @@
 const L = { sidePitch: 20, tbPitch: 66, labelZone: 16, nameLine: 15, gap: 70, bandGap: 170, busPitch: 16,
   busTop: 46, lanePitch: 9, stub: 14, charW: 6.1, minW: 150, gutter: 250 };
 const STATUS = ['connected', 'unverified', 'planned', 'open'];
-const DASH = { connected: '', unverified: '6 4', planned: '3 4', open: '1 4' };
+const DASH = { connected: '', unverified: '7 4', planned: '2 4', open: '1 6' };
+// Physical insulation colours. Unset wires get a default: rails red, ground black, 3.3 V orange, USB grey.
+const WIRE = { red: '#d62828', black: '#111111', white: '#f4f4f4', yellow: '#e9c46a', orange: '#f4a261', green: '#2a9d4f',
+  blue: '#2f6fd6', brown: '#8b5a2b', purple: '#8e5bd6', grey: '#8d939a', pink: '#e86fb0' };
+const UNSET = '#a3a8ae';
+function wireColor(w) {
+  if (w.color && WIRE[w.color]) return WIRE[w.color];
+  if (w.to === 'pc') return WIRE.grey;
+  if (w.bus) return /gnd/.test(w.bus) ? WIRE.black : /v33/.test(w.bus) ? WIRE.orange : WIRE.red;
+  return UNSET;
+}
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let data, handle = null, dirty = false, selected = null, fit = true;
@@ -303,9 +315,11 @@ function draw() {
     for (const r of B.routes) {
       if (!shown.has(r.w.status)) continue;
       const d = 'M' + r.path.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' L');
-      const col = `var(--${r.w.status})`;
+      const col = wireColor(r.w);
+      // Underlay first, so black and white wires show on either background.
+      s += `<path class="halo" d="${d}" stroke-dasharray="${DASH[r.w.status]}"></path>`;
       s += `<path class="wire ${selected === r.i ? 'sel' : ''}" d="${d}" stroke="${col}" stroke-dasharray="${DASH[r.w.status]}"></path>`;
-      if (r.junction) s += `<circle class="dot" cx="${r.junction.x}" cy="${r.junction.y}" r="3.2" style="fill:${col}"></circle>`;
+      if (r.junction) s += `<circle class="dot" cx="${r.junction.x}" cy="${r.junction.y}" r="3.2" style="fill:${col};stroke:var(--muted);stroke-width:.8"></circle>`;
       if (r.cross) s += `<text x="${r.cross.x}" y="${r.cross.y + 4}" text-anchor="middle" style="fill:${col}">×</text>`;
       if (r.label) s += `<text x="${r.label.x}" y="${r.label.y}" text-anchor="${r.label.anchor}" style="fill:${col};font-size:10px">${esc(r.label.text)}</text>`;
       if (r.w.via) {
@@ -338,7 +352,7 @@ function chips() {
   $('chips').innerHTML = STATUS.map((st) => {
     const n = data.wires.filter((w) => w.status === st).length;
     return `<span class="chip ${shown.has(st) ? '' : 'off'}" data-s="${st}" title="${esc(data.statuses[st])}">
-      <span class="sw" style="border-top-color:var(--${st});border-top-style:${st === 'connected' ? 'solid' : 'dashed'}"></span>${st} ${n}</span>`;
+      <svg width="26" height="8"><line x1="1" y1="4" x2="25" y2="4" stroke="var(--ink)" stroke-width="2.2" stroke-dasharray="${DASH[st]}"></line></svg>${st} ${n}</span>`;
   }).join(' ');
   document.querySelectorAll('.chip').forEach((c) => c.onclick = () => {
     shown.has(c.dataset.s) ? shown.delete(c.dataset.s) : shown.add(c.dataset.s); draw();
@@ -362,11 +376,13 @@ function select(i) {
   $('pEnds').textContent = `${w.from} → ${w.to === 'pc' ? 'PC' : w.to || busName || w.label || 'not connected'}${w.via ? ' (via ' + w.via + ')' : ''}`;
   $('pStatus').innerHTML = STATUS.map((st) => `<option${st === w.status ? ' selected' : ''}>${st}</option>`).join('');
   $('pNote').value = w.note || '';
+  $('pColor').innerHTML = `<option value="">(not set: default)</option>` + Object.keys(WIRE).map((c) => `<option${c === w.color ? ' selected' : ''}>${c}</option>`).join('');
   $('pDesc').textContent = data.statuses[w.status] || '';
   $('panel').style.display = 'block';
   draw();
 }
 $('pStatus').onchange = () => { data.wires[selected].status = $('pStatus').value; $('pDesc').textContent = data.statuses[$('pStatus').value]; setDirty(true); draw(); };
+$('pColor').onchange = () => { const w = data.wires[selected]; if ($('pColor').value) w.color = $('pColor').value; else delete w.color; setDirty(true); draw(); };
 $('pNote').oninput = () => { data.wires[selected].note = $('pNote').value; setDirty(true); };
 $('pClose').onclick = () => select(null);
 

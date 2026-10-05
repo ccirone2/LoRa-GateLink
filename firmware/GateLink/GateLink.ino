@@ -211,6 +211,7 @@ void setup() {
 
   consoleBegin();
   cfgLoaded = configLoad();
+  consoleConfigure();  // before the boot event, so a UART console sees it
   activeRole = cfg.role;
   in1.begin(PIN_IN1, cfg.in1_invert);
   in2.begin(PIN_IN2, cfg.in2_invert);

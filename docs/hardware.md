@@ -74,6 +74,12 @@ and `firmware/GateLink/pins.h` in sync.
 - **2GIG contact sensor**: any 2GIG-compatible door/window sensor with external terminal input. Wire K2 NO/COM
   to its terminals; name it "Gate" in Alarm.com. (`sensor_invert` flips the sense if needed.)
 
+## Bench UART console
+
+Pins 13 (RX) and 14 (TX) carry an optional second console (`uart_console`, off by default) for bench power
+tests with a 3.3 V USB-to-UART adapter: adapter TX → 10 kΩ → pin 13, pin 14 → adapter RX, GND to GND, adapter VCC
+unconnected. See [console.md](console.md). Leave the pins unused and `uart_console` at 0 at the install.
+
 ## Spare inputs
 
 IN4 (and IN3 on the house board) are pull-down inputs (contact to 3.3 V) reserved for future use such as a

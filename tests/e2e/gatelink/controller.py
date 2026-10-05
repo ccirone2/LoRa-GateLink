@@ -74,6 +74,8 @@ class CtrlPower:
 
     plug: GATELINK_HA_POWER_ENTITY switches the controller's real supply, with the IN2 opto wired to it. Cutting it
           drops the controller's relay too, so the real relay-before-opto race is exercised.
+    wired: no plug, but the IN2 opto is on the controller's live supply (shared with the house board, so it can't be
+          cut here): in2_invert 1 makes it read unpowered. Found by detect().
     sim:  IN2 isn't wired, so house in2_invert stands in: 1 makes the open input read powered, 0 unpowered. That's
           only safe because nothing is connected to IN2.
     """
@@ -83,6 +85,13 @@ class CtrlPower:
     def __init__(self, ctrl, house, entity=None):
         self.ctrl, self.house = ctrl, house
         self.entity = entity if entity is not None else os.environ.get("GATELINK_HA_POWER_ENTITY", "")
+        self.wired = False
+
+    def detect(self):
+        """Without a plug, see whether IN2 reads the controller's supply (call with house in2_invert 0)."""
+        if not self.real:
+            self.wired = bool(self.house.status()["io"]["in2"])
+        return "plug" if self.real else "wired (in2_invert fakes a loss)" if self.wired else "sim (IN2 unwired)"
 
     @property
     def real(self):
@@ -93,13 +102,15 @@ class CtrlPower:
         if self.real:
             self.ctrl.timeline.add("ctrl", "action", text=f"controller power {'ON' if on else 'OFF'}")
             self.ctrl._call("POST", f"/api/services/switch/{'turn_on' if on else 'turn_off'}", {"entity_id": self.entity})
+        elif self.wired:
+            self.house.config_set(in2_invert=0 if on else 1)
         else:
             self.house.config_set(in2_invert=1 if on else 0)
 
     def fake(self, unpowered):
         """Make the house read the controller as unpowered (its edges ignored) while it keeps its supply, so it
         can still be switched. fake(False) puts the normal reading back."""
-        if self.real:
+        if self.real or self.wired:
             self.house.config_set(in2_invert=1 if unpowered else 0)
         else:
             self.house.config_set(in2_invert=0 if unpowered else 1)

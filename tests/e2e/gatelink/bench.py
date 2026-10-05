@@ -233,6 +233,7 @@ class Bench:
         self.note(f"baseline for {self.test_name}")
         self.sim.fault("none")
         self.sim.relay_auto()
+        self.sim.power_rig_auto()
         self.sim.power(True)
         self.power.ensure_on()
         self.apply_profile()

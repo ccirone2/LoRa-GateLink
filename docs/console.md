@@ -51,6 +51,7 @@ with `"error"` on failure. A line that isn't valid JSON is answered `bad json`, 
 | `reboot` | | Replies, then resets the board (USB re-enumerates) |
 | `identify` | `ms` (default 6000, max 60000) | Strobes the LED |
 | `debug.replay` | | Re-sends the last frame as-is, to test the peer's replay protection |
+| `debug.reboot_after_cmd` | | Gate only, one-shot: the next command that pulses resets the gate right after the pulse, without ACKing it (a power cut or crash at the worst moment) |
 
 Settings are listed in the `PARAMS[]` table in `firmware/GateLink/config.cpp`; the web console's Config tab
 shows each with help text. Saved config and the key live in the board's SPI flash chip (`cfg_store` `spi`) and
@@ -137,7 +138,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `tx_giveup` | message type | seq |
 | `cmd_sent` | action (1 open, 2 close) | command id |
 | `cmd_suppressed` | action | gate state |
-| `cmd_dropped` | action (not ACKed within `cmd_ttl_s`, or the link restarted) | command id |
+| `cmd_dropped` | action (not ACKed within `cmd_ttl_s`, the link restarted, or the gate restarted before ACKing it) | command id |
 | `cmd_rx` | action | command id |
 | `cmd_dup` | command id | |
 | `cmd_refused` | action | command id (no AC power) |

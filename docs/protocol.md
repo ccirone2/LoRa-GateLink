@@ -32,7 +32,10 @@ is challenged, but the verified session stays in place until the new one answers
 Commands, status and remote config writes are acknowledged and retried: the `retries` resends are spread over
 the message's lifetime with doubling gaps (`cmd_ttl_s` for commands: at 10 s and 5 retries about 0.3, 0.9, 2.2,
 4.7 and 9.7 s; STATUS: `heartbeat_s` capped at 10 s; config writes: 10 s), so a command survives an outage of nearly `cmd_ttl_s` and is dropped, never fired late, after
-it. Duplicate commands are detected and not re-pulsed. Every transmission listens before talking: responses go
+it. Duplicate commands are detected and not re-pulsed. If the gate restarts while a command is still waiting
+for its ACK (a HELLO from a new gate session), the house drops the command instead of sending it again: the gate
+may already have pulsed for it and lost the ACK to the reset, and its record of the last command went with it, so a
+resend would pulse twice. The house then resyncs the controller to the real gate. Every transmission listens before talking: responses go
 after a 25 ms turnaround, new frames after the response slot plus a random backoff.
 
 ## Link supervision

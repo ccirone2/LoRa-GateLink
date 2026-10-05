@@ -23,6 +23,8 @@ static uint8_t lastCmdAck = RES_OK;
 static uint32_t lastStatusAt = 0;
 static int32_t reportedHeartbeat = 0;  // heartbeat_s in our last STATUS
 static uint32_t seenSessions = 0;
+static bool rebootAfterCmd = false;  // debug: next pulsed command reboots us before its ACK (a power cut)
+static uint32_t rebootAt = 0;
 
 // IN3 = AC power (the 24 V supply on mains). The opener has battery backup, so it keeps running without AC.
 static bool acPower() {
@@ -97,6 +99,7 @@ void gateBegin() {
 }
 
 void gateLoop(uint32_t now) {
+  if (rebootAt && elapsed(now, rebootAt, 0)) NVIC_SystemReset();
   in1.update(now, cfg.debounce_ms, cfg.in1_invert);
   in2.update(now, cfg.debounce_ms, cfg.in2_invert);
   bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense
@@ -192,6 +195,12 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
     else pulse(k2, k1, 2, now);
     setTarget(want, now);
     lastCmdAck = RES_OK;
+    if (rebootAfterCmd) {
+      // Bench fault injection: the pulse runs, then we reset without ACKing, as a power cut right after it would.
+      rebootAfterCmd = false;
+      rebootAt = (now + cfg.pulse_ms + 100) | 1;
+      return;
+    }
   }
   linkAck(m.seq, lastCmdAck);
   sendStatus(now);
@@ -259,6 +268,10 @@ void gateStatus(JsonObject o) {
   o["last_cmd_id"] = lastCmdId;
   o["power_sense"] = (bool)cfg.power_sense;
   o["ac_power"] = acPower();
+}
+
+void gateDebugRebootAfterCmd() {
+  rebootAfterCmd = true;
 }
 
 void gateRelayTest(uint8_t k, uint32_t ms) {

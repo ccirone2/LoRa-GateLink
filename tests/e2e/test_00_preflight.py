@@ -27,7 +27,8 @@ def test_bench_safe_settings(bench):
 
 
 def test_ping(bench):
-    pong = bench.ping("house")
+    # The house misses ~2-3 % of pongs (TODO.md): one lost pong mustn't skip the whole run.
+    pong = bench.ping("house", required=False) or bench.ping("house", required=False) or bench.ping("house")
     bench.facts["ping RTT"] = f"{pong['rtt_ms']} ms"
     bench.facts["RSSI/SNR at house"] = f"{pong['rssi']} dBm / {pong['snr']} dB"
     bench.facts["RSSI/SNR at gate"] = f"{pong['peer_rssi']} dBm / {pong['peer_snr']} dB"

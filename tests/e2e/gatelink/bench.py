@@ -300,7 +300,8 @@ class Bench:
             self.fail("invariant check failed:\n  " + "\n  ".join(problems), since=since)
 
     def _check_pulses(self, since, problems):
-        """Every gate pulse answers a command or a relay test, and the opener saw it for as long as it should.
+        """Every gate pulse answers a command or a relay test, and the opener saw it for as long as it should; and
+        the opener saw no press the gate didn't log (relay chatter, e.g. while a board powers up or down).
 
         handleCmd logs cmd_rx and the pulse back to back, so a commanded pulse directly follows a cmd_rx for the
         same action (OPEN = K1, CLOSE = K2) in the gate's log; a refused or already-there command logs no pulse.
@@ -324,16 +325,16 @@ class Bench:
                     tests.remove(rt)
                     pulses.append((e, e["b"]))
             prev = e
-        if not pulses:
-            return
         # The release is reported when the pulse ends: give the last one time to arrive.
-        end = max(e["t"] + want / 1000 for e, want in pulses) + 0.5
+        end = max((e["t"] + want / 1000 for e, want in pulses), default=0) + 0.5
         if end > self.mark():
             time.sleep(end - self.mark())
         releases = {1: [], 2: []}  # relay -> [(t, held ms)]
         for e in self.timeline.select(src="sim", kind="evt", since=since):
             parts = e["line"].split()
-            if len(parts) == 3 and parts[0] == "release" and parts[1] in ("open", "close"):
+            # A press that began before the test (`since`) belongs to the one before.
+            if (len(parts) == 3 and parts[0] == "release" and parts[1] in ("open", "close")
+                    and e["t"] - int(parts[2]) / 1000 >= since):
                 releases[1 if parts[1] == "open" else 2].append((e["t"], int(parts[2])))
         tol = PULSE_TOL_MS + SIM_DEBOUNCE_MS
         for e, want in pulses:
@@ -350,6 +351,10 @@ class Bench:
             if held > want + tol or (not cut and held < want - tol):
                 problems.append(f"gate relay {e['a']} pulse at {e['t']}s held {held} ms at the opener, "
                                 f"expected {want} ms ±{tol}" + (" (cut short by the other relay)" if cut else ""))
+        for k, left in releases.items():
+            for t, held in left:
+                problems.append(f"opener {'OPEN' if k == 1 else 'CLOSE'} input pressed {held} ms at "
+                                f"{t - held / 1000:.3f}s with no gate pulse logged (relay chatter?)")
 
     def _check_k2(self, since, problems):
         """House K2 (contact sensor) reads closed only while the gate is known closed. The status event is sent

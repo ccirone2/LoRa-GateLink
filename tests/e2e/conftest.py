@@ -122,6 +122,7 @@ def bench(request):
         (run_dir / "config_backup.json").write_text(json.dumps(b.backup, indent=2))
         state["bench"] = b
         b.apply_profile()
+        b.facts["controller power"] = b.power.detect()
     except BaseException:
         try:
             if b is not None:

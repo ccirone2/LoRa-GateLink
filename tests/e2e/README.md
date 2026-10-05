@@ -74,7 +74,9 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
   wrong-key test and `test_remote_set` (the gate saves a remote write): the latter saves the backup again
   afterwards, and so does the end of the session.
 - **Simulated faults.** A radio outage is the gate moved to another `net_id`. Controller power is house
-  `in2_invert` (IN2 isn't wired on the bench) unless `GATELINK_HA_POWER_ENTITY` is set.
+  `in2_invert` unless `GATELINK_HA_POWER_ENTITY` is set: with IN2 unwired it fakes power, with IN2's opto on the
+  live 12 V (shared with the house board, so it can't be cut) it fakes a loss. The session finds which at the start
+  (summary "controller power").
 - **Baseline.** Each test starts from the same point: opener powered, gate closed, controller off, house armed
   and in sync.
 - **Invariant checks after every test.** OPEN and CLOSE are never pulsed together (the simulator reports any

@@ -19,7 +19,11 @@ def test_bench_safe_settings(bench):
         p = bench.backup[name]
         # Full-power TX with a relay energized crashed USB-powered boards into watchdog resets.
         assert p["tx_power"] <= 5, f"{name} tx_power {p['tx_power']}: keep it at about 5 on USB power"
-    assert bench.backup["house"]["in1_invert"] == 0, "house IN1 is the real controller relay: leave in1_invert 0"
+    # The suite runs with every invert at 0 and puts the saved values back afterwards, so a stray invert would
+    # never fail a scenario. Inverted, a dead opto or cut wire reads active (e.g. a closed limit): keep them 0.
+    inverted = [f"{name} {k}" for name in ("house", "gate") for k in ("in1_invert", "in2_invert", "in3_invert",
+                                                                       "in4_invert") if bench.backup[name].get(k)]
+    assert not inverted, f"set back to 0 and save: {', '.join(inverted)} (fix reversed signals in the wiring)"
 
 
 def test_ping(bench):

@@ -132,8 +132,36 @@ class GateSim:
         self._ok(f"travel {seconds}")
 
     def ac(self, on):
-        """AC lost with the opener on its battery: IN3 (relay 3) off while the limits and motion carry on."""
-        self._ok(f"relay 3 {'auto' if on else 'off'}")
+        """AC mains (gate IN3). Without it the opener carries on on its battery: limits and motion as normal."""
+        self._ok(f"ac {'on' if on else 'off'}")
+
+    def battery(self, on):
+        """The opener's battery backup. With neither it nor AC the opener is dead (`power(False)` does both)."""
+        self._ok(f"battery {'on' if on else 'off'}")
+
+    def supply(self, source):
+        """Where the gate board's buck is fed from: "acc" (accessory output: alive while the opener is),
+        "psu" (the AC supply), or "none" (only explicit rail cuts). Needs the power rig's D7 relay."""
+        self._ok(f"supply {source}")
+
+    def rail(self, site, on):
+        """Force a site's supply rail ("gate" or "house") on/off, or None to follow the model."""
+        self._ok(f"rail {site} {'auto' if on is None else 'on' if on else 'off'}")
+
+    def cut(self, site, ms):
+        """Cut a site's supply rail for `ms`, timed on the Uno."""
+        self._ok(f"rail {site} cut {int(ms)}")
+
+    def lipo(self, site, on):
+        """Connect or disconnect a board's LiPo ("gate" or "house")."""
+        self._ok(f"lipo {site} {'on' if on else 'off'}")
+
+    def power_rig_auto(self):
+        """Both rails on and following the model (gate supply: explicit cuts only), both LiPos connected."""
+        self._ok("supply none")
+        for site in ("gate", "house"):
+            self._ok(f"rail {site} auto")
+            self._ok(f"lipo {site} on")
 
     def relay_auto(self):
         for n in (1, 2, 3):

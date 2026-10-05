@@ -2,8 +2,9 @@
 
 Controller power goes through `bench.power` (gatelink.controller.CtrlPower). With GATELINK_HA_POWER_ENTITY set,
 an HA smart plug really cuts the controller's supply and house IN2 is wired to it, so the controller's relay
-drops by itself. Otherwise IN2 isn't wired and in2_invert simulates it; the relay doesn't drop, and where the real
-one would, the test switches it off itself.
+drops by itself. Otherwise in2_invert simulates the loss (IN2 unwired, or wired to the live supply, which can't be cut
+because the house board shares it); the relay doesn't drop, and where the real one would, the test switches it off
+itself.
 """
 import threading
 import time

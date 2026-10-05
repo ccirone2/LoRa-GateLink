@@ -227,6 +227,13 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     appIdentify(ms > 60000 ? 60000 : ms);
   } else if (!strcmp(cmd, "debug.replay")) {
     linkDebugReplay();
+  } else if (!strcmp(cmd, "debug.reboot_after_cmd")) {
+    if (activeRole != ROLE_GATE) {
+      res["ok"] = false;
+      res["error"] = "gate node only";
+    } else {
+      gateDebugRebootAfterCmd();
+    }
   } else {
     res["ok"] = false;
     res["error"] = "unknown cmd";

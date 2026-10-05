@@ -367,6 +367,14 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
 
   if (type == MSG_HELLO) {
     if (plen < 4) return;
+    // A new session after a verified one: the peer restarted, and with it went its ACK memo and its record of the
+    // last command, so a command still waiting for an ACK may already have run there (the ACK lost to the reset).
+    // Sending it again would run it twice, late: drop it (the house then resyncs its controller to the real gate).
+    // Status and config writes are safe to repeat and are renumbered below.
+    if (peerSession != 0 && session != peerSession && slots[SLOT_CMD].active) {
+      slots[SLOT_CMD].active = false;
+      if (ackHandler) ackHandler(SLOT_CMD, slots[SLOT_CMD].type, false, 0);
+    }
     linkSend(MSG_HELLO_ACK, payload, 4);
     reframePending(now);
     // A session we haven't verified: the peer restarted, or an old HELLO is being replayed. Challenge it

@@ -54,3 +54,4 @@ void gateOnRx(const RxMsg &m);
 void gateOnAck(Slot slot, uint8_t type, bool acked, uint8_t result);
 void gateStatus(JsonObject o);
 void gateRelayTest(uint8_t k, uint32_t ms);
+void gateDebugRebootAfterCmd();  // bench: the next pulsed command resets the gate before its ACK

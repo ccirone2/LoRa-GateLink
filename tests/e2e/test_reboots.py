@@ -1,7 +1,7 @@
 """Board resets (power blips, watchdog): nothing may be commanded by a reboot, and state recovers."""
 import time
 
-from gatelink.bench import CAUSE, GS, SIM_TRAVEL_S
+from gatelink.bench import ACT_OPEN, CAUSE, GS, PROFILE_COMMON, SIM_TRAVEL_S
 from gatelink.flows import open_via_ctrl
 
 
@@ -37,6 +37,27 @@ def test_gate_reboot_mid_travel(rig):
     rig.wait_house(15, gate="open", io__k1=True, io__k2=False, ctrl=True)
     assert len(rig.logs("gate", "pulse", since=m)) == 1, "exactly the one pulse before the reset"
     rig.expect_no("gate", "cmd_rx", since=t_boot)
+
+
+def test_gate_reset_before_ack_no_second_pulse(rig):
+    """The gate pulses for a command and resets before its ACK reaches the house (a power cut or crash right after
+    the pulse; the gate's debug.reboot_after_cmd). The rebooted gate has forgotten the command, so the house must
+    not send it again: the opener sees exactly one OPEN press, and the house drops the command."""
+    rig.expect_commands(1)
+    rig.allow_reboot("gate")
+    rig.gate.request("debug.reboot_after_cmd")
+    m = rig.mark()
+    rig.ctrl.on()
+    rig.wait_log("gate", "pulse", a=1, since=m, timeout=15)
+    rig.wait_log("house", "session", since=m, timeout=25)  # the rebooted gate's new session verified
+    # The house's retries span cmd_ttl_s: give every one of them the chance to land.
+    time.sleep(PROFILE_COMMON["cmd_ttl_s"] + 2)
+    presses = [e for e in rig.timeline.select(src="sim", kind="evt", since=m) if e["line"].startswith("pulse open")]
+    assert len(presses) == 1, f"the opener saw {len(presses)} OPEN presses: the command ran again after the reset"
+    rig.wait_log("house", "cmd_dropped", a=ACT_OPEN, since=m, timeout=1)
+    # The one pulse still opens the gate, and the house follows it.
+    rig.wait_gate("open", timeout=SIM_TRAVEL_S + 10)
+    rig.wait_house(15, gate="open", io__k1=True, io__k2=False, ctrl=True)
 
 
 def test_house_reboot_controller_on_gate_closed(rig):

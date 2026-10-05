@@ -13,6 +13,8 @@ import serial
 import serial.tools.list_ports
 
 ARDUINO_VID = 0x2341
+# USB CDC ignores the rate; a USB-to-UART adapter on the board's Serial1 console (uart_console) needs it.
+BAUD = 1_000_000
 # config.set params per request: keeps each line far below the firmware's console line limit.
 CONFIG_CHUNK = 8
 # Checked against each other up to firmware 0.3.4 (heartbeat_s <= link_timeout_s / 2): keep them in one request.
@@ -41,7 +43,7 @@ class Board:
     # --- connection -------------------------------------------------------------------------------------------
     def open(self):
         self._closing = False
-        self.ser = serial.Serial(self.port, 115200, timeout=0.1, write_timeout=2)
+        self.ser = serial.Serial(self.port, BAUD, timeout=0.1, write_timeout=2)
         self._reader = threading.Thread(target=self._read_loop, name=f"board-{self.name}", daemon=True)
         self._reader.start()
 
@@ -158,7 +160,7 @@ class Board:
         last = None
         while time.monotonic() < deadline:
             try:
-                self.ser = serial.Serial(self.port, 115200, timeout=0.1, write_timeout=2)
+                self.ser = serial.Serial(self.port, BAUD, timeout=0.1, write_timeout=2)
             except serial.SerialException as e:
                 last = e
                 time.sleep(0.5)

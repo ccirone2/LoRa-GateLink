@@ -9,9 +9,10 @@
 
 #define LINE_MAX 1024  // a config.set with every param fits (a full import after a firmware upload)
 // Second console on Serial1 (uart_console), for bench power tests: a USB-to-UART adapter stays on the PC when the
-// board loses power, so it sees the boot right away. Fast, because Serial1 writes block once its 256-byte buffer
-// is full (a ~5 KB config.get reply takes ~50 ms at 1 Mbaud).
-#define UART_BAUD 1000000
+// board loses power, so it sees the boot right away. Serial1 writes block once its 256-byte buffer is full (a ~5 KB
+// config.get reply takes ~200 ms at 250 kbaud). Not faster: at 1 Mbaud ~4 % of requests arrived garbled on the
+// bench (bad json), whatever the interrupt priority; at 250 kbaud none did with the board idle.
+#define UART_BAUD 250000
 
 // One console port, with its own request line so bytes from one can't garble a request on the other.
 struct ConsolePort {

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import serial
 
-from gatelink.board import Board, BoardError, find_boards, find_uarts
+from gatelink.board import Board, BoardError, UartTap, find_boards, find_uarts
 from gatelink.bench import Bench
 from gatelink.controller import Controller, ControllerError
 from gatelink.gatesim import GateSim, GateSimError
@@ -28,9 +28,9 @@ def pytest_addoption(parser):
     g.addoption("--house-port", help="house board COM port (default: auto-detect by role)")
     g.addoption("--gate-port", help="gate board COM port (default: auto-detect by role)")
     g.addoption("--sim-port", default=os.environ.get("GATELINK_SIM_PORT", "COM10"), help="GateSim Uno port")
-    g.addoption("--house-uart", help="house board's USB-to-UART adapter port (default: auto-detect FTDI ports)")
-    g.addoption("--gate-uart", help="gate board's USB-to-UART adapter port (default: auto-detect FTDI ports)")
-    g.addoption("--no-uart", action="store_true", help="drive the boards over USB even if a UART console answers")
+    g.addoption("--house-uart", help="house board's USB-to-UART adapter port to tap (default: auto-detect FTDI ports)")
+    g.addoption("--gate-uart", help="gate board's USB-to-UART adapter port to tap (default: auto-detect FTDI ports)")
+    g.addoption("--no-uart", action="store_true", help="don't tap the boards' UART consoles")
     g.addoption("--cycles", type=int, default=20, help="open/close cycles for the soak test")
     g.addoption("--soak-minutes", type=float, default=120, help="duration of the long soak (-m longsoak)")
     g.addoption("--rf-cycles", type=int, default=5, help="open/close cycles on the marginal link (-m rf)")
@@ -71,26 +71,21 @@ def _open_board(port, timeline):
     return b
 
 
-def _use_uarts(cfg, boards, tl, opened, sim_port):
-    """Drive a board over its UART console when one answers: its adapter keeps the port while the board is
-    unpowered, so power tests see the boot at once instead of waiting for USB to come back. Returns a summary."""
+def _tap_uarts(cfg, boards, tl, opened, sim_port):
+    """Listen on each board's UART console, if it has an adapter: its events reach the timeline even while the
+    board is unpowered or rebooting and USB is gone (`boot` the moment power returns). Requests stay on USB (see
+    gatelink.board). Returns a summary for the report."""
     uarts = {} if cfg.getoption("--no-uart") else find_uarts(tl, exclude={sim_port})
     for role in ("house", "gate"):
         if cfg.getoption(f"--{role}-uart"):
             uarts[role] = cfg.getoption(f"--{role}-uart")
     for role, port in uarts.items():
-        if role not in boards:
-            continue
-        b = _open_board(port, tl)
-        if b.name != role:
-            b.close()
-            raise BoardError(f"{port} answers as {b.name!r}, not {role!r}")
-        usb = boards[role]
-        usb.close()
-        opened.remove(usb)
-        opened.append(b)
-        boards[role] = b
-    return ", ".join(f"{r} {'UART' if r in uarts else 'USB'} {boards[r].port}" for r in ("house", "gate"))
+        if role in boards:
+            tap = UartTap(boards[role], port)
+            opened.append(tap)
+            tap.open()
+    return ", ".join(f"{r} USB {boards[r].port}" + (f" + UART tap {uarts[r]}" if r in uarts else "")
+                     for r in ("house", "gate"))
 
 
 def _close_all(opened):
@@ -124,7 +119,7 @@ def bench(request):
             _close_all(opened)
             pytest.skip(f"bench not connected: no {' or '.join(sorted(missing))} board found "
                         f"(close the web console; boards found: {sorted(boards) or 'none'})")
-        consoles = _use_uarts(cfg, boards, tl, opened, sim_port)
+        consoles = _tap_uarts(cfg, boards, tl, opened, sim_port)
         if cfg.getoption("--restore-key"):
             _restore_key(boards)
         sim = GateSim(sim_port, tl)

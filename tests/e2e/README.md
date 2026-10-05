@@ -29,11 +29,13 @@ pytest tests/e2e -m rf --rf-cycles 5      # marginal link (2 dBm, SF12); see "Re
 Other options: `--house-port` / `--gate-port` (default: found by role), `GATELINK_SIM_PORT`,
 `GATELINK_HA_ENTITY` (default `switch.wave_1`).
 
-**UART consoles.** A board with `uart_console` on and a USB-to-UART adapter on its Serial1 pins (see
-[docs/console.md](../../docs/console.md)) is driven over the adapter instead of USB: FTDI ports (VID 0x0403) are
-asked for their role at the start, or name them with `--house-uart` / `--gate-uart`; `--no-uart` keeps USB. The
-adapter keeps its port while the board is unpowered, so power tests see the `boot` event at once. The summary
-lists which console each board used.
+**UART taps.** A board with `uart_console` on and a USB-to-UART adapter on its Serial1 pins (see
+[docs/console.md](../../docs/console.md)) is also listened to on the adapter. FTDI ports (VID 0x0403) are asked for
+their role (`info`) at the start, or name them with `--house-uart` / `--gate-uart`; `--no-uart` turns the taps
+off. Requests always go over USB: on the bench ~1 % of requests sent over the UART arrived garbled, some still
+valid JSON with a digit changed. The board-to-PC direction was clean, and the adapter keeps its port while the
+board is unpowered, so the tap records events USB can't (`boot` the moment power returns). Each event is recorded
+once, whichever console delivers it first. The summary lists the consoles.
 
 `--restore-key` reboots both boards (dropping any unsaved test profile an interrupted run left behind), then
 `key.set`s `GATELINK_KEY` on both and waits for the link. Use it if a wrong-key run was killed mid-test and left the

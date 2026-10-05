@@ -1,5 +1,10 @@
-"""Client for a GateLink board's JSON console (the same contract web/app.js uses), over USB or, with the board's
-`uart_console` on, a USB-to-UART adapter on its Serial1 pins.
+"""Client for a GateLink board's JSON console over USB (the same contract web/app.js uses), plus an optional
+read-only tap on its UART console (`uart_console`, a USB-to-UART adapter on its Serial1 pins).
+
+Requests only ever go over USB: on the bench the UART garbled ~1 % of requests on their way into the board, some
+into still-valid JSON with a digit changed, so nothing may be sent that way. Its board-to-PC direction was clean,
+and the adapter keeps its port while the board is unpowered, so the tap records the board's events (above all
+`boot` the moment power returns, when USB hasn't re-enumerated yet).
 
 Requests are `{"id","cmd",...}` lines answered by `{"id","ok",...}`; unsolicited `{"event":...}` lines (log
 entries, house status updates, pongs) go to the shared timeline. The firmware only writes while DTR is asserted,
@@ -41,6 +46,10 @@ class Board:
         self._reader = None
         self._closing = False
         self.dropped = 0  # times the port vanished without us asking for a reboot
+        self.uart = None  # UartTap, if the board's UART console is tapped
+        # Every event goes out on both consoles: recent event lines, so the second copy is dropped.
+        self._recent = {}
+        self._recent_lock = threading.Lock()
 
     # --- connection -------------------------------------------------------------------------------------------
     def open(self):
@@ -79,13 +88,33 @@ class Board:
                 line, buf = buf.split(b"\n", 1)
                 self._handle_line(line.decode("utf-8", "replace").strip())
 
-    def _handle_line(self, line):
+    def _fresh(self, line):
+        """False if this exact event line was recorded in the last 0.5 s (the other console's copy). Copies
+        arrive within milliseconds of each other; the same event from another boot is seconds apart."""
+        now = time.monotonic()
+        with self._recent_lock:
+            if len(self._recent) > 64:
+                self._recent = {k: t for k, t in self._recent.items() if now - t < 0.5}
+            if now - self._recent.get(line, -1.0) < 0.5:
+                return False
+            self._recent[line] = now
+            return True
+
+    def _handle_line(self, line, via="usb"):
         if not line:
             return
         try:
             msg = json.loads(line)
         except ValueError:
             msg = None
+        if via == "uart":
+            # Only events are taken from the tap (no requests go that way); junk is kept for power tests.
+            if isinstance(msg, dict) and msg.get("event"):
+                if self._fresh(line):
+                    self._record_event(msg)
+            elif msg is None:
+                self.timeline.add(self.name, "raw", line=line, via="uart")
+            return
         if msg is None:
             # A line cut short by a USB stall (no newline; firmware before 0.4.1) runs into the next one: keep the
             # whole line that follows it.
@@ -97,18 +126,11 @@ class Board:
         if not isinstance(msg, dict):
             self.timeline.add(self.name, "raw", line=line)
             return
-        ev = msg.get("event")
-        if ev == "log":
-            self.timeline.add(self.name, "log", ev=msg.get("ev"), a=msg.get("a"), b=msg.get("b"), bt=msg.get("t"))
-        elif ev == "status":
-            s = msg.get("status", {})
-            io = s.get("io", {})
-            self.timeline.add(self.name, "status", gate=s.get("gate"), cause=s.get("cause"),
-                              result=s.get("last_result"), target=s.get("target"),
-                              k1=io.get("k1"), k2=io.get("k2"), ctrl=s.get("ctrl"))
-        elif ev:
-            self.timeline.add(self.name, ev, **{k: v for k, v in msg.items() if k != "event"})
-        elif "id" in msg:
+        if msg.get("event"):
+            if self._fresh(line):
+                self._record_event(msg)
+            return
+        if "id" in msg:
             with self._cond:
                 if msg["id"] in self._waiting:
                     self._replies[msg["id"]] = msg
@@ -125,8 +147,32 @@ class Board:
                     self._replies[next(iter(self._waiting))] = msg
                     self._cond.notify_all()
 
+    def _record_event(self, msg):
+        ev = msg.get("event")
+        if ev == "log":
+            self.timeline.add(self.name, "log", ev=msg.get("ev"), a=msg.get("a"), b=msg.get("b"), bt=msg.get("t"))
+        elif ev == "status":
+            s = msg.get("status", {})
+            io = s.get("io", {})
+            self.timeline.add(self.name, "status", gate=s.get("gate"), cause=s.get("cause"),
+                              result=s.get("last_result"), target=s.get("target"),
+                              k1=io.get("k1"), k2=io.get("k2"), ctrl=s.get("ctrl"))
+        else:
+            self.timeline.add(self.name, ev, **{k: v for k, v in msg.items() if k != "event"})
+
     # --- requests ---------------------------------------------------------------------------------------------
     def request(self, cmd, timeout=3.0, check=True, **kw):
+        # A request the board couldn't parse ("bad json") never ran, so sending it again is safe.
+        for attempt in range(3):
+            res = self._request_once(cmd, timeout, **kw)
+            if res.get("error") != "bad json":
+                break
+            self.timeline.add(self.name, "note", text=f"{cmd}: bad json, resent")
+        if check and not res.get("ok"):
+            raise BoardError(f"{self.name}: {cmd} failed: {res}")
+        return res
+
+    def _request_once(self, cmd, timeout, **kw):
         if self.ser is None or not self._reader.is_alive():
             self._reconnect()
         rid = next(self._ids)
@@ -151,8 +197,6 @@ class Board:
             with self._cond:
                 self._waiting.discard(rid)
                 self._replies.pop(rid, None)
-        if check and not res.get("ok"):
-            raise BoardError(f"{self.name}: {cmd} failed: {res}")
         return res
 
     def _reconnect(self, timeout=20.0):
@@ -230,9 +274,49 @@ class Board:
         self._reconnect()
 
 
+class UartTap:
+    """Read-only listener on a board's UART console: its events go to the board's timeline (each event only once,
+    whichever console delivers it first). Nothing is ever sent, see the module docstring."""
+
+    def __init__(self, board, port):
+        self.board, self.port = board, port
+        self.ser = None
+        self._reader = None
+        self._closing = False
+
+    def open(self):
+        self.ser = serial.Serial(self.port, BAUD, timeout=0.1)
+        self._closing = False
+        self._reader = threading.Thread(target=self._read_loop, name=f"uart-{self.board.name}", daemon=True)
+        self._reader.start()
+        self.board.uart = self
+
+    def close(self):
+        self._closing = True
+        if self._reader and self._reader is not threading.current_thread():
+            self._reader.join(timeout=2)
+        if self.ser:
+            try:
+                self.ser.close()
+            except serial.SerialException:
+                pass
+
+    def _read_loop(self):
+        buf = b""
+        while not self._closing:
+            try:
+                buf += self.ser.read(256)
+            except (serial.SerialException, OSError, TypeError, AttributeError):
+                return
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                self.board._handle_line(line.decode("utf-8", "replace").strip(), via="uart")
+
+
 def find_uarts(timeline, exclude=()):
-    """Ask every FTDI port not in `exclude` for its board's role (the board needs uart_console on). Returns
-    {role: port}; ports that don't answer are skipped."""
+    """Which board each FTDI port not in `exclude` taps (the board needs uart_console on). The only request ever
+    sent on a UART is this `info`, retried: a garbled copy can't turn into a command that does anything, and the
+    reply direction is clean. Returns {role: port}."""
     found = {}
     for p in serial.tools.list_ports.comports():
         if p.vid != FTDI_VID or p.device in exclude:
@@ -240,8 +324,15 @@ def find_uarts(timeline, exclude=()):
         b = Board(p.device, timeline)
         try:
             b.open()
-            found.setdefault(b.request("info", timeout=1.5)["role"], p.device)
-        except (serial.SerialException, BoardError):
+            for _ in range(5):
+                try:
+                    res = b.request("info", timeout=1.0, check=False)
+                except BoardError:
+                    continue
+                if res.get("role"):
+                    found.setdefault(res["role"], p.device)
+                    break
+        except serial.SerialException:
             pass
         finally:
             b.close()

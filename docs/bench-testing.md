@@ -3,7 +3,8 @@
 Every bench wire, and whether it's confirmed, is in [tools/bench-wiring](../tools/bench-wiring/README.md)
 (`wiring.json`, viewed and edited in a local page).
 
-The bench: both MKR boards on USB, the [GateSim](../tools/GateSim/README.md) Uno standing in for the opener on
+The bench: both MKR boards powered into VIN from bench bucks (gate 24 V → 5 V, house 12 V → 5 V, the house rail shared
+with the Shelly and the IN2 opto) and on USB through power-blocked cables, the [GateSim](../tools/GateSim/README.md) Uno standing in for the opener on
 the gate board, and the real Shelly on the house board (driven through Home Assistant). Most of the checklist
 below is automated by the [end-to-end suite](../tests/e2e/README.md); the test covering each item is named after
 it.

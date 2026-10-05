@@ -8,11 +8,12 @@ Only one program can hold the port: disconnect the web console before scripting.
 DTR is asserted (pyserial does that by default).
 
 **UART console.** With `uart_console` 1 the same console also runs on Serial1 (pins 13 RX / 14 TX, 3.3 V,
-1,000,000 baud, 8N1), for a USB-to-UART adapter on the bench: the adapter's port survives the board losing power,
+250,000 baud, 8N1), for a USB-to-UART adapter on the bench: the adapter's port survives the board losing power,
 so a power test sees the `boot` event as soon as the board is back, without waiting for USB to re-enumerate. Each
 port has its own request line; a reply goes to the port the request came from, and events and log lines go to
 both. The UART is always written (no DTR), and a write waits while its 256-byte buffer is full: a ~5 KB
-`config.get` reply holds the loop for ~50 ms. Wire adapter TX → 10 kΩ → pin 13, pin 14 → adapter RX, GND to GND,
+`config.get` reply holds the loop for ~200 ms. (At 1 Mbaud, the rate in 0.8.0, ~4 % of requests arrived garbled on
+the bench.) A request answered `bad json` never ran, so a client can safely send it again. Wire adapter TX → 10 kΩ → pin 13, pin 14 → adapter RX, GND to GND,
 and leave the adapter's VCC unconnected. Without the resistor the bench gate board still powered down and came
 back with a clean `power_on` reset, but the adapter's TX drove current into the unpowered chip's pins (its own
 bytes came back garbled while the board was off); the resistor keeps that small. Expect junk on the adapter

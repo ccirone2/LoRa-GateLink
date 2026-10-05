@@ -14,7 +14,7 @@ import serial.tools.list_ports
 
 ARDUINO_VID = 0x2341
 # USB CDC ignores the rate; a USB-to-UART adapter on the board's Serial1 console (uart_console) needs it.
-BAUD = 1_000_000
+BAUD = 250_000
 # config.set params per request: keeps each line far below the firmware's console line limit.
 CONFIG_CHUNK = 8
 # Checked against each other up to firmware 0.3.4 (heartbeat_s <= link_timeout_s / 2): keep them in one request.

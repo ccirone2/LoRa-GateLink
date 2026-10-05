@@ -20,8 +20,10 @@ python -m http.server 8001 -d tools/bench-wiring   # then open http://localhost:
 
 ## Wire colour and status
 **Colour** is the wire's insulation colour (`color`: red, black, white, yellow, orange, green, blue, brown,
-purple, grey, pink). Until it's set, a wire gets a default: rails red, ground black, 3.3 V orange, USB grey, and
-light grey for any other signal.
+purple, grey, pink). Each bus has a colour too (+24 V and +12 V red, +5 V orange, 3.3 V yellow, ground black,
+LiPo pink), shared by the wires dropping onto it. The signal colours are picked per function and kept along the
+whole path: open limit green, closed limit blue, AC / controller power sense purple, OPEN pulse white, CLOSE pulse
+brown, UART per the FTDI cable (adapter TX orange, RX yellow), USB grey. Change any of them to match the real wire.
 
 **Status** is the dash pattern:
 - **Solid:** `connected`, confirmed by eye, a meter or the e2e suite.

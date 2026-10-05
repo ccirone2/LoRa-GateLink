@@ -46,57 +46,68 @@
     {
       "id": "v24",
       "band": "gate",
-      "name": "+24 V (bench supply)"
+      "name": "+24 V (bench supply)",
+      "color": "red"
     },
     {
       "id": "gnd_g",
       "band": "gate",
-      "name": "0 V / GND (common)"
+      "name": "0 V / GND (common)",
+      "color": "black"
     },
     {
       "id": "v5_g",
       "band": "gate",
-      "name": "Gate +5 V (buck → VIN)"
+      "name": "Gate +5 V (buck → VIN)",
+      "color": "orange"
     },
     {
       "id": "v33_g",
       "band": "gate",
-      "name": "Gate 3.3 V"
+      "name": "Gate 3.3 V",
+      "color": "yellow"
     },
     {
       "id": "v5_uno",
       "band": "gate",
-      "name": "Uno 5 V"
+      "name": "Uno 5 V",
+      "color": "orange"
     },
     {
       "id": "batt_g",
       "band": "gate",
-      "name": "Gate LiPo"
+      "name": "Gate LiPo",
+      "color": "pink"
     },
     {
       "id": "v12",
       "band": "house",
-      "name": "+12 V rail (bench supply)"
+      "name": "+12 V rail (bench supply)",
+      "color": "red"
     },
     {
       "id": "gnd_h",
       "band": "house",
-      "name": "0 V / GND (common)"
+      "name": "0 V / GND (common)",
+      "color": "black"
     },
     {
       "id": "v5_h",
       "band": "house",
-      "name": "House +5 V (buck → VIN)"
+      "name": "House +5 V (buck → VIN)",
+      "color": "orange"
     },
     {
       "id": "v33_h",
       "band": "house",
-      "name": "House 3.3 V"
+      "name": "House 3.3 V",
+      "color": "yellow"
     },
     {
       "id": "batt_h",
       "band": "house",
-      "name": "House LiPo"
+      "name": "House LiPo",
+      "color": "pink"
     }
   ],
   "devices": [
@@ -505,96 +516,111 @@
       "from": "uno:D2",
       "to": "sim_relays:IN1",
       "status": "connected",
-      "signal": "Open limit drive"
+      "signal": "Open limit drive",
+      "color": "green"
     },
     {
       "from": "uno:D3",
       "to": "sim_relays:IN2",
       "status": "connected",
-      "signal": "Closed limit drive (coil inverted)"
+      "signal": "Closed limit drive (coil inverted)",
+      "color": "blue"
     },
     {
       "from": "uno:D4",
       "to": "sim_relays:IN3",
       "status": "connected",
-      "signal": "AC drive"
+      "signal": "AC drive",
+      "color": "purple"
     },
     {
       "from": "uno:D7",
       "to": "rig:IN1",
       "status": "planned",
-      "signal": "Gate supply cut"
+      "signal": "Gate supply cut",
+      "color": "grey"
     },
     {
       "from": "uno:D8",
       "to": "rig:IN2",
       "status": "planned",
-      "signal": "Gate LiPo connect"
+      "signal": "Gate LiPo connect",
+      "color": "grey"
     },
     {
       "from": "uno:D9",
       "to": "rig:IN3",
       "status": "planned",
-      "signal": "House 12 V rail cut"
+      "signal": "House 12 V rail cut",
+      "color": "grey"
     },
     {
       "from": "uno:D10",
       "to": "rig:IN4",
       "status": "planned",
-      "signal": "House LiPo connect"
+      "signal": "House LiPo connect",
+      "color": "grey"
     },
     {
       "from": "rig:JD-VCC",
       "label": "separate 5 V",
       "status": "planned",
       "signal": "Rig coil supply",
-      "note": "Not from the Uno"
+      "note": "Not from the Uno",
+      "color": "orange"
     },
     {
       "from": "rig:CH1 COM/NC",
       "label": "in series: +24 V → gate buck IN +",
       "status": "planned",
-      "signal": "Gate supply (D7)"
+      "signal": "Gate supply (D7)",
+      "color": "red"
     },
     {
       "from": "rig:CH2 COM/NC",
       "label": "in series: gate LiPo +",
       "status": "planned",
-      "signal": "Gate LiPo (D8)"
+      "signal": "Gate LiPo (D8)",
+      "color": "red"
     },
     {
       "from": "rig:CH3 COM/NC",
       "label": "in series: house +12 V rail",
       "status": "planned",
       "signal": "House rail (D9)",
-      "note": "Cuts the Shelly, IN2 opto and house buck together"
+      "note": "Cuts the Shelly, IN2 opto and house buck together",
+      "color": "red"
     },
     {
       "from": "rig:CH4 COM/NC",
       "label": "in series: house LiPo +",
       "status": "planned",
-      "signal": "House LiPo (D10)"
+      "signal": "House LiPo (D10)",
+      "color": "red"
     },
     {
       "from": "sim_relays:CH1 NO",
       "to": "gate_opto:in 1",
       "status": "connected",
       "signal": "Open limit (AUX 1, NO)",
-      "note": "Confirmed by the e2e suite"
+      "note": "Confirmed by the e2e suite",
+      "color": "green"
     },
     {
       "from": "sim_relays:CH2 NC",
       "to": "gate_opto:in 2",
       "status": "connected",
       "signal": "Closed limit (AUX 2, NC)",
-      "note": "Moved from NO to NC 2026-10-04. The coil is driven inverted"
+      "note": "Moved from NO to NC 2026-10-04. The coil is driven inverted",
+      "color": "blue"
     },
     {
       "from": "sim_relays:CH3 NO",
       "to": "gate_opto:in 3",
       "status": "connected",
       "signal": "AC power",
-      "note": "Confirmed by the e2e suite"
+      "note": "Confirmed by the e2e suite",
+      "color": "purple"
     },
     {
       "from": "gate_opto:in 4",
@@ -605,20 +631,23 @@
       "from": "gate_opto:OUT1",
       "to": "gate:IN1 (A1)",
       "status": "connected",
-      "signal": "Open limit"
+      "signal": "Open limit",
+      "color": "green"
     },
     {
       "from": "gate_opto:OUT2",
       "to": "gate:IN2 (A2)",
       "status": "connected",
       "signal": "Closed limit",
-      "note": "in2_invert back at 0"
+      "note": "in2_invert back at 0",
+      "color": "blue"
     },
     {
       "from": "gate_opto:OUT3",
       "to": "gate:IN3 (A3)",
       "status": "connected",
-      "signal": "AC power sense"
+      "signal": "AC power sense",
+      "color": "purple"
     },
     {
       "from": "gate_opto:OUT4",
@@ -631,26 +660,30 @@
       "to": "uno:D5",
       "status": "connected",
       "signal": "OPEN pulse",
-      "note": "Confirmed by the e2e suite (evt release open)"
+      "note": "Confirmed by the e2e suite (evt release open)",
+      "color": "white"
     },
     {
       "from": "gate:K1 COM",
       "bus": "gnd_g",
       "status": "connected",
-      "signal": "OPEN common (to Uno GND)"
+      "signal": "OPEN common (to Uno GND)",
+      "color": "black"
     },
     {
       "from": "gate:K2 NO",
       "to": "uno:D6",
       "status": "connected",
       "signal": "CLOSE pulse",
-      "note": "Confirmed by the e2e suite (evt release close)"
+      "note": "Confirmed by the e2e suite (evt release close)",
+      "color": "brown"
     },
     {
       "from": "gate:K2 COM",
       "bus": "gnd_g",
       "status": "connected",
-      "signal": "CLOSE common (to Uno GND)"
+      "signal": "CLOSE common (to Uno GND)",
+      "color": "black"
     },
     {
       "from": "gate:13 RX",
@@ -658,20 +691,23 @@
       "via": "10 kΩ",
       "status": "connected",
       "signal": "UART console in",
-      "note": "~1 % of requests arrive garbled, so the suite only listens on the UART"
+      "note": "~1 % of requests arrive garbled, so the suite only listens on the UART",
+      "color": "orange"
     },
     {
       "from": "gate:14 TX",
       "to": "ftdi:RX",
       "status": "connected",
       "signal": "UART console out",
-      "note": "Clean in every test"
+      "note": "Clean in every test",
+      "color": "yellow"
     },
     {
       "from": "gate:GND (UART)",
       "to": "ftdi:GND",
       "status": "connected",
-      "signal": "UART ground"
+      "signal": "UART ground",
+      "color": "black"
     },
     {
       "from": "gate:USB",
@@ -815,14 +851,16 @@
       "to": "house:IN1 (A1)",
       "status": "connected",
       "signal": "Controller relay output",
-      "note": "Confirmed by the e2e suite"
+      "note": "Confirmed by the e2e suite",
+      "color": "green"
     },
     {
       "from": "house_opto:OUT",
       "to": "house:IN2 (A2)",
       "status": "connected",
       "signal": "Controller power sense",
-      "note": "Wired 2026-10-04. Reads active with 12 V on"
+      "note": "Wired 2026-10-04. Reads active with 12 V on",
+      "color": "purple"
     },
     {
       "from": "house:IN3 (A3)",
@@ -839,26 +877,30 @@
       "to": "shelly:SW",
       "status": "connected",
       "signal": "Controller switch input (sync)",
-      "note": "Confirmed by the e2e suite (follow mode)"
+      "note": "Confirmed by the e2e suite (follow mode)",
+      "color": "white"
     },
     {
       "from": "house:K1 NO",
       "to": "shelly:SW common",
       "status": "connected",
-      "signal": "Controller switch input (sync)"
+      "signal": "Controller switch input (sync)",
+      "color": "white"
     },
     {
       "from": "house:K2 COM",
       "to": "sensor:term A",
       "status": "unverified",
       "signal": "Gate closed (contact sensor)",
-      "note": "The suite checks K2's relay state only"
+      "note": "The suite checks K2's relay state only",
+      "color": "brown"
     },
     {
       "from": "house:K2 NO",
       "to": "sensor:term B",
       "status": "unverified",
-      "signal": "Gate closed (contact sensor)"
+      "signal": "Gate closed (contact sensor)",
+      "color": "brown"
     },
     {
       "from": "house:USB",

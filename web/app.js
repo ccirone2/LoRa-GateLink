@@ -14,6 +14,7 @@ const GROUPS = [
   ['Gate node', ['pulse_ms', 'travel_timeout_s']],
   ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open',
     'ctrl_power_sense', 'ctrl_confirm_ms', 'ctrl_settle_ms']],
+  ['Board', ['uart_console']],
 ];
 // Config tooltips: what the setting does, then when you'd change it.
 const NO_INVERT = 'Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead.';
@@ -46,6 +47,7 @@ const HELP = {
   linkloss_open: 'House: the contact sensor reads open while the link is lost, so the alarm never trusts a stale “closed”. Turn off only if dropouts cause too many false alerts.',
   ctrl_power_sense: 'House: IN2 watches the controller’s supply, so a power cut (which drops its relay) isn’t mistaken for a close command. Turn off only if IN2 isn’t wired.',
   ctrl_confirm_ms: 'House: each controller change waits this long before becoming a command, so one caused by a failing supply can be discarded. Raise it if power cuts still send commands; lower it for a snappier response.',
+  uart_console: 'Also run this console on the board’s serial pins (13 RX, 14 TX; 3.3 V, 1 Mbaud) for a USB-to-UART adapter. Bench power testing only: the adapter keeps its port while the board is unpowered. Leave off at the install.',
   ctrl_settle_ms: 'House: after the controller powers up (or the house boots), its changes count as sync for at least this long. Raise it if the controller takes longer to settle after power returns.',
 };
 // Settings that must be identical on both boards (marked * in the form). The link's retry and response timing

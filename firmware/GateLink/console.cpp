@@ -8,34 +8,60 @@
 #include "radio.h"
 
 #define LINE_MAX 1024  // a config.set with every param fits (a full import after a firmware upload)
+// Second console on Serial1 (uart_console), for bench power tests: a USB-to-UART adapter stays on the PC when the
+// board loses power, so it sees the boot right away. Fast, because Serial1 writes block once its 256-byte buffer
+// is full (a ~5 KB config.get reply takes ~50 ms at 1 Mbaud).
+#define UART_BAUD 1000000
 
-static char line[LINE_MAX];
-static size_t lineLen = 0;
-static bool overflow = false;
+// One console port, with its own request line so bytes from one can't garble a request on the other.
+struct ConsolePort {
+  Stream &io;
+  bool usb;
+  char line[LINE_MAX];
+  size_t len;
+  bool overflow;
+  // One USB write per line: serialized straight to Serial, every character was its own USB transfer, and with
+  // the radio transmitting asynchronously single bytes went missing on the bench (lines like
+  // `{"event":"lo",...`). If the host doesn't take a USB packet within 70 ms, the core drops the rest of the
+  // write (send() returns -1, which Serial.write passes on as a huge count). The cut line has no newline, so the
+  // next line would run into it and be lost too: start the next one with a newline instead, so the host
+  // discards only the cut line.
+  bool lineCut;
+};
 
-// One USB write per line: serialized straight to Serial, every character was its own USB transfer, and with the
-// radio transmitting asynchronously single bytes went missing on the bench (lines like `{"event":"lo",...`).
-// If the host doesn't take a USB packet within 70 ms, the core drops the rest of the write (send() returns -1,
-// which Serial.write passes on as a huge count). The cut line has no newline, so the next line would run into it
-// and be lost too: start the next one with a newline instead, so the host discards only the cut line.
-static bool lineCut = false;
+static ConsolePort usbPort = { Serial, true, {}, 0, false, false };
+static ConsolePort uartPort = { Serial1, false, {}, 0, false, false };
+static bool uartOn = false;
 
-static void send(JsonDocument &doc) {
-  if (!Serial.dtr()) return;  // not Serial's bool operator: it delays 10 ms
-  static char out[4096];
+static bool writable(const ConsolePort &p) {
+  return p.usb ? Serial.dtr() : uartOn;  // not Serial's bool operator: it delays 10 ms
+}
+
+// A reply goes back to the port that asked (`to`), events to every open port.
+static void send(JsonDocument &doc, ConsolePort *to = nullptr) {
+  ConsolePort *const ports[2] = { &usbPort, &uartPort };
+  static char out[4096];  // out[0] is a spare newline, the line starts at out[1]
   size_t n = measureJson(doc);
-  if (n + 2 > sizeof(out)) {  // doesn't fit: stream it
-    if (lineCut) Serial.write('\n');
-    serializeJson(doc, Serial);
-    lineCut = Serial.write('\n') != 1;
-    return;
+  bool fits = n + 2 <= sizeof(out);
+  bool serialized = false;
+  for (ConsolePort *p : ports) {
+    if ((to && p != to) || !writable(*p)) continue;
+    if (!fits) {  // stream it
+      if (p->lineCut) p->io.write('\n');
+      serializeJson(doc, p->io);
+      p->lineCut = p->io.write('\n') != 1;
+      continue;
+    }
+    if (!serialized) {  // once for both ports
+      out[0] = '\n';
+      serializeJson(doc, out + 1, sizeof(out) - 1);
+      out[n + 1] = '\n';
+      serialized = true;
+    }
+    size_t start = p->lineCut ? 0 : 1;
+    size_t len = n + 2 - start;
+    p->lineCut = p->io.write((const uint8_t *)out + start, len) != len;
   }
-  size_t start = lineCut ? 1 : 0;
-  out[0] = '\n';
-  serializeJson(doc, out + start, sizeof(out) - start);
-  n += start;
-  out[n++] = '\n';
-  lineCut = Serial.write((const uint8_t *)out, n) != n;
 }
 
 static int hexVal(char c) {
@@ -72,7 +98,7 @@ static void saveFailed(JsonDocument &res) {
   res["error"] = "flash write failed";
 }
 
-static void handle(JsonDocument &req) {
+static void handle(JsonDocument &req, ConsolePort &from) {
   JsonDocument res;
   res["id"] = req["id"];
   res["ok"] = true;
@@ -191,8 +217,8 @@ static void handle(JsonDocument &req) {
       res["error"] = "period_s must be 60..3600";
     }
   } else if (!strcmp(cmd, "reboot")) {
-    send(res);
-    Serial.flush();
+    send(res, &from);
+    from.io.flush();
     delay(100);
     NVIC_SystemReset();
   } else if (!strcmp(cmd, "identify")) {
@@ -204,16 +230,34 @@ static void handle(JsonDocument &req) {
     res["ok"] = false;
     res["error"] = "unknown cmd";
   }
-  send(res);
+  send(res, &from);
 }
 
 void consoleBegin() {
   Serial.begin(115200);
 }
 
+void consoleConfigure() {
+  bool on = cfg.uart_console;
+  if (on == uartOn) return;
+  uartOn = on;
+  if (!on) {
+    Serial1.end();
+    return;
+  }
+  Serial1.begin(UART_BAUD);
+  // While we were unpowered the adapter could pick up junk (its own TX leaking through our pins): start on a
+  // fresh line, so it doesn't swallow the boot event.
+  uartPort.lineCut = true;
+  // Pull RX up, so an unplugged adapter reads as an idle line rather than noise.
+  const PinDescription &rx = g_APinDescription[PIN_SERIAL1_RX];
+  PORT->Group[rx.ulPort].PINCFG[rx.ulPin].bit.PULLEN = 1;
+  PORT->Group[rx.ulPort].OUTSET.reg = 1ul << rx.ulPin;
+}
+
 // Reply to a request we couldn't parse, with its id if one can be found in the raw text, so the caller gets
 // the error instead of waiting for a timeout.
-static void sendError(const char *raw, const char *error) {
+static void sendError(ConsolePort &from, const char *raw, const char *error) {
   JsonDocument res;
   const char *id = strstr(raw, "\"id\"");
   if (id) {
@@ -224,29 +268,35 @@ static void sendError(const char *raw, const char *error) {
   }
   res["ok"] = false;
   res["error"] = error;
-  send(res);
+  send(res, &from);
+}
+
+static void poll(ConsolePort &p) {
+  while (p.io.available()) {
+    char c = p.io.read();
+    if (c == '\r') continue;
+    if (c != '\n') {
+      if (p.len < LINE_MAX - 1) p.line[p.len++] = c;
+      else p.overflow = true;
+      continue;
+    }
+    p.line[p.len] = 0;
+    if (p.overflow) {
+      sendError(p, p.line, "line too long");
+    } else if (p.len) {
+      JsonDocument req;
+      if (deserializeJson(req, p.line) == DeserializationError::Ok) handle(req, p);
+      else sendError(p, p.line, "bad json");
+    }
+    p.len = 0;
+    p.overflow = false;
+  }
 }
 
 void consolePoll() {
-  while (Serial.available()) {
-    char c = Serial.read();
-    if (c == '\r') continue;
-    if (c != '\n') {
-      if (lineLen < LINE_MAX - 1) line[lineLen++] = c;
-      else overflow = true;
-      continue;
-    }
-    line[lineLen] = 0;
-    if (overflow) {
-      sendError(line, "line too long");
-    } else if (lineLen) {
-      JsonDocument req;
-      if (deserializeJson(req, line) == DeserializationError::Ok) handle(req);
-      else sendError(line, "bad json");
-    }
-    lineLen = 0;
-    overflow = false;
-  }
+  consoleConfigure();  // uart_console may have just been set
+  poll(usbPort);
+  if (uartOn) poll(uartPort);
 }
 
 void consoleEmitLog(const LogEntry &e) {

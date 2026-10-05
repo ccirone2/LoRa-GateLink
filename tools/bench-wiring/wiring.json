@@ -7,85 +7,864 @@
     "planned": "Agreed, not wired yet",
     "open": "Intentionally not connected"
   },
-  "sites": [
-    { "id": "gate", "name": "Gate side" },
-    { "id": "sim", "name": "GateSim (opener stand-in)" },
-    { "id": "house", "name": "House side" },
-    { "id": "rig", "name": "Power rig" },
-    { "id": "pc", "name": "PC" }
+  "bands": [
+    {
+      "id": "gate",
+      "name": "Gate side and GateSim",
+      "devices": [
+        "psu24",
+        "uno",
+        "sim_relays",
+        "gate_opto",
+        "gate",
+        "gate_buck",
+        "gate_lipo",
+        "rig"
+      ]
+    },
+    {
+      "id": "house",
+      "name": "House side",
+      "devices": [
+        "psu12",
+        "house_opto",
+        "shelly",
+        "house",
+        "house_buck",
+        "sensor",
+        "house_lipo"
+      ]
+    }
+  ],
+  "comms": [
+    {
+      "device": "ftdi",
+      "under": "gate"
+    }
+  ],
+  "buses": [
+    {
+      "id": "v24",
+      "band": "gate",
+      "name": "+24 V (bench supply)"
+    },
+    {
+      "id": "gnd_g",
+      "band": "gate",
+      "name": "0 V / GND (common)"
+    },
+    {
+      "id": "v5_g",
+      "band": "gate",
+      "name": "Gate +5 V (buck → VIN)"
+    },
+    {
+      "id": "v33_g",
+      "band": "gate",
+      "name": "Gate 3.3 V"
+    },
+    {
+      "id": "v5_uno",
+      "band": "gate",
+      "name": "Uno 5 V"
+    },
+    {
+      "id": "batt_g",
+      "band": "gate",
+      "name": "Gate LiPo"
+    },
+    {
+      "id": "v12",
+      "band": "house",
+      "name": "+12 V rail (bench supply)"
+    },
+    {
+      "id": "gnd_h",
+      "band": "house",
+      "name": "0 V / GND (common)"
+    },
+    {
+      "id": "v5_h",
+      "band": "house",
+      "name": "House +5 V (buck → VIN)"
+    },
+    {
+      "id": "v33_h",
+      "band": "house",
+      "name": "House 3.3 V"
+    },
+    {
+      "id": "batt_h",
+      "band": "house",
+      "name": "House LiPo"
+    }
   ],
   "devices": [
-    { "id": "gate", "site": "gate", "name": "Gate MKR WAN 1310 + Relay Proto Shield", "note": "USB COM6 (power-blocked cable); role gate" },
-    { "id": "gate_opto", "site": "gate", "name": "Gate opto board (MT-301R4P-P, PNP)", "note": "Input side 24 V; output side from the gate board's 3.3 V" },
-    { "id": "gate_buck", "site": "gate", "name": "24 V → 5 V buck (gate)", "note": "Feeds the gate board's VIN" },
-    { "id": "ftdi", "site": "gate", "name": "FTDI FT232R USB-to-UART adapter", "note": "COM12, 3.3 V logic; read-only tap on the gate's UART console" },
-    { "id": "r10k", "site": "gate", "name": "10 kΩ series resistor", "note": "On adapter TX → gate pin 13" },
-    { "id": "gate_lipo", "site": "gate", "name": "Gate LiPo (1S)", "note": "Not fitted yet" },
-    { "id": "uno", "site": "sim", "name": "GateSim Arduino Uno", "note": "USB COM10 (CH340); tools/GateSim" },
-    { "id": "sim_relays", "site": "sim", "name": "GateSim relay module (CH1–CH3)", "note": "Active-HIGH (polarity high); coils from the Uno" },
-    { "id": "psu24", "site": "sim", "name": "Bench 24 V supply", "note": "Wets the GateSim relay contacts; feeds the gate buck" },
-    { "id": "house", "site": "house", "name": "House MKR WAN 1310 + Relay Proto Shield", "note": "USB COM5 (power-blocked cable); role house" },
-    { "id": "house_buck", "site": "house", "name": "12 V → 5 V buck (house)", "note": "Feeds the house board's VIN" },
-    { "id": "psu12", "site": "house", "name": "Bench 12 V supply", "note": "Shared rail: Shelly, IN2 opto, house buck" },
-    { "id": "shelly", "site": "house", "name": "Shelly Wave 1 (controller)", "note": "Driven via Home Assistant (switch.wave_1); SW in follow mode" },
-    { "id": "house_opto", "site": "house", "name": "House opto channel (12 V input, PNP)", "note": "Controller power sense for IN2; board model to confirm" },
-    { "id": "sensor", "site": "house", "name": "2GIG contact sensor", "note": "Is one on the bench?" },
-    { "id": "house_lipo", "site": "house", "name": "House LiPo (1S)", "note": "Not fitted yet" },
-    { "id": "rig_relays", "site": "rig", "name": "Power rig relay module (4 ch, NC)", "note": "Not installed yet; GateSim D7–D10; coils from a separate 5 V (JD-VCC)" },
-    { "id": "pc", "site": "pc", "name": "PC (USB hub)", "note": "Runs the suite and the web console" }
+    {
+      "id": "psu24",
+      "name": "Bench 24 V supply",
+      "note": "Wets the GateSim relay contacts and feeds the gate buck",
+      "top": [
+        "+24 V",
+        "0 V"
+      ]
+    },
+    {
+      "id": "uno",
+      "name": "GateSim Arduino Uno",
+      "note": "COM10 (CH340), tools/GateSim",
+      "top": [
+        "5 V",
+        "GND"
+      ],
+      "right": [
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6",
+        "D7",
+        "D8",
+        "D9",
+        "D10"
+      ],
+      "bottom": [
+        "USB"
+      ]
+    },
+    {
+      "id": "rig",
+      "name": "Power rig relays (4 ch, NC)",
+      "note": "Not installed yet. Coils from a separate 5 V (JD-VCC)",
+      "top": [
+        "JD-VCC",
+        "GND"
+      ],
+      "left": [
+        "IN1",
+        "IN2",
+        "IN3",
+        "IN4"
+      ],
+      "right": [
+        "CH1 COM/NC",
+        "CH2 COM/NC",
+        "CH3 COM/NC",
+        "CH4 COM/NC"
+      ]
+    },
+    {
+      "id": "sim_relays",
+      "name": "GateSim relays (CH1–CH3)",
+      "note": "Active-HIGH (polarity high), coils from the Uno",
+      "top": [
+        "VCC",
+        "GND",
+        "CH1 COM",
+        "CH2 COM",
+        "CH3 COM"
+      ],
+      "left": [
+        "IN1",
+        "IN2",
+        "IN3"
+      ],
+      "right": [
+        "CH1 NO",
+        "CH2 NC",
+        "CH3 NO"
+      ]
+    },
+    {
+      "id": "gate_opto",
+      "name": "Gate opto (MT-301R4P-P, PNP)",
+      "note": "Input side 24 V, output side from the gate board's 3.3 V",
+      "top": [
+        "VCC out",
+        "GND out",
+        "in COM"
+      ],
+      "left": [
+        "in 1",
+        "in 2",
+        "in 3",
+        "in 4"
+      ],
+      "right": [
+        "OUT1",
+        "OUT2",
+        "OUT3",
+        "OUT4"
+      ]
+    },
+    {
+      "id": "gate",
+      "name": "Gate MKR WAN 1310 + Relay Proto Shield",
+      "note": "COM6 on a power-blocked USB cable. Role gate",
+      "top": [
+        "VIN",
+        "GND",
+        "3.3 V",
+        "BATT"
+      ],
+      "left": [
+        "IN1 (A1)",
+        "IN2 (A2)",
+        "IN3 (A3)",
+        "IN4 (A4)"
+      ],
+      "right": [
+        "K1 NO",
+        "K1 COM",
+        "K2 NO",
+        "K2 COM"
+      ],
+      "bottom": [
+        "USB",
+        "13 RX",
+        "14 TX",
+        "GND (UART)"
+      ]
+    },
+    {
+      "id": "gate_buck",
+      "name": "24 V → 5 V buck (gate)",
+      "top": [
+        "IN +",
+        "IN −",
+        "OUT +",
+        "OUT −"
+      ]
+    },
+    {
+      "id": "gate_lipo",
+      "name": "Gate LiPo (1S)",
+      "note": "Not fitted yet",
+      "top": [
+        "+",
+        "−"
+      ]
+    },
+    {
+      "id": "ftdi",
+      "name": "FTDI FT232R (3.3 V)",
+      "note": "COM12. Read-only tap on the gate's UART console",
+      "top": [
+        "TX",
+        "RX",
+        "GND"
+      ],
+      "bottom": [
+        "USB"
+      ]
+    },
+    {
+      "id": "psu12",
+      "name": "Bench 12 V supply",
+      "note": "Shared rail: Shelly, IN2 opto, house buck",
+      "top": [
+        "+12 V",
+        "0 V"
+      ]
+    },
+    {
+      "id": "house_opto",
+      "name": "House opto (12 V in, PNP)",
+      "note": "Controller power sense for IN2. Board model to confirm",
+      "top": [
+        "in +",
+        "in −",
+        "VCC out",
+        "GND out"
+      ],
+      "right": [
+        "OUT"
+      ]
+    },
+    {
+      "id": "shelly",
+      "name": "Shelly Wave 1 (controller)",
+      "note": "Home Assistant switch.wave_1. SW input in follow mode",
+      "top": [
+        "+",
+        "−",
+        "I"
+      ],
+      "right": [
+        "O",
+        "SW",
+        "SW common"
+      ]
+    },
+    {
+      "id": "house",
+      "name": "House MKR WAN 1310 + Relay Proto Shield",
+      "note": "COM5 on a power-blocked USB cable. Role house",
+      "top": [
+        "VIN",
+        "GND",
+        "3.3 V",
+        "BATT"
+      ],
+      "left": [
+        "IN1 (A1)",
+        "IN2 (A2)",
+        "IN3 (A3)",
+        "IN4 (A4)"
+      ],
+      "right": [
+        "K1 COM",
+        "K1 NO",
+        "K2 COM",
+        "K2 NO"
+      ],
+      "bottom": [
+        "USB"
+      ]
+    },
+    {
+      "id": "house_buck",
+      "name": "12 V → 5 V buck (house)",
+      "top": [
+        "IN +",
+        "IN −",
+        "OUT +",
+        "OUT −"
+      ]
+    },
+    {
+      "id": "sensor",
+      "name": "2GIG contact sensor",
+      "note": "Is one on the bench?",
+      "left": [
+        "term A",
+        "term B"
+      ]
+    },
+    {
+      "id": "house_lipo",
+      "name": "House LiPo (1S)",
+      "note": "Not fitted yet",
+      "top": [
+        "+",
+        "−"
+      ]
+    },
+    {
+      "id": "pc",
+      "name": "PC (USB)",
+      "note": "Runs the e2e suite and the web console"
+    }
   ],
-  "links": [
-    { "id": "g-vin", "a": ["gate", "VIN"], "b": ["gate_buck", "+5 V out"], "signal": "Gate board supply", "status": "connected", "note": "Confirmed 2026-10-04" },
-    { "id": "g-gnd-buck", "a": ["gate", "GND"], "b": ["gate_buck", "0 V out"], "signal": "Supply ground", "status": "connected", "note": "" },
-    { "id": "gbuck-in", "a": ["gate_buck", "IN +"], "b": ["psu24", "+24 V"], "signal": "24 V into the buck", "status": "connected", "note": "Moves to the rig's D7 NC contact when the rig is installed; a 24 V cut powered the board down cleanly" },
-    { "id": "gbuck-gnd", "a": ["gate_buck", "IN −"], "b": ["psu24", "0 V"], "signal": "24 V return", "status": "connected", "note": "" },
-    { "id": "g-usb", "a": ["gate", "USB"], "b": ["pc", "USB (power-blocked cable)"], "signal": "Console + flashing, no power", "status": "connected", "note": "Unplugging it doesn't affect the board" },
-    { "id": "g-rx", "a": ["gate", "13 (RX)"], "b": ["r10k", "end 1"], "signal": "UART console in", "status": "connected", "note": "" },
-    { "id": "ftdi-tx", "a": ["r10k", "end 2"], "b": ["ftdi", "TX"], "signal": "UART console in", "status": "connected", "note": "~1 % of requests arrive garbled: the suite only listens on the UART" },
-    { "id": "g-tx", "a": ["gate", "14 (TX)"], "b": ["ftdi", "RX"], "signal": "UART console out", "status": "connected", "note": "Clean in every test" },
-    { "id": "g-gnd-ftdi", "a": ["gate", "GND"], "b": ["ftdi", "GND"], "signal": "UART ground", "status": "connected", "note": "" },
-    { "id": "ftdi-vcc", "a": ["ftdi", "VCC"], "b": ["gate", "—"], "signal": "Adapter supply", "status": "open", "note": "Leave unconnected" },
-    { "id": "ftdi-usb", "a": ["ftdi", "USB"], "b": ["pc", "USB"], "signal": "COM12", "status": "connected", "note": "" },
-    { "id": "g-in1", "a": ["gate", "IN1 (A1)"], "b": ["gate_opto", "OUT1"], "signal": "Open limit", "status": "connected", "note": "Confirmed by the e2e suite" },
-    { "id": "g-in2", "a": ["gate", "IN2 (A2)"], "b": ["gate_opto", "OUT2"], "signal": "Closed limit", "status": "connected", "note": "Confirmed by the e2e suite (in2_invert back at 0)" },
-    { "id": "g-in3", "a": ["gate", "IN3 (A3)"], "b": ["gate_opto", "OUT3"], "signal": "AC power sense", "status": "connected", "note": "Confirmed by the e2e suite" },
-    { "id": "g-in4", "a": ["gate", "IN4 (A4)"], "b": ["gate_opto", "OUT4"], "signal": "Spare", "status": "open", "note": "" },
-    { "id": "g-opto-vcc", "a": ["gate", "3.3 V"], "b": ["gate_opto", "VCC (output side)"], "signal": "Opto output supply", "status": "connected", "note": "3.3 V only, never 5 V" },
-    { "id": "g-opto-gnd", "a": ["gate", "GND"], "b": ["gate_opto", "GND (output side)"], "signal": "Opto output ground", "status": "connected", "note": "" },
-    { "id": "g-k1-no", "a": ["gate", "K1 NO"], "b": ["uno", "D5"], "signal": "OPEN pulse", "status": "connected", "note": "Confirmed by the e2e suite (evt release open)" },
-    { "id": "g-k1-com", "a": ["gate", "K1 COM"], "b": ["uno", "GND"], "signal": "OPEN common", "status": "connected", "note": "" },
-    { "id": "g-k2-no", "a": ["gate", "K2 NO"], "b": ["uno", "D6"], "signal": "CLOSE pulse", "status": "connected", "note": "Confirmed by the e2e suite (evt release close)" },
-    { "id": "g-k2-com", "a": ["gate", "K2 COM"], "b": ["uno", "GND"], "signal": "CLOSE common", "status": "connected", "note": "" },
-    { "id": "g-lipo", "a": ["gate", "BATT (JST-PH)"], "b": ["gate_lipo", "+/−"], "signal": "Battery backup", "status": "planned", "note": "Through the rig's D8 NC contact" },
-    { "id": "s-ch1-com", "a": ["sim_relays", "CH1 COM"], "b": ["psu24", "+24 V"], "signal": "Wetting", "status": "connected", "note": "" },
-    { "id": "s-ch1-no", "a": ["sim_relays", "CH1 NO"], "b": ["gate_opto", "ch1 input"], "signal": "Open limit (AUX 1 NO)", "status": "connected", "note": "Confirmed by the e2e suite" },
-    { "id": "s-ch2-com", "a": ["sim_relays", "CH2 COM"], "b": ["psu24", "+24 V"], "signal": "Wetting", "status": "connected", "note": "" },
-    { "id": "s-ch2-nc", "a": ["sim_relays", "CH2 NC"], "b": ["gate_opto", "ch2 input"], "signal": "Closed limit (AUX 2 NC)", "status": "connected", "note": "Moved from NO to NC on 2026-10-04; coil driven inverted" },
-    { "id": "s-ch3-com", "a": ["sim_relays", "CH3 COM"], "b": ["psu24", "+24 V"], "signal": "Wetting", "status": "connected", "note": "" },
-    { "id": "s-ch3-no", "a": ["sim_relays", "CH3 NO"], "b": ["gate_opto", "ch3 input"], "signal": "AC power", "status": "connected", "note": "Confirmed by the e2e suite" },
-    { "id": "s-opto-com", "a": ["gate_opto", "input common"], "b": ["psu24", "0 V"], "signal": "Opto input return", "status": "unverified", "note": "Per the opto board's input markings" },
-    { "id": "s-in", "a": ["sim_relays", "IN1 / IN2 / IN3"], "b": ["uno", "D2 / D3 / D4"], "signal": "Relay drive", "status": "connected", "note": "" },
-    { "id": "s-vcc", "a": ["sim_relays", "VCC / GND"], "b": ["uno", "5 V / GND"], "signal": "Relay module supply", "status": "unverified", "note": "" },
-    { "id": "uno-usb", "a": ["uno", "USB"], "b": ["pc", "USB"], "signal": "COM10", "status": "connected", "note": "Opening it resets the Uno unless DTR is off" },
-    { "id": "h-vin", "a": ["house", "VIN"], "b": ["house_buck", "+5 V out"], "signal": "House board supply", "status": "connected", "note": "Confirmed 2026-10-04" },
-    { "id": "h-gnd-buck", "a": ["house", "GND"], "b": ["house_buck", "0 V out"], "signal": "Supply ground", "status": "connected", "note": "" },
-    { "id": "hbuck-in", "a": ["house_buck", "IN + / IN −"], "b": ["psu12", "+12 V / 0 V"], "signal": "12 V into the buck", "status": "connected", "note": "Moves behind the rig's D9 NC contact with the rest of the 12 V rail" },
-    { "id": "h-usb", "a": ["house", "USB"], "b": ["pc", "USB (power-blocked cable)"], "signal": "Console + flashing, no power", "status": "connected", "note": "" },
-    { "id": "sh-pwr", "a": ["shelly", "+ / −"], "b": ["psu12", "+12 V / 0 V"], "signal": "Controller supply", "status": "connected", "note": "" },
-    { "id": "h-in1", "a": ["house", "IN1 (A1)"], "b": ["shelly", "O"], "signal": "Controller relay output", "status": "connected", "note": "Confirmed by the e2e suite" },
-    { "id": "h-33-shelly", "a": ["house", "3.3 V"], "b": ["shelly", "I"], "signal": "Relay wetting", "status": "connected", "note": "" },
-    { "id": "h-k1", "a": ["house", "K1 COM / K1 NO"], "b": ["shelly", "SW / SW common"], "signal": "Controller switch input (sync)", "status": "connected", "note": "Confirmed by the e2e suite (follow mode)" },
-    { "id": "h-in2", "a": ["house", "IN2 (A2)"], "b": ["house_opto", "OUT"], "signal": "Controller power sense", "status": "connected", "note": "Wired 2026-10-04; reads active with 12 V on" },
-    { "id": "h-opto-vcc", "a": ["house", "3.3 V / GND"], "b": ["house_opto", "VCC / GND (output side)"], "signal": "Opto output supply", "status": "connected", "note": "3.3 V only" },
-    { "id": "h-opto-in", "a": ["house_opto", "input + / input −"], "b": ["psu12", "+12 V / 0 V"], "signal": "Senses the 12 V rail", "status": "connected", "note": "" },
-    { "id": "h-k2", "a": ["house", "K2 COM / K2 NO"], "b": ["sensor", "terminals"], "signal": "Gate closed (contact sensor)", "status": "unverified", "note": "The suite checks K2's relay state only" },
-    { "id": "h-in3", "a": ["house", "IN3 / IN4"], "b": ["house", "—"], "signal": "Spare", "status": "open", "note": "" },
-    { "id": "h-lipo", "a": ["house", "BATT (JST-PH)"], "b": ["house_lipo", "+/−"], "signal": "Battery backup", "status": "planned", "note": "Through the rig's D10 NC contact" },
-    { "id": "r-in", "a": ["rig_relays", "IN1–IN4"], "b": ["uno", "D7 / D8 / D9 / D10"], "signal": "Rig relay drive", "status": "planned", "note": "" },
-    { "id": "r-jdvcc", "a": ["rig_relays", "JD-VCC / GND"], "b": ["pc", "separate 5 V"], "signal": "Coil supply", "status": "planned", "note": "Not from the Uno" },
-    { "id": "r-ch1", "a": ["rig_relays", "CH1 COM / NC"], "b": ["gate_buck", "IN + (from +24 V)"], "signal": "Gate board supply cut (D7)", "status": "planned", "note": "NC: a released coil means powered" },
-    { "id": "r-ch2", "a": ["rig_relays", "CH2 COM / NC"], "b": ["gate_lipo", "+ lead"], "signal": "Gate LiPo connect (D8)", "status": "planned", "note": "" },
-    { "id": "r-ch3", "a": ["rig_relays", "CH3 COM / NC"], "b": ["psu12", "+12 V rail"], "signal": "House 12 V rail cut (D9)", "status": "planned", "note": "Cuts the Shelly, IN2 opto and house buck together" },
-    { "id": "r-ch4", "a": ["rig_relays", "CH4 COM / NC"], "b": ["house_lipo", "+ lead"], "signal": "House LiPo connect (D10)", "status": "planned", "note": "" }
+  "wires": [
+    {
+      "from": "psu24:+24 V",
+      "bus": "v24",
+      "status": "connected",
+      "signal": "24 V supply"
+    },
+    {
+      "from": "psu24:0 V",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "24 V return"
+    },
+    {
+      "from": "sim_relays:CH1 COM",
+      "bus": "v24",
+      "status": "connected",
+      "signal": "Wetting"
+    },
+    {
+      "from": "sim_relays:CH2 COM",
+      "bus": "v24",
+      "status": "connected",
+      "signal": "Wetting"
+    },
+    {
+      "from": "sim_relays:CH3 COM",
+      "bus": "v24",
+      "status": "connected",
+      "signal": "Wetting"
+    },
+    {
+      "from": "gate_buck:IN +",
+      "bus": "v24",
+      "status": "connected",
+      "signal": "24 V into the buck",
+      "note": "Moves behind the rig's CH1 NC (D7) when the rig is installed"
+    },
+    {
+      "from": "gate_buck:IN −",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "24 V return"
+    },
+    {
+      "from": "gate_opto:in COM",
+      "bus": "gnd_g",
+      "status": "unverified",
+      "signal": "Opto input return",
+      "note": "Per the opto board's input markings"
+    },
+    {
+      "from": "gate_buck:OUT +",
+      "bus": "v5_g",
+      "status": "connected",
+      "signal": "5 V out"
+    },
+    {
+      "from": "gate_buck:OUT −",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "0 V out"
+    },
+    {
+      "from": "gate:VIN",
+      "bus": "v5_g",
+      "status": "connected",
+      "signal": "Gate board supply",
+      "note": "Confirmed 2026-10-04. A 24 V cut powered the board down cleanly"
+    },
+    {
+      "from": "gate:GND",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "Board GND"
+    },
+    {
+      "from": "gate:3.3 V",
+      "bus": "v33_g",
+      "status": "connected",
+      "signal": "3.3 V out"
+    },
+    {
+      "from": "gate_opto:VCC out",
+      "bus": "v33_g",
+      "status": "connected",
+      "signal": "Opto output supply",
+      "note": "3.3 V only, never 5 V"
+    },
+    {
+      "from": "gate_opto:GND out",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "Opto output ground"
+    },
+    {
+      "from": "uno:5 V",
+      "bus": "v5_uno",
+      "status": "connected",
+      "signal": "Uno 5 V"
+    },
+    {
+      "from": "uno:GND",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "Uno GND",
+      "note": "Also common through the PC's USB ground"
+    },
+    {
+      "from": "sim_relays:VCC",
+      "bus": "v5_uno",
+      "status": "unverified",
+      "signal": "Relay coil supply"
+    },
+    {
+      "from": "sim_relays:GND",
+      "bus": "gnd_g",
+      "status": "unverified",
+      "signal": "Relay module GND"
+    },
+    {
+      "from": "gate:BATT",
+      "bus": "batt_g",
+      "status": "planned",
+      "signal": "Battery backup"
+    },
+    {
+      "from": "gate_lipo:+",
+      "bus": "batt_g",
+      "status": "planned",
+      "signal": "LiPo +",
+      "note": "Through the rig's CH2 NC (D8)"
+    },
+    {
+      "from": "gate_lipo:−",
+      "bus": "gnd_g",
+      "status": "planned",
+      "signal": "LiPo −"
+    },
+    {
+      "from": "rig:GND",
+      "bus": "gnd_g",
+      "status": "planned",
+      "signal": "Rig GND"
+    },
+    {
+      "from": "uno:D2",
+      "to": "sim_relays:IN1",
+      "status": "connected",
+      "signal": "Open limit drive"
+    },
+    {
+      "from": "uno:D3",
+      "to": "sim_relays:IN2",
+      "status": "connected",
+      "signal": "Closed limit drive (coil inverted)"
+    },
+    {
+      "from": "uno:D4",
+      "to": "sim_relays:IN3",
+      "status": "connected",
+      "signal": "AC drive"
+    },
+    {
+      "from": "uno:D7",
+      "to": "rig:IN1",
+      "status": "planned",
+      "signal": "Gate supply cut"
+    },
+    {
+      "from": "uno:D8",
+      "to": "rig:IN2",
+      "status": "planned",
+      "signal": "Gate LiPo connect"
+    },
+    {
+      "from": "uno:D9",
+      "to": "rig:IN3",
+      "status": "planned",
+      "signal": "House 12 V rail cut"
+    },
+    {
+      "from": "uno:D10",
+      "to": "rig:IN4",
+      "status": "planned",
+      "signal": "House LiPo connect"
+    },
+    {
+      "from": "rig:JD-VCC",
+      "label": "separate 5 V",
+      "status": "planned",
+      "signal": "Rig coil supply",
+      "note": "Not from the Uno"
+    },
+    {
+      "from": "rig:CH1 COM/NC",
+      "label": "in series: +24 V → gate buck IN +",
+      "status": "planned",
+      "signal": "Gate supply (D7)"
+    },
+    {
+      "from": "rig:CH2 COM/NC",
+      "label": "in series: gate LiPo +",
+      "status": "planned",
+      "signal": "Gate LiPo (D8)"
+    },
+    {
+      "from": "rig:CH3 COM/NC",
+      "label": "in series: house +12 V rail",
+      "status": "planned",
+      "signal": "House rail (D9)",
+      "note": "Cuts the Shelly, IN2 opto and house buck together"
+    },
+    {
+      "from": "rig:CH4 COM/NC",
+      "label": "in series: house LiPo +",
+      "status": "planned",
+      "signal": "House LiPo (D10)"
+    },
+    {
+      "from": "sim_relays:CH1 NO",
+      "to": "gate_opto:in 1",
+      "status": "connected",
+      "signal": "Open limit (AUX 1, NO)",
+      "note": "Confirmed by the e2e suite"
+    },
+    {
+      "from": "sim_relays:CH2 NC",
+      "to": "gate_opto:in 2",
+      "status": "connected",
+      "signal": "Closed limit (AUX 2, NC)",
+      "note": "Moved from NO to NC 2026-10-04. The coil is driven inverted"
+    },
+    {
+      "from": "sim_relays:CH3 NO",
+      "to": "gate_opto:in 3",
+      "status": "connected",
+      "signal": "AC power",
+      "note": "Confirmed by the e2e suite"
+    },
+    {
+      "from": "gate_opto:in 4",
+      "status": "open",
+      "signal": "Spare"
+    },
+    {
+      "from": "gate_opto:OUT1",
+      "to": "gate:IN1 (A1)",
+      "status": "connected",
+      "signal": "Open limit"
+    },
+    {
+      "from": "gate_opto:OUT2",
+      "to": "gate:IN2 (A2)",
+      "status": "connected",
+      "signal": "Closed limit",
+      "note": "in2_invert back at 0"
+    },
+    {
+      "from": "gate_opto:OUT3",
+      "to": "gate:IN3 (A3)",
+      "status": "connected",
+      "signal": "AC power sense"
+    },
+    {
+      "from": "gate_opto:OUT4",
+      "to": "gate:IN4 (A4)",
+      "status": "open",
+      "signal": "Spare"
+    },
+    {
+      "from": "gate:K1 NO",
+      "to": "uno:D5",
+      "status": "connected",
+      "signal": "OPEN pulse",
+      "note": "Confirmed by the e2e suite (evt release open)"
+    },
+    {
+      "from": "gate:K1 COM",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "OPEN common (to Uno GND)"
+    },
+    {
+      "from": "gate:K2 NO",
+      "to": "uno:D6",
+      "status": "connected",
+      "signal": "CLOSE pulse",
+      "note": "Confirmed by the e2e suite (evt release close)"
+    },
+    {
+      "from": "gate:K2 COM",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "CLOSE common (to Uno GND)"
+    },
+    {
+      "from": "gate:13 RX",
+      "to": "ftdi:TX",
+      "via": "10 kΩ",
+      "status": "connected",
+      "signal": "UART console in",
+      "note": "~1 % of requests arrive garbled, so the suite only listens on the UART"
+    },
+    {
+      "from": "gate:14 TX",
+      "to": "ftdi:RX",
+      "status": "connected",
+      "signal": "UART console out",
+      "note": "Clean in every test"
+    },
+    {
+      "from": "gate:GND (UART)",
+      "to": "ftdi:GND",
+      "status": "connected",
+      "signal": "UART ground"
+    },
+    {
+      "from": "gate:USB",
+      "to": "pc",
+      "status": "connected",
+      "signal": "COM6, data only (power-blocked)"
+    },
+    {
+      "from": "ftdi:USB",
+      "to": "pc",
+      "status": "connected",
+      "signal": "COM12"
+    },
+    {
+      "from": "uno:USB",
+      "to": "pc",
+      "status": "connected",
+      "signal": "COM10",
+      "note": "Opening it resets the Uno unless DTR is off"
+    },
+    {
+      "from": "psu12:+12 V",
+      "bus": "v12",
+      "status": "connected",
+      "signal": "12 V supply"
+    },
+    {
+      "from": "psu12:0 V",
+      "bus": "gnd_h",
+      "status": "connected",
+      "signal": "12 V return"
+    },
+    {
+      "from": "house_opto:in +",
+      "bus": "v12",
+      "status": "connected",
+      "signal": "Senses the 12 V rail"
+    },
+    {
+      "from": "house_opto:in −",
+      "bus": "gnd_h",
+      "status": "connected",
+      "signal": "Opto input return"
+    },
+    {
+      "from": "house_opto:VCC out",
+      "bus": "v33_h",
+      "status": "connected",
+      "signal": "Opto output supply",
+      "note": "3.3 V only"
+    },
+    {
+      "from": "house_opto:GND out",
+      "bus": "gnd_h",
+      "status": "connected",
+      "signal": "Opto output ground"
+    },
+    {
+      "from": "shelly:+",
+      "bus": "v12",
+      "status": "connected",
+      "signal": "Controller supply"
+    },
+    {
+      "from": "shelly:−",
+      "bus": "gnd_h",
+      "status": "connected",
+      "signal": "Controller return"
+    },
+    {
+      "from": "shelly:I",
+      "bus": "v33_h",
+      "status": "connected",
+      "signal": "Relay wetting (from house 3.3 V)"
+    },
+    {
+      "from": "house_buck:IN +",
+      "bus": "v12",
+      "status": "connected",
+      "signal": "12 V into the buck",
+      "note": "The whole rail moves behind the rig's CH3 NC (D9)"
+    },
+    {
+      "from": "house_buck:IN −",
+      "bus": "gnd_h",
+      "status": "connected",
+      "signal": "12 V return"
+    },
+    {
+      "from": "house_buck:OUT +",
+      "bus": "v5_h",
+      "status": "connected",
+      "signal": "5 V out"
+    },
+    {
+      "from": "house_buck:OUT −",
+      "bus": "gnd_h",
+      "status": "connected",
+      "signal": "0 V out"
+    },
+    {
+      "from": "house:VIN",
+      "bus": "v5_h",
+      "status": "connected",
+      "signal": "House board supply",
+      "note": "Confirmed 2026-10-04"
+    },
+    {
+      "from": "house:GND",
+      "bus": "gnd_h",
+      "status": "connected",
+      "signal": "Board GND"
+    },
+    {
+      "from": "house:3.3 V",
+      "bus": "v33_h",
+      "status": "connected",
+      "signal": "3.3 V out"
+    },
+    {
+      "from": "house:BATT",
+      "bus": "batt_h",
+      "status": "planned",
+      "signal": "Battery backup"
+    },
+    {
+      "from": "house_lipo:+",
+      "bus": "batt_h",
+      "status": "planned",
+      "signal": "LiPo +",
+      "note": "Through the rig's CH4 NC (D10)"
+    },
+    {
+      "from": "house_lipo:−",
+      "bus": "gnd_h",
+      "status": "planned",
+      "signal": "LiPo −"
+    },
+    {
+      "from": "shelly:O",
+      "to": "house:IN1 (A1)",
+      "status": "connected",
+      "signal": "Controller relay output",
+      "note": "Confirmed by the e2e suite"
+    },
+    {
+      "from": "house_opto:OUT",
+      "to": "house:IN2 (A2)",
+      "status": "connected",
+      "signal": "Controller power sense",
+      "note": "Wired 2026-10-04. Reads active with 12 V on"
+    },
+    {
+      "from": "house:IN3 (A3)",
+      "status": "open",
+      "signal": "Spare"
+    },
+    {
+      "from": "house:IN4 (A4)",
+      "status": "open",
+      "signal": "Spare"
+    },
+    {
+      "from": "house:K1 COM",
+      "to": "shelly:SW",
+      "status": "connected",
+      "signal": "Controller switch input (sync)",
+      "note": "Confirmed by the e2e suite (follow mode)"
+    },
+    {
+      "from": "house:K1 NO",
+      "to": "shelly:SW common",
+      "status": "connected",
+      "signal": "Controller switch input (sync)"
+    },
+    {
+      "from": "house:K2 COM",
+      "to": "sensor:term A",
+      "status": "unverified",
+      "signal": "Gate closed (contact sensor)",
+      "note": "The suite checks K2's relay state only"
+    },
+    {
+      "from": "house:K2 NO",
+      "to": "sensor:term B",
+      "status": "unverified",
+      "signal": "Gate closed (contact sensor)"
+    },
+    {
+      "from": "house:USB",
+      "to": "pc",
+      "status": "connected",
+      "signal": "COM5, data only (power-blocked)"
+    }
   ]
 }

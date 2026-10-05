@@ -6,60 +6,60 @@
 <title>Bench Wiring</title>
 <style>
   :root {
-    --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1f21; --muted: #6b6f76; --line: #d9dbde; --accent: #2f6fd6;
-    --connected: #2e8540; --unverified: #c77700; --planned: #2f6fd6; --open: #9aa0a6;
-    --hl: #fff4c2;
+    --bg: #f6f6f3; --panel: #ffffff; --ink: #1d1f21; --muted: #6b6f76; --line: #d4d6da; --accent: #2f6fd6;
+    --box: #ffffff; --boxline: #3a3d42; --bus: #3a3d42;
+    --connected: #1d1f21; --unverified: #c77700; --planned: #2f6fd6; --open: #a0a5ab; --sel: #e0398a;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #16181b; --panel: #1f2226; --ink: #e6e7e9; --muted: #9aa0a6; --line: #34383d; --accent: #6ea0ff;
-      --connected: #5cc46f; --unverified: #f0a33a; --planned: #6ea0ff; --open: #7b8188; --hl: #3a3420;
+      --bg: #15171a; --panel: #1f2226; --ink: #e6e7e9; --muted: #9aa0a6; --line: #34383d; --accent: #6ea0ff;
+      --box: #1f2226; --boxline: #b9bec5; --bus: #b9bec5;
+      --connected: #e6e7e9; --unverified: #f0a33a; --planned: #6ea0ff; --open: #6b7178; --sel: #ff6eb4;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line);
-    padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
-  h1 { font-size: 17px; margin: 0 8px 0 0; }
-  .muted { color: var(--muted); }
-  button, select, input { font: inherit; color: inherit; }
-  button { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  header { position: sticky; top: 0; z-index: 3; background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  h1 { font-size: 16px; margin: 0 6px 0 0; }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  button { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button:disabled { opacity: .5; cursor: default; }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px;
-    padding: 2px 10px; cursor: pointer; user-select: none; }
-  .chip.off { opacity: .4; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
-  main { padding: 16px; max-width: 1400px; margin: 0 auto; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 16px; }
-  #diagram { width: 100%; overflow-x: auto; }
-  svg text { fill: var(--ink); font-size: 12px; }
-  .devbox rect { fill: var(--panel); stroke: var(--line); }
-  .devbox.sel rect { stroke: var(--accent); stroke-width: 2; }
-  .devbox { cursor: pointer; }
-  .wire { fill: none; stroke-width: 2.5; opacity: .85; cursor: pointer; }
-  .wire.dim { opacity: .12; }
-  .wire.hot { stroke-width: 5; opacity: 1; }
-  h2 { font-size: 15px; margin: 4px 0 8px; }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  col.c-end { width: 22%; } col.c-sig { width: 15%; } col.c-st { width: 12%; } col.c-note { width: 27%; } col.c-x { width: 2%; }
-  th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { font-weight: 600; color: var(--muted); font-size: 12px; }
-  tr.hot td { background: var(--hl); }
-  td.end b { font-weight: 600; }
-  td input.txt { width: 100%; border: 1px solid transparent; background: transparent; padding: 2px 4px; border-radius: 4px; }
-  td input.txt:hover, td input.txt:focus { border-color: var(--line); background: var(--bg); outline: none; }
-  select.status { border-radius: 6px; border: 1px solid var(--line); background: var(--panel); padding: 2px 4px; }
-  .del { border: none; background: none; color: var(--muted); padding: 0 4px; }
-  .del:hover { color: #c0392b; }
-  .add { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; align-items: end; }
-  .add label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); }
-  .add input, .add select { border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; background: var(--bg); }
-  #msg { font-size: 13px; }
+    padding: 1px 10px; cursor: pointer; user-select: none; font-size: 13px; }
+  .chip.off { opacity: .35; }
+  .sw { width: 18px; height: 0; border-top: 3px solid; display: inline-block; }
+  #msg { font-size: 13px; color: var(--muted); }
   #msg.warn { color: var(--unverified); }
-  .devnote { font-size: 12px; color: var(--muted); }
-  @media (max-width: 700px) { th:nth-child(5), td:nth-child(5) { display: none; } }
+  #wrap { overflow: auto; padding: 12px; }
+  svg { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  svg text { fill: var(--ink); font-size: 11px; font-family: system-ui, sans-serif; }
+  .box { fill: var(--box); stroke: var(--boxline); stroke-width: 1.4; }
+  .dname { font-weight: 600; font-size: 12px; }
+  .term { fill: var(--panel); stroke: var(--boxline); stroke-width: 1.2; }
+  .tlabel { fill: var(--muted); font-size: 10px; }
+  .busline { stroke: var(--bus); stroke-width: 3; }
+  .buslabel { font-size: 11px; font-weight: 600; fill: var(--muted); }
+  .wire { fill: none; stroke-width: 1.8; stroke-linejoin: round; }
+  .hit { fill: none; stroke: transparent; stroke-width: 10; cursor: pointer; }
+  .wire.sel { stroke: var(--sel) !important; stroke-width: 3.2; }
+  .dot { stroke: none; }
+  .bandname { font-size: 13px; font-weight: 700; fill: var(--muted); }
+  .via { font-size: 10px; font-weight: 600; }
+  #panel { position: fixed; right: 16px; bottom: 16px; width: 340px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); display: none; z-index: 4; }
+  #panel h3 { margin: 0 0 4px; font-size: 14px; }
+  #panel .ends { font-size: 13px; margin-bottom: 8px; }
+  #panel label { display: block; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  #panel select, #panel textarea, #panel input { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; background: var(--bg); }
+  #panel textarea { height: 64px; resize: vertical; }
+  #tip { position: fixed; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    padding: 4px 8px; font-size: 12px; display: none; z-index: 5; max-width: 320px; }
+  #todo { padding: 0 12px 24px; }
+  #todo h2 { font-size: 14px; margin: 8px 0; }
+  #todo li { cursor: pointer; margin: 2px 0; }
+  #todo li:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -68,220 +68,307 @@
   <button id="open" class="primary" title="Pick tools/bench-wiring/wiring.json so edits save straight to it">Open wiring.json…</button>
   <button id="reload" title="Re-read the file (e.g. after Claude edited it)">Reload</button>
   <button id="save" disabled title="Ctrl+S">Save</button>
-  <button id="download" title="Download a copy (browsers without file access)">Download</button>
-  <span class="chips" id="filters"></span>
-  <input id="search" placeholder="Search…" style="border:1px solid var(--line);border-radius:6px;padding:4px 8px;background:var(--bg);min-width:140px">
-  <span id="msg" class="muted"></span>
+  <button id="fit" title="Fit the diagram to the window, or show it at full size">Actual size</button>
+  <span id="chips"></span>
+  <span id="msg"></span>
 </header>
-<main>
-  <div class="panel"><div id="diagram"></div>
-    <div class="muted" style="font-size:12px;margin-top:6px">One line per pair of devices (the number is how many wires), coloured by its least-settled wire. Hover a line to highlight its wires below; click a device to show only its wires (click again to clear).</div>
+<div id="wrap"><div id="diagram"></div></div>
+<div id="todo"></div>
+<div id="panel">
+  <h3 id="pSig"></h3>
+  <div class="ends" id="pEnds"></div>
+  <label>Status <select id="pStatus"></select></label>
+  <label>Note <textarea id="pNote"></textarea></label>
+  <div style="display:flex;justify-content:space-between;margin-top:8px">
+    <span id="pDesc" style="font-size:12px;color:var(--muted)"></span>
+    <button id="pClose">Close</button>
   </div>
-  <div id="tables"></div>
-  <div class="panel">
-    <h2>Add a wire</h2>
-    <div class="add">
-      <label>From device<select id="aDev"></select></label>
-      <label>Terminal<input id="aTerm" placeholder="e.g. IN4 (A4)"></label>
-      <label>To device<select id="bDev"></select></label>
-      <label>Terminal<input id="bTerm" placeholder="e.g. OUT4"></label>
-      <label>Signal<input id="sig" placeholder="what it carries"></label>
-      <label>Status<select id="st"></select></label>
-      <button id="addBtn">Add</button>
-    </div>
-  </div>
-</main>
+</div>
+<div id="tip"></div>
 <script>
-const ORDER = ['open', 'connected', 'unverified', 'planned'];  // least settled last
-const COLS = { house: 0, rig: 1, pc: 1, sim: 2, gate: 3 };
-let data = null, handle = null, dirty = false, focusDev = null, hotPair = null;
-const shown = new Set(['connected', 'unverified', 'planned', 'open']);
+// ---- layout constants --------------------------------------------------------------------------------------------
+const L = { sidePitch: 20, tbPitch: 66, labelZone: 16, nameLine: 15, gap: 70, bandGap: 170, busPitch: 16,
+  busTop: 46, lanePitch: 9, stub: 14, charW: 6.1, minW: 150, gutter: 250 };
+const STATUS = ['connected', 'unverified', 'planned', 'open'];
+const DASH = { connected: '', unverified: '6 4', planned: '3 4', open: '1 4' };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const color = (st) => `var(--${st})`;
-const dev = (id) => data.devices.find((d) => d.id === id) || { id, name: id, site: 'pc' };
-const pairKey = (l) => [l.a[0], l.b[0]].sort().join('|');
+let data, handle = null, dirty = false, selected = null, fit = true;
+const shown = new Set(STATUS);
 
-function msg(text, warn) { $('msg').textContent = text; $('msg').className = warn ? 'warn' : 'muted'; }
+// ---- file handling (Chrome/Edge File System Access; fetch when served read-only) -------------------------------------
+function msg(t, warn) { $('msg').textContent = t; $('msg').className = warn ? 'warn' : ''; }
 function setDirty(d) {
-  dirty = d;
-  $('save').disabled = !d;
-  $('save').classList.toggle('primary', d);
-  if (d) msg(handle ? 'Unsaved changes' : 'Unsaved changes: open wiring.json to save, or Download', true);
+  dirty = d; $('save').disabled = !d; $('save').classList.toggle('primary', d);
+  if (d) msg(handle ? 'Unsaved changes' : 'Unsaved changes: Open wiring.json… to save them', true);
 }
-
-async function loadFromHandle() {
-  data = JSON.parse(await (await handle.getFile()).text());
-  setDirty(false); render(); msg(`Loaded ${handle.name}`);
-}
+async function loadHandle() { data = JSON.parse(await (await handle.getFile()).text()); setDirty(false); draw(); msg(`Loaded ${handle.name}`); }
 async function loadFetch() {
-  try {
-    const r = await fetch('wiring.json', { cache: 'no-store' });
-    data = await r.json(); setDirty(false); render();
-    msg('Loaded wiring.json (read-only until you open it with the button)');
-  } catch (e) {
-    msg('Open wiring.json with the button (or serve this folder: python -m http.server)', true);
-  }
+  try { data = await (await fetch('wiring.json', { cache: 'no-store' })).json(); setDirty(false); draw(); msg('Read-only: Open wiring.json… to edit'); }
+  catch (e) { msg('Serve this folder (python -m http.server) or use Open wiring.json…', true); }
 }
 $('open').onclick = async () => {
-  if (!window.showOpenFilePicker) return msg('This browser has no file access: use Chrome or Edge, or Download to save', true);
+  if (!window.showOpenFilePicker) return msg('Needs Chrome or Edge to save', true);
   if (dirty && !confirm('Discard unsaved changes?')) return;
   [handle] = await window.showOpenFilePicker({ types: [{ description: 'Wiring', accept: { 'application/json': ['.json'] } }] });
-  await loadFromHandle();
+  await loadHandle();
 };
-$('reload').onclick = async () => {
-  if (dirty && !confirm('Discard unsaved changes?')) return;
-  handle ? loadFromHandle() : loadFetch();
-};
+$('reload').onclick = () => { if (dirty && !confirm('Discard unsaved changes?')) return; handle ? loadHandle() : loadFetch(); };
 async function save() {
-  if (!dirty) return;
-  if (!handle) return msg('Open wiring.json first (or Download)', true);
+  if (!dirty || !handle) return;
   data.updated = new Date().toISOString().slice(0, 10);
-  const w = await handle.createWritable();
-  await w.write(JSON.stringify(data, null, 2) + '\n'); await w.close();
-  setDirty(false); msg(`Saved ${handle.name} ${new Date().toLocaleTimeString()}`);
+  const w = await handle.createWritable(); await w.write(JSON.stringify(data, null, 2) + '\n'); await w.close();
+  setDirty(false); msg(`Saved ${new Date().toLocaleTimeString()}`); draw();
 }
 $('save').onclick = save;
-document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); }
+  if (e.key === 'Escape') select(null);
+});
 window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
-$('download').onclick = () => {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2) + '\n'], { type: 'application/json' }));
-  a.download = 'wiring.json'; a.click();
-};
-$('search').oninput = () => renderTables();
+$('fit').onclick = () => { fit = !fit; $('fit').textContent = fit ? 'Actual size' : 'Fit width'; draw(); };
 
-function visible(l) {
-  if (!shown.has(l.status)) return false;
-  if (focusDev && l.a[0] !== focusDev && l.b[0] !== focusDev) return false;
-  const q = $('search').value.trim().toLowerCase();
-  if (!q) return true;
-  return [dev(l.a[0]).name, l.a[1], dev(l.b[0]).name, l.b[1], l.signal, l.note, l.status].join(' ').toLowerCase().includes(q);
+// ---- layout -----------------------------------------------------------------------------------------------------
+const tw = (s) => String(s).length * L.charW;
+function nameLines(name, w) {
+  const max = Math.floor((w - 16) / (L.charW * 1.1));
+  if (name.length <= max) return [name];
+  const i = name.lastIndexOf(' ', max);
+  return [name.slice(0, i > 0 ? i : max), name.slice(i > 0 ? i + 1 : max)];
+}
+function measure(d) {
+  const top = d.top || [], bottom = d.bottom || [], left = d.left || [], right = d.right || [];
+  const side = Math.max(...left.map(tw), 0) + Math.max(...right.map(tw), 0) + 40;
+  const w = Math.max(L.minW, Math.min(tw(d.name) * 1.1 + 24, 260), side, (top.length + 0.4) * L.tbPitch, (bottom.length + 0.4) * L.tbPitch);
+  const lines = nameLines(d.name, w).length;
+  const h = L.labelZone + 8 + lines * L.nameLine + 6 + Math.max(left.length, right.length) * L.sidePitch + (bottom.length ? L.labelZone + 4 : 6);
+  return { w, h, lines };
 }
 
-function render() {
-  $('title').textContent = `${data.title} · updated ${data.updated}`;
-  document.title = 'Bench Wiring';
-  $('filters').innerHTML = ORDER.map((s) => {
-    const n = data.links.filter((l) => l.status === s).length;
-    return `<span class="chip ${shown.has(s) ? '' : 'off'}" data-s="${s}" title="${esc(data.statuses[s])}">
-      <span class="dot" style="background:${color(s)}"></span>${s} ${n}</span>`;
-  }).join('');
-  document.querySelectorAll('.chip').forEach((c) => c.onclick = () => {
-    shown.has(c.dataset.s) ? shown.delete(c.dataset.s) : shown.add(c.dataset.s); render();
-  });
-  const opts = data.devices.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
-  $('aDev').innerHTML = opts; $('bDev').innerHTML = opts;
-  $('st').innerHTML = ORDER.map((s) => `<option${s === 'planned' ? ' selected' : ''}>${s}</option>`).join('');
-  renderDiagram(); renderTables();
-}
-
-function renderDiagram() {
-  const cols = [[], [], [], []];
-  for (const d of data.devices) cols[COLS[d.site] ?? 1].push(d);
-  const W = 230, BH = 30, GX = 120, GY = 14, PAD = 10;
-  const pos = {};
-  const height = Math.max(...cols.map((c) => c.length)) * (BH + GY) + PAD * 2 + 20;
-  cols.forEach((c, ci) => c.forEach((d, ri) => { pos[d.id] = { x: PAD + ci * (W + GX), y: PAD + 20 + ri * (BH + GY) }; }));
-  const width = PAD * 2 + 4 * W + 3 * GX;
-  const pairs = new Map();
-  for (const l of data.links) {
-    if (!shown.has(l.status) || l.a[0] === l.b[0]) continue;
-    const k = pairKey(l);
-    const p = pairs.get(k) || { a: l.a[0], b: l.b[0], links: [] };
-    p.links.push(l); pairs.set(k, p);
+function termPos(box, name) {
+  const d = box.d;
+  for (const side of ['top', 'bottom', 'left', 'right']) {
+    const list = d[side] || [];
+    const i = list.indexOf(name);
+    if (i < 0) continue;
+    if (side === 'top' || side === 'bottom') {
+      const x = box.x + (i + 0.7) * (box.w / (list.length + 0.4));
+      return { x, y: side === 'top' ? box.y : box.y + box.h, side, box };
+    }
+    const y = box.y + L.labelZone + 8 + box.lines * L.nameLine + 6 + (i + 0.5) * L.sidePitch;
+    return { x: side === 'left' ? box.x : box.x + box.w, y, side, box };
   }
-  let wires = '';
-  for (const [k, p] of pairs) {
-    const A = pos[p.a], B = pos[p.b];
-    if (!A || !B) continue;
-    const st = p.links.map((l) => l.status).sort((x, y) => ORDER.indexOf(y) - ORDER.indexOf(x))[0];
-    let x1, x2, path;
-    const y1 = A.y + BH / 2, y2 = B.y + BH / 2;
-    if (Math.abs(A.x - B.x) < 1) {  // same column: loop out sideways (left in the last column, so it stays visible)
-      const left = A.x > width / 2;
-      x1 = left ? A.x : A.x + W;
-      const bulge = (left ? -1 : 1) * (30 + Math.abs(y2 - y1) * 0.25);
-      path = `M${x1},${y1} C${x1 + bulge},${y1} ${x1 + bulge},${y2} ${x1},${y2}`;
+  return null;
+}
+
+const parse = (ref) => { const [dev, ...t] = ref.split(':'); return { dev, term: t.join(':') }; };
+const out = (P, n) => ({ x: P.x + (P.side === 'left' ? -n : P.side === 'right' ? n : 0),
+  y: P.y + (P.side === 'top' ? -n : P.side === 'bottom' ? n : 0) });
+
+// One site: its buses on top, a row of devices, lanes for wires that go round boxes, the comms row, then a PC strip.
+function layoutBand(band, y0, devs) {
+  const boxes = {}, buses = {};
+  const busList = data.buses.filter((b) => b.band === band.id);
+  const busTop = y0 + 34;
+  busList.forEach((b, i) => { buses[b.id] = { ...b, y: busTop + i * L.busPitch, xs: [] }; });
+  const rowTop = busTop + busList.length * L.busPitch + 26;
+  let x = L.gutter;
+  for (const id of band.devices) {
+    const m = measure(devs[id]);
+    boxes[id] = { id, x, y: rowTop, ...m, d: devs[id] };
+    x += m.w + L.gap;
+  }
+  const width = x - L.gap + 230;  // room for off-diagram labels on the right
+  const rowBottom = rowTop + Math.max(...Object.values(boxes).map((b) => b.h));
+  const comms = (data.comms || []).filter((c) => band.devices.includes(c.under));
+  for (const c of comms) {
+    const m = measure(devs[c.device]), over = boxes[c.under];
+    boxes[c.device] = { id: c.device, x: over.x + over.w / 2 - m.w / 2, y: 0, ...m, d: devs[c.device], comms: true };
+  }
+  const wires = data.wires.map((w, i) => ({ w, i })).filter(({ w }) => boxes[parse(w.from).dev]);
+  const blocked = (x1, x2) => Object.values(boxes).some((b) => !b.comms && b.x > Math.min(x1, x2) + 1 && b.x + b.w < Math.max(x1, x2) - 1);
+
+  // Pass 1: classify, and give each wire that must go round boxes its own lane below the row.
+  let lanes = 0;
+  const plan = [];
+  for (const { w, i } of wires) {
+    const a = parse(w.from);
+    if (!termPos(boxes[a.dev], a.term)) { console.warn('unknown terminal', w.from); continue; }
+    const p = { w, i, a };
+    if (w.bus) p.kind = buses[w.bus] ? 'bus' : null;
+    else if (w.label) p.kind = 'label';
+    else if (w.to === 'pc') p.kind = 'pc';
+    else if (!w.to) p.kind = 'open';
+    else {
+      p.b = parse(w.to);
+      const bb = boxes[p.b.dev];
+      if (!bb || !termPos(bb, p.b.term)) { console.warn('unknown terminal', w.to); continue; }
+      if (boxes[a.dev].comms || bb.comms) p.kind = 'vz';
+      else {
+        const A = termPos(boxes[a.dev], a.term), B = termPos(bb, p.b.term);
+        const [P, Q] = A.x <= B.x ? [A, B] : [B, A];
+        p.kind = P.side === 'right' && Q.side === 'left' && !blocked(P.x, Q.x) ? 'z' : 'lane';
+      }
+      if (p.kind === 'lane') p.lane = ++lanes;
+    }
+    if (!p.kind) { console.warn('unknown bus', w.bus); continue; }
+    plan.push(p);
+  }
+  const laneY = (k) => rowBottom + 16 + k * L.lanePitch;
+  const commsY = laneY(lanes) + 30;
+  for (const c of comms) boxes[c.device].y = commsY;
+  const lowest = Math.max(rowBottom + 16 + lanes * L.lanePitch, ...comms.map((c) => commsY + boxes[c.device].h));
+  const pcY = lowest + 36;
+
+  // Pass 2: route.
+  const gapUse = {};
+  let vz = 0;
+  const routes = [];
+  for (const p of plan) {
+    const { w } = p;
+    const A = termPos(boxes[p.a.dev], p.a.term);
+    const B = p.b && termPos(boxes[p.b.dev], p.b.term);
+    let path, label = null, junction = null, cross = null;
+    if (p.kind === 'bus') {
+      const bus = buses[w.bus];
+      if (A.side === 'top') path = [A, { x: A.x, y: bus.y }];
+      else { const s = out(A, L.stub + 6); path = [A, s, { x: s.x, y: bus.y }]; }
+      junction = path[path.length - 1]; bus.xs.push(junction.x);
+    } else if (p.kind === 'label') {
+      const s = out(A, 30); path = [A, s];
+      label = A.side === 'top' ? { x: s.x, y: s.y - 6, anchor: 'middle' }
+        : { x: s.x + (A.side === 'left' ? -4 : 4), y: s.y + 3.5, anchor: A.side === 'left' ? 'end' : 'start' };
+      label.text = w.label;
+    } else if (p.kind === 'open') {
+      cross = out(A, 10); path = [A, cross];
+    } else if (p.kind === 'pc') {
+      path = [A, { x: A.x, y: pcY }];
+    } else if (p.kind === 'z') {
+      const [P, Q] = A.x <= B.x ? [A, B] : [B, A];
+      const k = gapUse[P.box.id] = (gapUse[P.box.id] || 0) + 1;
+      const mx = Math.min(P.x + L.stub + (k - 1) * 7, Q.x - 10);
+      path = [P, { x: mx, y: P.y }, { x: mx, y: Q.y }, Q];
+    } else if (p.kind === 'vz') {
+      const [P, Q] = A.y <= B.y ? [A, B] : [B, A];
+      const my = P.y + 12 + (vz++) * 6;
+      path = [P, { x: P.x, y: my }, { x: Q.x, y: my }, Q];
     } else {
-      const [L, R, yl, yr] = A.x < B.x ? [A, B, y1, y2] : [B, A, y2, y1];
-      x1 = L.x + W; x2 = R.x;
-      const mx = (x1 + x2) / 2;
-      path = `M${x1},${yl} C${mx},${yl} ${mx},${yr} ${x2},${yr}`;
+      const ly = laneY(p.lane), n = L.stub + p.lane * 3;
+      const sa = out(A, n), sb = out(B, n);
+      path = [A, sa, { x: sa.x, y: ly }, { x: sb.x, y: ly }, sb, B];
     }
-    const dash = st === 'planned' ? 'stroke-dasharray="7 5"' : st === 'open' ? 'stroke-dasharray="2 4"' : '';
-    const dim = focusDev && p.a !== focusDev && p.b !== focusDev ? 'dim' : '';
-    wires += `<path class="wire ${dim} ${hotPair === k ? 'hot' : ''}" data-k="${k}" d="${path}" stroke="${color(st)}" ${dash}>
-      <title>${esc(dev(p.a).name)} ↔ ${esc(dev(p.b).name)}: ${p.links.length} wire(s), ${st}</title></path>`;
+    routes.push({ ...p, path, label, junction, cross });
   }
-  let boxes = '';
-  for (const d of data.devices) {
-    const P = pos[d.id];
-    const n = data.links.filter((l) => l.a[0] === d.id || l.b[0] === d.id).length;
-    const name = d.name.length > 34 ? d.name.slice(0, 33) + '…' : d.name;
-    boxes += `<g class="devbox ${focusDev === d.id ? 'sel' : ''}" data-d="${d.id}"><rect x="${P.x}" y="${P.y}" width="${W}" height="${BH}" rx="6"></rect>
-      <text x="${P.x + 8}" y="${P.y + 19}">${esc(name)} <tspan fill="var(--muted)">(${n})</tspan></text><title>${esc(d.name)}\n${esc(d.note || '')}</title></g>`;
-  }
-  const heads = ['House side', 'Power rig · PC', 'GateSim', 'Gate side'].map((h, i) =>
-    `<text x="${PAD + i * (W + GX)}" y="${PAD + 10}" fill="var(--muted)" font-weight="600">${h}</text>`).join('');
-  $('diagram').innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Wiring overview">${heads}${wires}${boxes}</svg>`;
-  document.querySelectorAll('.wire').forEach((w) => {
-    w.onmouseenter = () => { hotPair = w.dataset.k; w.classList.add('hot'); markRows(); };
-    w.onmouseleave = () => { hotPair = null; w.classList.remove('hot'); markRows(); };
-  });
-  document.querySelectorAll('.devbox').forEach((g) => g.onclick = () => {
-    focusDev = focusDev === g.dataset.d ? null : g.dataset.d; renderDiagram(); renderTables();
-  });
+  return { band, y0, boxes, buses, routes, pcY, width, bottom: pcY + 30 };
 }
 
-function markRows() {
-  document.querySelectorAll('tr[data-k]').forEach((r) => r.classList.toggle('hot', r.dataset.k === hotPair));
-  if (hotPair) document.querySelector(`tr[data-k="${hotPair}"]`)?.scrollIntoView({ block: 'nearest' });
-}
-
-function renderTables() {
-  let html = '';
-  for (const s of data.sites) {
-    const rows = data.links.filter((l) => dev(l.a[0]).site === s.id && visible(l));
-    if (!rows.length) continue;
-    html += `<div class="panel"><h2>${esc(s.name)}</h2><table><colgroup><col class="c-end"><col class="c-end"><col class="c-sig"><col class="c-st"><col class="c-note"><col class="c-x"></colgroup><thead><tr><th>From</th><th>To</th><th>Signal</th><th>Status</th><th>Note</th><th></th></tr></thead><tbody>`;
-    for (const l of rows) {
-      const i = data.links.indexOf(l);
-      html += `<tr data-k="${pairKey(l)}">
-        <td class="end"><b>${esc(dev(l.a[0]).name)}</b><br><input class="txt" data-i="${i}" data-f="a1" value="${esc(l.a[1])}"></td>
-        <td class="end"><b>${esc(dev(l.b[0]).name)}</b><br><input class="txt" data-i="${i}" data-f="b1" value="${esc(l.b[1])}"></td>
-        <td><input class="txt" data-i="${i}" data-f="signal" value="${esc(l.signal)}" title="${esc(l.signal)}"></td>
-        <td><span class="dot" style="background:${color(l.status)}"></span>
-          <select class="status" data-i="${i}">${ORDER.map((o) => `<option${o === l.status ? ' selected' : ''}>${o}</option>`).join('')}</select></td>
-        <td><input class="txt" data-i="${i}" data-f="note" value="${esc(l.note)}" title="${esc(l.note)}" placeholder="note"></td>
-        <td><button class="del" data-i="${i}" title="Delete this wire">✕</button></td></tr>`;
+function draw() {
+  $('title').textContent = `${data.title} · updated ${data.updated}`;
+  const devs = Object.fromEntries(data.devices.map((d) => [d.id, d]));
+  const bands = [];
+  let y = 0;
+  for (const band of data.bands) { const B = layoutBand(band, y, devs); bands.push(B); y = B.bottom + 40; }
+  const width = Math.max(...bands.map((b) => b.width)), height = y;
+  let s = '';
+  const allBuses = {};
+  for (const B of bands) {
+    Object.assign(allBuses, B.buses);
+    s += `<text class="bandname" x="20" y="${B.y0 + 20}">${esc(B.band.name)}</text>`;
+    if (B.y0 > 0) s += `<line x1="0" x2="${width}" y1="${B.y0 - 20}" y2="${B.y0 - 20}" stroke="var(--line)"></line>`;
+    for (const b of Object.values(B.buses)) {
+      if (!b.xs.length) continue;
+      const x1 = Math.min(...b.xs) - 10, x2 = Math.max(...b.xs) + 10;
+      s += `<line class="busline" x1="${x1}" y1="${b.y}" x2="${x2}" y2="${b.y}"><title>${esc(b.name)}</title></line>`;
+      s += `<line x1="${L.gutter - 6}" y1="${b.y}" x2="${x1}" y2="${b.y}" stroke="var(--line)" stroke-dasharray="2 3"></line>`;
+      s += `<text class="buslabel" x="${L.gutter - 10}" y="${b.y + 4}" text-anchor="end">${esc(b.name)}</text>`;
     }
-    html += '</tbody></table></div>';
+    const drops = B.routes.filter((r) => r.kind === 'pc').map((r) => r.path[0].x);
+    if (drops.length) {
+      s += `<rect class="box" x="20" y="${B.pcY}" width="${width - 40}" height="26" rx="6"></rect>`;
+      s += `<text class="dname" x="30" y="${B.pcY + 17}">${esc(devs.pc?.name || 'PC')}</text>`;
+    }
+    for (const b of Object.values(B.boxes)) {
+      s += `<g><rect class="box" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="6"><title>${esc(b.d.name)}${b.d.note ? '\n' + esc(b.d.note) : ''}</title></rect>`;
+      nameLines(b.d.name, b.w).forEach((ln, i) => {
+        s += `<text class="dname" x="${b.x + b.w / 2}" y="${b.y + L.labelZone + 8 + (i + 0.8) * L.nameLine}" text-anchor="middle">${esc(ln)}</text>`;
+      });
+      for (const side of ['top', 'bottom', 'left', 'right']) for (const t of b.d[side] || []) {
+        const P = termPos(b, t);
+        const lx = side === 'left' ? P.x + 6 : side === 'right' ? P.x - 6 : P.x;
+        const ly = side === 'top' ? P.y + 12 : side === 'bottom' ? P.y - 5 : P.y + 3.5;
+        s += `<text class="tlabel" x="${lx}" y="${ly}" text-anchor="${side === 'left' ? 'start' : side === 'right' ? 'end' : 'middle'}">${esc(t)}</text>`;
+      }
+      s += '</g>';
+    }
+    for (const r of B.routes) {
+      if (!shown.has(r.w.status)) continue;
+      const d = 'M' + r.path.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' L');
+      const col = `var(--${r.w.status})`;
+      s += `<path class="wire ${selected === r.i ? 'sel' : ''}" d="${d}" stroke="${col}" stroke-dasharray="${DASH[r.w.status]}"></path>`;
+      if (r.junction) s += `<circle class="dot" cx="${r.junction.x}" cy="${r.junction.y}" r="3.2" style="fill:${col}"></circle>`;
+      if (r.cross) s += `<text x="${r.cross.x}" y="${r.cross.y + 4}" text-anchor="middle" style="fill:${col}">×</text>`;
+      if (r.label) s += `<text x="${r.label.x}" y="${r.label.y}" text-anchor="${r.label.anchor}" style="fill:${col};font-size:10px">${esc(r.label.text)}</text>`;
+      if (r.w.via) {
+        const [p1, p2] = r.path.length > 2 ? [r.path[1], r.path[2]] : [r.path[0], r.path[1]];
+        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        s += `<rect x="${mx - 22}" y="${my - 8}" width="44" height="16" rx="3" style="fill:var(--panel);stroke:${col}"></rect><text class="via" x="${mx}" y="${my + 4}" text-anchor="middle">${esc(r.w.via)}</text>`;
+      }
+      s += `<path class="hit" d="${d}" data-i="${r.i}"></path>`;
+    }
+    for (const b of Object.values(B.boxes)) for (const side of ['top', 'bottom', 'left', 'right']) for (const t of b.d[side] || []) {
+      const P = termPos(b, t);
+      s += `<circle class="term" cx="${P.x}" cy="${P.y}" r="3"></circle>`;
+    }
   }
-  $('tables').innerHTML = html || '<div class="panel muted">No wires match.</div>';
-  document.querySelectorAll('select.status').forEach((s) => s.onchange = () => {
-    data.links[s.dataset.i].status = s.value; setDirty(true); render();
+  const sizing = fit ? `width="100%" style="min-width:900px"` : `width="${width}" height="${height}"`;
+  $('diagram').innerHTML = `<svg viewBox="0 0 ${width} ${height}" ${sizing} role="img" aria-label="Bench wiring diagram">${s}</svg>`;
+  document.querySelectorAll('.hit').forEach((h) => {
+    const w = data.wires[h.dataset.i];
+    h.onmousemove = (e) => {
+      $('tip').style.display = 'block'; $('tip').style.left = e.clientX + 14 + 'px'; $('tip').style.top = e.clientY + 10 + 'px';
+      $('tip').innerHTML = `<b>${esc(w.signal || '')}</b><br>${esc(w.from)} → ${esc(endName(w, allBuses))}${w.via ? ' (via ' + esc(w.via) + ')' : ''}<br>${w.status}${w.note ? ' · ' + esc(w.note) : ''}`;
+    };
+    h.onmouseleave = () => { $('tip').style.display = 'none'; };
+    h.onclick = () => select(+h.dataset.i);
   });
-  document.querySelectorAll('input.txt').forEach((t) => t.onchange = () => {
-    const l = data.links[t.dataset.i], f = t.dataset.f;
-    if (f === 'a1') l.a[1] = t.value; else if (f === 'b1') l.b[1] = t.value; else l[f] = t.value;
-    setDirty(true);
-  });
-  document.querySelectorAll('.del').forEach((b) => b.onclick = () => {
-    const l = data.links[b.dataset.i];
-    if (!confirm(`Delete ${dev(l.a[0]).name} ${l.a[1]} → ${dev(l.b[0]).name} ${l.b[1]}?`)) return;
-    data.links.splice(b.dataset.i, 1); setDirty(true); render();
-  });
-  markRows();
+  chips(); todo(allBuses);
 }
 
-$('addBtn').onclick = () => {
-  const a = [$('aDev').value, $('aTerm').value.trim()], b = [$('bDev').value, $('bTerm').value.trim()];
-  if (!a[1] || !b[1]) return msg('Give both terminals', true);
-  data.links.push({ id: `w${Date.now().toString(36)}`, a, b, signal: $('sig').value.trim(), status: $('st').value, note: '' });
-  ['aTerm', 'bTerm', 'sig'].forEach((id) => { $(id).value = ''; });
-  setDirty(true); render();
-};
+function chips() {
+  $('chips').innerHTML = STATUS.map((st) => {
+    const n = data.wires.filter((w) => w.status === st).length;
+    return `<span class="chip ${shown.has(st) ? '' : 'off'}" data-s="${st}" title="${esc(data.statuses[st])}">
+      <span class="sw" style="border-top-color:var(--${st});border-top-style:${st === 'connected' ? 'solid' : 'dashed'}"></span>${st} ${n}</span>`;
+  }).join(' ');
+  document.querySelectorAll('.chip').forEach((c) => c.onclick = () => {
+    shown.has(c.dataset.s) ? shown.delete(c.dataset.s) : shown.add(c.dataset.s); draw();
+  });
+}
+
+function endName(w, buses) { return w.to === 'pc' ? 'PC' : w.to || (w.bus && buses[w.bus]?.name) || w.label || 'not connected'; }
+function todo(buses) {
+  const items = data.wires.map((w, i) => ({ w, i })).filter(({ w }) => w.status === 'unverified' || w.status === 'planned');
+  $('todo').innerHTML = `<h2>Still to settle (${items.length})</h2><ul>` + items.map(({ w, i }) =>
+    `<li data-i="${i}"><span style="color:var(--${w.status})">${w.status}</span> · ${esc(w.signal || '')}: ${esc(w.from)} → ${esc(endName(w, buses))}</li>`).join('') + '</ul>';
+  document.querySelectorAll('#todo li').forEach((li) => li.onclick = () => select(+li.dataset.i));
+}
+
+function select(i) {
+  selected = i;
+  if (i === null) { $('panel').style.display = 'none'; draw(); return; }
+  const w = data.wires[i];
+  const busName = w.bus && data.buses.find((b) => b.id === w.bus)?.name;
+  $('pSig').textContent = w.signal || 'Wire';
+  $('pEnds').textContent = `${w.from} → ${w.to === 'pc' ? 'PC' : w.to || busName || w.label || 'not connected'}${w.via ? ' (via ' + w.via + ')' : ''}`;
+  $('pStatus').innerHTML = STATUS.map((st) => `<option${st === w.status ? ' selected' : ''}>${st}</option>`).join('');
+  $('pNote').value = w.note || '';
+  $('pDesc').textContent = data.statuses[w.status] || '';
+  $('panel').style.display = 'block';
+  draw();
+}
+$('pStatus').onchange = () => { data.wires[selected].status = $('pStatus').value; $('pDesc').textContent = data.statuses[$('pStatus').value]; setDirty(true); draw(); };
+$('pNote').oninput = () => { data.wires[selected].note = $('pNote').value; setDirty(true); };
+$('pClose').onclick = () => select(null);
 
 loadFetch();
 </script>

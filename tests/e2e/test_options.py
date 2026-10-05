@@ -30,6 +30,23 @@ def test_gate_relay_test_opens_closed_gate(rig):
     rig.wait_ctrl(False, timeout=30)
 
 
+def test_gate_reversal_mid_pulse_never_overlaps(rig):
+    """A CLOSE pulse requested while the OPEN pulse is still on (a reversal landing mid-pulse): K1 must have
+    released before K2 closes, or the opener sees OPEN and CLOSE together for a moment (relay make faster than
+    break). The invariant check flags any overlap the simulator saw."""
+    rig.expect_commands(0)
+    m = rig.mark()
+    rig.relay_test("gate", 1, 1000)
+    rig.wait_log("gate", "pulse", a=1, since=m, timeout=5)
+    time.sleep(0.3)
+    rig.relay_test("gate", 2, rig.pulse_ms)
+    rig.wait_log("gate", "pulse", a=2, since=m, timeout=5)
+    time.sleep(1.5)
+    both = [e for e in rig.timeline.select(src="sim", kind="evt", since=m) if e["line"] == "pulse both"]
+    assert not both, "the opener saw OPEN and CLOSE closed together"
+    rig.wait_gate("closed", timeout=SIM_TRAVEL_S + 5)
+
+
 def test_gate_relay_test_at_open_limit_then_external_close(rig):
     """relay.test K1 with the gate already open sets no target, so a local close straight after is external."""
     rig.expect_commands(0)

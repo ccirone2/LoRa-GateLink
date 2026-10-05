@@ -31,18 +31,28 @@ void Relay::begin(uint8_t pin) {
 }
 
 void Relay::set(bool on) {
+  _startAt = 0;
   _pulseUntil = 0;
   _on = on;
   digitalWrite(_pin, on ? HIGH : LOW);
 }
 
-void Relay::pulse(uint32_t now, uint32_t ms) {
-  _on = true;
-  digitalWrite(_pin, HIGH);
-  _pulseUntil = now + ms;
-  if (_pulseUntil == 0) _pulseUntil = 1;
+void Relay::pulse(uint32_t now, uint32_t ms, uint32_t delayMs) {
+  if (delayMs) {
+    _startAt = (now + delayMs) | 1;
+  } else {
+    _startAt = 0;
+    _on = true;
+    digitalWrite(_pin, HIGH);
+  }
+  _pulseUntil = (now + delayMs + ms) | 1;
 }
 
 void Relay::update(uint32_t now) {
-  if (_pulseUntil && (int32_t)(now - _pulseUntil) >= 0) set(false);
+  if (_startAt && (int32_t)(now - _startAt) >= 0) {
+    _startAt = 0;
+    _on = true;
+    digitalWrite(_pin, HIGH);
+  }
+  if (_pulseUntil && !_startAt && (int32_t)(now - _pulseUntil) >= 0) set(false);
 }

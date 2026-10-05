@@ -1,10 +1,12 @@
 // GateSim: bench-only CSW24UL opener simulator for the GateLink gate board. Not for the install.
-// Arduino Uno + relay module. Relay contacts are wetted with 24 V (COM) and the NO contacts feed the
-// gate board's opto channels, exactly like the opener's AUX relays and accessory output would.
+// Arduino Uno + relay module. Relay contacts are wetted with 24 V (COM) and feed the gate board's opto
+// channels, exactly like the opener's AUX relays and accessory output would.
 //
-//   D2 relay -> opto ch1 -> gate IN1  "open limit"   (on only while powered and fully open)
-//   D3 relay -> opto ch2 -> gate IN2  "closed limit" (on only while powered and fully closed)
-//   D4 relay -> opto ch3 -> gate IN3  opener 24 V power
+//   D2 relay NO -> opto ch1 -> gate IN1  "open limit"   (on only while powered and fully open)
+//   D3 relay NC -> opto ch2 -> gate IN2  "closed limit" (on only while powered and fully closed). The CSW24UL's
+//                                        closed-limit AUX relay energizes when NOT at the close limit, so it's
+//                                        wired on NC and D3's coil is driven inverted, as the real relay is.
+//   D4 relay NO -> opto ch3 -> gate IN3  AC power
 //   D5 <- gate K1 NO (OPEN pulse),  gate K1 COM -> Uno GND   (dry contacts, INPUT_PULLUP)
 //   D6 <- gate K2 NO (CLOSE pulse), gate K2 COM -> Uno GND
 //
@@ -109,7 +111,9 @@ void applyRelays(uint32_t now) {
     if (c) c = false;
   }
   writeRelay(PIN_R_OPEN, override[0] < 0 ? o : override[0]);
-  writeRelay(PIN_R_CLOSED, override[1] < 0 ? c : override[1]);
+  // NC contact: the coil is off while the closed-limit signal is on. Unpowered, the real opener has no 24 V to
+  // wet its contacts at all; here the coil stays energized instead, so IN2 reads off just the same.
+  writeRelay(PIN_R_CLOSED, !(override[1] < 0 ? c : override[1]));
   writeRelay(PIN_R_POWER, override[2] < 0 ? powered : override[2]);
 }
 
@@ -196,7 +200,7 @@ void printRelease(const __FlashStringHelper *which, uint32_t ms) {
 void printHelp() {
   Serial.println(F("commands: status | open | close | stop | power on|off | travel <1-300 s>"));
   Serial.println(F("  fault none|stuck|both|flicker|deaf | polarity low|high | help"));
-  Serial.println(F("  relay <1-3> on|off|auto  force relay D2/D3/D4 for wiring tests (auto = simulate)"));
+  Serial.println(F("  relay <1-3> on|off|auto  force the signal to gate IN1/IN2/IN3 (D2/D3/D4; D3 inverted, NC)"));
   Serial.println(F("  open/close act like a local button (not the gate board); stop halts mid-travel"));
 }
 
@@ -272,7 +276,8 @@ void readSerial() {
 
 void setup() {
   loadSettings();
-  // Drive the "off" level before enabling the outputs so the relays don't click at boot.
+  // Drive the "off" level before enabling the outputs so the relays don't click at boot (the simulation then
+  // starts closed: D3's coil stays off, its NC contact giving the closed limit).
   const uint8_t relays[] = {PIN_R_OPEN, PIN_R_CLOSED, PIN_R_POWER};
   for (uint8_t p : relays) {
     writeRelay(p, false);

@@ -20,7 +20,7 @@ GATE board
   K1  ──> CSW24UL OPEN + COM    (pulse)
   K2  ──> CSW24UL CLOSE + COM   (pulse)
   IN1 <── AUX "open limit"      (opto)
-  IN2 <── AUX "closed limit"    (opto)
+  IN2 <── AUX "closed limit" NC (opto)
   IN3 <── 24 V supply on AC     (opto)
           = AC power present
 ```

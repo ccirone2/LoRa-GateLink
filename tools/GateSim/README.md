@@ -2,13 +2,14 @@
 
 Bench only, not GateLink firmware: an Arduino Uno with a relay module stands in for the CSW24UL so the gate
 board sees real limit and power signals through its opto board, and the whole loop (controller → house → LoRa →
-gate → "opener" → limits → house) runs without the opener. Relay COMs are wetted with 24 V and the NO contacts
-feed the opto channels, as the opener's AUX relays would.
+gate → "opener" → limits → house) runs without the opener. Relay COMs are wetted with 24 V and feed the opto
+channels, as the opener's AUX relays would: D2 and D4 through NO, D3 through **NC**, because the CSW24UL's
+closed-limit AUX relay energizes when *not* at the close limit. D3's coil is driven inverted to match.
 
 | Uno | Connects to | Simulates |
 |---|---|---|
-| D2 relay | opto ch1 → gate IN1 | AUX "open limit" (on only when powered and fully open) |
-| D3 relay | opto ch2 → gate IN2 | AUX "closed limit" |
+| D2 relay NO | opto ch1 → gate IN1 | AUX "open limit" (on only when powered and fully open) |
+| D3 relay **NC** | opto ch2 → gate IN2 | AUX "closed limit" (coil energized when not closed; signal on only when powered and fully closed) |
 | D4 relay | opto ch3 → gate IN3 | opener 24 V accessory power |
 | D5 | gate K1 NO (K1 COM → Uno GND) | OPEN input (dry contact, pulled up) |
 | D6 | gate K2 NO (K2 COM → Uno GND) | CLOSE input |
@@ -22,7 +23,9 @@ arduino-cli upload  --fqbn arduino:avr:uno -p COMx tools/GateSim
 
 Serial 115200, one command per line: `status`, `open`, `close` (a local button, reported as an external
 move), `stop` (strand it between), `power on|off`, `travel <s>` (default 15), `fault none|stuck|both|flicker|deaf`,
-`polarity low|high`, `relay <1-3> on|off|auto` (force D2/D3/D4 for wiring checks, not saved), `help`.
+`polarity low|high`, `relay <1-3> on|off|auto` (force the signal to gate IN1/IN2/IN3 for wiring checks, not
+saved; for relay 2, `on` releases D3's coil so its NC contact closes), `help`. `status` reports the signals
+(`relays open= closed= power=`), not the coils.
 
 It prints `evt ...` lines: `evt pulse open|close` on each debounced press of an input (`evt pulse both` whenever
 one input closes while the other is still held: the K1/K2 interlock failed), `evt release open|close <ms>` when it
@@ -37,11 +40,13 @@ and pulses are ignored.
 Faults: `stuck` leaves the limit and jams (exercises `travel_timeout_s`), `both` asserts both limits (gate
 `fault`), `flicker` chatters a limit on arrival (debounce), `deaf` ignores the gate's pulses.
 
-Opening the port resets the Uno, which restarts it closed and powered (the gate briefly sees `no_power`); scripts
+Opening the port resets the Uno, which restarts it closed and powered (meanwhile the relays release: the gate
+briefly sees AC lost, with D3's NC contact keeping the closed limit on); scripts
 can avoid that by opening it with DTR off (pyserial: set `dtr = False` before `open()`).
 
 ## Relay polarity
 
 The bench relay module switches on when the pin is HIGH (`polarity high`, the default); many modules are the
-other way round. After boot, the closed-limit (D3) and power (D4) relays should be on and D2 off. If it's the
-other way round, send `polarity low` (saved in EEPROM). Travel time is saved too.
+other way round. After boot (closed and powered), only the power relay (D4) should be energized: D2 off, and
+D3 off as well (its NC contact gives the closed limit). If D2 and D3 are energized and D4 isn't, send
+`polarity low` (saved in EEPROM). Travel time is saved too.

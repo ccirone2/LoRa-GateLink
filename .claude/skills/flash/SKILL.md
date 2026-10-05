@@ -41,7 +41,7 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
    Link check without a restore: `ports` again after ~15 s should show `verified True` on both.
 5. **GateSim** (only if `tools/GateSim` changed): `arduino-cli compile --fqbn arduino:avr:uno --warnings all
    tools/GateSim` then `arduino-cli upload --fqbn arduino:avr:uno -p COM10 tools/GateSim`. Its settings live in
-   EEPROM and survive. After boot the closed-limit (D3) and power (D4) relays are on.
+   EEPROM and survive. After boot only the power relay (D4) is energized; D3's coil is off, its NC contact giving the closed limit.
 6. Report the firmware version now on each board (`ports`). Don't raise `tx_power` above 5 on USB power.
 
 If the key file is missing or wrong, stop and ask the user: boards can't read the key back, and setting a new

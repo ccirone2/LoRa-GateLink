@@ -29,14 +29,18 @@ and `firmware/GateLink/pins.h` in sync.
 ## Gate board
 
 - **CSW24UL**: set AUX relay A to *open limit* and AUX relay B to *closed limit* (per the LiftMaster manual)
-  and wire their contacts to GATE IN1 / IN2 through the opto board (below). K1 NO/COM → OPEN + COM,
+  and wire their contacts to GATE IN1 / IN2 through the opto board (below). The closed-limit relay (AUX 2)
+  *energizes when not at the close limit*, so take IN2 from its **NC** contact; the open-limit relay from NO. K1 NO/COM → OPEN + COM,
   K2 NO/COM → CLOSE + COM. The OPEN/CLOSE inputs are shared with an AES Prime Edge cellular controller and a
   siren sensor, which is why the relays are only ever pulsed (default 500 ms), never held.
 - **Opto board:** a 4-channel PNP-output opto isolator (NOYITO MT-301R4P-P), OUT1–OUT4 → IN1–IN4, output
   GND → board GND, output VCC → the board's **3.3 V only** (a PNP output passes VCC straight to the pin). On the
-  24 V side, wet each AUX limit contact from the opener's 24 V (24 V → AUX C, AUX NO → opto input) and put channel 3
+  24 V side, wet each AUX limit contact from the opener's 24 V accessory output (24 V → AUX C; open limit
+  AUX NO → opto ch1, closed limit AUX NC → opto ch2) and put channel 3
   across the 24 V; OUT4 is spare. A lit opto reads active; power loss, a dead opto or a cut wire reads off — "not
-  at a limit", never closed. Leave the gate's `inN_invert` toggles off: inverting would make those faults read
+  at a limit", never closed. The NC closed-limit contact keeps that: with the opener dead its accessory output has
+  no 24 V to wet the contact, so IN2 reads off even though the relay has dropped. Wet the limits from the
+  accessory output, not the AC 24 V supply, or a dead opener on AC would read closed. Leave the gate's `inN_invert` toggles off: inverting would make those faults read
   active.
 - **Gate IN3 = AC power sense** (`power_sense`, default on). An opto channel across the 120 VAC → 24 V supply
   (the one feeding the AES controller) drives IN3; the CSW24UL has battery backup and keeps running without AC.

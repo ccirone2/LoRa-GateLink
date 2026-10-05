@@ -10,7 +10,7 @@
   "bands": [
     {
       "id": "gate",
-      "name": "Gate side and GateSim",
+      "name": "Gate",
       "devices": [
         "psu24",
         "gate_buck",
@@ -24,7 +24,7 @@
     },
     {
       "id": "house",
-      "name": "House side",
+      "name": "House",
       "devices": [
         "psu12",
         "house_buck",
@@ -40,6 +40,10 @@
     {
       "device": "ftdi",
       "under": "gate"
+    },
+    {
+      "device": "ftdi_h",
+      "under": "house"
     }
   ],
   "buses": [
@@ -58,13 +62,13 @@
     {
       "id": "v5_g",
       "band": "gate",
-      "name": "Gate +5 V (buck → VIN)",
+      "name": "+5 V (buck → VIN)",
       "color": "orange"
     },
     {
       "id": "v33_g",
       "band": "gate",
-      "name": "Gate 3.3 V",
+      "name": "3.3 V",
       "color": "yellow"
     },
     {
@@ -76,7 +80,7 @@
     {
       "id": "batt_g",
       "band": "gate",
-      "name": "Gate LiPo",
+      "name": "LiPo",
       "color": "pink"
     },
     {
@@ -94,19 +98,19 @@
     {
       "id": "v5_h",
       "band": "house",
-      "name": "House +5 V (buck → VIN)",
+      "name": "+5 V (buck → VIN)",
       "color": "orange"
     },
     {
       "id": "v33_h",
       "band": "house",
-      "name": "House 3.3 V",
+      "name": "3.3 V",
       "color": "yellow"
     },
     {
       "id": "batt_h",
       "band": "house",
-      "name": "House LiPo",
+      "name": "LiPo",
       "color": "pink"
     }
   ],
@@ -118,7 +122,8 @@
       "top": [
         "+24 V",
         "0 V"
-      ]
+      ],
+      "bench": true
     },
     {
       "id": "uno",
@@ -129,19 +134,29 @@
         "GND"
       ],
       "right": [
+        "",
         "D2",
+        "",
         "D3",
+        "",
         "D4",
+        "",
         "D5",
+        "",
         "D6",
+        "",
         "D7",
+        "",
         "D8",
+        "",
         "D9",
+        "",
         "D10"
       ],
       "bottom": [
         "USB"
-      ]
+      ],
+      "bench": true
     },
     {
       "id": "rig",
@@ -153,16 +168,25 @@
       ],
       "left": [
         "IN1",
+        "",
         "IN2",
+        "",
         "IN3",
-        "IN4"
+        "",
+        "IN4",
+        ""
       ],
       "right": [
-        "CH1 COM/NC",
-        "CH2 COM/NC",
-        "CH3 COM/NC",
-        "CH4 COM/NC"
-      ]
+        "CH1 COM",
+        "CH1 NC",
+        "CH2 COM",
+        "CH2 NC",
+        "CH3 COM",
+        "CH3 NC",
+        "CH4 COM",
+        "CH4 NC"
+      ],
+      "bench": true
     },
     {
       "id": "sim_relays",
@@ -170,47 +194,59 @@
       "note": "Active-HIGH (polarity high), coils from the Uno",
       "top": [
         "VCC",
-        "GND",
-        "CH1 COM",
-        "CH2 COM",
-        "CH3 COM"
+        "GND"
       ],
       "left": [
+        "",
         "IN1",
+        "",
         "IN2",
+        "",
         "IN3"
       ],
       "right": [
+        "CH1 COM",
         "CH1 NO",
+        "CH2 COM",
         "CH2 NC",
+        "CH3 COM",
         "CH3 NO"
-      ]
+      ],
+      "bench": true
     },
     {
       "id": "gate_opto",
-      "name": "Gate opto (MT-301R4P-P, PNP)",
-      "note": "Input side 24 V, output side from the gate board's 3.3 V",
+      "name": "24 V to 3.3 V Optocoupler",
+      "note": "Input side 24 V (a ± pair per channel), output side from the gate board's 3.3 V",
       "top": [
         "VCC out",
-        "GND out",
-        "in COM"
+        "GND out"
       ],
       "left": [
-        "in 1",
-        "in 2",
-        "in 3",
-        "in 4"
+        "1−",
+        "1+",
+        "2−",
+        "2+",
+        "3−",
+        "3+",
+        "4−",
+        "4+"
       ],
       "right": [
+        "",
         "OUT1",
+        "",
         "OUT2",
+        "",
         "OUT3",
+        "",
         "OUT4"
-      ]
+      ],
+      "sub": "MT-301R4P-P (PNP)"
     },
     {
       "id": "gate",
-      "name": "Gate MKR WAN 1310 + Relay Proto Shield",
+      "name": "MKR WAN 1310 + Relay Proto Shield",
       "note": "COM6 on a power-blocked USB cable. Role gate",
       "top": [
         "VIN",
@@ -219,16 +255,20 @@
         "BATT"
       ],
       "left": [
+        "",
         "IN1 (A1)",
+        "",
         "IN2 (A2)",
+        "",
         "IN3 (A3)",
+        "",
         "IN4 (A4)"
       ],
       "right": [
-        "K1 NO",
         "K1 COM",
-        "K2 NO",
-        "K2 COM"
+        "K1 NO",
+        "K2 COM",
+        "K2 NO"
       ],
       "bottom": [
         "USB",
@@ -239,7 +279,7 @@
     },
     {
       "id": "gate_buck",
-      "name": "24 V → 5 V buck (gate)",
+      "name": "24 V → 5 V buck",
       "top": [
         "IN +",
         "IN −",
@@ -249,7 +289,7 @@
     },
     {
       "id": "gate_lipo",
-      "name": "Gate LiPo (1S)",
+      "name": "LiPo (1S)",
       "note": "Not fitted yet",
       "top": [
         "+",
@@ -267,7 +307,8 @@
       ],
       "bottom": [
         "USB"
-      ]
+      ],
+      "bench": true
     },
     {
       "id": "psu12",
@@ -276,20 +317,37 @@
       "top": [
         "+12 V",
         "0 V"
-      ]
+      ],
+      "bench": true
     },
     {
       "id": "house_opto",
-      "name": "House opto (12 V in, PNP)",
-      "note": "Controller power sense for IN2. Board model to confirm",
+      "name": "12 V to 3.3 V Optocoupler",
+      "note": "Controller power sense for IN2, on channel 1. Same board as the gate opto, 12 V input version",
       "top": [
-        "in +",
-        "in −",
         "VCC out",
         "GND out"
       ],
       "right": [
-        "OUT"
+        "",
+        "OUT1",
+        "",
+        "OUT2",
+        "",
+        "OUT3",
+        "",
+        "OUT4"
+      ],
+      "sub": "MT-301R4P-P (PNP)",
+      "left": [
+        "1−",
+        "1+",
+        "2−",
+        "2+",
+        "3−",
+        "3+",
+        "4−",
+        "4+"
       ]
     },
     {
@@ -298,10 +356,10 @@
       "note": "Home Assistant switch.wave_1. SW input in follow mode",
       "top": [
         "+",
-        "−",
-        "I"
+        "−"
       ],
       "right": [
+        "I",
         "O",
         "SW",
         "SW common"
@@ -309,7 +367,7 @@
     },
     {
       "id": "house",
-      "name": "House MKR WAN 1310 + Relay Proto Shield",
+      "name": "MKR WAN 1310 + Relay Proto Shield",
       "note": "COM5 on a power-blocked USB cable. Role house",
       "top": [
         "VIN",
@@ -330,12 +388,29 @@
         "K2 NO"
       ],
       "bottom": [
-        "USB"
+        "USB",
+        "13 RX",
+        "14 TX",
+        "GND (UART)"
       ]
     },
     {
+      "id": "ftdi_h",
+      "name": "FTDI FT232R (3.3 V)",
+      "note": "Planned. Read-only tap on the house UART console",
+      "top": [
+        "TX",
+        "RX",
+        "GND"
+      ],
+      "bottom": [
+        "USB"
+      ],
+      "bench": true
+    },
+    {
       "id": "house_buck",
-      "name": "12 V → 5 V buck (house)",
+      "name": "12 V → 5 V buck",
       "top": [
         "IN +",
         "IN −",
@@ -354,7 +429,7 @@
     },
     {
       "id": "house_lipo",
-      "name": "House LiPo (1S)",
+      "name": "LiPo (1S)",
       "note": "Not fitted yet",
       "top": [
         "+",
@@ -364,7 +439,8 @@
     {
       "id": "pc",
       "name": "PC (USB)",
-      "note": "Runs the e2e suite and the web console"
+      "note": "Runs the e2e suite and the web console",
+      "bench": true
     }
   ],
   "wires": [
@@ -403,7 +479,9 @@
       "bus": "v24",
       "status": "connected",
       "signal": "24 V into the buck",
-      "note": "Moves behind the rig's CH1 NC (D7) when the rig is installed"
+      "note": "Moves behind the rig's CH1 NC (D7) when the rig is installed",
+      "cut": 1,
+      "com": "to"
     },
     {
       "from": "gate_buck:IN −",
@@ -412,11 +490,22 @@
       "signal": "24 V return"
     },
     {
-      "from": "gate_opto:in COM",
+      "from": "gate_opto:1−",
       "bus": "gnd_g",
-      "status": "unverified",
-      "signal": "Opto input return",
-      "note": "Per the opto board's input markings"
+      "status": "connected",
+      "signal": "Opto input 1 return"
+    },
+    {
+      "from": "gate_opto:2−",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "Opto input 2 return"
+    },
+    {
+      "from": "gate_opto:3−",
+      "bus": "gnd_g",
+      "status": "connected",
+      "signal": "Opto input 3 return"
     },
     {
       "from": "gate_buck:OUT +",
@@ -478,13 +567,13 @@
     {
       "from": "sim_relays:VCC",
       "bus": "v5_uno",
-      "status": "unverified",
+      "status": "connected",
       "signal": "Relay coil supply"
     },
     {
       "from": "sim_relays:GND",
       "bus": "gnd_g",
-      "status": "unverified",
+      "status": "connected",
       "signal": "Relay module GND"
     },
     {
@@ -498,7 +587,9 @@
       "bus": "batt_g",
       "status": "planned",
       "signal": "LiPo +",
-      "note": "Through the rig's CH2 NC (D8)"
+      "note": "Through the rig's CH2 NC (D8)",
+      "cut": 2,
+      "com": "from"
     },
     {
       "from": "gate_lipo:−",
@@ -570,37 +661,74 @@
       "color": "orange"
     },
     {
-      "from": "rig:CH1 COM/NC",
-      "label": "in series: +24 V → gate buck IN +",
+      "from": "rig:CH1 COM",
+      "label": "+24 V (supply)",
       "status": "planned",
       "signal": "Gate supply (D7)",
-      "color": "red"
+      "color": "red",
+      "cut": 1
     },
     {
-      "from": "rig:CH2 COM/NC",
-      "label": "in series: gate LiPo +",
+      "from": "rig:CH1 NC",
+      "label": "gate buck IN +",
+      "status": "planned",
+      "signal": "Gate supply (D7)",
+      "color": "red",
+      "cut": 1
+    },
+    {
+      "from": "rig:CH2 COM",
+      "label": "gate LiPo +",
       "status": "planned",
       "signal": "Gate LiPo (D8)",
-      "color": "red"
+      "color": "red",
+      "cut": 2
     },
     {
-      "from": "rig:CH3 COM/NC",
-      "label": "in series: house +12 V rail",
+      "from": "rig:CH2 NC",
+      "label": "gate BATT",
+      "status": "planned",
+      "signal": "Gate LiPo (D8)",
+      "color": "red",
+      "cut": 2
+    },
+    {
+      "from": "rig:CH3 COM",
+      "label": "+12 V (supply)",
       "status": "planned",
       "signal": "House rail (D9)",
       "note": "Cuts the Shelly, IN2 opto and house buck together",
-      "color": "red"
+      "color": "red",
+      "cut": 3
     },
     {
-      "from": "rig:CH4 COM/NC",
-      "label": "in series: house LiPo +",
+      "from": "rig:CH3 NC",
+      "label": "house +12 V rail",
+      "status": "planned",
+      "signal": "House rail (D9)",
+      "note": "Cuts the Shelly, IN2 opto and house buck together",
+      "color": "red",
+      "cut": 3
+    },
+    {
+      "from": "rig:CH4 COM",
+      "label": "house LiPo +",
       "status": "planned",
       "signal": "House LiPo (D10)",
-      "color": "red"
+      "color": "red",
+      "cut": 4
+    },
+    {
+      "from": "rig:CH4 NC",
+      "label": "house BATT",
+      "status": "planned",
+      "signal": "House LiPo (D10)",
+      "color": "red",
+      "cut": 4
     },
     {
       "from": "sim_relays:CH1 NO",
-      "to": "gate_opto:in 1",
+      "to": "gate_opto:1+",
       "status": "connected",
       "signal": "Open limit (AUX 1, NO)",
       "note": "Confirmed by the e2e suite",
@@ -608,7 +736,7 @@
     },
     {
       "from": "sim_relays:CH2 NC",
-      "to": "gate_opto:in 2",
+      "to": "gate_opto:2+",
       "status": "connected",
       "signal": "Closed limit (AUX 2, NC)",
       "note": "Moved from NO to NC 2026-10-04. The coil is driven inverted",
@@ -616,14 +744,14 @@
     },
     {
       "from": "sim_relays:CH3 NO",
-      "to": "gate_opto:in 3",
+      "to": "gate_opto:3+",
       "status": "connected",
       "signal": "AC power",
       "note": "Confirmed by the e2e suite",
       "color": "purple"
     },
     {
-      "from": "gate_opto:in 4",
+      "from": "gate_opto:4+",
       "status": "open",
       "signal": "Spare"
     },
@@ -713,26 +841,31 @@
       "from": "gate:USB",
       "to": "pc",
       "status": "connected",
-      "signal": "COM6, data only (power-blocked)"
+      "signal": "COM6, data only (power-blocked)",
+      "usb": "data"
     },
     {
       "from": "ftdi:USB",
       "to": "pc",
       "status": "connected",
-      "signal": "COM12"
+      "signal": "COM12",
+      "usb": "powered"
     },
     {
       "from": "uno:USB",
       "to": "pc",
       "status": "connected",
       "signal": "COM10",
-      "note": "Opening it resets the Uno unless DTR is off"
+      "note": "Opening it resets the Uno unless DTR is off",
+      "usb": "powered"
     },
     {
       "from": "psu12:+12 V",
       "bus": "v12",
       "status": "connected",
-      "signal": "12 V supply"
+      "signal": "12 V supply",
+      "cut": 3,
+      "com": "from"
     },
     {
       "from": "psu12:0 V",
@@ -741,13 +874,13 @@
       "signal": "12 V return"
     },
     {
-      "from": "house_opto:in +",
+      "from": "house_opto:1+",
       "bus": "v12",
       "status": "connected",
       "signal": "Senses the 12 V rail"
     },
     {
-      "from": "house_opto:in −",
+      "from": "house_opto:1−",
       "bus": "gnd_h",
       "status": "connected",
       "signal": "Opto input return"
@@ -838,7 +971,9 @@
       "bus": "batt_h",
       "status": "planned",
       "signal": "LiPo +",
-      "note": "Through the rig's CH4 NC (D10)"
+      "note": "Through the rig's CH4 NC (D10)",
+      "cut": 4,
+      "com": "from"
     },
     {
       "from": "house_lipo:−",
@@ -855,7 +990,7 @@
       "color": "green"
     },
     {
-      "from": "house_opto:OUT",
+      "from": "house_opto:OUT1",
       "to": "house:IN2 (A2)",
       "status": "connected",
       "signal": "Controller power sense",
@@ -890,7 +1025,7 @@
     {
       "from": "house:K2 COM",
       "to": "sensor:term A",
-      "status": "unverified",
+      "status": "planned",
       "signal": "Gate closed (contact sensor)",
       "note": "The suite checks K2's relay state only",
       "color": "brown"
@@ -898,7 +1033,7 @@
     {
       "from": "house:K2 NO",
       "to": "sensor:term B",
-      "status": "unverified",
+      "status": "planned",
       "signal": "Gate closed (contact sensor)",
       "color": "brown"
     },
@@ -906,7 +1041,37 @@
       "from": "house:USB",
       "to": "pc",
       "status": "connected",
-      "signal": "COM5, data only (power-blocked)"
+      "signal": "COM5, data only (power-blocked)",
+      "usb": "data"
+    },
+    {
+      "from": "house:13 RX",
+      "to": "ftdi_h:TX",
+      "via": "10 kΩ",
+      "status": "planned",
+      "signal": "UART console in",
+      "color": "orange"
+    },
+    {
+      "from": "house:14 TX",
+      "to": "ftdi_h:RX",
+      "status": "planned",
+      "signal": "UART console out",
+      "color": "yellow"
+    },
+    {
+      "from": "house:GND (UART)",
+      "to": "ftdi_h:GND",
+      "status": "planned",
+      "signal": "UART ground",
+      "color": "black"
+    },
+    {
+      "from": "ftdi_h:USB",
+      "to": "pc",
+      "status": "planned",
+      "signal": "House FTDI",
+      "usb": "powered"
     }
   ]
 }

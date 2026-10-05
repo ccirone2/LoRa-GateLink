@@ -23,7 +23,7 @@ python tools/gatelink.py snapshot | restore    # save config before flashing / r
 python tools/gatelink.py house hist --csv f.csv # link quality history (hourly buckets) as CSV
 ```
 
-`tools/bench-wiring/` is the agreed record of every bench wire (`wiring.json`, shown by `index.html`: `python -m http.server 8001 -d tools/bench-wiring`). Update `wiring.json` in the same session whenever a wire moves or is confirmed; the user edits it in the page.
+`tools/bench-wiring/` is the agreed record of every bench wire (`wiring.json`, shown by `index.html`: `python tools/bench-wiring/serve.py`, which also saves the page's edits back to it). Update `wiring.json` in the same session whenever a wire moves or is confirmed; the user edits it in the page.
 
 `tools/GateSim/` is a separate bench-only Uno sketch (`--fqbn arduino:avr:uno`) that simulates the CSW24UL's limits, power and OPEN/CLOSE inputs for the gate board; see `tools/GateSim/README.md`. It is not GateLink firmware.
 

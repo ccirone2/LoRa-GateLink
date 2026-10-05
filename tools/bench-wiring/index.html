@@ -9,12 +9,14 @@
     --bg: #f6f6f3; --panel: #ffffff; --ink: #1d1f21; --muted: #6b6f76; --line: #d4d6da; --accent: #2f6fd6;
     --box: #ffffff; --boxline: #3a3d42; --bus: #3a3d42;
     --connected: #1d1f21; --unverified: #c77700; --planned: #2f6fd6; --open: #a0a5ab; --sel: #e0398a;
+    --bench: #0f9b8e;  /* border of bench-rig-only devices; teal is no wire colour */
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #15171a; --panel: #1f2226; --ink: #e6e7e9; --muted: #9aa0a6; --line: #34383d; --accent: #6ea0ff;
       --box: #1f2226; --boxline: #b9bec5; --bus: #b9bec5;
       --connected: #e6e7e9; --unverified: #f0a33a; --planned: #6ea0ff; --open: #6b7178; --sel: #ff6eb4;
+      --bench: #3cc9b9;
     }
   }
   * { box-sizing: border-box; }
@@ -36,6 +38,11 @@
   svg { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
   svg text { fill: var(--ink); font-size: 11px; font-family: system-ui, sans-serif; }
   .box { fill: var(--box); stroke: var(--boxline); stroke-width: 1.4; }
+  .usbcore { fill: none; stroke: #d62828; stroke-width: .9; }
+  .usbtag { fill: var(--panel); stroke: #8d939a; }
+  .box.bench { stroke: var(--bench); stroke-width: 2.4; }
+  .benchkey { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  .benchkey i { width: 18px; height: 12px; border: 2.4px solid var(--bench); border-radius: 3px; }
   .dname { font-weight: 600; font-size: 12px; }
   .term { fill: var(--panel); stroke: var(--boxline); stroke-width: 1.2; }
   .tlabel { fill: var(--muted); font-size: 10px; }
@@ -45,9 +52,14 @@
   .wire { fill: none; stroke-width: 2.2; stroke-linejoin: round; }
   .halo { fill: none; stroke: var(--muted); stroke-width: 4; stroke-linejoin: round; opacity: .55; }
   .hit { fill: none; stroke: transparent; stroke-width: 10; cursor: pointer; }
-  .wire.sel { stroke: var(--sel) !important; stroke-width: 3.2; }
+  .selglow { fill: none; stroke: var(--sel); stroke-width: 10; stroke-linejoin: round; stroke-linecap: round; opacity: .35; }
   .dot { stroke: none; }
-  .bandname { font-size: 13px; font-weight: 700; fill: var(--muted); }
+  .cut path { fill: var(--panel); stroke: var(--ink); stroke-width: 1.3; }
+  .cut text { font-size: 9.5px; font-weight: 700; }
+  .cut .pol { fill: var(--ink); stroke: none; }
+  .dsub { font-size: 10.5px; fill: var(--muted); }
+  .band { fill: none; stroke: var(--boxline); stroke-width: 1; opacity: .45; }
+  .bandname { font-size: 15px; font-weight: 700; fill: var(--ink); }
   .via { font-size: 10px; font-weight: 600; }
   #panel { position: fixed; right: 16px; bottom: 16px; width: 340px; background: var(--panel); border: 1px solid var(--line);
     border-radius: 10px; padding: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); display: none; z-index: 4; }
@@ -72,6 +84,10 @@
   <button id="save" disabled title="Ctrl+S">Save</button>
   <button id="fit" title="Fit the diagram to the window, or show it at full size">Actual size</button>
   <span id="chips"></span>
+  <span class="benchkey" title="Devices with this border are only part of the bench test rig, not the install"><i></i>bench rig only</span>
+  <span class="benchkey" title="USB cable that carries 5 V (red core) or is power-blocked (data only)">
+    <svg width="26" height="8"><line x1="1" y1="4" x2="25" y2="4" stroke="#8d939a" stroke-width="2.2"></line><line x1="1" y1="4" x2="25" y2="4" stroke="#d62828" stroke-width=".9"></line></svg>USB powered
+    <svg width="26" height="8"><line x1="1" y1="4" x2="25" y2="4" stroke="#8d939a" stroke-width="2.2"></line></svg>USB data only</span>
   <span id="msg"></span>
 </header>
 <div id="wrap"><div id="diagram"></div></div>
@@ -107,32 +123,55 @@ function wireColor(w) {
 }
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-let data, handle = null, dirty = false, selected = null, fit = true;
+let data, handle = null, serverSave = false, dirty = false, selected = null, fit = true;
 const shown = new Set(STATUS);
+// The dialog fallback reopens in the folder picked last time.
+const PICK = { id: 'bench-wiring', types: [{ description: 'Wiring', accept: { 'application/json': ['.json'] } }] };
 
-// ---- file handling (Chrome/Edge File System Access; fetch when served read-only) -------------------------------------
+// ---- file handling: serve.py saves back to the served wiring.json; otherwise Chrome/Edge File System Access -------------
 function msg(t, warn) { $('msg').textContent = t; $('msg').className = warn ? 'warn' : ''; }
 function setDirty(d) {
   dirty = d; $('save').disabled = !d; $('save').classList.toggle('primary', d);
-  if (d) msg(handle ? 'Unsaved changes' : 'Unsaved changes: Open wiring.json… to save them', true);
+  if (d) msg(handle || serverSave ? 'Unsaved changes' : 'Unsaved changes: Save asks where wiring.json is', true);
 }
 async function loadHandle() { data = JSON.parse(await (await handle.getFile()).text()); setDirty(false); draw(); msg(`Loaded ${handle.name}`); }
 async function loadFetch() {
-  try { data = await (await fetch('wiring.json', { cache: 'no-store' })).json(); setDirty(false); draw(); msg('Read-only: Open wiring.json… to edit'); }
-  catch (e) { msg('Serve this folder (python -m http.server) or use Open wiring.json…', true); }
+  try {
+    const r = await fetch('wiring.json', { cache: 'no-store' });
+    serverSave = r.headers.get('X-Bench-Wiring-Save') === '1';
+    $('open').classList.toggle('primary', !serverSave);
+    data = await r.json(); setDirty(false); draw();
+    msg(serverSave ? 'Save writes the served wiring.json' : 'Plain server: Save asks for the file (serve.py saves in place)');
+  } catch (e) { msg('Serve this folder (python tools/bench-wiring/serve.py) or use Open wiring.json…', true); }
 }
 $('open').onclick = async () => {
   if (!window.showOpenFilePicker) return msg('Needs Chrome or Edge to save', true);
   if (dirty && !confirm('Discard unsaved changes?')) return;
-  [handle] = await window.showOpenFilePicker({ types: [{ description: 'Wiring', accept: { 'application/json': ['.json'] } }] });
+  try { [handle] = await window.showOpenFilePicker(PICK); } catch (e) { return; }
   await loadHandle();
 };
 $('reload').onclick = () => { if (dirty && !confirm('Discard unsaved changes?')) return; handle ? loadHandle() : loadFetch(); };
 async function save() {
-  if (!dirty || !handle) return;
-  data.updated = new Date().toISOString().slice(0, 10);
-  const w = await handle.createWritable(); await w.write(JSON.stringify(data, null, 2) + '\n'); await w.close();
-  setDirty(false); msg(`Saved ${new Date().toLocaleTimeString()}`); draw();
+  if (!dirty) return;
+  try {
+    data.updated = new Date().toISOString().slice(0, 10);
+    const text = JSON.stringify(data, null, 2) + '\n';
+    if (!handle && serverSave) {
+      const r = await fetch('wiring.json', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: text });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      setDirty(false); msg(`Saved ${new Date().toLocaleTimeString()}`); draw();
+      return;
+    }
+    // Plain server: ask where wiring.json is (once), then keep that handle.
+    if (!handle) {
+      if (!window.showSaveFilePicker) return msg('Needs Chrome or Edge to save', true);
+      handle = await window.showSaveFilePicker({ ...PICK, suggestedName: 'wiring.json' });
+    }
+    const w = await handle.createWritable(); await w.write(text); await w.close();
+    setDirty(false); msg(`Saved to ${handle.name} ${new Date().toLocaleTimeString()}`); draw();
+  } catch (e) {
+    if (e.name !== 'AbortError') msg(`Save failed: ${e.message}`, true);
+  }
 }
 $('save').onclick = save;
 document.addEventListener('keydown', (e) => {
@@ -150,11 +189,11 @@ function nameLines(name, w) {
   const i = name.lastIndexOf(' ', max);
   return [name.slice(0, i > 0 ? i : max), name.slice(i > 0 ? i + 1 : max)];
 }
-function measure(d) {
+function measure(d, width) {
   const top = d.top || [], bottom = d.bottom || [], left = d.left || [], right = d.right || [];
   const side = Math.max(...left.map(tw), 0) + Math.max(...right.map(tw), 0) + 40;
-  const w = Math.max(L.minW, Math.min(tw(d.name) * 1.1 + 24, 260), side, (top.length + 0.4) * L.tbPitch, (bottom.length + 0.4) * L.tbPitch);
-  const lines = nameLines(d.name, w).length;
+  const w = width || Math.max(L.minW, Math.min(tw(d.name) * 1.1 + 24, 260), side, (top.length + 0.4) * L.tbPitch, (bottom.length + 0.4) * L.tbPitch);
+  const lines = nameLines(d.name, w).length + (d.sub ? 1 : 0);
   const h = L.labelZone + 8 + lines * L.nameLine + 6 + Math.max(left.length, right.length) * L.sidePitch + (bottom.length ? L.labelZone + 4 : 6);
   return { w, h, lines };
 }
@@ -163,7 +202,7 @@ function termPos(box, name) {
   const d = box.d;
   for (const side of ['top', 'bottom', 'left', 'right']) {
     const list = d[side] || [];
-    const i = list.indexOf(name);
+    const i = name ? list.indexOf(name) : -1;  // "" is a spacer, never a terminal
     if (i < 0) continue;
     if (side === 'top' || side === 'bottom') {
       const x = box.x + (i + 0.7) * (box.w / (list.length + 0.4));
@@ -186,18 +225,39 @@ function layoutBand(band, y0, devs) {
   const busTop = y0 + 34;
   busList.forEach((b, i) => { buses[b.id] = { ...b, y: busTop + i * L.busPitch, xs: [] }; });
   const rowTop = busTop + busList.length * L.busPitch + 26;
+  // Every box in the row gets the same header height, so side terminals line up across boxes.
+  const ms = band.devices.map((id) => measure(devs[id]));
+  const lines = Math.max(...ms.map((m) => m.lines));
   let x = L.gutter;
-  for (const id of band.devices) {
-    const m = measure(devs[id]);
-    boxes[id] = { id, x, y: rowTop, ...m, d: devs[id] };
+  band.devices.forEach((id, k) => {
+    const m = ms[k], h = m.h + (lines - m.lines) * L.nameLine;
+    boxes[id] = { id, x, y: rowTop, ...m, h, lines, d: devs[id] };
     x += m.w + L.gap;
-  }
+  });
   const width = x - L.gap + 230;  // room for off-diagram labels on the right
   const rowBottom = rowTop + Math.max(...Object.values(boxes).map((b) => b.h));
   const comms = (data.comms || []).filter((c) => band.devices.includes(c.under));
   for (const c of comms) {
-    const m = measure(devs[c.device]), over = boxes[c.under];
-    boxes[c.device] = { id: c.device, x: over.x + over.w / 2 - m.w / 2, y: 0, ...m, d: devs[c.device], comms: true };
+    const d = devs[c.device], over = boxes[c.under];
+    let m = measure(d), cx = over.x + over.w / 2 - m.w / 2;
+    // Give the comms box the same terminal pitch as the bottom of the box above and shift it so each of its top
+    // terminals sits right under the one it's wired to: those wires drop straight down. Needs every pair at the same
+    // index offset (e.g. TX/RX/GND under 13 RX/14 TX/GND); otherwise it stays centred.
+    const top = d.top || [], bot = over.d.bottom || [], offs = new Set();
+    for (const w of data.wires) {
+      if (!w.to || w.to === 'pc') continue;
+      const [e1, e2] = [parse(w.from), parse(w.to)];
+      const [mine, other] = e1.dev === c.device ? [e1, e2] : [e2, e1];
+      if (mine.dev !== c.device || other.dev !== c.under) continue;
+      const i = top.indexOf(mine.term), j = bot.indexOf(other.term);
+      if (i >= 0 && j >= 0) offs.add(j - i);
+    }
+    if (offs.size === 1) {
+      const pitch = over.w / (bot.length + 0.4);
+      m = measure(d, pitch * (top.length + 0.4));
+      cx = over.x + [...offs][0] * pitch;
+    }
+    boxes[c.device] = { id: c.device, x: cx, y: 0, ...m, d, comms: true };
   }
   const wires = data.wires.map((w, i) => ({ w, i })).filter(({ w }) => boxes[parse(w.from).dev]);
   const blocked = (x1, x2) => Object.values(boxes).some((b) => !b.comms && b.x > Math.min(x1, x2) + 1 && b.x + b.w < Math.max(x1, x2) - 1);
@@ -223,19 +283,63 @@ function layoutBand(band, y0, devs) {
         const [P, Q] = A.x <= B.x ? [A, B] : [B, A];
         p.kind = P.side === 'right' && Q.side === 'left' && !blocked(P.x, Q.x) ? 'z' : 'lane';
       }
-      if (p.kind === 'lane') p.lane = ++lanes;
     }
     if (!p.kind) { console.warn('unknown bus', w.bus); continue; }
     plan.push(p);
   }
-  const laneY = (k) => rowBottom + 16 + k * L.lanePitch;
-  const commsY = laneY(lanes) + 30;
+  // A lane runs just under the boxes it passes (not the whole row), or level with its left terminal when that is
+  // lower still, so wires off a tall box (the Uno's D7-D10) run straight out. Lanes take tracks in the order of their
+  // left end, top terminal first, a lane pitch apart where their spans overlap, so they don't cross at that end.
+  const ends = (p) => {
+    const A = termPos(boxes[p.a.dev], p.a.term), B = termPos(boxes[p.b.dev], p.b.term);
+    return A.x <= B.x ? [A, B] : [B, A];
+  };
+  const placed = [];
+  plan.filter((p) => p.kind === 'lane').map((p) => ({ p, e: ends(p) }))
+    .sort((a, b) => a.e[0].x - b.e[0].x || a.e[0].y - b.e[0].y).forEach(({ p, e: [P, Q] }) => {
+      const under = Object.values(boxes).filter((b) => !b.comms && b.x < Q.x - 1 && b.x + b.w > P.x + 1);
+      let y = Math.max(...under.map((b) => b.y + b.h), rowTop) + 16;
+      if (P.side === 'right' && P.y > y) y = P.y;
+      const near = (o) => o.x1 < Q.x + 60 && P.x < o.x2 + 60 && Math.abs(o.y - y) < L.lanePitch;
+      while (placed.some(near)) y += L.lanePitch;
+      p.lane = ++lanes; p.laneY = y;
+      placed.push({ x1: P.x, x2: Q.x, y });
+    });
+  const commsY = Math.max(rowBottom + 16, ...placed.map((o) => o.y)) + 30;
   for (const c of comms) boxes[c.device].y = commsY;
-  const lowest = Math.max(rowBottom + 16 + lanes * L.lanePitch, ...comms.map((c) => commsY + boxes[c.device].h));
+  const lowest = Math.max(commsY - 30, ...comms.map((c) => commsY + boxes[c.device].h));
   const pcY = lowest + 36;
+  // A lane level with its terminal leaves straight out of it: no vertical run, so no slot.
+  const straight = (P, p) => Math.abs(P.y - p.laneY) < 0.5 && (P.side === 'right' || P.side === 'left');
 
-  // Pass 2: route.
-  const gapUse = {};
+  // Pass 2: every wire that leaves a box side and then runs vertically gets its own slot (x) in the gap, counted
+  // out from that side: bus drops first (top terminal innermost, so they don't cross each other), then Z jogs, then
+  // lane stubs (bottom terminal innermost).
+  const reqs = {};
+  const want = (P, p, rank) => {
+    if (P.side !== 'left' && P.side !== 'right') return;
+    (reqs[P.box.id + P.side] ||= []).push({ P, p, rank });
+  };
+  for (const p of plan) {
+    const A = termPos(boxes[p.a.dev], p.a.term), B = p.b && termPos(boxes[p.b.dev], p.b.term);
+    if (p.kind === 'bus') want(A, p, A.y);
+    else if (p.kind === 'z') {
+      const P = A.x <= B.x ? A : B, Q = P === A ? B : A;
+      if (Math.abs(P.y - Q.y) > 1) want(P, p, 1e5 + P.y);
+    } else if (p.kind === 'lane') {
+      if (!straight(A, p)) want(A, p, 2e5 - A.y);
+      if (!straight(B, p)) want(B, p, 2e5 - B.y);
+    }
+  }
+  const slot = new Map();  // `${wire}:${end x}` -> x of its vertical run
+  for (const list of Object.values(reqs)) {
+    list.sort((a, b) => a.rank - b.rank).forEach(({ P, p }, k) => {
+      slot.set(`${p.i}:${P.x}`, P.x + (P.side === 'right' ? 1 : -1) * (10 + k * 6));
+    });
+  }
+  const side = (P, p) => { const x = slot.get(`${p.i}:${P.x}`); return x === undefined ? null : { x, y: P.y }; };
+
+  // Pass 3: route.
   let vz = 0;
   const routes = [];
   for (const p of plan) {
@@ -246,12 +350,14 @@ function layoutBand(band, y0, devs) {
     if (p.kind === 'bus') {
       const bus = buses[w.bus];
       if (A.side === 'top') path = [A, { x: A.x, y: bus.y }];
-      else { const s = out(A, L.stub + 6); path = [A, s, { x: s.x, y: bus.y }]; }
+      else { const s = side(A, p) || out(A, L.stub + 6); path = [A, s, { x: s.x, y: bus.y }]; }
       junction = path[path.length - 1]; bus.xs.push(junction.x);
     } else if (p.kind === 'label') {
-      const s = out(A, 30); path = [A, s];
-      label = A.side === 'top' ? { x: s.x, y: s.y - 6, anchor: 'middle' }
-        : { x: s.x + (A.side === 'left' ? -4 : 4), y: s.y + 3.5, anchor: A.side === 'left' ? 'end' : 'start' };
+      const s = out(A, 30), gap = w.cut ? 22 : 4;  // room for the cut diamond at the stub's end
+      path = [A, s];
+      label = A.side === 'top' ? { x: s.x, y: s.y - 6 - (gap - 4), anchor: 'middle' }
+        : { x: s.x + (A.side === 'left' ? -gap : gap), y: s.y + 3.5, anchor: A.side === 'left' ? 'end' : 'start' };
+      if (w.cut) label.cut = out(A, 30 + 9);
       label.text = w.label;
     } else if (p.kind === 'open') {
       cross = out(A, 10); path = [A, cross];
@@ -259,17 +365,20 @@ function layoutBand(band, y0, devs) {
       path = [A, { x: A.x, y: pcY }];
     } else if (p.kind === 'z') {
       const [P, Q] = A.x <= B.x ? [A, B] : [B, A];
-      const k = gapUse[P.box.id] = (gapUse[P.box.id] || 0) + 1;
-      const mx = Math.min(P.x + L.stub + (k - 1) * 7, Q.x - 10);
-      path = [P, { x: mx, y: P.y }, { x: mx, y: Q.y }, Q];
+      const s = side(P, p);
+      path = s ? [P, s, { x: s.x, y: Q.y }, Q] : [P, Q];
     } else if (p.kind === 'vz') {
       const [P, Q] = A.y <= B.y ? [A, B] : [B, A];
-      const my = P.y + 12 + (vz++) * 6;
-      path = [P, { x: P.x, y: my }, { x: Q.x, y: my }, Q];
+      if (Math.abs(P.x - Q.x) < 1) path = [P, Q];
+      else { const my = P.y + 12 + (vz++) * 6; path = [P, { x: P.x, y: my }, { x: Q.x, y: my }, Q]; }
     } else {
-      const ly = laneY(p.lane), n = L.stub + p.lane * 3;
-      const sa = out(A, n), sb = out(B, n);
-      path = [A, sa, { x: sa.x, y: ly }, { x: sb.x, y: ly }, sb, B];
+      const ly = p.laneY, n = L.stub + p.lane * 3;
+      const leg = (P) => {
+        if (straight(P, p)) return [P];
+        const s = side(P, p) || out(P, n);
+        return [P, s, { x: s.x, y: ly }];
+      };
+      path = [...leg(A), ...leg(B).reverse()];
     }
     routes.push({ ...p, path, label, junction, cross });
   }
@@ -284,11 +393,10 @@ function draw() {
   for (const band of data.bands) { const B = layoutBand(band, y, devs); bands.push(B); y = B.bottom + 40; }
   const width = Math.max(...bands.map((b) => b.width)), height = y;
   let s = '';
-  const allBuses = {};
   for (const B of bands) {
-    Object.assign(allBuses, B.buses);
-    s += `<text class="bandname" x="20" y="${B.y0 + 20}">${esc(B.band.name)}</text>`;
-    if (B.y0 > 0) s += `<line x1="0" x2="${width}" y1="${B.y0 - 20}" y2="${B.y0 - 20}" stroke="var(--line)"></line>`;
+    // Each site is a container: names inside it don't repeat the site.
+    s += `<rect class="band" x="8" y="${B.y0 + 4}" width="${width - 16}" height="${B.bottom - B.y0 - 2}" rx="10"></rect>`;
+    s += `<text class="bandname" x="20" y="${B.y0 + 24}">${esc(B.band.name)}</text>`;
     for (const b of Object.values(B.buses)) {
       if (!b.xs.length) continue;
       const x1 = Math.min(...b.xs) - 10, x2 = Math.max(...b.xs) + 10;
@@ -299,15 +407,18 @@ function draw() {
     }
     const drops = B.routes.filter((r) => r.kind === 'pc').map((r) => r.path[0].x);
     if (drops.length) {
-      s += `<rect class="box" x="20" y="${B.pcY}" width="${width - 40}" height="26" rx="6"></rect>`;
+      s += `<rect class="box${devs.pc?.bench ? ' bench' : ''}" x="20" y="${B.pcY}" width="${width - 40}" height="26" rx="6"></rect>`;
       s += `<text class="dname" x="30" y="${B.pcY + 17}">${esc(devs.pc?.name || 'PC')}</text>`;
     }
     for (const b of Object.values(B.boxes)) {
-      s += `<g><rect class="box" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="6"><title>${esc(b.d.name)}${b.d.note ? '\n' + esc(b.d.note) : ''}</title></rect>`;
-      nameLines(b.d.name, b.w).forEach((ln, i) => {
+      s += `<g><rect class="box${b.d.bench ? ' bench' : ''}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="6"><title>${esc(b.d.name)}${b.d.note ? '\n' + esc(b.d.note) : ''}</title></rect>`;
+      const names = nameLines(b.d.name, b.w);
+      names.forEach((ln, i) => {
         s += `<text class="dname" x="${b.x + b.w / 2}" y="${b.y + L.labelZone + 8 + (i + 0.8) * L.nameLine}" text-anchor="middle">${esc(ln)}</text>`;
       });
+      if (b.d.sub) s += `<text class="dsub" x="${b.x + b.w / 2}" y="${b.y + L.labelZone + 8 + (names.length + 0.8) * L.nameLine}" text-anchor="middle">${esc(b.d.sub)}</text>`;
       for (const side of ['top', 'bottom', 'left', 'right']) for (const t of b.d[side] || []) {
+        if (!t) continue;
         const P = termPos(b, t);
         const lx = side === 'left' ? P.x + 6 : side === 'right' ? P.x - 6 : P.x;
         const ly = side === 'top' ? P.y + 12 : side === 'bottom' ? P.y - 5 : P.y + 3.5;
@@ -321,10 +432,34 @@ function draw() {
       const col = wireColor(r.w);
       // Underlay first, so black and white wires show on either background.
       s += `<path class="halo" d="${d}" stroke-dasharray="${DASH[r.w.status]}"></path>`;
-      s += `<path class="wire ${selected === r.i ? 'sel' : ''}" d="${d}" stroke="${col}" stroke-dasharray="${DASH[r.w.status]}"></path>`;
+      // The selected wire keeps its own colour; a soft glow behind it marks the selection.
+      if (selected === r.i) s += `<path class="selglow" d="${d}"></path>`;
+      s += `<path class="wire" d="${d}" stroke="${col}" stroke-dasharray="${DASH[r.w.status]}"></path>`;
+      // USB: a red core marks a cable that carries 5 V; a power-blocked one is tagged "data only".
+      if (r.w.usb === 'powered') s += `<path class="usbcore" d="${d}" stroke-dasharray="${DASH[r.w.status]}"></path>`;
+      if (r.w.usb === 'data') {
+        // Just above the PC strip, clear of the lanes the cable crosses on its way down.
+        const end = r.path[r.path.length - 1], mx = end.x, my = end.y - 18;
+        s += `<rect class="usbtag" x="${mx - 26}" y="${my - 8}" width="52" height="16" rx="3"></rect><text class="via" x="${mx}" y="${my + 4}" text-anchor="middle">data only</text>`;
+      }
       if (r.junction) s += `<circle class="dot" cx="${r.junction.x}" cy="${r.junction.y}" r="3.2" style="fill:${col};stroke:var(--muted);stroke-width:.8"></circle>`;
       if (r.cross) s += `<text x="${r.cross.x}" y="${r.cross.y + 4}" text-anchor="middle" style="fill:${col}">×</text>`;
       if (r.label) s += `<text x="${r.label.x}" y="${r.label.y}" text-anchor="${r.label.anchor}" style="fill:${col};font-size:10px">${esc(r.label.text)}</text>`;
+      // A numbered diamond marks where a power rig relay will break the wire, and the rig contact that breaks it.
+      if (r.w.cut) {
+        const [p0, p1] = r.path, len = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1, t = Math.min(13, len / 2);
+        const ux = (p1.x - p0.x) / len, uy = (p1.y - p0.y) / len;
+        const c = r.label?.cut || { x: p0.x + ux * t, y: p0.y + uy * t };
+        // Polarity dot beside the vertex on the side that goes to COM (com: "from" | "to").
+        let dot = '', side = '';
+        if (r.w.com) {
+          const k = r.w.com === 'to' ? 8 : -8;
+          dot = `<circle class="pol" cx="${c.x + ux * k - uy * 7}" cy="${c.y + uy * k + ux * 7}" r="2.4"></circle>`;
+          side = `, COM on the ${r.w.com === 'to' ? endName(r.w) : r.w.from} side`;
+        }
+        s += `<g class="cut"><title>Power rig CH${r.w.cut} breaks this wire${esc(side)}</title><path d="M${c.x},${c.y - 8} L${c.x + 8},${c.y} L${c.x},${c.y + 8} L${c.x - 8},${c.y} Z"></path>`
+          + `<text x="${c.x}" y="${c.y + 3.5}" text-anchor="middle">${r.w.cut}</text>${dot}</g>`;
+      }
       if (r.w.via) {
         const [p1, p2] = r.path.length > 2 ? [r.path[1], r.path[2]] : [r.path[0], r.path[1]];
         const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
@@ -333,6 +468,7 @@ function draw() {
       s += `<path class="hit" d="${d}" data-i="${r.i}"></path>`;
     }
     for (const b of Object.values(B.boxes)) for (const side of ['top', 'bottom', 'left', 'right']) for (const t of b.d[side] || []) {
+      if (!t) continue;
       const P = termPos(b, t);
       s += `<circle class="term" cx="${P.x}" cy="${P.y}" r="3"></circle>`;
     }
@@ -343,12 +479,12 @@ function draw() {
     const w = data.wires[h.dataset.i];
     h.onmousemove = (e) => {
       $('tip').style.display = 'block'; $('tip').style.left = e.clientX + 14 + 'px'; $('tip').style.top = e.clientY + 10 + 'px';
-      $('tip').innerHTML = `<b>${esc(w.signal || '')}</b><br>${esc(w.from)} → ${esc(endName(w, allBuses))}${w.via ? ' (via ' + esc(w.via) + ')' : ''}<br>${w.status}${w.note ? ' · ' + esc(w.note) : ''}`;
+      $('tip').innerHTML = `<b>${esc(w.signal || '')}</b><br>${esc(w.from)} → ${esc(endName(w))}${w.via ? ' (via ' + esc(w.via) + ')' : ''}<br>${w.status}${w.note ? ' · ' + esc(w.note) : ''}`;
     };
     h.onmouseleave = () => { $('tip').style.display = 'none'; };
     h.onclick = () => select(+h.dataset.i);
   });
-  chips(); todo(allBuses);
+  chips(); todo();
 }
 
 function chips() {
@@ -362,11 +498,16 @@ function chips() {
   });
 }
 
-function endName(w, buses) { return w.to === 'pc' ? 'PC' : w.to || (w.bus && buses[w.bus]?.name) || w.label || 'not connected'; }
-function todo(buses) {
+// Outside the diagram a bus name needs its site ("LiPo" alone could be either).
+function busName(id) {
+  const b = data.buses.find((x) => x.id === id);
+  return b && `${b.name} (${data.bands.find((x) => x.id === b.band)?.name || b.band})`;
+}
+function endName(w) { return w.to === 'pc' ? 'PC' : w.to || (w.bus && busName(w.bus)) || w.label || 'not connected'; }
+function todo() {
   const items = data.wires.map((w, i) => ({ w, i })).filter(({ w }) => w.status === 'unverified' || w.status === 'planned');
   $('todo').innerHTML = `<h2>Still to settle (${items.length})</h2><ul>` + items.map(({ w, i }) =>
-    `<li data-i="${i}"><span style="color:var(--${w.status})">${w.status}</span> · ${esc(w.signal || '')}: ${esc(w.from)} → ${esc(endName(w, buses))}</li>`).join('') + '</ul>';
+    `<li data-i="${i}"><span style="color:var(--${w.status})">${w.status}</span> · ${esc(w.signal || '')}: ${esc(w.from)} → ${esc(endName(w))}</li>`).join('') + '</ul>';
   document.querySelectorAll('#todo li').forEach((li) => li.onclick = () => select(+li.dataset.i));
 }
 
@@ -374,9 +515,8 @@ function select(i) {
   selected = i;
   if (i === null) { $('panel').style.display = 'none'; draw(); return; }
   const w = data.wires[i];
-  const busName = w.bus && data.buses.find((b) => b.id === w.bus)?.name;
   $('pSig').textContent = w.signal || 'Wire';
-  $('pEnds').textContent = `${w.from} → ${w.to === 'pc' ? 'PC' : w.to || busName || w.label || 'not connected'}${w.via ? ' (via ' + w.via + ')' : ''}`;
+  $('pEnds').textContent = `${w.from} → ${endName(w)}${w.via ? ' (via ' + w.via + ')' : ''}`;
   $('pStatus').innerHTML = STATUS.map((st) => `<option${st === w.status ? ' selected' : ''}>${st}</option>`).join('');
   $('pNote').value = w.note || '';
   $('pColor').innerHTML = `<option value="">(not set: default)</option>` + Object.keys(WIRE).map((c) => `<option${c === w.color ? ' selected' : ''}>${c}</option>`).join('');
@@ -388,6 +528,8 @@ $('pStatus').onchange = () => { data.wires[selected].status = $('pStatus').value
 $('pColor').onchange = () => { const w = data.wires[selected]; if ($('pColor').value) w.color = $('pColor').value; else delete w.color; setDirty(true); draw(); };
 $('pNote').oninput = () => { data.wires[selected].note = $('pNote').value; setDirty(true); };
 $('pClose').onclick = () => select(null);
+// Clicking anywhere in the diagram but a wire drops the selection.
+$('diagram').addEventListener('click', (e) => { if (selected !== null && !e.target.classList.contains('hit')) select(null); });
 
 loadFetch();
 </script>

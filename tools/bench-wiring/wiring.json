@@ -479,7 +479,7 @@
       "bus": "v24",
       "status": "connected",
       "signal": "24 V into the buck",
-      "note": "Moves behind the rig's CH1 NC (D7) when the rig is installed",
+      "note": "Through the rig's CH1 NC (D7)",
       "cut": 1,
       "com": "to"
     },
@@ -668,18 +668,20 @@
     {
       "from": "rig:CH1 COM",
       "label": "+24 V (supply)",
-      "status": "planned",
+      "status": "connected",
       "signal": "Gate supply (D7)",
       "color": "red",
-      "cut": 1
+      "cut": 1,
+      "note": "In the buck's IN+ branch only, after the split (moved there 2026-10-06; at first it cut the whole gate 24 V, wetting included). A cut: the gate rides on its LiPo and keeps reading its limits. The buck's capacitors hold its output for ~10 s once the board has switched to the LiPo"
     },
     {
       "from": "rig:CH1 NC",
       "label": "gate buck IN +",
-      "status": "planned",
+      "status": "connected",
       "signal": "Gate supply (D7)",
       "color": "red",
-      "cut": 1
+      "cut": 1,
+      "note": "In the buck's IN+ branch only, after the split (moved there 2026-10-06; at first it cut the whole gate 24 V, wetting included). A cut: the gate rides on its LiPo and keeps reading its limits. The buck's capacitors hold its output for ~10 s once the board has switched to the LiPo"
     },
     {
       "from": "rig:CH2 COM",
@@ -700,18 +702,18 @@
     {
       "from": "rig:CH3 COM",
       "label": "+12 V (supply)",
-      "status": "planned",
+      "status": "connected",
       "signal": "House rail (D9)",
-      "note": "Cuts the Shelly, IN2 opto and house buck together",
+      "note": "Cuts the Shelly, IN2 opto and house buck together. Checked 2026-10-06: the house rode on its LiPo, ctrl_power 0 then 1, no command",
       "color": "red",
       "cut": 3
     },
     {
       "from": "rig:CH3 NC",
       "label": "house +12 V rail",
-      "status": "planned",
+      "status": "connected",
       "signal": "House rail (D9)",
-      "note": "Cuts the Shelly, IN2 opto and house buck together",
+      "note": "Cuts the Shelly, IN2 opto and house buck together. Checked 2026-10-06: the house rode on its LiPo, ctrl_power 0 then 1, no command",
       "color": "red",
       "cut": 3
     },
@@ -926,7 +928,7 @@
       "bus": "v12",
       "status": "connected",
       "signal": "12 V into the buck",
-      "note": "The whole rail moves behind the rig's CH3 NC (D9)"
+      "note": "The whole rail runs through the rig's CH3 NC (D9)"
     },
     {
       "from": "house_buck:IN −",

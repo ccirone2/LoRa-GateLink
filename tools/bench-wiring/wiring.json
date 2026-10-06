@@ -511,7 +511,8 @@
       "from": "gate_buck:OUT +",
       "bus": "v5_g",
       "status": "connected",
-      "signal": "5 V out"
+      "signal": "5 V out",
+      "note": "Hold-up without LiPo (2026-10-06): the gate rides through supply cuts up to 0.5 s and goes down at ~0.6 s"
     },
     {
       "from": "gate_buck:OUT −",
@@ -940,7 +941,8 @@
       "from": "house_buck:OUT +",
       "bus": "v5_h",
       "status": "connected",
-      "signal": "5 V out"
+      "signal": "5 V out",
+      "note": "Hold-up without LiPo (2026-10-06): the house goes down ~0.1 s into a 12 V cut"
     },
     {
       "from": "house_buck:OUT −",

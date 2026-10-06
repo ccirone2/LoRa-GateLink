@@ -194,6 +194,28 @@ class Bench:
                 raise
             return None
 
+    def power_cut(self, site, ms):
+        """Cut a site's supply through the power rig (GateSim `rail <site> cut`, timed on the Uno): the gate board's
+        buck feed (rig CH1) or the house 12 V rail (CH3: controller, IN2 opto and house board). Without its LiPo the
+        board goes down (the gate holds ~0.6 s, the house ~0.1 s), so its reset is allowed."""
+        self.allow_reboot(site)
+        self.timeline.add("test", "action", text=f"power cut {site} {ms} ms", power_cut=site, ms=ms)
+        self.sim.cut(site, ms)
+
+    def wait_power_return(self, name, since, timeout=30, profile=True):
+        """After a power cut took `name` down: wait for its boot (heard first on its UART tap, before USB is back)
+        and its link, then put the test profile back (a boot loads the saved config) unless `profile` is False.
+        Returns the boot log entry."""
+        try:
+            boot = self.wait_log(name, "boot", since=since, timeout=timeout)
+        except AssertionError as e:
+            raise AssertionError(f"{name} didn't reboot after the power cut: is its LiPo still fitted, or the rig "
+                                 f"channel not wired?\n{e}") from None
+        self.wait_for(lambda: self.board(name).status()["link"]["verified"], 30, f"{name} link verified after power return")
+        if profile:
+            self.board(name).config_set(**self.profile[name])
+        return boot
+
     def relay_test(self, name, k, ms):
         """relay.test, recorded so the invariant checks can tell its pulse from one without a command."""
         self.timeline.add("test", "action", text=f"{name} relay.test K{k} {ms} ms", relay_test=name, k=k, ms=ms)
@@ -337,6 +359,8 @@ class Bench:
                     and e["t"] - int(parts[2]) / 1000 >= since):
                 releases[1 if parts[1] == "open" else 2].append((e["t"], int(parts[2])))
         tol = PULSE_TOL_MS + SIM_DEBOUNCE_MS
+        # The gate's supply cut by the power rig: a pulse it overlapped ends when the board goes down.
+        gate_cuts = [e["t"] for e in self.timeline.select(src="sim", kind="evt", since=since) if e["line"] == "rail gate off"]
         for e, want in pulses:
             found = next((r for r in releases[e["a"]] if e["t"] <= r[0] <= e["t"] + want / 1000 + 1.0), None)
             if found is None:
@@ -348,6 +372,8 @@ class Bench:
             # Interlock: a pulse on the other relay while this one is on cuts it short.
             cut = any(o["ev"] == "pulse" and o["a"] != e["a"] and e["t"] < o["t"] < e["t"] + want / 1000
                       for o in gate_logs)
+            if any(e["t"] - 1.0 <= c <= e["t"] + want / 1000 for c in gate_cuts):
+                continue  # cut short by the power cut, which is the point of that test
             if held > want + tol or (not cut and held < want - tol):
                 problems.append(f"gate relay {e['a']} pulse at {e['t']}s held {held} ms at the opener, "
                                 f"expected {want} ms ±{tol}" + (" (cut short by the other relay)" if cut else ""))

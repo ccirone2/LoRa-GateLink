@@ -24,6 +24,7 @@ GATELINK_KEY=<32 hex> pytest tests/e2e -k wrong_key   # wrong-key test, opt-in (
 GATELINK_KEY=<32 hex> pytest tests/e2e --restore-key -k boards_and_link   # put the shared key back on both boards
 pytest tests/e2e -m longsoak --soak-minutes 120   # hours-long run, outages and opener faults mixed in
 pytest tests/e2e -m rf --rf-cycles 5      # marginal link (2 dBm, SF12); see "Real RF" below
+pytest tests/e2e -m power                 # real power cuts through the power rig, LiPos out; see "Power rig" below
 ```
 
 Other options: `--house-port` / `--gate-port` (default: found by role), `GATELINK_SIM_PORT`,
@@ -53,6 +54,12 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
   then set `GATELINK_HA_POWER_ENTITY=switch.<plug>`. `test_controller_faults.py` then cuts real power, so the real
   relay-drops-before-opto race is tested (either order passes as long as nothing is commanded). Without it,
   controller power is simulated with house `in2_invert`.
+- **Power rig.** Relays on GateSim D7–D10 switch the boards' supplies (wiring: `tools/bench-wiring`; commands:
+  `tools/GateSim/README.md`): CH1 the gate buck's 24 V feed, CH3 the house 12 V rail (controller, IN2 opto, house
+  buck), CH2/CH4 the LiPos (not wired yet). `-m power` runs `test_power.py` with the LiPos out, so a cut takes
+  the board down (the gate holds ~0.6 s on its buck, the house ~0.1 s). Each test waits for the board's `boot` on
+  its UART tap, its link, and then puts the test profile back; a missing boot points at a fitted LiPo or an
+  unwired channel. Pulses that a gate power cut overlapped are exempt from the pulse-length check.
 - **Real RF.** `-m rf` runs pings and open/close cycles at `tx_power` 2 and SF12 and reports pings, RSSI/SNR,
   retries and giveups in the summary. Run it with an attenuator in line or the antennas off at the bench, and at
   the install site; also check ping and RSSI from the web console there.
@@ -71,6 +78,7 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
 | `test_remote.py` | `remote.set` over LoRa (applied, saved by the gate, put back), refused for non-remote params, `busy` while one is pending. `remote.diag`. A gate heartbeat longer than the house's `link_timeout_s` (house `link_timeout_eff_s`). The console's `line too long` reply |
 | `test_history.py` | Link history: bucket counters against the status totals, levels and the gate's side filled in. Rollover with 60 s buckets, and `hist.get` paging. Link-down seconds and the gate's STATUS retries across an outage |
 | `test_soak.py` | `-m longsoak`: open/close cycles, outages, opener power blips, external moves and jams in rotation; no resets or radio faults; counters to `soak_counters.csv` |
+| `test_power.py` | `-m power`: gate cut at rest (house doesn't notice), beyond the link timeout (sensor fails open, recovers), mid-pulse (one short press, no re-pulse), bounce (5 cuts, config intact), during a remote config save (old or new value, never defaults); house cut with the gate open (no command, controller back on); house 12 V dips; both sites at once |
 | `test_rf.py` | `-m rf`: the full loop over a marginal link (minimum power, SF12) |
 
 ## How it works

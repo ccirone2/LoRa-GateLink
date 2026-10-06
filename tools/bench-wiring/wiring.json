@@ -1,6 +1,6 @@
 {
   "title": "GateLink bench wiring",
-  "updated": "2026-10-05",
+  "updated": "2026-10-06",
   "statuses": {
     "connected": "In place and confirmed (by eye, a meter, or the e2e suite)",
     "unverified": "Believed to be in place (from the docs) but not confirmed yet",
@@ -579,29 +579,30 @@
     {
       "from": "gate:BATT",
       "bus": "batt_g",
-      "status": "planned",
+      "status": "connected",
       "signal": "Battery backup"
     },
     {
       "from": "gate_lipo:+",
       "bus": "batt_g",
-      "status": "planned",
+      "status": "connected",
       "signal": "LiPo +",
-      "note": "Through the rig's CH2 NC (D8)",
+      "note": "Plugged straight into the board for now (polarity was swapped at first, fixed 2026-10-06); moves through the rig's CH2 NC (D8). Rode through a bench-supply cut with no reset",
       "cut": 2,
       "com": "from"
     },
     {
       "from": "gate_lipo:−",
       "bus": "gnd_g",
-      "status": "planned",
+      "status": "connected",
       "signal": "LiPo −"
     },
     {
       "from": "rig:GND",
       "bus": "gnd_g",
-      "status": "planned",
-      "signal": "Rig GND"
+      "status": "connected",
+      "signal": "Rig GND",
+      "note": "Uno GND"
     },
     {
       "from": "uno:D2",
@@ -627,38 +628,42 @@
     {
       "from": "uno:D7",
       "to": "rig:IN1",
-      "status": "planned",
+      "status": "connected",
       "signal": "Gate supply cut",
-      "color": "grey"
+      "color": "grey",
+      "note": "Checked 2026-10-06: each channel lights and clicks in turn; all off at rest"
     },
     {
       "from": "uno:D8",
       "to": "rig:IN2",
-      "status": "planned",
+      "status": "connected",
       "signal": "Gate LiPo connect",
-      "color": "grey"
+      "color": "grey",
+      "note": "Checked 2026-10-06: each channel lights and clicks in turn; all off at rest"
     },
     {
       "from": "uno:D9",
       "to": "rig:IN3",
-      "status": "planned",
+      "status": "connected",
       "signal": "House 12 V rail cut",
-      "color": "grey"
+      "color": "grey",
+      "note": "Checked 2026-10-06: each channel lights and clicks in turn; all off at rest"
     },
     {
       "from": "uno:D10",
       "to": "rig:IN4",
-      "status": "planned",
+      "status": "connected",
       "signal": "House LiPo connect",
-      "color": "grey"
+      "color": "grey",
+      "note": "Checked 2026-10-06: each channel lights and clicks in turn; all off at rest"
     },
     {
       "from": "rig:JD-VCC",
-      "label": "separate 5 V",
-      "status": "planned",
+      "status": "connected",
       "signal": "Rig coil supply",
-      "note": "Not from the Uno",
-      "color": "orange"
+      "note": "Coils from the Uno 5 V (confirmed 2026-10-06). With the GateSim relays that is up to 7 coils (~0.5 A) on the Uno's USB: fine for one or two at a time; suspect it if the Uno resets while switching",
+      "color": "orange",
+      "bus": "v5_uno"
     },
     {
       "from": "rig:CH1 COM",
@@ -963,22 +968,22 @@
     {
       "from": "house:BATT",
       "bus": "batt_h",
-      "status": "planned",
+      "status": "connected",
       "signal": "Battery backup"
     },
     {
       "from": "house_lipo:+",
       "bus": "batt_h",
-      "status": "planned",
+      "status": "connected",
       "signal": "LiPo +",
-      "note": "Through the rig's CH4 NC (D10)",
+      "note": "Plugged straight into the board for now (polarity was swapped at first, fixed 2026-10-06); moves through the rig's CH4 NC (D10). Rode through a bench-supply cut with no reset",
       "cut": 4,
       "com": "from"
     },
     {
       "from": "house_lipo:−",
       "bus": "gnd_h",
-      "status": "planned",
+      "status": "connected",
       "signal": "LiPo −"
     },
     {
@@ -1048,29 +1053,30 @@
       "from": "house:13 RX",
       "to": "ftdi_h:TX",
       "via": "10 kΩ",
-      "status": "planned",
+      "status": "connected",
       "signal": "UART console in",
-      "color": "orange"
+      "color": "orange",
+      "note": "10 kΩ in series on adapter TX (confirmed 2026-10-06)"
     },
     {
       "from": "house:14 TX",
       "to": "ftdi_h:RX",
-      "status": "planned",
+      "status": "connected",
       "signal": "UART console out",
       "color": "yellow"
     },
     {
       "from": "house:GND (UART)",
       "to": "ftdi_h:GND",
-      "status": "planned",
+      "status": "connected",
       "signal": "UART ground",
       "color": "black"
     },
     {
       "from": "ftdi_h:USB",
       "to": "pc",
-      "status": "planned",
-      "signal": "House FTDI",
+      "status": "connected",
+      "signal": "COM17",
       "usb": "powered"
     }
   ]

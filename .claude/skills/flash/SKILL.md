@@ -29,6 +29,9 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
    ```
    A board in the bootloader can re-enumerate on another COM number; `arduino-cli board list` shows it. If an
    upload fails with the port busy, double-tap the board's reset button and retry on the port it shows.
+   Upload one board at a time and check `ports` between. If ports report `no answer within 8 s` (every USB
+   serial port stuck, seen after uploads), ask the user to replug the USB hub; the boards keep running on their
+   bench supplies.
 4. **Check, then restore if needed.** Run `python tools/gatelink.py ports`. If both boards show their role,
    `key set`, `tx_power` 5 and `cfg spi`, the config survived: skip to the link check below. Otherwise restore
    role, config and key, reboot, and wait for the link:

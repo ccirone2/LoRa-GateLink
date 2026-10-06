@@ -32,6 +32,41 @@ class BoardError(Exception):
     pass
 
 
+OPEN_TIMEOUT_S = 8.0
+
+
+def open_serial(port, **kw):
+    """serial.Serial(port, **kw), giving up after OPEN_TIMEOUT_S. Windows sometimes wedges USB serial ports (on the
+    bench after uploads, every port at once until the USB hub was replugged) and the open then blocks for minutes.
+    Raises serial.SerialException like a failed open, so callers treat a stuck port as an unavailable one."""
+    box = {}
+    lock = threading.Lock()
+
+    def work():
+        try:
+            ser = serial.Serial(port, **kw)
+        except BaseException as e:  # noqa: BLE001 - handed to the caller
+            box["err"] = e
+            return
+        with lock:
+            if box.get("gave_up"):
+                ser.close()  # opened after the caller stopped waiting: don't leave it held
+            else:
+                box["ser"] = ser
+
+    t = threading.Thread(target=work, name=f"open-{port}", daemon=True)
+    t.start()
+    t.join(OPEN_TIMEOUT_S)
+    with lock:
+        if "ser" not in box and "err" not in box:
+            box["gave_up"] = True
+            raise serial.SerialException(f"could not open port {port!r}: no answer within {OPEN_TIMEOUT_S:g} s "
+                                         "(port stuck? replug the board or the USB hub)")
+    if "err" in box:
+        raise box["err"]
+    return box["ser"]
+
+
 class Board:
     def __init__(self, port, timeline, name=None):
         self.port = port
@@ -54,7 +89,7 @@ class Board:
     # --- connection -------------------------------------------------------------------------------------------
     def open(self):
         self._closing = False
-        self.ser = serial.Serial(self.port, BAUD, timeout=0.1, write_timeout=2)
+        self.ser = open_serial(self.port, baudrate=BAUD, timeout=0.1, write_timeout=2)
         self._reader = threading.Thread(target=self._read_loop, name=f"board-{self.name}", daemon=True)
         self._reader.start()
 
@@ -206,7 +241,7 @@ class Board:
         last = None
         while time.monotonic() < deadline:
             try:
-                self.ser = serial.Serial(self.port, BAUD, timeout=0.1, write_timeout=2)
+                self.ser = open_serial(self.port, baudrate=BAUD, timeout=0.1, write_timeout=2)
             except serial.SerialException as e:
                 last = e
                 time.sleep(0.5)
@@ -293,7 +328,7 @@ class UartTap:
         self._closing = False
 
     def open(self):
-        self.ser = serial.Serial(self.port, BAUD, timeout=0.1)
+        self.ser = open_serial(self.port, baudrate=BAUD, timeout=0.1)
         self._closing = False
         self._reader = threading.Thread(target=self._read_loop, name=f"uart-{self.board.name}", daemon=True)
         self._reader.start()

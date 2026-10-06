@@ -51,6 +51,11 @@ once its fix is merged and record it in the pull request.
   released, before the firmware starts. Remaining options: a bootloader that skips that wait on watchdog/software
   resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
+- [ ] **A gate supply cut logs a moment of `between`, cause `external`.** Cutting the 24 V that wets the gate's
+  inputs (bench, 2026-10-06): the closed limit's opto dropped one debounce cycle before IN3, so the gate logged
+  `gate_state` between/external, then no_power within the same second. Harmless (the house shows not-closed for
+  `no_power` anyway) but the log reads as a move. Fix idea: when a limit drops, wait one more debounce period for
+  IN3 before reporting.
 - [ ] **USB stalls cut console lines.** In the 120-minute soak on 0.4.1, 13 replies (11 house, 2 gate) were cut
   off at 192, 256 or 320 bytes: the host stopped taking IN packets for over 70 ms and the SAMD core dropped the
   rest of the line. Since 0.4.1 only that line is lost (the suite retries), but the web console and

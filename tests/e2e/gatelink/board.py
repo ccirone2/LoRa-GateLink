@@ -1,10 +1,12 @@
 """Client for a GateLink board's JSON console over USB (the same contract web/app.js uses), plus an optional
 read-only tap on its UART console (`uart_console`, a USB-to-UART adapter on its Serial1 pins).
 
-Requests only ever go over USB: on the bench the UART garbled ~1 % of requests on their way into the board, some
-into still-valid JSON with a digit changed, so nothing may be sent that way. Its board-to-PC direction was clean,
-and the adapter keeps its port while the board is unpowered, so the tap records the board's events (above all
-`boot` the moment power returns, when USB hasn't re-enumerated yet).
+Requests go over USB: on the bench the UART garbled ~1 % of requests on their way into the board, some into
+still-valid JSON with a digit changed, so no command may be sent that way. Its board-to-PC direction was clean, and
+the adapter keeps its port while the board is unpowered, so the tap records the board's events (above all `boot`
+the moment power returns, when USB hasn't re-enumerated yet). While USB is down (a power cut; Windows sometimes
+loses the port until the hub is replugged) read-only requests (READ_ONLY) fall back to the UART: a garbled one is
+simply sent again, since it changes nothing on the board.
 
 Requests are `{"id","cmd",...}` lines answered by `{"id","ok",...}`; unsolicited `{"event":...}` lines (log
 entries, house status updates, pongs) go to the shared timeline. The firmware only writes while DTR is asserted,
@@ -20,6 +22,8 @@ import serial.tools.list_ports
 
 ARDUINO_VID = 0x2341
 FTDI_VID = 0x0403  # USB-to-UART adapters on the boards' Serial1 consoles (not the GateSim's CH340)
+# Requests that change nothing on the board: the only ones that may go over the UART (see the module docstring).
+READ_ONLY = ("status", "info", "log.get", "hist.get", "config.get")
 # USB CDC ignores the rate; a USB-to-UART adapter on the board's Serial1 console (uart_console) needs it.
 BAUD = 250_000
 # config.set params per request: keeps each line far below the firmware's console line limit.
@@ -196,7 +200,26 @@ class Board:
             self.timeline.add(self.name, ev, **{k: v for k, v in msg.items() if k != "event"})
 
     # --- requests ---------------------------------------------------------------------------------------------
+    def usb_up(self):
+        return self.ser is not None and self._reader is not None and self._reader.is_alive()
+
+    def _usb_back(self):
+        """One quick try to reopen USB, only if Windows lists the port again."""
+        if not any(p.device == self.port for p in serial.tools.list_ports.comports()):
+            return False
+        try:
+            self._reconnect(timeout=1.0)
+            return True
+        except BoardError:
+            return False
+
     def request(self, cmd, timeout=3.0, check=True, **kw):
+        if not self.usb_up() and self.uart is not None and cmd in READ_ONLY and not self._usb_back():
+            res = self.uart.request(cmd, **kw)
+            self.timeline.add(self.name, "note", text=f"{cmd} over the UART (USB down)")
+            if check and not res.get("ok"):
+                raise BoardError(f"{self.name}: {cmd} failed: {res}")
+            return res
         # A request the board couldn't parse ("bad json") never ran, so sending it again is safe.
         for attempt in range(3):
             res = self._request_once(cmd, timeout, **kw)
@@ -257,7 +280,10 @@ class Board:
                 last = e
                 self.close()
                 time.sleep(0.5)
-        raise BoardError(f"{self.name}: did not come back on {self.port} within {timeout}s ({last})")
+        hint = ""
+        if self.uart is not None and self.uart.heard_within(10):
+            hint = "; its UART still hears it, so the board is up: Windows may have lost the port (replug the USB hub)"
+        raise BoardError(f"{self.name}: did not come back on {self.port} within {timeout}s ({last}){hint}")
 
     def info(self):
         return self.request("info")
@@ -318,14 +344,67 @@ class Board:
 
 
 class UartTap:
-    """Read-only listener on a board's UART console: its events go to the board's timeline (each event only once,
-    whichever console delivers it first). Nothing is ever sent, see the module docstring."""
+    """Listener on a board's UART console: its events go to the board's timeline (each event only once, whichever
+    console delivers it first). It sends only READ_ONLY requests, and only while the board's USB is down (see the
+    module docstring)."""
 
     def __init__(self, board, port):
         self.board, self.port = board, port
         self.ser = None
         self._reader = None
         self._closing = False
+        self._ids = itertools.count(1_000_000)  # apart from the USB ids, for the timeline's sake
+        self._lock = threading.Lock()
+        self._cond = threading.Condition()
+        self._replies = {}
+        self._waiting = set()
+        self.last_rx = 0.0  # monotonic time of the last line heard
+
+    def heard_within(self, seconds):
+        return time.monotonic() - self.last_rx < seconds
+
+    def request(self, cmd, timeout=1.5, tries=5, **kw):
+        """A READ_ONLY request over the UART. Sent again when it comes back `bad json` or unanswered (a garbled id
+        sends the reply elsewhere): harmless, as it changes nothing on the board."""
+        if cmd not in READ_ONLY:
+            raise BoardError(f"{self.board.name}: {cmd!r} may not go over the UART (only {', '.join(READ_ONLY)})")
+        for _ in range(tries):
+            rid = next(self._ids)
+            with self._cond:
+                self._waiting.add(rid)
+            try:
+                with self._lock:
+                    self.ser.write((json.dumps({"id": rid, "cmd": cmd, **kw}) + "\n").encode())
+                deadline = time.monotonic() + timeout
+                with self._cond:
+                    while rid not in self._replies and time.monotonic() < deadline:
+                        self._cond.wait(deadline - time.monotonic())
+                    res = self._replies.pop(rid, None)
+            except (serial.SerialException, OSError) as e:
+                raise BoardError(f"{self.board.name}: UART write failed: {e}") from e
+            finally:
+                with self._cond:
+                    self._waiting.discard(rid)
+            if res is not None and res.get("error") != "bad json":
+                return res
+        raise BoardError(f"{self.board.name}: no reply over the UART to {cmd!r} in {tries} tries")
+
+    def _handle(self, line):
+        self.last_rx = time.monotonic()
+        if line.startswith('{"id"') or line.startswith('{"ok"'):
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                msg = None
+            if isinstance(msg, dict) and "event" not in msg:
+                with self._cond:
+                    if msg.get("id") in self._waiting:
+                        self._replies[msg["id"]] = msg
+                    elif "id" not in msg and len(self._waiting) == 1:
+                        self._replies[next(iter(self._waiting))] = msg  # `bad json`: no id to match
+                    self._cond.notify_all()
+                return  # a reply (or a stray one under a garbled id): not for the timeline
+        self.board._handle_line(line, via="uart")
 
     def open(self):
         self.ser = open_serial(self.port, baudrate=BAUD, timeout=0.1)
@@ -353,7 +432,9 @@ class UartTap:
                 return
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
-                self.board._handle_line(line.decode("utf-8", "replace").strip(), via="uart")
+                line = line.decode("utf-8", "replace").strip()
+                if line:
+                    self._handle(line)
 
 
 def find_uarts(timeline, exclude=()):

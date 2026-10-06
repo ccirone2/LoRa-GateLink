@@ -35,7 +35,10 @@ their role (`info`) at the start, or name them with `--house-uart` / `--gate-uar
 off. Requests always go over USB: on the bench ~1 % of requests sent over the UART arrived garbled, some still
 valid JSON with a digit changed. The board-to-PC direction was clean, and the adapter keeps its port while the
 board is unpowered, so the tap records events USB can't (`boot` the moment power returns). Each event is recorded
-once, whichever console delivers it first. The summary lists the consoles.
+once, whichever console delivers it first. While a board's USB is down (a power cut, or Windows losing the port
+until the hub is replugged), read-only requests (`status`, `info`, `log.get`, `hist.get`, `config.get`) go over
+its UART instead, resent if garbled since they change nothing; commands still wait for USB, and if it doesn't
+come back the error says whether the UART still hears the board. The summary lists the consoles.
 
 `--restore-key` reboots both boards (dropping any unsaved test profile an interrupted run left behind), then
 `key.set`s `GATELINK_KEY` on both and waits for the link. Use it if a wrong-key run was killed mid-test and left the

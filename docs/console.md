@@ -75,7 +75,8 @@ ours, i.e. the two boards' crystal offset)), and `free_ram` (bytes between the h
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,
-  `power_sense`, `ac_power` (IN3, or true with `power_sense` off).
+  `power_sense`, `ac_power` (IN3, or true with `power_sense` off), `settling` (after boot: the first STATUS waits
+  until the inputs have been steady for 3 s, at most 10 s).
 - **House:** the gate's `gate`, `cause`, `last_result` and `target` as last reported, plus `link_up`,
   `link_timeout_eff_s`, `armed`, `ctrl` (controller level), `ctrl_power`, `sync_window`, `resyncing`, `cmd_id`,
   `cmd_pending`, `cmd_result` (ACK result: 0 ok, 1 already, 2 rejected, 4 no AC power; −1 none, −2 gave up)

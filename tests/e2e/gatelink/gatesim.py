@@ -139,6 +139,10 @@ class GateSim:
         """The opener's battery backup. With neither it nor AC the opener is dead (`power(False)` does both)."""
         self._ok(f"battery {'on' if on else 'off'}")
 
+    def restart(self, ms):
+        """The opener's controller rebooting: limits off and pulses ignored for `ms`, AC stays."""
+        self._ok(f"restart {int(ms)}")
+
     def supply(self, source):
         """Where the gate board's buck is fed from: "acc" (accessory output: alive while the opener is),
         "psu" (the AC supply), or "none" (only explicit rail cuts). Needs the power rig's D7 relay."""

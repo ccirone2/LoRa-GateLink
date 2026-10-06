@@ -266,9 +266,17 @@ class Board:
                 return buckets, {k: res[k] for k in ("period_s", "now_s", "oldest", "current")}
             frm = res["rows"][-1][0] + 1
 
-    def reboot(self):
+    def request_reboot(self):
+        """Ask the board to reset. It replies first and resets ~100 ms later, but the reply doesn't always reach us
+        before USB drops, so a missing reply is fine."""
         self.timeline.add("test", "action", text=f"{self.name} reboot")
-        self.request("reboot")
+        try:
+            self.request("reboot", timeout=1.5)
+        except BoardError:
+            pass
+
+    def reboot(self):
+        self.request_reboot()
         self.close()
         time.sleep(1.5)
         self._reconnect()

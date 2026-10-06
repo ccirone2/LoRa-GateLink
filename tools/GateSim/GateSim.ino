@@ -52,6 +52,7 @@ uint32_t pos = 0;
 int8_t dir = 0;  // +1 opening, -1 closing, 0 stopped
 bool ac = true;        // AC mains: the 24 V supply IN3 watches
 bool battery = true;   // the opener's own battery backup
+uint32_t restartUntil = 0;  // opener controller restarting (`restart <ms>`): limits off, pulses ignored
 enum Supply : uint8_t { SUP_NONE, SUP_ACC, SUP_PSU };
 const char *const SUPPLY_NAMES[] = {"none", "acc", "psu"};
 Supply supply = SUP_NONE;  // what the gate board's buck is fed from (not saved)
@@ -105,7 +106,8 @@ void loadSettings() {
   }
 }
 
-bool alive() { return ac || battery; }
+bool restarting() { return restartUntil && (int32_t)(millis() - restartUntil) < 0; }
+bool alive() { return (ac || battery) && !restarting(); }
 
 // Whether a site's supply rail is on: the model (gate: its supply source), or forced, or cut for a while.
 bool railOn(uint8_t i) {
@@ -271,7 +273,7 @@ void printRelease(const __FlashStringHelper *which, uint32_t ms) {
 
 void printHelp() {
   Serial.println(F("commands: status | open | close | stop | travel <1-300 s> | help"));
-  Serial.println(F("  power on|off (AC and opener battery) | ac on|off | battery on|off"));
+  Serial.println(F("  power on|off (AC and opener battery) | ac on|off | battery on|off | restart <ms> (opener reboots)"));
   Serial.println(F("  supply none|acc|psu  gate board fed by: explicit cuts only / accessory output / AC supply"));
   Serial.println(F("  rail gate|house on|off|auto | rail gate|house cut <ms> | lipo gate|house on|off"));
   Serial.println(F("  fault none|stuck|both|flicker|deaf | polarity low|high"));
@@ -298,6 +300,11 @@ void handleLine(char *line) {
     if (cmd[0] != 'b') ac = on;
     if (cmd[0] != 'a') battery = on;
     if (!alive()) dir = 0;  // opener stops dead; it doesn't resume on power return
+    Serial.println(F("ok"));
+  } else if (!strcmp(cmd, "restart") && arg && atol(arg) >= 1 && atol(arg) <= 60000L) {
+    // The opener's controller rebooting (e.g. after a power blip): AC stays, limits drop, motion stops.
+    restartUntil = (millis() + (uint32_t)atol(arg)) | 1;
+    dir = 0;
     Serial.println(F("ok"));
   } else if (!strcmp(cmd, "supply") && arg) {
     for (uint8_t i = 0; i < 3; i++) {

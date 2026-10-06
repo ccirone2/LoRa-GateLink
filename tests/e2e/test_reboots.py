@@ -60,6 +60,24 @@ def test_gate_reset_before_ack_no_second_pulse(rig):
     rig.wait_house(15, gate="open", io__k1=True, io__k2=False, ctrl=True)
 
 
+def test_gate_boot_waits_for_opener_limits(rig):
+    """Gate and opener restart together (a power blip at the gate): the gate boots while the opener's limits are
+    still off. Its first report must wait for them, or the house would flash not-closed (the contact sensor
+    opening, K1 flicking) before the limits come back."""
+    rig.expect_commands(0)
+    rig.allow_reboot("gate")
+    m = rig.mark()
+    rig.gate.request_reboot()
+    time.sleep(0.2)  # the gate is in its bootloader (~0.5 s): the opener restarts under it
+    rig.sim.restart(2500)
+    rig.wait_log("house", "session", since=m, timeout=25)
+    rig.wait_gate("closed", timeout=15)
+    time.sleep(2)
+    blips = [e for e in rig.timeline.select(src="house", kind="status", since=m) if e["gate"] != "closed" or not e["k2"]]
+    assert not blips, f"the house showed the gate as {blips[0]['gate']} (K2 {blips[0]['k2']}) while it restarted"
+    rig.expect_no("house", "gate_state", since=m)
+
+
 def test_house_reboot_controller_on_gate_closed(rig):
     """House resets while the controller is on but the gate is closed: it must not open the gate."""
     rig.expect_commands(0)

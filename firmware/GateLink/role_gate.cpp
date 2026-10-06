@@ -10,6 +10,11 @@
 #include "history.h"
 
 #define STATUS_TTL_MS 10000
+// After boot, the first STATUS waits until the inputs have been steady this long (at most BOOT_SETTLE_MAX_MS): the
+// opener may be restarting with us (a power blip at the gate) and its limits come back after we do. Reporting them
+// early made the house show not-closed for a moment: the contact sensor opening, K1 flicking.
+#define BOOT_SETTLE_MS 3000
+#define BOOT_SETTLE_MAX_MS 10000
 
 static uint8_t state = GS_UNKNOWN;
 static uint8_t cause = CAUSE_NONE;
@@ -23,6 +28,8 @@ static uint8_t lastCmdAck = RES_OK;
 static uint32_t lastStatusAt = 0;
 static int32_t reportedHeartbeat = 0;  // heartbeat_s in our last STATUS
 static uint32_t seenSessions = 0;
+static bool settling = true;  // after boot: tracking the inputs silently, see BOOT_SETTLE_MS
+static uint32_t bootAt = 0, steadySince = 0;
 static bool rebootAfterCmd = false;  // debug: next pulsed command reboots us before its ACK (a power cut)
 static uint32_t rebootAt = 0;
 
@@ -43,6 +50,7 @@ static uint8_t readState() {
 }
 
 static void sendStatus(uint32_t now) {
+  if (settling) return;  // the first one goes out once the inputs have settled
   uint8_t p[ST_LEN];
   p[ST_STATE] = state;
   p[ST_INPUTS] = in1.active() | (in2.active() << 1) | (k1.on() << 2) | (k2.on() << 3)
@@ -104,7 +112,8 @@ static void pulse(Relay &r, Relay &other, uint8_t which, uint32_t now) {
 void gateBegin() {
   state = readState();
   cause = CAUSE_NONE;
-  sendStatus(millis());
+  settling = true;
+  bootAt = steadySince = millis();
 }
 
 void gateLoop(uint32_t now) {
@@ -114,7 +123,17 @@ void gateLoop(uint32_t now) {
   bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense
 
   uint8_t s = readState();
-  if (s != state) {
+  if (settling) {
+    // Follow the inputs without reporting (no cause: nothing is attributed to a boot), until they hold still.
+    if (s != state) {
+      state = s;
+      steadySince = now;
+    }
+    if (elapsed(now, steadySince, BOOT_SETTLE_MS) || elapsed(now, bootAt, BOOT_SETTLE_MAX_MS)) {
+      settling = false;
+      sendStatus(now);
+    }
+  } else if (s != state) {
     // Into or out of no_power there's no telling a movement from the power changing (on battery the gate may
     // have moved while no limit read; on AC return the limits and IN3 settle in either order): no cause.
     bool power = s == GS_NO_POWER || state == GS_NO_POWER;
@@ -277,6 +296,7 @@ void gateStatus(JsonObject o) {
   o["last_cmd_id"] = lastCmdId;
   o["power_sense"] = (bool)cfg.power_sense;
   o["ac_power"] = acPower();
+  o["settling"] = settling;
 }
 
 void gateDebugRebootAfterCmd() {

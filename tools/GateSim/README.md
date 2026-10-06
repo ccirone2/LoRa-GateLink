@@ -32,6 +32,7 @@ arduino-cli upload  --fqbn arduino:avr:uno -p COMx tools/GateSim
 Serial 115200, one command per line: `status`, `open`, `close` (a local button, reported as an external
 move), `stop` (strand it between), `power on|off` (AC and the opener's battery together: on, or a dead opener),
 `ac on|off` (AC only: IN3; the opener carries on on its battery), `battery on|off` (the opener's battery),
+`restart <ms>` (the opener's controller reboots: the limits drop and pulses are ignored for that long, AC stays),
 `travel <s>` (default 15), `fault none|stuck|both|flicker|deaf`,
 `polarity low|high`, `relay <1-3> on|off|auto` (force the signal to gate IN1/IN2/IN3 for wiring checks, not
 saved; for relay 2, `on` releases D3's coil so its NC contact closes), `help`. `status` reports the signals

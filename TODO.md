@@ -43,6 +43,14 @@ once its fix is merged and record it in the pull request.
   doubling gaps (about 0.3, 0.9, 2.2, 4.7 and 9.7 s at the defaults), so after a ~4.7 s outage only the last
   retry is left and one lost frame drops the command. Decide whether to raise the default `retries` or change
   the spacing once the install-site RF numbers are in.
+- [ ] **A warm reset of the house blips its outputs for at least 0.5 s.** On a watchdog, crash, reset-button or
+  software reset, K1/K2 drop until the house is back and the gate reports (~1.5 s). With the gate open the
+  controller follows K1 off and on (Alarm.com shows it closed for a moment); with it closed the contact sensor
+  blips open. Restoring K1/K2 from `.noinit` RAM in `setup()` was tried (2026-10-05) and only shortened the drop to
+  ~0.6–0.8 s: the MKR bootloader's double-tap check waits ~0.5 s on every reset except power-on, with the relay pins
+  released, before the firmware starts. Remaining options: a bootloader that skips that wait on watchdog/software
+  resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
+  takes the controller down too (shared 12 V), so it's only the warm resets.
 - [ ] **USB stalls cut console lines.** In the 120-minute soak on 0.4.1, 13 replies (11 house, 2 gate) were cut
   off at 192, 256 or 320 bytes: the host stopped taking IN packets for over 70 ms and the SAMD core dropped the
   rest of the line. Since 0.4.1 only that line is lost (the suite retries), but the web console and
@@ -50,6 +58,11 @@ once its fix is merged and record it in the pull request.
   is to blame. To check: count cut lines with only one board connected, and with the radio idle.
 
 ## Bench and field tests
+
+- [ ] **USB serial ports hang after uploads.** On 2026-10-05, twice after an upload every USB serial port on the
+  bench (both boards and the FTDI adapter) stopped opening until the USB hub was replugged. Uploading one board at
+  a time, and checking the ports between, avoided it since. Try another hub port or the PC's own ports; a
+  per-port timeout in `tools/gatelink.py ports` would at least stop it hanging.
 
 - [ ] **SPI flash on both boards.** 0.5.0 keeps config in the on-board SPI flash. Check `info` `flash_id` and
   `cfg_store` `spi` on both bench boards and on any replacement board (an unexpected chip falls back to

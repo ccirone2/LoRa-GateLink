@@ -600,9 +600,9 @@
     {
       "from": "rig:GND",
       "bus": "gnd_g",
-      "status": "unverified",
+      "status": "connected",
       "signal": "Rig GND",
-      "note": "module is powered: confirm where from"
+      "note": "Uno GND"
     },
     {
       "from": "uno:D2",
@@ -659,11 +659,11 @@
     },
     {
       "from": "rig:JD-VCC",
-      "label": "separate 5 V",
-      "status": "unverified",
+      "status": "connected",
       "signal": "Rig coil supply",
-      "note": "Not from the Uno; module is powered: confirm where from",
-      "color": "orange"
+      "note": "Coils from the Uno 5 V (confirmed 2026-10-06). With the GateSim relays that is up to 7 coils (~0.5 A) on the Uno's USB: fine for one or two at a time; suspect it if the Uno resets while switching",
+      "color": "orange",
+      "bus": "v5_uno"
     },
     {
       "from": "rig:CH1 COM",
@@ -1053,10 +1053,10 @@
       "from": "house:13 RX",
       "to": "ftdi_h:TX",
       "via": "10 kΩ",
-      "status": "unverified",
+      "status": "connected",
       "signal": "UART console in",
       "color": "orange",
-      "note": "Adapter answers on COM17; is the 10 kΩ fitted on adapter TX?"
+      "note": "10 kΩ in series on adapter TX (confirmed 2026-10-06)"
     },
     {
       "from": "house:14 TX",

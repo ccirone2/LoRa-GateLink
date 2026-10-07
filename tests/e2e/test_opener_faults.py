@@ -1,6 +1,8 @@
 """Opener-side failures, injected with the GateSim: power loss, a jammed or deaf opener, bad limit signals."""
 import time
 
+import pytest
+
 from gatelink.bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, PROFILE_COMMON, PROFILE_HOUSE, RES_NO_POWER, SIM_TRAVEL_S
 
 TRAVEL_TIMEOUT_S = PROFILE_COMMON["travel_timeout_s"]
@@ -77,6 +79,44 @@ def test_ac_loss_mid_travel(rig):
     rig.expect_no("house", "resync", seconds=2, since=m)
 
 
+@pytest.mark.parametrize("gap_ms", [100, 300])
+def test_input_supply_lost_limit_drops_before_ac(rig, gap_ms):
+    """The 24 V that wets the gate's inputs fails: the closed limit's opto drops before IN3's, and on its return
+    IN3 comes back first. The gate goes closed -> no_power -> closed with no cause and never reports between (the
+    firmware holds a move into between for BETWEEN_HOLD_MS, and BOOT_SETTLE_MS out of no_power)."""
+    rig.expect_commands(0)
+    m = rig.mark()
+    rig.sim.relays([(2, "off"), (3, "off")], gap_ms / 1000)
+    rig.wait_log("gate", "gate_state", a=GS["no_power"], b=CAUSE["none"], since=m, timeout=5)
+    rig.wait_house(10, gate="no_power", io__k2=False, io__k1=True)
+    rig.wait_ctrl(True, timeout=30)
+    rig.wait_house(10, "sync window closed", sync_window=False, resyncing=False)
+
+    m2 = rig.mark()
+    rig.sim.relays([(3, "auto"), (2, "auto")], gap_ms / 1000)
+    rig.wait_log("gate", "gate_state", a=GS["closed"], b=CAUSE["none"], since=m2, timeout=10)
+    rig.wait_house(10, gate="closed", io__k2=True)
+    rig.wait_ctrl(False, timeout=45)
+    rig.wait_house(10, io__k1=False, resyncing=False)
+    rig.expect_no("gate", "gate_state", a=GS["between"], since=m)
+    rig.expect_no("gate", "pulse", since=m)
+
+
+def test_limit_lost_with_ac_still_reports_between(rig):
+    """A limit that drops while AC stays is a movement: between/external is reported once the hold is over."""
+    rig.expect_commands(0)
+    m = rig.mark()
+    rig.sim.relays([(2, "off")], 0)
+    t = rig.wait_log("gate", "gate_state", a=GS["between"], b=CAUSE["external"], since=m, timeout=5)
+    assert t["t"] - m >= 0.45, "reported before the hold (BETWEEN_HOLD_MS) was over"
+    rig.wait_house(10, gate="between", io__k2=False)
+    m2 = rig.mark()
+    rig.sim.relays([(2, "auto")], 0)
+    rig.wait_log("gate", "gate_state", a=GS["closed"], b=CAUSE["external"], since=m2, timeout=5)
+    rig.wait_house(10, gate="closed", io__k2=True, io__k1=False, resyncing=False)
+    rig.expect_no("gate", "pulse", since=m)
+
+
 def test_relay_test_without_power(rig):
     """A gate relay test while the opener is unpowered still pulses (wiring check) but sets no target, so the
     limit read when power returns is neither reached nor a timeout, and the house doesn't resync."""
@@ -117,7 +157,7 @@ def test_power_loss_mid_travel(rig):
     time.sleep(2)
     m2 = rig.mark()
     rig.sim.power(True)
-    back = rig.wait_log("gate", "gate_state", a=GS["between"], since=m2, timeout=5)
+    back = rig.wait_log("gate", "gate_state", a=GS["between"], since=m2, timeout=8)  # held BOOT_SETTLE_MS
     assert back["b"] == CAUSE["none"], "power return isn't a movement"
     assert rig.sim.status()["state"] == "stopped", "the opener doesn't resume after a power cut"
     # The limit it left is no longer trusted after no_power, so the house shows not-closed straight away.

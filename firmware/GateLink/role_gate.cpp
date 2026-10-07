@@ -15,6 +15,11 @@
 // early made the house show not-closed for a moment: the contact sensor opening, K1 flicking.
 #define BOOT_SETTLE_MS 3000
 #define BOOT_SETTLE_MAX_MS 10000
+// A move into `between` waits this long before it's reported (only with power_sense): when the 24 V that wets the
+// inputs fails, a limit's opto can drop before IN3's (bench, 2026-10-06), and a moment of between/external was
+// logged before no_power. If no_power (or a limit) follows within it, that is reported instead. Out of no_power the
+// wait is BOOT_SETTLE_MS: on power return IN3 can come back before the limits (the opener restarting).
+#define BETWEEN_HOLD_MS 500
 
 static uint8_t state = GS_UNKNOWN;
 static uint8_t cause = CAUSE_NONE;
@@ -30,6 +35,7 @@ static int32_t reportedHeartbeat = 0;  // heartbeat_s in our last STATUS
 static uint32_t seenSessions = 0;
 static bool settling = true;  // after boot: tracking the inputs silently, see BOOT_SETTLE_MS
 static uint32_t bootAt = 0, steadySince = 0;
+static uint32_t betweenAt = 0;  // when the inputs started reading between while we report something else (0 = not)
 static bool rebootAfterCmd = false;  // debug: next pulsed command reboots us before its ACK (a power cut)
 static uint32_t rebootAt = 0;
 
@@ -123,6 +129,13 @@ void gateLoop(uint32_t now) {
   bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense
 
   uint8_t s = readState();
+  if (s != GS_BETWEEN || state == GS_BETWEEN) {
+    betweenAt = 0;
+  } else if (!betweenAt) {
+    betweenAt = now | 1;
+  }
+  bool holdBetween = betweenAt && cfg.power_sense
+                     && !elapsed(now, betweenAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);
   if (settling) {
     // Follow the inputs without reporting (no cause: nothing is attributed to a boot), until they hold still.
     if (s != state) {
@@ -133,7 +146,7 @@ void gateLoop(uint32_t now) {
       settling = false;
       sendStatus(now);
     }
-  } else if (s != state) {
+  } else if (s != state && !holdBetween) {
     // Into or out of no_power there's no telling a movement from the power changing (on battery the gate may
     // have moved while no limit read; on AC return the limits and IN3 settle in either order): no cause.
     bool power = s == GS_NO_POWER || state == GS_NO_POWER;

@@ -102,14 +102,6 @@ once its fix is merged and record it in the pull request.
   buck, house on a 12 V→5 V buck, both with LiPos), so check it there first: set `tx_power` 17 on both (radio
   params: both boards, applied at once), run `pytest tests/e2e -m soak` and the power tests, and look for resets
   (`reset_cause`) and `radio_faults`. Then confirm at the install, with the antenna away from the relay shield.
-- [ ] **Power-test scenarios not covered yet.** `test_power.py` (`-m power`) covers the gate cut at rest, beyond the
-  link timeout, mid-pulse, bounce and during a config save; AC loss and a dead opener with the LiPo in; the house
-  cut, dips and a 12 V cut on its LiPo; both sites. Still to add from the 2026-10-04 plan:
-  - the gate unpowered while the opener is moved by hand (state and cause after the boot);
-  - the house cut between a controller edge and the gate's ACK (no late command after its reboot);
-  - a cut during a local `config.save` on the house (old or new config, never defaults);
-  - AC loss with the gate board on the AC supply and no LiPo (`supply psu`: the board dies with AC while the
-    opener runs on its battery).
 
 ## Install
 

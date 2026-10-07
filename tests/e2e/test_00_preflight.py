@@ -15,10 +15,14 @@ def test_boards_and_link(bench):
 
 
 def test_bench_safe_settings(bench):
-    for name in ("house", "gate"):
-        p = bench.backup[name]
-        # Full-power TX with a relay energized crashed USB-powered boards into watchdog resets.
-        assert p["tx_power"] <= 5, f"{name} tx_power {p['tx_power']}: keep it at about 5 on USB power"
+    if bench.tx_power is not None:
+        bench.facts["tx_power"] = f"{bench.tx_power} dBm (--tx-power)"
+    else:
+        for name in ("house", "gate"):
+            p = bench.backup[name]
+            # Full-power TX with a relay energized crashed USB-powered boards into watchdog resets.
+            assert p["tx_power"] <= 5, (f"{name} tx_power {p['tx_power']}: keep it at about 5 on USB power "
+                                        "(or run at a chosen power with --tx-power)")
     # The suite runs with every invert at 0 and puts the saved values back afterwards, so a stray invert would
     # never fail a scenario. Inverted, a dead opto or cut wire reads active (e.g. a closed limit): keep them 0.
     inverted = [f"{name} {k}" for name in ("house", "gate") for k in ("in1_invert", "in2_invert", "in3_invert",

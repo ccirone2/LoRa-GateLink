@@ -47,7 +47,7 @@ static uint32_t mismatchSince = 0;
 static bool checkSoon = false;  // boot or controller power return: resync at once if still out of step
 static bool k1WasPulsing = false;
 static bool ctrlPower = true;
-static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms
+static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms (CLOSE only, see below)
 static uint32_t pendingAt = 0;
 
 static uint16_t cmdId = 0;
@@ -194,8 +194,12 @@ void houseLoop(uint32_t now) {
       }
     }
   }
-  // The relay can drop before the power sense does: send only once power has held for ctrl_confirm_ms.
-  if (pendingAction && (!cfg.ctrl_power_sense || elapsed(now, pendingAt, cfg.ctrl_confirm_ms))) {
+  // The relay can drop before the power sense does: on the bench the controller's relay dropped ~0.46 s into a 12 V
+  // cut and the IN2 opto only ~2.1 s in (the rail's capacitors keep it lit). A power loss can only drop the relay,
+  // which reads as OFF: so a CLOSE is sent only once power has held for ctrl_confirm_ms, while an OPEN (relay on),
+  // which no power loss can produce, goes at once.
+  if (pendingAction && (!cfg.ctrl_power_sense || pendingAction == ACT_OPEN
+                        || elapsed(now, pendingAt, cfg.ctrl_confirm_ms))) {
     sendCommand(pendingAction);
     pendingAction = 0;
   }

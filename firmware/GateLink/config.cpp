@@ -200,7 +200,7 @@ void configDefaults(Config &c) {
   c.sensor_invert = 0;
   c.linkloss_open = 1;
   c.ctrl_power_sense = 1;
-  c.ctrl_confirm_ms = 500;
+  c.ctrl_confirm_ms = 3000;  // > the ~1.65 s the IN2 opto lags the controller's relay on a 12 V cut
   c.ctrl_settle_ms = 10000;
   c.uart_console = 0;
   c.key_set = 0;

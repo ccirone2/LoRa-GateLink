@@ -46,7 +46,7 @@ const HELP = {
   sensor_invert: 'House: flips the contact sensor output (K2). Use it if the alarm shows open while the gate is closed.',
   linkloss_open: 'House: the contact sensor reads open while the link is lost, so the alarm never trusts a stale “closed”. Turn off only if dropouts cause too many false alerts.',
   ctrl_power_sense: 'House: IN2 watches the controller’s supply, so a power cut (which drops its relay) isn’t mistaken for a close command. Turn off only if IN2 isn’t wired.',
-  ctrl_confirm_ms: 'House: each controller change waits this long before becoming a command, so one caused by a failing supply can be discarded. Raise it if power cuts still send commands; lower it for a snappier response.',
+  ctrl_confirm_ms: 'House: a controller switch-OFF waits this long before it becomes a CLOSE, so one caused by the controller losing power (its relay drops before the power sense notices) can be discarded. Switch-ON (OPEN) goes at once: a power loss can’t cause it. Keep it above the power sense’s lag (~1.7 s on the bench).',
   uart_console: 'Also run this console on the board’s serial pins (13 RX, 14 TX; 3.3 V, 250 kbaud) for a USB-to-UART adapter. Bench power testing only: the adapter keeps its port while the board is unpowered. Leave off at the install.',
   ctrl_settle_ms: 'House: after the controller powers up (or the house boots), its changes count as sync for at least this long. Raise it if the controller takes longer to settle after power returns.',
 };

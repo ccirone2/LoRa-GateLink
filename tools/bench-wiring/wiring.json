@@ -588,9 +588,7 @@
       "bus": "batt_g",
       "status": "connected",
       "signal": "LiPo +",
-      "note": "Plugged straight into the board for now (polarity was swapped at first, fixed 2026-10-06); moves through the rig's CH2 NC (D8). Rode through a bench-supply cut with no reset",
-      "cut": 2,
-      "com": "from"
+      "note": "Plugged straight into the board's battery connector, in or out by hand (rig CH2/CH4 unused); the power tests detect which. Polarity was swapped at first, fixed 2026-10-06"
     },
     {
       "from": "gate_lipo:−",
@@ -640,7 +638,7 @@
       "status": "connected",
       "signal": "Gate LiPo connect",
       "color": "grey",
-      "note": "Checked 2026-10-06: each channel lights and clicks in turn; all off at rest"
+      "note": "Drive wired, but the relay contacts are unused (LiPos switched by hand)"
     },
     {
       "from": "uno:D9",
@@ -656,7 +654,7 @@
       "status": "connected",
       "signal": "House LiPo connect",
       "color": "grey",
-      "note": "Checked 2026-10-06: each channel lights and clicks in turn; all off at rest"
+      "note": "Drive wired, but the relay contacts are unused (LiPos switched by hand)"
     },
     {
       "from": "rig:JD-VCC",
@@ -687,18 +685,20 @@
     {
       "from": "rig:CH2 COM",
       "label": "gate LiPo +",
-      "status": "planned",
+      "status": "open",
       "signal": "Gate LiPo (D8)",
       "color": "red",
-      "cut": 2
+      "cut": 2,
+      "note": "Not used: the LiPos are plugged and unplugged by hand (decided 2026-10-06)"
     },
     {
       "from": "rig:CH2 NC",
       "label": "gate BATT",
-      "status": "planned",
+      "status": "open",
       "signal": "Gate LiPo (D8)",
       "color": "red",
-      "cut": 2
+      "cut": 2,
+      "note": "Not used: the LiPos are plugged and unplugged by hand (decided 2026-10-06)"
     },
     {
       "from": "rig:CH3 COM",
@@ -721,18 +721,20 @@
     {
       "from": "rig:CH4 COM",
       "label": "house LiPo +",
-      "status": "planned",
+      "status": "open",
       "signal": "House LiPo (D10)",
       "color": "red",
-      "cut": 4
+      "cut": 4,
+      "note": "Not used: the LiPos are plugged and unplugged by hand (decided 2026-10-06)"
     },
     {
       "from": "rig:CH4 NC",
       "label": "house BATT",
-      "status": "planned",
+      "status": "open",
       "signal": "House LiPo (D10)",
       "color": "red",
-      "cut": 4
+      "cut": 4,
+      "note": "Not used: the LiPos are plugged and unplugged by hand (decided 2026-10-06)"
     },
     {
       "from": "sim_relays:CH1 NO",
@@ -980,9 +982,7 @@
       "bus": "batt_h",
       "status": "connected",
       "signal": "LiPo +",
-      "note": "Plugged straight into the board for now (polarity was swapped at first, fixed 2026-10-06); moves through the rig's CH4 NC (D10). Rode through a bench-supply cut with no reset",
-      "cut": 4,
-      "com": "from"
+      "note": "Plugged straight into the board's battery connector, in or out by hand (rig CH2/CH4 unused); the power tests detect which. Polarity was swapped at first, fixed 2026-10-06"
     },
     {
       "from": "house_lipo:−",

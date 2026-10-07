@@ -56,8 +56,12 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
   controller power is simulated with house `in2_invert`.
 - **Power rig.** Relays on GateSim D7–D10 switch the boards' supplies (wiring: `tools/bench-wiring`; commands:
   `tools/GateSim/README.md`): CH1 the gate buck's 24 V feed, CH3 the house 12 V rail (controller, IN2 opto, house
-  buck), CH2/CH4 the LiPos (not wired yet). `-m power` runs `test_power.py` with the LiPos out, so a cut takes
-  the board down (the gate holds ~0.6 s on its buck, the house ~0.1 s). Each test waits for the board's `boot` on
+  buck); CH2/CH4 aren't used: the LiPos are plugged in or out by hand. `-m power` runs `test_power.py`, which
+  first gives each board a 1.5 s cut to find out whether its LiPo is in (the summary's "LiPos" line) and runs
+  the tests for that state, skipping the others. LiPo out: a cut takes the board down (the gate holds ~0.6 s on
+  its buck, the house ~0.1 s), so those tests check boots and recovery. LiPo in: the board rides through, so
+  those check what the site does while its supply is gone (AC loss with the board on the AC supply, the opener
+  dead with the board on its accessory output, the controller's relay dropping before its power sense). Each test waits for the board's `boot` on
   its UART tap, its link, and then puts the test profile back; a missing boot points at a fitted LiPo or an
   unwired channel. Pulses that a gate power cut overlapped are exempt from the pulse-length check.
 - **Real RF.** `-m rf` runs pings and open/close cycles at `tx_power` 2 and SF12 and reports pings, RSSI/SNR,

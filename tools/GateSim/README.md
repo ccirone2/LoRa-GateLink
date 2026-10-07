@@ -42,7 +42,8 @@ Power rig (not saved; reset by the suite's baseline): `supply none|acc|psu` (wha
 the default, only explicit cuts; `acc` the opener's accessory output, so the board loses power only when the
 opener is dead; `psu` the AC supply, so it loses power with AC), `rail gate|house on|off|auto` (force a supply
 rail, or follow the model), `rail gate|house cut <ms>` (cut it for that long, timed on the Uno, ~10 ms
-resolution with a mechanical relay), `lipo gate|house on|off` (connect or disconnect a board's LiPo). `status`
+resolution with a mechanical relay), `lipo gate|house on|off` (connect or disconnect a board's LiPo; on the bench
+CH2/CH4 aren't wired: the LiPos are plugged in or out by hand). `status`
 adds `ac= battery= supply= rail_gate= rail_house= lipo_gate= lipo_house=`.
 
 It prints `evt ...` lines: `evt pulse open|close` on each debounced press of an input (`evt pulse both` whenever

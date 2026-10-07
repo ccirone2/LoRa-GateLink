@@ -97,14 +97,13 @@ once its fix is merged and record it in the pull request.
 - [ ] **Real RF.** `test_rf.py` (`-m rf`) passes at the bench with antennas on: SF12, 2 dBm, 3 cycles. Still to
   do: run it with an attenuator or the antennas off, and at the install site, and check ping/RSSI there from the
   web console.
-- [ ] **Full power on a real supply.** Bench boards run at `tx_power` 5 because, on PC USB power, 17 dBm with a
-  relay energized caused watchdog resets. Since 2026-10-06 the bench boards run like the install (gate on a 24 V→5 V
-  buck, house on a 12 V→5 V buck). **With both LiPos in it passes (2026-10-07, 0.10.0, `--tx-power 17`):** the
-  full suite with `-m soak` (20 cycles) and the LiPo-in power tests (59 passed), then a 60-minute `-m longsoak`
-  (169 scenarios); no resets, no `radio_faults`, no `lbt_forced`. Left: the same with the LiPos out, where the
-  bucks alone carry the transmit bursts and the relay coils (`pytest tests/e2e --tx-power 17 -m "soak or power"`,
-  then `-m longsoak`), since the install may run without them. Then confirm at the install, with the antenna away
-  from the relay shield, and save `tx_power` 17 on both boards.
+- [ ] **Full power at the install.** On PC USB power, 17 dBm with a relay energized caused watchdog resets, so the
+  bench boards keep `tx_power` 5 saved. On the bench's install-like supplies (gate on a 24 V→5 V buck, house on a
+  12 V→5 V buck) 17 dBm passes, run with `--tx-power 17` (2026-10-07, 0.10.0): with both LiPos in, the full suite with
+  `-m soak` and the LiPo-in power tests, and a 60-minute `-m longsoak`; with both LiPos out, `-m "soak or power"` (24
+  passed) and a 60-minute `-m longsoak`. No resets, no `radio_faults`, no `lbt_forced`. Left: at the install, save
+  `tx_power` 17 on both boards and watch `reset_cause` and `radio_faults` for a few days, with the antenna away from
+  the relay shield.
 
 ## Install
 

@@ -8,6 +8,10 @@ in the file.
 python tools/bench-wiring/serve.py   # then open http://localhost:8001; Save writes wiring.json in place
 ```
 
+Always serve the page with `serve.py`, never `python -m http.server` or another static server: only `serve.py`
+accepts the save, so under any other server Save asks for the file. The page shows a warning banner when it isn't
+served by `serve.py`. If port 8001 is taken by another server, stop that server rather than picking another port.
+
 ## Reading the diagram
 - **Rows:** one container per site (Gate, with the GateSim and power rig; House). Names inside a container don't
   repeat the site: "LiPo" in the Gate container is the gate LiPo.
@@ -41,9 +45,9 @@ A USB cable that carries 5 V has a red core (`usb: "powered"`); a power-blocked 
 
 ## Editing
 - **In the page:** click a wire to open its card and set its status, colour or note; click off it to close the card.
-  Save or Ctrl+S writes the served `wiring.json` when the page comes from `serve.py`. Under any other server the
-  first save asks for the file (Chrome or Edge; the dialog remembers the folder), or use **Open wiring.json…** up
-  front. **Reload** re-reads the file after an edit made elsewhere.
+  Save or Ctrl+S writes the served `wiring.json` (served by `serve.py`, see above). As a fallback, without
+  `serve.py`, the first save asks for the file (Chrome or Edge; the dialog remembers the folder), or use
+  **Open wiring.json…** up front. **Reload** re-reads the file after an edit made elsewhere.
 - **In the JSON:** structural changes go here.
   - A device has `top`, `left`, `right` and `bottom` terminal lists; `""` in a list is an empty row (a spacer to line
     terminals up, as with OUT*n* beside *n*+). `sub` is an optional subtitle under the name. `bench: true` marks a

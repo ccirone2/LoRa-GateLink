@@ -34,6 +34,10 @@
   .sw { width: 18px; height: 0; border-top: 3px solid; display: inline-block; }
   #msg { font-size: 13px; color: var(--muted); }
   #msg.warn { color: var(--unverified); }
+  #plain { display: none; margin: 12px 12px 0; padding: 10px 14px; border: 2px solid var(--unverified); border-radius: 8px;
+    background: var(--panel); font-size: 14px; }
+  #plain.on { display: block; }
+  #plain code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
   #wrap { overflow: auto; padding: 12px; }
   svg { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
   svg text { fill: var(--ink); font-size: 11px; font-family: system-ui, sans-serif; }
@@ -90,6 +94,9 @@
     <svg width="26" height="8"><line x1="1" y1="4" x2="25" y2="4" stroke="#8d939a" stroke-width="2.2"></line></svg>USB data only</span>
   <span id="msg"></span>
 </header>
+<div id="plain"><b>Save can't write wiring.json in place:</b> this page isn't served by <code>serve.py</code>, so Save asks
+  for the file. Stop this server and run <code>python tools/bench-wiring/serve.py</code> from the repo root, then reload
+  this page (<a href="http://localhost:8001/">localhost:8001</a>).</div>
 <div id="wrap"><div id="diagram"></div></div>
 <div id="todo"></div>
 <div id="panel">
@@ -134,15 +141,19 @@ function setDirty(d) {
   dirty = d; $('save').disabled = !d; $('save').classList.toggle('primary', d);
   if (d) msg(handle || serverSave ? 'Unsaved changes' : 'Unsaved changes: Save asks where wiring.json is', true);
 }
-async function loadHandle() { data = JSON.parse(await (await handle.getFile()).text()); setDirty(false); draw(); msg(`Loaded ${handle.name}`); }
+async function loadHandle() {
+  data = JSON.parse(await (await handle.getFile()).text()); setDirty(false); draw(); msg(`Loaded ${handle.name}`);
+  $('plain').classList.remove('on');
+}
 async function loadFetch() {
   try {
     const r = await fetch('wiring.json', { cache: 'no-store' });
     serverSave = r.headers.get('X-Bench-Wiring-Save') === '1';
+    $('plain').classList.toggle('on', !serverSave);
     $('open').classList.toggle('primary', !serverSave);
     data = await r.json(); setDirty(false); draw();
     msg(serverSave ? 'Save writes the served wiring.json' : 'Plain server: Save asks for the file (serve.py saves in place)');
-  } catch (e) { msg('Serve this folder (python tools/bench-wiring/serve.py) or use Open wiring.json…', true); }
+  } catch (e) { $('plain').classList.add('on'); msg('Could not load wiring.json: use Open wiring.json…', true); }
 }
 $('open').onclick = async () => {
   if (!window.showOpenFilePicker) return msg('Needs Chrome or Edge to save', true);
@@ -166,6 +177,7 @@ async function save() {
     if (!handle) {
       if (!window.showSaveFilePicker) return msg('Needs Chrome or Edge to save', true);
       handle = await window.showSaveFilePicker({ ...PICK, suggestedName: 'wiring.json' });
+      $('plain').classList.remove('on');
     }
     const w = await handle.createWritable(); await w.write(text); await w.close();
     setDirty(false); msg(`Saved to ${handle.name} ${new Date().toLocaleTimeString()}`); draw();

@@ -29,6 +29,35 @@ it.
 On/off settings are toggle switches on the Config tab: flip one, click **Apply** (it takes effect immediately),
 then **Save** to keep it across reboots.
 
+## New board preflight
+
+Optional, but worth doing before a MKR WAN 1310 goes into the install: one bench board had a weak receiver that
+only showed up as occasional CRC errors and lost pongs. Pair the new board with a known-good one:
+
+1. Put the new board in place of one of the bench boards (`python tools/gatelink.py snapshot` first), flash it
+   (`/flash`) and give it that board's role, config and key (`restore`; a new board may come up on another COM
+   number, so rename the port in `~/.gatelink_config.json`). If it doesn't show up on USB even after a
+   double-tap of reset (Windows lists *Device Descriptor Request Failed*), try another USB port or cable.
+2. Run `python tools/gatelink.py rftest` (5 minutes of pings both ways; `--seconds` to change). Keep the bench
+   setup the same between runs: boards side by side, `tx_power` 5, SF9 (the defaults it was calibrated on).
+3. It passes with no CRC errors at either board and at most 1 % of pongs lost (`--max-crc`, `--max-loss`). A
+   board's `crc` column counts frames *it* received with a bad CRC, so it names the weak receiver; lost pongs
+   can't be pinned on one side. Record the board's USB serial number (printed by `rftest`) with the result.
+
+On a fail, rerun once, then swap the two boards' roles (or shields) and run again: if the CRC errors follow the
+board, keep it out of the install.
+
+Results on the bench (0.10.1, SF9, `tx_power` 5, 5 minutes, 2026-10-07):
+
+| Pair | Pongs lost | CRC errors | Avg SNR | Result |
+|---|---|---|---|---|
+| …183013 (house) + …191117 (gate) | 12 / 372 (3.2 %) | 0 / **7** | 7.3 / 7.2 dB | FAIL: …191117 |
+| …183013 (house) + …0C301C (gate) | 1 / 416 (0.2 %) | 0 / 0 | 7.9 / 8.0 dB | PASS |
+
+Board …191117 (`8E4B6C235030534D4D2E3120FF191117`) had CRC errors in every run since 2026-10-02, whatever its role,
+shield, antenna, USB cable or channel, with lower SNR than its partner (5.5–7.75 dB against 7.75–8). With the spare
+…0C301C in its place both the CRC errors and most of the pong loss went away. Keep …191117 out of the install.
+
 ## Checklist
 
 **Still manual:** status LED patterns and **Identify**; the web console itself (Config toggles: flip one → its

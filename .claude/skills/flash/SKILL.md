@@ -7,7 +7,7 @@ description: Flash GateLink firmware to the bench boards (and optionally the Gat
 
 From 0.5.0 the saved config and key live in the board's SPI flash chip and survive uploads. Uploading over
 older firmware, or onto a board whose chip doesn't answer (`cfg internal` in `ports`), still erases them, so
-this procedure always snapshots first and restores when needed. Bench facts: the MKR boards are usually COM5/COM6 (which is which can change; boards
+this procedure always snapshots first and restores when needed. Bench facts: the MKR boards are usually COM5/COM21 (which is which can change; boards
 are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink_key`.
 
 1. **Free the ports.** The web console (or a running pytest) holding a port makes everything below fail with

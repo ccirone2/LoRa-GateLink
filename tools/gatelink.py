@@ -6,6 +6,7 @@
     python tools/gatelink.py snapshot                   # save every board's config before flashing
     python tools/gatelink.py restore                    # after flashing: config + key back, reboot, wait for link
     python tools/gatelink.py house hist --csv link.csv  # link quality history (every bucket) as CSV
+    python tools/gatelink.py rftest                     # radio preflight for a new board (5 min of pings)
 
 From firmware 0.5.0 the config and key live in the board's SPI flash chip and survive uploads (`ports` shows
 `cfg spi`); older firmware, or a board whose chip doesn't answer (`cfg internal`), loses them on every upload.
@@ -209,6 +210,84 @@ def cmd_restore(args):
             b.close()
 
 
+def cmd_rftest(args):
+    """Radio preflight: ping both ways between the two linked boards and judge each board's receiver.
+
+    A board's `crc_err` counts frames it received with a bad CRC, so it points at that board's receiver; lost
+    pongs can't be split between the ping and the pong, so loss is judged on both directions together.
+    """
+    boards, serials = [], {}
+    try:
+        for p in serial.tools.list_ports.comports():
+            if p.vid != ARDUINO_VID:
+                continue
+            try:
+                b = open_board(p.device)
+            except (serial.SerialException, BoardError) as e:
+                print(f"{p.device}: skipped ({e})")
+                continue
+            boards.append(b)
+            serials[b.name] = (p.device, p.serial_number or "?")
+        if sorted(b.name for b in boards) != ["gate", "house"]:
+            sys.exit("rftest needs one house and one gate board on USB, both with the key set")
+        tl = boards[0].timeline = boards[1].timeline = Timeline()
+        start = {}
+        for b in boards:
+            s = b.status()
+            if not s["link"]["verified"]:
+                sys.exit(f"{b.name}: link not verified; wait for it (or `restore`) and retry")
+            start[b.name] = s["link"]
+        sf, tx_power = boards[0].config_get()["sf"], boards[0].config_get()["tx_power"]
+        print(f"pinging both ways for {args.seconds:.0f} s (SF{sf}, tx_power {tx_power}) ...")
+
+        stats = {b.name: {"sent": 0, "lost": 0, "snr": [], "rssi": [], "fei": []} for b in boards}
+        end_at = time.monotonic() + args.seconds
+        while time.monotonic() < end_at:
+            for b in boards:
+                st = stats[b.name]
+                mark = tl.now()
+                b.request("radio.ping")
+                st["sent"] += 1
+                deadline = time.monotonic() + 3
+                pong = None
+                while pong is None and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                    pong = tl.first(b.name, "pong", mark)
+                if pong is None:
+                    st["lost"] += 1
+                else:
+                    for k in ("snr", "rssi", "fei"):
+                        if pong.get(k) is not None:
+                            st[k].append(pong[k])
+                time.sleep(0.5)
+        end = {b.name: b.status()["link"] for b in boards}
+    finally:
+        for b in boards:
+            b.close()
+
+    def avg(xs):
+        return f"{sum(xs) / len(xs):6.2f}" if xs else "     -"
+
+    sent = sum(s["sent"] for s in stats.values())
+    lost = sum(s["lost"] for s in stats.values())
+    loss = 100 * lost / max(sent, 1)
+    ok = loss <= args.max_loss
+    print(f"\n{'board':5} {'port':6} {'serial':32} {'pings':>5} {'lost':>4} {'crc':>3} {'snr':>6} {'min':>5} "
+          f"{'rssi':>6} {'fei Hz':>7} {'noise':>5}  receiver")
+    for name, st in stats.items():
+        port, sn = serials[name]
+        crc = (end[name]["crc_err"] - start[name]["crc_err"]) & 0xFFFFFFFF
+        good = crc <= args.max_crc
+        ok = ok and good
+        print(f"{name:5} {port:6} {sn:32} {st['sent']:5} {st['lost']:4} {crc:3} {avg(st['snr'])} "
+              f"{min(st['snr'], default=float('nan')):5.2f} {avg(st['rssi'])} {avg(st['fei']):>7} "
+              f"{end[name]['noise'] if end[name]['noise'] is not None else '-':>5}  {'ok' if good else 'FAIL'}")
+    print(f"\npong loss {lost}/{sent} ({loss:.1f} %, limit {args.max_loss:g} %); "
+          f"CRC errors limit {args.max_crc} per board")
+    print("PASS" if ok else "FAIL: see docs/bench-testing.md (New board preflight) before using this pair")
+    return 0 if ok else 1
+
+
 def main():
     ap = argparse.ArgumentParser(description="GateLink boards over their USB JSON console (docs/console.md); "
                                              "or `gatelink.py <house|gate|COMx> <cmd> [key=value ...]`")
@@ -223,9 +302,14 @@ def main():
     p.add_argument("--force", action="store_true", help="restore even boards that already match")
     p.add_argument("--wait", type=float, default=30, help="seconds to wait for the link")
     p.set_defaults(fn=cmd_restore)
+    p = sub.add_parser("rftest", help="radio preflight: ping both ways, check pong loss and CRC errors")
+    p.add_argument("--seconds", type=float, default=300, help="test length (default 300)")
+    p.add_argument("--max-loss", type=float, default=1.0, help="pong loss limit in %% (default 1)")
+    p.add_argument("--max-crc", type=int, default=0, help="CRC errors allowed per board (default 0)")
+    p.set_defaults(fn=cmd_rftest)
 
     # Anything else is `<target> <cmd> [key=value ...]`.
-    if len(sys.argv) > 1 and sys.argv[1] not in ("ports", "snapshot", "restore", "-h", "--help"):
+    if len(sys.argv) > 1 and sys.argv[1] not in ("ports", "snapshot", "restore", "rftest", "-h", "--help"):
         rp = argparse.ArgumentParser(prog="gatelink.py <target>")
         rp.add_argument("target", help="house, gate or a port (COMx)")
         rp.add_argument("cmd", help="console command, e.g. status, log.get, config.set; or hist (history as CSV)")

@@ -22,6 +22,7 @@ GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -m power   # real power cuts 
 python tools/gatelink.py ports                 # boards on USB: role, fw, key, link (also: <house|gate|COMx> <cmd> k=v)
 python tools/gatelink.py snapshot | restore    # save config before flashing / re-apply config + key after
 python tools/gatelink.py house hist --csv f.csv # link quality history (hourly buckets) as CSV
+python tools/gatelink.py rftest                # radio preflight for a new MKR board (docs/bench-testing.md)
 ```
 
 `tools/bench-wiring/` is the agreed record of every bench wire (`wiring.json`, shown by `index.html`). Always serve it with `python tools/bench-wiring/serve.py` (port 8001), which saves the page's edits back to the file; never with `python -m http.server` or any other server, where Save falls back to a file dialog (the page shows a warning banner). If something else holds port 8001, stop it and start `serve.py`. Update `wiring.json` in the same session whenever a wire moves or is confirmed; the user edits it in the page.

@@ -36,7 +36,7 @@ siren sensor.
 | `web/` | Static configuration and diagnostics page (Web Serial over USB, no server), hosted on GitHub Pages |
 | `tests/e2e/` | Bench end-to-end suite (pytest; needs the hardware) |
 | `tools/GateSim/` | Bench-only Uno sketch that simulates the opener |
-| `tools/gatelink.py` | Command-line access to a board's USB console; config snapshot/restore around a flash; link history as CSV |
+| `tools/gatelink.py` | Command-line access to a board's USB console; config snapshot/restore around a flash; link history as CSV; radio preflight for a new board (`rftest`) |
 | `docs/` | Hardware, protocol, console and bench documentation |
 
 ## Documentation

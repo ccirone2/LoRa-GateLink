@@ -18,6 +18,7 @@ arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COMx firmware/GateLink
 node --check web/app.js                        # syntax check for the web UI
 python -m http.server 8000 -d web              # serve UI at http://localhost:8000 (Chrome/Edge)
 GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -v   # bench end-to-end suite (hardware required)
+GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -m power   # real power cuts through the power rig (LiPos out)
 python tools/gatelink.py ports                 # boards on USB: role, fw, key, link (also: <house|gate|COMx> <cmd> k=v)
 python tools/gatelink.py snapshot | restore    # save config before flashing / re-apply config + key after
 python tools/gatelink.py house hist --csv f.csv # link quality history (hourly buckets) as CSV

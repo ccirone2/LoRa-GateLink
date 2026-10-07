@@ -51,11 +51,6 @@ once its fix is merged and record it in the pull request.
   released, before the firmware starts. Remaining options: a bootloader that skips that wait on watchdog/software
   resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
-- [ ] **A gate supply cut logs a moment of `between`, cause `external`.** Cutting the 24 V that wets the gate's
-  inputs (bench, 2026-10-06): the closed limit's opto dropped one debounce cycle before IN3, so the gate logged
-  `gate_state` between/external, then no_power within the same second. Harmless (the house shows not-closed for
-  `no_power` anyway) but the log reads as a move. Fix idea: when a limit drops, wait one more debounce period for
-  IN3 before reporting.
 - [ ] **Shorten the 3 s close delay (the relay drops before the power sense).** Since 0.10.0 a controller
   switch-OFF waits `ctrl_confirm_ms` (3 s) before it becomes CLOSE, because on a real 12 V cut the Shelly's relay
   drops ~0.46 s in but the house IN2 opto only notices ~2.1 s in (bench, 2026-10-06: 1.64–1.66 s apart over 7

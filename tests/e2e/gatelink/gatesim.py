@@ -162,6 +162,27 @@ class GateSim:
         for site in ("gate", "house"):
             self._ok(f"rail {site} auto")
 
+    def relays(self, steps, gap_s):
+        """Force gate input signals in order, e.g. [(2, "off"), (3, "off")] (relay 1-3 = IN1-IN3), gap_s apart.
+        Replies are collected at the end: waiting for each takes ~0.1 s, too coarse for the gaps tested."""
+        while not self._lines.empty():
+            self._lines.get_nowait()
+        for i, (n, mode) in enumerate(steps):
+            if i:
+                time.sleep(gap_s)
+            self.timeline.add("test", "action", text=f"sim relay {n} {mode}")
+            self.ser.write(f"relay {n} {mode}\n".encode())
+        deadline = time.monotonic() + 2
+        oks = 0
+        while oks < len(steps):
+            try:
+                reply = self._lines.get(timeout=max(0.01, deadline - time.monotonic()))
+            except queue.Empty:
+                raise GateSimError(f"no reply to relay steps {steps}") from None
+            if reply.startswith("err"):
+                raise GateSimError(f"relay steps {steps}: {reply}")
+            oks += reply == "ok"
+
     def relay_auto(self):
         for n in (1, 2, 3):
             self._ok(f"relay {n} auto")

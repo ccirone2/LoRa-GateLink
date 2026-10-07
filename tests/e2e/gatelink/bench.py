@@ -43,7 +43,7 @@ def _get(d, path):
 
 
 class Bench:
-    def __init__(self, house, gate, sim, ctrl, timeline, run_dir):
+    def __init__(self, house, gate, sim, ctrl, timeline, run_dir, tx_power=None):
         self.house, self.gate, self.sim, self.ctrl = house, gate, sim, ctrl
         self.power = CtrlPower(ctrl, house)
         self.timeline = timeline
@@ -53,6 +53,11 @@ class Bench:
             "house": {**PROFILE_COMMON, **PROFILE_HOUSE, "net_id": self.backup["house"]["net_id"]},
             "gate": {**PROFILE_COMMON, **PROFILE_GATE, "net_id": self.backup["gate"]["net_id"]},
         }
+        # --tx-power: a radio param, applied at once; both boards get it (the link works either way meanwhile).
+        self.tx_power = tx_power
+        if tx_power is not None:
+            for n in ("house", "gate"):
+                self.profile[n]["tx_power"] = tx_power
         self.pulse_ms = self.backup["gate"]["pulse_ms"]
         self.sim_travel_orig = sim.status()["travel"]
         self.latencies = defaultdict(list)

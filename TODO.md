@@ -97,19 +97,13 @@ once its fix is merged and record it in the pull request.
 - [ ] **Real RF.** `test_rf.py` (`-m rf`) passes at the bench with antennas on: SF12, 2 dBm, 3 cycles. Still to
   do: run it with an attenuator or the antennas off, and at the install site, and check ping/RSSI there from the
   web console.
-- [ ] **Full power on a real supply.** Bench boards run at `tx_power` 5 because, on PC USB power, 17 dBm with a
-  relay energized caused watchdog resets. Since 2026-10-06 the bench boards run like the install (gate on a 24 V→5 V
-  buck, house on a 12 V→5 V buck, both with LiPos), so check it there first: set `tx_power` 17 on both (radio
-  params: both boards, applied at once), run `pytest tests/e2e -m soak` and the power tests, and look for resets
-  (`reset_cause`) and `radio_faults`. Then confirm at the install, with the antenna away from the relay shield.
-- [ ] **Power-test scenarios not covered yet.** `test_power.py` (`-m power`) covers the gate cut at rest, beyond the
-  link timeout, mid-pulse, bounce and during a config save; AC loss and a dead opener with the LiPo in; the house
-  cut, dips and a 12 V cut on its LiPo; both sites. Still to add from the 2026-10-04 plan:
-  - the gate unpowered while the opener is moved by hand (state and cause after the boot);
-  - the house cut between a controller edge and the gate's ACK (no late command after its reboot);
-  - a cut during a local `config.save` on the house (old or new config, never defaults);
-  - AC loss with the gate board on the AC supply and no LiPo (`supply psu`: the board dies with AC while the
-    opener runs on its battery).
+- [ ] **Full power at the install.** On PC USB power, 17 dBm with a relay energized caused watchdog resets, so the
+  bench boards keep `tx_power` 5 saved. On the bench's install-like supplies (gate on a 24 V→5 V buck, house on a
+  12 V→5 V buck) 17 dBm passes, run with `--tx-power 17` (2026-10-07, 0.10.0): with both LiPos in, the full suite with
+  `-m soak` and the LiPo-in power tests, and a 60-minute `-m longsoak`; with both LiPos out, `-m "soak or power"` (24
+  passed) and a 60-minute `-m longsoak`. No resets, no `radio_faults`, no `lbt_forced`. Left: at the install, save
+  `tx_power` 17 on both boards and watch `reset_cause` and `radio_faults` for a few days, with the antenna away from
+  the relay shield.
 
 ## Install
 

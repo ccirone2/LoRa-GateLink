@@ -34,6 +34,9 @@ def pytest_addoption(parser):
     g.addoption("--cycles", type=int, default=20, help="open/close cycles for the soak test")
     g.addoption("--soak-minutes", type=float, default=120, help="duration of the long soak (-m longsoak)")
     g.addoption("--rf-cycles", type=int, default=5, help="open/close cycles on the marginal link (-m rf)")
+    g.addoption("--tx-power", type=int,
+                help="run both boards at this tx_power (dBm, applied unsaved like the rest of the test profile); "
+                     "without it the saved value is kept and must be <= 5")
     g.addoption("--restore-key", action="store_true",
                 help="first reboot both boards and re-apply GATELINK_KEY, e.g. after an interrupted wrong-key test")
 
@@ -139,7 +142,7 @@ def bench(request):
         run_dir = RESULTS / time.strftime("%Y%m%d-%H%M%S")
         run_dir.mkdir(parents=True, exist_ok=True)
         state["run_dir"] = run_dir
-        b = Bench(boards["house"], boards["gate"], sim, ctrl, tl, run_dir)
+        b = Bench(boards["house"], boards["gate"], sim, ctrl, tl, run_dir, tx_power=cfg.getoption("--tx-power"))
         b.facts["consoles"] = consoles
         (run_dir / "config_backup.json").write_text(json.dumps(b.backup, indent=2))
         state["bench"] = b
@@ -193,7 +196,11 @@ def pytest_runtest_makereport(item, call):
     rep = yield
     state = item.config._gatelink
     prev = state["outcomes"].get(item.nodeid)
-    if rep.when == "call" or (rep.failed and prev != "failed") or (rep.skipped and prev is None):
+    if hasattr(rep, "wasxfail"):
+        # An xfail test that fails in its teardown (the invariant checks) after passing its body is an xfail too.
+        if rep.skipped or rep.when == "call":
+            state["outcomes"][item.nodeid] = "xfailed" if rep.skipped else "xpassed"
+    elif rep.when == "call" or (rep.failed and prev != "failed") or (rep.skipped and prev is None):
         state["outcomes"][item.nodeid] = "failed" if rep.failed else rep.outcome
     if rep.failed and "test_00_preflight" in item.nodeid:
         state["preflight_failed"] = True

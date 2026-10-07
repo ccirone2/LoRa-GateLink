@@ -11,11 +11,14 @@ After every test the usual invariants are checked, including "the opener saw no 
 is what catches relay chatter while a board powers down or up.
 """
 import random
+import threading
 import time
 
 import pytest
 
-from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink.bench import ACT_OPEN, CAUSE, PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink.board import BoardError
+from gatelink.flows import outage
 
 pytestmark = pytest.mark.power
 
@@ -146,6 +149,134 @@ def test_gate_power_cut_during_config_save(rig, lipo, lead_ms):
         rig.note(f"lead {lead_ms} ms: the {'new' if saved == new else 'old'} value survived")
     finally:
         rig.resave("gate")  # put the backup's saved config back, and the profile on top
+
+
+@pytest.mark.parametrize("cut_ms", [5000, (LINK_TIMEOUT_S + 5) * 1000], ids=["back_mid_travel", "beyond_link_timeout"])
+def test_gate_unpowered_opener_moved_by_hand(rig, lipo, cut_ms):
+    """The gate board is down while the opener is opened locally (a button, the AES controller): back while it's
+    still travelling, or after the house declared the link lost. The board reads the real position once its inputs
+    settle and claims nothing (cause none: nothing is attributed to a boot); the house follows the gate open and
+    puts the controller on, without a command."""
+    require(lipo, gate=False)
+    rig.expect_commands(0)
+    m = rig.mark()
+    rig.power_cut("gate", cut_ms)
+    time.sleep(1.0)  # the board holds ~0.6 s on its buck
+    rig.sim.open_gate()
+    boot = rig.wait_power_return("gate", m, timeout=cut_ms / 1000 + 30)
+    assert boot["a"] & RCAUSE_POWER, f"expected a power-on/brownout reset, got RCAUSE {boot['a']:#x}"
+    rig.wait_gate("open", timeout=SIM_TRAVEL_S + 15, settling=False)
+    st = rig.gate.status()
+    assert st["cause"] == "none" and st["target"] == "", f"after the boot: cause {st['cause']}, target {st['target']!r}"
+    for e in rig.logs("gate", "gate_state", since=boot["t"]):
+        assert e["b"] != CAUSE["lora"], f"gate_state {e['a']} at {e['t']}s claimed as ours"
+    rig.expect_no("gate", "pulse", since=m)
+    if cut_ms > LINK_TIMEOUT_S * 1000:
+        rig.wait_log("house", "link_down", since=m, timeout=1)
+    rig.wait_house(20, gate="open", link_up=True, io__k1=True, io__k2=False)
+    rig.wait_ctrl(True, timeout=30)
+
+
+def test_ac_loss_board_on_ac_supply_no_lipo(rig, lipo):
+    """The gate board fed from the AC 24 V supply (`supply psu`) with no LiPo, and AC goes for longer than the
+    house's link timeout: the board dies with it while the opener carries on on its battery. The house fails the
+    contact sensor open on link loss; when AC returns the board boots, reads AC and the closed limit, and everything
+    is back without a command or a press."""
+    require(lipo, gate=False)
+    rig.expect_commands(0)
+    m = rig.mark()
+    rig.allow_reboot("gate")
+    rig.sim.supply("psu")
+    rig.sim.ac(False)
+    rig.wait_sim("rail gate off", since=m, timeout=3)
+    rig.wait_log("house", "link_down", since=m, timeout=LINK_TIMEOUT_S + 10)
+    rig.wait_house(5, link_up=False, io__k2=False)
+    assert rig.sim.status()["state"] == "closed", "the opener should ride through on its battery"
+    rig.expect_no("gate", "boot", since=m)  # no LiPo, no AC: the board must still be down
+    m2 = rig.mark()
+    rig.sim.ac(True)
+    boot = rig.wait_power_return("gate", m2, timeout=30)
+    assert boot["a"] & RCAUSE_POWER, f"expected a power-on/brownout reset, got RCAUSE {boot['a']:#x}"
+    rig.wait_gate("closed", ac_power=True, settling=False, timeout=15)
+    rig.wait_house(20, gate="closed", link_up=True, io__k2=True, io__k1=False, remote__ac_power=True)
+    rig.expect_no("gate", "pulse", since=m)
+
+
+def test_house_power_cut_with_command_pending(rig, lipo):
+    """The house loses power between a controller edge and the gate's ACK: the command is pending (the radio is
+    out, so it can't be delivered) when the 12 V rail goes, taking the house board and the controller down. After
+    the reboot the house has forgotten it (commands live in RAM) and must not send anything from the controller's
+    level at boot; the gate never pulses, and the house puts the controller back to the closed gate."""
+    require(lipo, house=False)
+    rig.expect_commands(1)  # the one before the cut, never delivered
+    m = rig.mark()
+    with outage(rig):
+        rig.ctrl.on()
+        rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m, timeout=10)
+        time.sleep(1.0)  # a retry or two on the air
+        rig.wait_house(2, cmd_pending=True)
+        cut = rig.mark()
+        rig.power_cut("house", 5000)
+        time.sleep(1.0)  # the house is down after ~0.1 s: the radio can come back without it
+    rig.wait_power_return("house", cut, timeout=40)
+    rig.house.config_set(ctrl_power_sense=1)  # the opto is real: keep it on (the profile turns it off)
+    rig.wait_house(45, "settled after power return", gate="closed", io__k1=False, io__k2=True, armed=True,
+                   cmd_pending=False, sync_window=False, resyncing=False)
+    rig.wait_ctrl(False, timeout=45)
+    time.sleep(PROFILE_COMMON["cmd_ttl_s"])  # anything still pending anywhere would have landed by now
+    rig.expect_no("gate", "cmd_rx", since=m)
+    rig.expect_no("gate", "pulse", since=m)
+    assert len(rig.logs("house", "cmd_sent", since=m)) == 1, "the house sent a command after its reboot"
+
+
+@pytest.mark.parametrize("save_lead_ms", [-40, 0, 40, 80, 150, 300])
+def test_house_power_cut_during_config_save(rig, lipo, save_lead_ms):
+    """A local config.save on the house while its 12 V rail goes: the save is sent `save_lead_ms` before the cut
+    (negative: after it), and the board goes down ~0.1 s into the cut, so somewhere in the erase, program or
+    read-back. After the boot the config must be the old record or the new one, loaded from the SPI flash with
+    nothing dropped: never defaults, never a mix."""
+    require(lipo, house=False)
+    rig.expect_commands(0)
+    rig.resave("house")  # the saved record is now exactly the backup: the "old" config
+    old = rig.backup["house"]
+    p = "pulse_ms"  # unused by the house: harmless whichever value survives
+    rig.house.config_set(**{p: old[p] + 100 if old[p] <= 4900 else old[p] - 100})
+    new = rig.house.config_get()  # what the save writes: the test profile plus the changed param
+    m = rig.mark()
+
+    def save():
+        try:
+            rig.house.request("config.save", timeout=3, check=False)
+        except BoardError:
+            pass  # the board went down before it answered
+
+    try:
+        saver = threading.Thread(target=save, daemon=True)
+        if save_lead_ms >= 0:
+            saver.start()
+            time.sleep(save_lead_ms / 1000)
+            rig.power_cut("house", 3000)
+        else:
+            rig.power_cut("house", 3000)
+            time.sleep(-save_lead_ms / 1000)
+            saver.start()
+        saver.join(5)
+        rig.wait_power_return("house", m, timeout=40, profile=False)
+        cfg = rig.logs("house", "cfg", since=m)[-1]
+        assert cfg["a"] == 1 and cfg["b"] == 0, f"config at boot from source {cfg['a']}, {cfg['b']} dropped"
+        got = rig.house.config_get()
+        if got == old:
+            rig.note(f"save lead {save_lead_ms} ms: the old config survived")
+        elif got == new:
+            rig.note(f"save lead {save_lead_ms} ms: the new config survived")
+        else:
+            diff_old = {k: (got.get(k), v) for k, v in old.items() if got.get(k) != v}
+            diff_new = {k: (got.get(k), v) for k, v in new.items() if got.get(k) != v}
+            pytest.fail(f"loaded config is neither the old nor the new record: vs old {diff_old}, vs new {diff_new}")
+    finally:
+        rig.resave("house")  # put the backup's saved config back, and the profile on top
+    rig.wait_house(45, gate="closed", link_up=True, io__k2=True, armed=True)
+    rig.wait_ctrl(False, timeout=45)
 
 
 def test_house_power_cut_gate_open(rig, lipo):

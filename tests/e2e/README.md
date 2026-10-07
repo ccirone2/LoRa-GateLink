@@ -28,7 +28,9 @@ pytest tests/e2e -m power                 # real power cuts through the power ri
 ```
 
 Other options: `--house-port` / `--gate-port` (default: found by role), `GATELINK_SIM_PORT`,
-`GATELINK_HA_ENTITY` (default `switch.wave_1`).
+`GATELINK_HA_ENTITY` (default `switch.wave_1`), `--tx-power <dBm>` (both boards at that power for the run, applied
+unsaved with the test profile and put back afterwards, e.g. `--tx-power 17` to check full power on the real
+supplies; without it the saved `tx_power` must be 5 or less).
 
 **UART taps.** A board with `uart_console` on and a USB-to-UART adapter on its Serial1 pins (see
 [docs/console.md](../../docs/console.md)) is also listened to on the adapter. FTDI ports (VID 0x0403) are asked for
@@ -83,7 +85,7 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
 | `test_remote.py` | `remote.set` over LoRa (applied, saved by the gate, put back), refused for non-remote params, `busy` while one is pending. `remote.diag`. A gate heartbeat longer than the house's `link_timeout_s` (house `link_timeout_eff_s`). The console's `line too long` reply |
 | `test_history.py` | Link history: bucket counters against the status totals, levels and the gate's side filled in. Rollover with 60 s buckets, and `hist.get` paging. Link-down seconds and the gate's STATUS retries across an outage |
 | `test_soak.py` | `-m longsoak`: open/close cycles, outages, opener power blips, external moves and jams in rotation; no resets or radio faults; counters to `soak_counters.csv` |
-| `test_power.py` | `-m power`: gate cut at rest (house doesn't notice), beyond the link timeout (sensor fails open, recovers), mid-pulse (one short press, no re-pulse), bounce (5 cuts, config intact), during a remote config save (old or new value, never defaults); house cut with the gate open (no command, controller back on); house 12 V dips; both sites at once |
+| `test_power.py` | `-m power`: gate cut at rest (house doesn't notice), beyond the link timeout (sensor fails open, recovers), mid-pulse (one short press, no re-pulse), bounce (5 cuts, config intact), during a remote config save (old or new value, never defaults); the opener moved by hand while the gate is down (real position after the boot, cause none); AC loss with the board on the AC supply (dies with AC, back without a press); house cut with the gate open (no command, controller back on), with a command pending (not sent again after the reboot), during a local config save (old or new record, never defaults or a mix); house 12 V dips; both sites at once. LiPo in: the gate and house supply cut and dips, AC loss and a dead opener with the board riding through, both supplies at once |
 | `test_rf.py` | `-m rf`: the full loop over a marginal link (minimum power, SF12) |
 
 ## How it works

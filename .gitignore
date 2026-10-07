@@ -11,3 +11,6 @@ __pycache__/
 
 # Bundled into the Pages deploy from the latest release
 web/firmware/
+
+# Local settings (Home Assistant address etc.); never commit
+.env

@@ -96,5 +96,11 @@ yet. Leave them unwired if unused.
 - A full-power transmit while a relay is energized can crash a weakly powered board (seen on PC USB power, as
   watchdog resets). Use a solid 5 V supply, and consider a bulk capacitor (~470 µF) across 5 V/GND or a LiPo on
   the MKR battery connector. On the bench, on USB power, keep `tx_power` at about 5 dBm.
+- The shield's relays (Omron G5V-1, 3 V coils) run from the MKR's 3.3 V rail, not the 5V pin, so they keep
+  working on the LiPo alone. Bench check 2026-10-06 (0.10.0): with the 12 V rail cut, the house board on its LiPo
+  switched K1 and K2 (test pulses, and following the gate open and closed; both on together for 5 s) while
+  pinging at 17 dBm, each contact change seen by the GateSim on the relays' NC contacts, with no reset, no
+  `radio_faults` and 82/82 pongs; with its buck cut, the gate board on its LiPo pulsed OPEN and CLOSE into the
+  GateSim (507 ms each).
 - If `radio_ok` shows false, update the Murata module firmware with the `MKRWANFWUpdate_standalone` example from
   the MKRWAN library and retry.

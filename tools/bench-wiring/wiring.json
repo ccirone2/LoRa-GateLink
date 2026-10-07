@@ -151,7 +151,11 @@
         "",
         "D9",
         "",
-        "D10"
+        "D10",
+        "",
+        "D11",
+        "",
+        "D12"
       ],
       "bottom": [
         "USB"
@@ -160,8 +164,8 @@
     },
     {
       "id": "rig",
-      "name": "Power rig relays (4 ch, NC)",
-      "note": "Not installed yet. Coils from a separate 5 V (JD-VCC)",
+      "name": "4-Ch Relay Module",
+      "note": "CH1/CH3 cut supplies (power rig, NC); CH2 mirrors house K1 to the controller (NO); CH4 spare, nothing wired. Coils from the Uno 5 V (JD-VCC)",
       "top": [
         "JD-VCC",
         "GND"
@@ -180,7 +184,7 @@
         "CH1 COM",
         "CH1 NC",
         "CH2 COM",
-        "CH2 NC",
+        "CH2 NO",
         "CH3 COM",
         "CH3 NC",
         "CH4 COM",
@@ -290,7 +294,7 @@
     {
       "id": "gate_lipo",
       "name": "LiPo (1S)",
-      "note": "Not fitted yet",
+      "note": "Fitted (rode a 1.5 s supply cut, 2026-10-06); the relays work on it alone",
       "top": [
         "+",
         "−"
@@ -353,17 +357,20 @@
     {
       "id": "shelly",
       "name": "Shelly Wave 1 (controller)",
-      "note": "Home Assistant switch.wave_1. SW input in follow mode",
+      "note": "Home Assistant switch.wave_1. SW input in follow mode. SW driven by relay module CH2, which follows house K1 (2026-10-06)",
       "top": [
         "+",
         "−"
       ],
       "right": [
         "I",
-        "O",
+        "O"
+      ],
+      "left": [
         "SW",
         "SW common"
-      ]
+      ],
+      "gap": 50
     },
     {
       "id": "house",
@@ -384,8 +391,10 @@
       "right": [
         "K1 COM",
         "K1 NO",
+        "K1 NC",
         "K2 COM",
-        "K2 NO"
+        "K2 NO",
+        "K2 NC"
       ],
       "bottom": [
         "USB",
@@ -423,14 +432,21 @@
       "name": "2GIG contact sensor",
       "note": "Is one on the bench?",
       "left": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
         "term A",
         "term B"
-      ]
+      ],
+      "gap": 90
     },
     {
       "id": "house_lipo",
       "name": "LiPo (1S)",
-      "note": "Not fitted yet",
+      "note": "Fitted (rode a 1.5 s supply cut, 2026-10-06); the relays work on it alone",
       "top": [
         "+",
         "−"
@@ -588,7 +604,7 @@
       "bus": "batt_g",
       "status": "connected",
       "signal": "LiPo +",
-      "note": "Plugged straight into the board's battery connector, in or out by hand (rig CH2/CH4 unused); the power tests detect which. Polarity was swapped at first, fixed 2026-10-06"
+      "note": "Plugged straight into the board's battery connector, in or out by hand; the power tests detect which. Polarity was swapped at first, fixed 2026-10-06"
     },
     {
       "from": "gate_lipo:−",
@@ -636,9 +652,9 @@
       "from": "uno:D8",
       "to": "rig:IN2",
       "status": "connected",
-      "signal": "Gate LiPo connect",
+      "signal": "House K1 mirror (controller SW)",
       "color": "yellow",
-      "note": "Drive wired, but the relay contacts are unused (LiPos switched by hand)"
+      "note": "GateSim drives CH2 from house K1 as sensed on D12 (2026-10-06)"
     },
     {
       "from": "uno:D9",
@@ -652,9 +668,9 @@
       "from": "uno:D10",
       "to": "rig:IN4",
       "status": "connected",
-      "signal": "House LiPo connect",
+      "signal": "CH4 drive (spare)",
       "color": "purple",
-      "note": "Drive wired, but the relay contacts are unused (LiPos switched by hand)"
+      "note": "Drive only: the GateSim holds D10 off; CH4's contacts are unused"
     },
     {
       "from": "rig:JD-VCC",
@@ -683,24 +699,6 @@
       "note": "In the buck's IN+ branch only, after the split (moved there 2026-10-06; at first it cut the whole gate 24 V, wetting included). A cut: the gate rides on its LiPo and keeps reading its limits. The buck's capacitors hold its output for ~10 s once the board has switched to the LiPo"
     },
     {
-      "from": "rig:CH2 COM",
-      "label": "gate LiPo +",
-      "status": "open",
-      "signal": "Gate LiPo (D8)",
-      "color": "red",
-      "cut": 2,
-      "note": "Not used: the LiPos are plugged and unplugged by hand (decided 2026-10-06)"
-    },
-    {
-      "from": "rig:CH2 NC",
-      "label": "gate BATT",
-      "status": "open",
-      "signal": "Gate LiPo (D8)",
-      "color": "red",
-      "cut": 2,
-      "note": "Not used: the LiPos are plugged and unplugged by hand (decided 2026-10-06)"
-    },
-    {
       "from": "rig:CH3 COM",
       "label": "+12 V (supply)",
       "status": "connected",
@@ -717,24 +715,6 @@
       "note": "Cuts the Shelly, IN2 opto and house buck together. Checked 2026-10-06: the house rode on its LiPo, ctrl_power 0 then 1, no command",
       "color": "red",
       "cut": 3
-    },
-    {
-      "from": "rig:CH4 COM",
-      "label": "house LiPo +",
-      "status": "open",
-      "signal": "House LiPo (D10)",
-      "color": "red",
-      "cut": 4,
-      "note": "Not used: the LiPos are plugged and unplugged by hand (decided 2026-10-06)"
-    },
-    {
-      "from": "rig:CH4 NC",
-      "label": "house BATT",
-      "status": "open",
-      "signal": "House LiPo (D10)",
-      "color": "red",
-      "cut": 4,
-      "note": "Not used: the LiPos are plugged and unplugged by hand (decided 2026-10-06)"
     },
     {
       "from": "sim_relays:CH1 NO",
@@ -982,7 +962,7 @@
       "bus": "batt_h",
       "status": "connected",
       "signal": "LiPo +",
-      "note": "Plugged straight into the board's battery connector, in or out by hand (rig CH2/CH4 unused); the power tests detect which. Polarity was swapped at first, fixed 2026-10-06"
+      "note": "Plugged straight into the board's battery connector, in or out by hand; the power tests detect which. Polarity was swapped at first, fixed 2026-10-06"
     },
     {
       "from": "house_lipo:−",
@@ -1017,21 +997,6 @@
       "signal": "Spare"
     },
     {
-      "from": "house:K1 COM",
-      "to": "shelly:SW",
-      "status": "connected",
-      "signal": "Controller switch input (sync)",
-      "note": "Confirmed by the e2e suite (follow mode)",
-      "color": "white"
-    },
-    {
-      "from": "house:K1 NO",
-      "to": "shelly:SW common",
-      "status": "connected",
-      "signal": "Controller switch input (sync)",
-      "color": "white"
-    },
-    {
       "from": "house:K2 COM",
       "to": "sensor:term A",
       "status": "planned",
@@ -1045,6 +1010,80 @@
       "status": "planned",
       "signal": "Gate closed (contact sensor)",
       "color": "brown"
+    },
+    {
+      "from": "house:K1 NC",
+      "label": "Uno D12",
+      "status": "connected",
+      "signal": "House K1 coil sense (LOW = released)",
+      "note": "Confirmed 2026-10-06: GateSim evt house k1 on/off, also on the LiPo with the 12 V rail cut",
+      "color": "white"
+    },
+    {
+      "from": "uno:D12",
+      "label": "house K1 NC",
+      "status": "connected",
+      "signal": "House K1 coil sense (LOW = released)",
+      "color": "white"
+    },
+    {
+      "from": "house:K1 COM",
+      "label": "Uno GND",
+      "status": "connected",
+      "signal": "K1 sense common (to Uno GND)",
+      "color": "black"
+    },
+    {
+      "from": "house:K2 NC",
+      "label": "Uno D11",
+      "status": "connected",
+      "signal": "House K2 coil sense (LOW = released)",
+      "note": "Confirmed 2026-10-06: GateSim evt house k2 on/off, also on the LiPo with the 12 V rail cut",
+      "color": "brown"
+    },
+    {
+      "from": "uno:D11",
+      "label": "house K2 NC",
+      "status": "connected",
+      "signal": "House K2 coil sense (LOW = released)",
+      "color": "brown"
+    },
+    {
+      "from": "house:K2 COM",
+      "label": "Uno GND",
+      "status": "connected",
+      "signal": "K2 sense common (to Uno GND)",
+      "color": "black"
+    },
+    {
+      "from": "rig:CH2 COM",
+      "label": "controller SW",
+      "status": "connected",
+      "signal": "Controller switch input (sync)",
+      "note": "Moved from house K1 (2026-10-06): CH2 follows K1 via the GateSim, so K1's own contacts can be sensed on the Uno. Sync lags K1 by ~20 ms; a Uno reset releases CH2 (the controller sees OFF). Confirmed 2026-10-06: house IN1 follows K1 through CH2 (on ~0.2 s, off ~0.17 s, 5/5 each)",
+      "color": "white"
+    },
+    {
+      "from": "shelly:SW",
+      "label": "CH2 COM",
+      "status": "connected",
+      "signal": "Controller switch input (sync)",
+      "color": "white"
+    },
+    {
+      "from": "rig:CH2 NO",
+      "label": "controller SW common",
+      "status": "connected",
+      "signal": "Controller switch input (sync)",
+      "note": "SW is wetted at ~3 V by the controller",
+      "color": "white"
+    },
+    {
+      "from": "shelly:SW common",
+      "label": "CH2 NO",
+      "status": "connected",
+      "signal": "Controller switch input (sync)",
+      "color": "white"
     },
     {
       "from": "house:USB",

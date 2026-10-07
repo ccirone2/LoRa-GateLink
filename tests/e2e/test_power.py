@@ -1,7 +1,7 @@
 """Real power cuts through the bench power rig (GateSim `rail ... cut`; tools/GateSim/README.md, tools/bench-wiring).
 
 Needs rig CH1 (the gate buck's feed) and CH3 (the house 12 V rail: controller, IN2 opto and house buck) wired. The
-boards' LiPos are plugged in or out by hand (rig CH2/CH4 aren't used); the session finds out which with a 1.5 s cut
+boards' LiPos are plugged in or out by hand; the session finds out which with a 1.5 s cut
 per board (the `lipo` fixture) and runs the tests for that state, skipping the rest:
 - LiPo out: a cut takes the board down (the gate holds ~0.6 s on its buck, the house ~0.1 s): boots, recovery.
 - LiPo in: the board rides through on its battery: what the site does while its supply is gone.

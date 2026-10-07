@@ -243,6 +243,7 @@ function layoutBand(band, y0, devs) {
   let x = L.gutter;
   band.devices.forEach((id, k) => {
     const m = ms[k], h = m.h + (lines - m.lines) * L.nameLine;
+    if (k) x += devs[id].gap || 0;  // extra room before a box, e.g. for stub labels between two boxes
     boxes[id] = { id, x, y: rowTop, ...m, h, lines, d: devs[id] };
     x += m.w + L.gap;
   });
@@ -456,7 +457,8 @@ function draw() {
       }
       if (r.junction) s += `<circle class="dot" cx="${r.junction.x}" cy="${r.junction.y}" r="3.2" style="fill:${col};stroke:var(--muted);stroke-width:.8"></circle>`;
       if (r.cross) s += `<text x="${r.cross.x}" y="${r.cross.y + 4}" text-anchor="middle" style="fill:${col}">×</text>`;
-      if (r.label) s += `<text x="${r.label.x}" y="${r.label.y}" text-anchor="${r.label.anchor}" style="fill:${col};font-size:10px">${esc(r.label.text)}</text>`;
+      // Stub labels in the ink colour, not the wire's: white and yellow wires would vanish as text.
+      if (r.label) s += `<text x="${r.label.x}" y="${r.label.y}" text-anchor="${r.label.anchor}" style="fill:var(--ink);font-size:10px">${esc(r.label.text)}</text>`;
       // A numbered diamond marks where a power rig relay will break the wire, and the rig contact that breaks it.
       if (r.w.cut) {
         const [p0, p1] = r.path, len = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1, t = Math.min(13, len / 2);
@@ -469,12 +471,14 @@ function draw() {
           dot = `<circle class="pol" cx="${c.x + ux * k - uy * 7}" cy="${c.y + uy * k + ux * 7}" r="2.4"></circle>`;
           side = `, COM on the ${r.w.com === 'to' ? endName(r.w) : r.w.from} side`;
         }
-        s += `<g class="cut"><title>Power rig CH${r.w.cut} breaks this wire${esc(side)}</title><path d="M${c.x},${c.y - 8} L${c.x + 8},${c.y} L${c.x},${c.y + 8} L${c.x - 8},${c.y} Z"></path>`
+        s += `<g class="cut"><title>Relay module CH${r.w.cut} breaks this wire${esc(side)}</title><path d="M${c.x},${c.y - 8} L${c.x + 8},${c.y} L${c.x},${c.y + 8} L${c.x - 8},${c.y} Z"></path>`
           + `<text x="${c.x}" y="${c.y + 3.5}" text-anchor="middle">${r.w.cut}</text>${dot}</g>`;
       }
       if (r.w.via) {
-        const [p1, p2] = r.path.length > 2 ? [r.path[1], r.path[2]] : [r.path[0], r.path[1]];
-        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        // Near the `to` end (where the part sits, e.g. the 10 kΩ at the FTDI's TX), or mid-segment if that's short.
+        const p1 = r.path[r.path.length - 2], p2 = r.path[r.path.length - 1];
+        const len = Math.hypot(p2.x - p1.x, p2.y - p1.y), t = len > 80 ? 1 - 28 / len : 0.5;
+        const mx = p1.x + (p2.x - p1.x) * t, my = p1.y + (p2.y - p1.y) * t;
         s += `<rect x="${mx - 22}" y="${my - 8}" width="44" height="16" rx="3" style="fill:var(--panel);stroke:${col}"></rect><text class="via" x="${mx}" y="${my + 4}" text-anchor="middle">${esc(r.w.via)}</text>`;
       }
       s += `<path class="hit" d="${d}" data-i="${r.i}"></path>`;

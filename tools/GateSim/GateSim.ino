@@ -9,11 +9,14 @@
 //   D4 relay NO -> opto ch3 -> gate IN3  AC power
 //   D5 <- gate K1 NO (OPEN pulse),  gate K1 COM -> Uno GND   (dry contacts, INPUT_PULLUP)
 //   D6 <- gate K2 NO (CLOSE pulse), gate K2 COM -> Uno GND
-// Power rig (optional, all on NC so a released coil means powered/connected, as during a Uno reset):
+// 4-channel relay module (optional). Power rig channels on NC, so a released coil means powered/connected, as
+// during a Uno reset:
 //   D7 relay NC  -> 24 V into the gate board's buck   (gate board supply)
-//   D8 relay NC  -> gate board LiPo + lead
+//   D8 relay NO  -> controller SW input: follows house K1 (sensed on D12), whose own contacts go to the Uno
 //   D9 relay NC  -> house 12 V rail (controller, IN2 opto, house board's buck)
-//   D10 relay NC -> house board LiPo + lead
+//   D10 relay    -> CH4, spare: held off (a floating input could switch it)
+// House relay sense (optional, to check the house relays switch, e.g. on LiPo only):
+//   D11 <- house K2 NC, D12 <- house K1 NC, house K1/K2 COM -> Uno GND  (INPUT_PULLUP: LOW = coil released)
 //
 // Model: OPEN heads for open, CLOSE heads for closed, reversing mid-travel from the current position
 // (dedicated open/close inputs, no single-button stop). Limits drop as soon as the gate leaves them.
@@ -24,13 +27,15 @@
 // Serial 115200, one command per line (send "help"). Replies and "evt ..." lines are plain text:
 // "evt pulse open|close|both" on each debounced press ("both" whenever one input closes while the other
 // is held), "evt release open|close <ms>" with the press length, "evt state <name>", "evt cmd ...".
-// "evt ac on|off", "evt rail gate|house on|off" and "evt lipo gate|house on|off" on every change.
+// "evt ac on|off" and "evt rail gate|house on|off" on every change.
+// "evt house k1|k2 on|off" when a house relay's coil energizes or releases (seen on its NC contact).
 // Opening the port resets the Uno (DTR), which restarts the simulation closed and powered.
 #include <EEPROM.h>
 
 const uint8_t PIN_R_OPEN = 2, PIN_R_CLOSED = 3, PIN_R_POWER = 4;
-const uint8_t PIN_R_GATE_RAIL = 7, PIN_R_GATE_LIPO = 8, PIN_R_HOUSE_RAIL = 9, PIN_R_HOUSE_LIPO = 10;
+const uint8_t PIN_R_GATE_RAIL = 7, PIN_R_K1_MIRROR = 8, PIN_R_HOUSE_RAIL = 9, PIN_R_SPARE = 10;
 const uint8_t PIN_S_OPEN = 5, PIN_S_CLOSE = 6;
+const uint8_t PIN_S_HOUSE_K2 = 11, PIN_S_HOUSE_K1 = 12;
 const uint32_t SENSE_DEBOUNCE_MS = 20;
 const uint8_t FLICKER_TOGGLES = 6;     // relay changes per chatter burst
 const uint32_t FLICKER_STEP_MS = 30;
@@ -60,8 +65,7 @@ Supply supply = SUP_NONE;  // what the gate board's buck is fed from (not saved)
 const char *const SITE_NAMES[] = {"gate", "house"};
 int8_t railForce[2] = {-1, -1};
 uint32_t cutUntil[2] = {0, 0};
-bool lipo[2] = {true, true};  // battery connected (NC: connected while the coil is released)
-bool lastRail[2] = {true, true}, lastLipo[2] = {true, true}, lastAc = true;
+bool lastRail[2] = {true, true}, lastAc = true;
 Fault fault = F_NONE;
 uint8_t flickerLeft = 0;
 uint32_t flickerAt = 0;
@@ -91,6 +95,8 @@ struct Sense {
   uint32_t heldMs() const { return changedAt - pressedAt; }
 };
 Sense sOpen = {PIN_S_OPEN, false, false, 0, 0}, sClose = {PIN_S_CLOSE, false, false, 0, 0};
+// House relays on their NC contacts: "pressed" = contact closed = coil released. An unwired pin reads energized.
+Sense sHouseK[2] = {{PIN_S_HOUSE_K1, false, false, 0, 0}, {PIN_S_HOUSE_K2, false, false, 0, 0}};
 
 uint32_t travelMs() { return (uint32_t)st.travelS * 1000; }
 
@@ -157,7 +163,7 @@ void applyRelays(uint32_t now) {
     lastAc = in3;
     Serial.println(in3 ? F("evt ac on") : F("evt ac off"));
   }
-  const uint8_t railPins[2] = {PIN_R_GATE_RAIL, PIN_R_HOUSE_RAIL}, lipoPins[2] = {PIN_R_GATE_LIPO, PIN_R_HOUSE_LIPO};
+  const uint8_t railPins[2] = {PIN_R_GATE_RAIL, PIN_R_HOUSE_RAIL};
   for (uint8_t i = 0; i < 2; i++) {
     if (cutUntil[i] && (int32_t)(now - cutUntil[i]) >= 0) {
       cutUntil[i] = 0;
@@ -165,14 +171,9 @@ void applyRelays(uint32_t now) {
     }
     bool r = railOn(i);
     writeRelay(railPins[i], !r);  // NC: energized = cut
-    writeRelay(lipoPins[i], !lipo[i]);
     if (r != lastRail[i]) {
       lastRail[i] = r;
       printSite(F("evt rail "), i, r);
-    }
-    if (lipo[i] != lastLipo[i]) {
-      lastLipo[i] = lipo[i];
-      printSite(F("evt lipo "), i, lipo[i]);
     }
   }
 }
@@ -251,10 +252,10 @@ void printStatus() {
   Serial.print(railOn(0));
   Serial.print(F(" rail_house="));
   Serial.print(railOn(1));
-  Serial.print(F(" lipo_gate="));
-  Serial.print(lipo[0]);
-  Serial.print(F(" lipo_house="));
-  Serial.print(lipo[1]);
+  Serial.print(F(" house_k1="));
+  Serial.print(!sHouseK[0].stable);
+  Serial.print(F(" house_k2="));
+  Serial.print(!sHouseK[1].stable);
   Serial.print(F(" travel="));
   Serial.print(st.travelS);
   Serial.print(F("s fault="));
@@ -275,9 +276,10 @@ void printHelp() {
   Serial.println(F("commands: status | open | close | stop | travel <1-300 s> | help"));
   Serial.println(F("  power on|off (AC and opener battery) | ac on|off | battery on|off | restart <ms> (opener reboots)"));
   Serial.println(F("  supply none|acc|psu  gate board fed by: explicit cuts only / accessory output / AC supply"));
-  Serial.println(F("  rail gate|house on|off|auto | rail gate|house cut <ms> | lipo gate|house on|off"));
+  Serial.println(F("  rail gate|house on|off|auto | rail gate|house cut <ms>"));
   Serial.println(F("  fault none|stuck|both|flicker|deaf | polarity low|high"));
   Serial.println(F("  relay <1-3> on|off|auto  force the signal to gate IN1/IN2/IN3 (D2/D3/D4; D3 inverted, NC)"));
+  Serial.println(F("  status house_k1/k2 = house relay coils, sensed on their NC contacts (D12/D11); D8 follows K1"));
   Serial.println(F("  open/close act like a local button (not the gate board); stop halts mid-travel"));
 }
 
@@ -315,24 +317,22 @@ void handleLine(char *line) {
       }
     }
     Serial.println(F("err supply none|acc|psu"));
-  } else if ((!strcmp(cmd, "rail") || !strcmp(cmd, "lipo")) && arg
+  } else if (!strcmp(cmd, "rail") && arg
              && (!strcmp(arg, "gate") || !strcmp(arg, "house"))) {
     uint8_t i = !strcmp(arg, "house");
     char *mode = strtok(nullptr, " \t");
     char *ms = strtok(nullptr, " \t");
-    bool rail = cmd[0] == 'r';
     if (mode && (!strcmp(mode, "on") || !strcmp(mode, "off"))) {
-      if (rail) railForce[i] = !strcmp(mode, "on");
-      else lipo[i] = !strcmp(mode, "on");
-      if (rail) cutUntil[i] = 0;
-    } else if (rail && mode && !strcmp(mode, "auto")) {
+      railForce[i] = !strcmp(mode, "on");
+      cutUntil[i] = 0;
+    } else if (mode && !strcmp(mode, "auto")) {
       railForce[i] = -1;
       cutUntil[i] = 0;
-    } else if (rail && mode && !strcmp(mode, "cut") && ms && atol(ms) >= 1 && atol(ms) <= 600000L) {
+    } else if (mode && !strcmp(mode, "cut") && ms && atol(ms) >= 1 && atol(ms) <= 600000L) {
       railForce[i] = 0;
       cutUntil[i] = (millis() + (uint32_t)atol(ms)) | 1;
     } else {
-      Serial.println(rail ? F("err rail gate|house on|off|auto|cut <ms>") : F("err lipo gate|house on|off"));
+      Serial.println(F("err rail gate|house on|off|auto|cut <ms>"));
       return;
     }
     Serial.println(F("ok"));
@@ -393,14 +393,20 @@ void setup() {
   loadSettings();
   // Drive the "off" level before enabling the outputs so the relays don't click at boot (the simulation then
   // starts closed: D3's coil stays off, its NC contact giving the closed limit).
-  const uint8_t relays[] = {PIN_R_OPEN, PIN_R_CLOSED, PIN_R_POWER, PIN_R_GATE_RAIL, PIN_R_GATE_LIPO,
-                            PIN_R_HOUSE_RAIL, PIN_R_HOUSE_LIPO};
+  const uint8_t relays[] = {PIN_R_OPEN, PIN_R_CLOSED, PIN_R_POWER, PIN_R_GATE_RAIL, PIN_R_K1_MIRROR,
+                            PIN_R_HOUSE_RAIL, PIN_R_SPARE};
   for (uint8_t p : relays) {
     writeRelay(p, false);
     pinMode(p, OUTPUT);
   }
   pinMode(PIN_S_OPEN, INPUT_PULLUP);
   pinMode(PIN_S_CLOSE, INPUT_PULLUP);
+  pinMode(PIN_S_HOUSE_K1, INPUT_PULLUP);
+  pinMode(PIN_S_HOUSE_K2, INPUT_PULLUP);
+  // Start from what the contacts read, so D8 doesn't flash on (an edge the controller could act on) before the
+  // first debounce.
+  for (Sense &k : sHouseK) k.raw = k.stable = digitalRead(k.pin) == LOW;
+  writeRelay(PIN_R_K1_MIRROR, !sHouseK[0].stable);
   Serial.begin(115200);
   lastTick = millis();
   applyRelays(lastTick);
@@ -428,6 +434,14 @@ void loop() {
   }
   if (eo < 0) printRelease(F("open"), sOpen.heldMs());
   if (ec < 0) printRelease(F("close"), sClose.heldMs());
+  for (uint8_t i = 0; i < 2; i++) {
+    int8_t e = sHouseK[i].update(now);
+    if (i == 0) writeRelay(PIN_R_K1_MIRROR, !sHouseK[0].stable);  // the controller sees K1 (~20 ms debounce later)
+    if (!e) continue;
+    Serial.print(F("evt house k"));
+    Serial.print(i + 1);
+    Serial.println(e > 0 ? F(" off") : F(" on"));
+  }
   tick(now);
   applyRelays(now);
   reportState();

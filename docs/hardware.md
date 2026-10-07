@@ -65,8 +65,10 @@ and `firmware/GateLink/pins.h` in sync.
   which looks exactly like the Alarm.com switch being turned off; without this a power blip would close the gate
   and reopen it when the Shelly came back. A PNP opto channel across the Shelly's 12 V supply drives IN2 (use a
   channel rated for 12 V input; output side from the board's 3.3 V, as on the gate). While IN2 is off, IN1 edges
-  are logged but never sent and resync pauses. Because the relay can drop before the opto does, each IN1 edge is
-  held for `ctrl_confirm_ms` (default 500 ms) and discarded if IN2 drops meanwhile. After power returns (and
+  are logged but never sent and resync pauses. The relay drops before the opto does: on the bench the Shelly's relay
+  dropped ~0.46 s into a 12 V cut and the opto only ~2.1 s in, since the rail's capacitors keep it lit. A power loss
+  can only drop the relay (OFF), so an OFF edge (CLOSE) is held for `ctrl_confirm_ms` (default 3 s) and discarded
+  if IN2 drops meanwhile, while an ON edge (OPEN) is sent at once. After power returns (and
   after a house boot) IN1 edges count as sync for at least `ctrl_settle_ms` (default 10 s), and up to
   `sync_window_ms` longer while the Shelly doesn't match K1 yet; one still out of step then is resynced at once. A
   Shelly that reboots internally without losing its supply isn't covered. Turn `ctrl_power_sense`

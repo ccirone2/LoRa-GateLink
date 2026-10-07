@@ -58,7 +58,7 @@ rather than a simulated outage; the Shelly's real 12 V removed (unless the suite
 - Shelly power sense: with the gate open and the Shelly on, remove the Shelly's 12 V → house log `ctrl_power 0`
   (plus `ctrl` b=1, or `ctrl_power` b=2 if the relay dropped first), no `cmd_sent`, gate no `pulse`; restore it →
   `ctrl_power 1`, then `sync 1` when the Shelly comes back on. Compare the `ctrl` and `ctrl_power` times to check
-  `ctrl_confirm_ms` covers the gap. *e2e: `test_controller_faults.py` (simulated unless
+  `ctrl_confirm_ms` (3 s, OFF edges only) covers the gap. *e2e: `test_controller_faults.py` (simulated unless
   `GATELINK_HA_POWER_ENTITY` is set)*
 - Unpower the gate board → after `link_timeout_s` (at least 2.5 × the gate's `heartbeat_s`) house K2 releases
   (sensor open), log `link_down`. *e2e: `test_link_loss_at_rest` (simulated outage)*

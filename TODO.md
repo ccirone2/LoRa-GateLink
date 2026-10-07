@@ -99,9 +99,12 @@ once its fix is merged and record it in the pull request.
   web console.
 - [ ] **Full power on a real supply.** Bench boards run at `tx_power` 5 because, on PC USB power, 17 dBm with a
   relay energized caused watchdog resets. Since 2026-10-06 the bench boards run like the install (gate on a 24 V→5 V
-  buck, house on a 12 V→5 V buck, both with LiPos), so check it there first: set `tx_power` 17 on both (radio
-  params: both boards, applied at once), run `pytest tests/e2e -m soak` and the power tests, and look for resets
-  (`reset_cause`) and `radio_faults`. Then confirm at the install, with the antenna away from the relay shield.
+  buck, house on a 12 V→5 V buck). **With both LiPos in it passes (2026-10-07, 0.10.0, `--tx-power 17`):** the
+  full suite with `-m soak` (20 cycles) and the LiPo-in power tests (59 passed), then a 60-minute `-m longsoak`
+  (169 scenarios); no resets, no `radio_faults`, no `lbt_forced`. Left: the same with the LiPos out, where the
+  bucks alone carry the transmit bursts and the relay coils (`pytest tests/e2e --tx-power 17 -m "soak or power"`,
+  then `-m longsoak`), since the install may run without them. Then confirm at the install, with the antenna away
+  from the relay shield, and save `tx_power` 17 on both boards.
 
 ## Install
 

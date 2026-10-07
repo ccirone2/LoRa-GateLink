@@ -196,7 +196,11 @@ def pytest_runtest_makereport(item, call):
     rep = yield
     state = item.config._gatelink
     prev = state["outcomes"].get(item.nodeid)
-    if rep.when == "call" or (rep.failed and prev != "failed") or (rep.skipped and prev is None):
+    if hasattr(rep, "wasxfail"):
+        # An xfail test that fails in its teardown (the invariant checks) after passing its body is an xfail too.
+        if rep.skipped or rep.when == "call":
+            state["outcomes"][item.nodeid] = "xfailed" if rep.skipped else "xpassed"
+    elif rep.when == "call" or (rep.failed and prev != "failed") or (rep.skipped and prev is None):
         state["outcomes"][item.nodeid] = "failed" if rep.failed else rep.outcome
     if rep.failed and "test_00_preflight" in item.nodeid:
         state["preflight_failed"] = True

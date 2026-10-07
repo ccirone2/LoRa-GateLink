@@ -1,6 +1,6 @@
 {
   "title": "GateLink bench wiring",
-  "updated": "2026-10-06",
+  "updated": "2026-10-07",
   "statuses": {
     "connected": "In place and confirmed (by eye, a meter, or the e2e suite)",
     "unverified": "Believed to be in place (from the docs) but not confirmed yet",
@@ -629,7 +629,7 @@
       "to": "rig:IN1",
       "status": "connected",
       "signal": "Gate supply cut",
-      "color": "grey",
+      "color": "orange",
       "note": "Checked 2026-10-06: each channel lights and clicks in turn; all off at rest"
     },
     {
@@ -637,7 +637,7 @@
       "to": "rig:IN2",
       "status": "connected",
       "signal": "Gate LiPo connect",
-      "color": "grey",
+      "color": "yellow",
       "note": "Drive wired, but the relay contacts are unused (LiPos switched by hand)"
     },
     {
@@ -645,7 +645,7 @@
       "to": "rig:IN3",
       "status": "connected",
       "signal": "House 12 V rail cut",
-      "color": "grey",
+      "color": "green",
       "note": "Checked 2026-10-06: each channel lights and clicks in turn; all off at rest"
     },
     {
@@ -653,7 +653,7 @@
       "to": "rig:IN4",
       "status": "connected",
       "signal": "House LiPo connect",
-      "color": "grey",
+      "color": "purple",
       "note": "Drive wired, but the relay contacts are unused (LiPos switched by hand)"
     },
     {

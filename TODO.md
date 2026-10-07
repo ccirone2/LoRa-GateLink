@@ -56,6 +56,13 @@ once its fix is merged and record it in the pull request.
   `gate_state` between/external, then no_power within the same second. Harmless (the house shows not-closed for
   `no_power` anyway) but the log reads as a move. Fix idea: when a limit drops, wait one more debounce period for
   IN3 before reporting.
+- [ ] **A short 12 V dip at the house can close then reopen the gate.** Bench, 2026-10-06 (0.10.0, house on its
+  LiPo): a 300 ms dip of the house 12 V rail rebooted the Shelly (its relay off ~3.4 s, then restored on) but the
+  IN2 opto never dropped (the rail's capacitors carried it), so after `ctrl_confirm_ms` (3 s) the OFF edge became
+  CLOSE, and the Shelly's restored ON then sent OPEN. Real cuts are handled (the opto drops ~2.1 s in and the
+  pending CLOSE is discarded). Options: sense the supply faster (a ~9 V zener in series with the opto input, or a
+  higher-threshold opto), or `ctrl_confirm_ms` above the Shelly's reboot time (~5 s), at the cost of slower
+  closing. e2e: `test_house_supply_dips_ride_through` (`-m power`, LiPo in), marked xfail.
 - [ ] **USB stalls cut console lines.** In the 120-minute soak on 0.4.1, 13 replies (11 house, 2 gate) were cut
   off at 192, 256 or 320 bytes: the host stopped taking IN packets for over 70 ms and the SAMD core dropped the
   rest of the line. Since 0.4.1 only that line is lost (the suite retries), but the web console and

@@ -28,7 +28,7 @@ PROFILE_COMMON = {"heartbeat_s": 5, "link_timeout_s": 15, "travel_timeout_s": 15
                   "retries": 5, "debounce_ms": 50}
 PROFILE_HOUSE = {"mismatch_timeout_s": 20, "ctrl_power_sense": 0, "in2_invert": 0, "ctrl_sync": 1,
                  "sensor_invert": 0, "linkloss_open": 1, "sync_window_ms": 3000, "resync_ms": 1000,
-                 "ctrl_confirm_ms": 500, "ctrl_settle_ms": 10000}
+                 "ctrl_confirm_ms": 3000, "ctrl_settle_ms": 10000}
 PROFILE_GATE = {"power_sense": 1, "in1_invert": 0, "in2_invert": 0, "in3_invert": 0}
 
 _ERRORS = (BoardError, GateSimError, ControllerError, KeyError, TypeError)

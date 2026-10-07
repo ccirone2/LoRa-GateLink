@@ -56,6 +56,15 @@ once its fix is merged and record it in the pull request.
   `gate_state` between/external, then no_power within the same second. Harmless (the house shows not-closed for
   `no_power` anyway) but the log reads as a move. Fix idea: when a limit drops, wait one more debounce period for
   IN3 before reporting.
+- [ ] **Shorten the 3 s close delay (the relay drops before the power sense).** Since 0.10.0 a controller
+  switch-OFF waits `ctrl_confirm_ms` (3 s) before it becomes CLOSE, because on a real 12 V cut the Shelly's relay
+  drops ~0.46 s in but the house IN2 opto only notices ~2.1 s in (bench, 2026-10-06: 1.64–1.66 s apart over 7
+  runs; the rail's capacitors keep the opto lit while it sags). Closing from Alarm.com therefore starts ~3 s late.
+  Goal: make IN2 drop before (or with) the relay, so the delay can come down to ~0.5 s again. Ideas: a ~9 V zener
+  in series with the opto input (off as soon as the rail sags), a higher-threshold opto, or a bleeder across the
+  rail. Measure with the power rig: `rail house cut` with the house on its LiPo and the gate open, then read the
+  house log (`ctrl` a=0 vs `ctrl_power` a=0 times); `test_house_supply_cut_rides_through` (`-m power`) must keep
+  passing at the shorter `ctrl_confirm_ms`. The same fix should cover the dip below.
 - [ ] **A short 12 V dip at the house can close then reopen the gate.** Bench, 2026-10-06 (0.10.0, house on its
   LiPo): a 300 ms dip of the house 12 V rail rebooted the Shelly (its relay off ~3.4 s, then restored on) but the
   IN2 opto never dropped (the rail's capacitors carried it), so after `ctrl_confirm_ms` (3 s) the OFF edge became
@@ -85,15 +94,22 @@ once its fix is merged and record it in the pull request.
   `cfg_store` `spi` on both bench boards and on any replacement board (an unexpected chip falls back to
   program flash, which uploads erase).
 
-- [ ] **Real controller power loss.** It's still simulated (house `in2_invert`). The suite is ready: wire the IN2
-  opto to the Shelly's 12 V on an HA smart plug and set `GATELINK_HA_POWER_ENTITY`. Then run
-  `test_controller_faults.py` and note which drops first (summary "Link" section).
 - [ ] **Real RF.** `test_rf.py` (`-m rf`) passes at the bench with antennas on: SF12, 2 dBm, 3 cycles. Still to
   do: run it with an attenuator or the antennas off, and at the install site, and check ping/RSSI there from the
   web console.
-- [ ] **Full power on a real supply.** Bench boards run at `tx_power` 5 on USB because 17 dBm with a relay
-  energized caused watchdog resets. Verify 17 dBm is stable on the install supplies (24 V→5 V buck at the gate,
-  and the house supply), with the antenna placed away from the relay shield.
+- [ ] **Full power on a real supply.** Bench boards run at `tx_power` 5 because, on PC USB power, 17 dBm with a
+  relay energized caused watchdog resets. Since 2026-10-06 the bench boards run like the install (gate on a 24 V→5 V
+  buck, house on a 12 V→5 V buck, both with LiPos), so check it there first: set `tx_power` 17 on both (radio
+  params: both boards, applied at once), run `pytest tests/e2e -m soak` and the power tests, and look for resets
+  (`reset_cause`) and `radio_faults`. Then confirm at the install, with the antenna away from the relay shield.
+- [ ] **Power-test scenarios not covered yet.** `test_power.py` (`-m power`) covers the gate cut at rest, beyond the
+  link timeout, mid-pulse, bounce and during a config save; AC loss and a dead opener with the LiPo in; the house
+  cut, dips and a 12 V cut on its LiPo; both sites. Still to add from the 2026-10-04 plan:
+  - the gate unpowered while the opener is moved by hand (state and cause after the boot);
+  - the house cut between a controller edge and the gate's ACK (no late command after its reboot);
+  - a cut during a local `config.save` on the house (old or new config, never defaults);
+  - AC loss with the gate board on the AC supply and no LiPo (`supply psu`: the board dies with AC while the
+    opener runs on its battery).
 
 ## Install
 

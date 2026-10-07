@@ -14,13 +14,16 @@ closed-limit AUX relay energizes when *not* at the close limit. D3's coil is dri
 | D5 | gate K1 NO (K1 COM → Uno GND) | OPEN input (dry contact, pulled up) |
 | D6 | gate K2 NO (K2 COM → Uno GND) | CLOSE input |
 | D7 relay **NC** | 24 V into the gate board's buck | gate board supply (power rig) |
-| D8 relay **NC** | gate board LiPo + lead | gate battery connected (power rig) |
+| D8 relay **NO** | controller SW input | follows house K1 (sensed on D12), so the controller still syncs while K1's own contacts go to the Uno |
 | D9 relay **NC** | house 12 V rail (controller, IN2 opto, house buck) | house supply (power rig) |
-| D10 relay **NC** | house board LiPo + lead | house battery connected (power rig) |
+| D10 relay | nothing (CH4 spare) | held off |
+| D11 | house K2 NC (K2 COM → Uno GND) | senses the house K2 coil (bench check, e.g. on LiPo only) |
+| D12 | house K1 NC (K1 COM → Uno GND) | senses the house K1 coil; D8 repeats it to the controller |
 
-The power rig channels (D7–D10) are optional and wired through NC, so a released coil means powered/connected:
-a Uno reset (opening its port) never cuts a board. Power their relay module's coils from a separate 5 V (JD-VCC),
-not the Uno.
+D7–D10 drive an optional 4-channel relay module (CH4 is a spare, held off). The power rig channels are wired through NC, so a released coil
+means powered/connected: a Uno reset (opening its port) never cuts a board. Power the module's coils from a separate
+5 V (JD-VCC), not the Uno. D11/D12 are optional too; unwired, they read as energized (and D8 follows). CH2 lags K1 by
+the 20 ms debounce, and a Uno reset releases it, which the controller sees as OFF.
 
 ```sh
 arduino-cli compile --fqbn arduino:avr:uno --warnings all tools/GateSim
@@ -42,15 +45,15 @@ Power rig (not saved; reset by the suite's baseline): `supply none|acc|psu` (wha
 the default, only explicit cuts; `acc` the opener's accessory output, so the board loses power only when the
 opener is dead; `psu` the AC supply, so it loses power with AC), `rail gate|house on|off|auto` (force a supply
 rail, or follow the model), `rail gate|house cut <ms>` (cut it for that long, timed on the Uno, ~10 ms
-resolution with a mechanical relay), `lipo gate|house on|off` (connect or disconnect a board's LiPo; on the bench
-CH2/CH4 aren't wired: the LiPos are plugged in or out by hand). `status`
-adds `ac= battery= supply= rail_gate= rail_house= lipo_gate= lipo_house=`.
+resolution with a mechanical relay). `status` adds
+`ac= battery= supply= rail_gate= rail_house= house_k1= house_k2=` (house relay coils, 1 = energized).
 
 It prints `evt ...` lines: `evt pulse open|close` on each debounced press of an input (`evt pulse both` whenever
 one input closes while the other is still held: the K1/K2 interlock failed), `evt release open|close <ms>` when it
 opens again, with how long it was held (edge to edge, so the 20 ms debounce cancels out), `evt cmd ...`,
-`evt state <state>`, and on every change `evt ac on|off`, `evt rail gate|house on|off` and
-`evt lipo gate|house on|off`. The end-to-end suite relies on these lines; change `tests/e2e/gatelink/gatesim.py` with them.
+`evt state <state>`, on every change `evt ac on|off` and `evt rail gate|house on|off`, and `evt house k1|k2 on|off`
+when a house relay's coil energizes or releases. The end-to-end suite relies on these lines; change
+`tests/e2e/gatelink/gatesim.py` with them.
 
 ## Model
 

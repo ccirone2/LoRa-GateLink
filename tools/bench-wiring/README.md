@@ -13,7 +13,7 @@ accepts the save, so under any other server Save asks for the file. The page sho
 served by `serve.py`. If port 8001 is taken by another server, stop that server rather than picking another port.
 
 ## Reading the diagram
-- **Rows:** one container per site (Gate, with the GateSim and power rig; House). Names inside a container don't
+- **Rows:** one container per site (Gate, with the GateSim and its 4-channel relay module; House). Names inside a container don't
   repeat the site: "LiPo" in the Gate container is the gate LiPo.
 - **Boxes:** each device is a box with power terminals on top, inputs on the left, outputs on the right, and
   comms (USB, UART) at the bottom. Relay contacts are always on the right, each COM next to its NO/NC. Opto
@@ -23,10 +23,11 @@ served by `serve.py`. If port 8001 is taken by another server, stop that server 
   row. A dot marks each terminal tied to a bus.
 - **PC strip:** each site has a strip along its bottom, and USB cables drop straight down to it.
 - **Lanes:** signal wires run box to box. Wires that would cross a box detour through lanes under the row.
-- **Numbered diamonds** mark where a power rig relay breaks a wire: diamond *n* on the wire, and on the rig's CH*n* COM
+- **Numbered diamonds** mark where a relay module channel breaks a wire: diamond *n* on the wire, and on its CH*n* COM
   and NC (`cut: n` on those wires). A dot beside the diamond marks the side that goes to the relay's COM
   (`com: "from"` or `"to"` on the broken wire).
-- **Off-diagram ends** are labelled at the end of a short stub; × marks a terminal that's deliberately unused.
+- **Off-diagram ends** are labelled (in black) at the end of a short stub, also for a wire to the other site's
+  row; × marks a terminal that's deliberately unused.
 
 ## Wire colour and status
 **Colour** is the wire's insulation colour (`color`: red, black, white, yellow, orange, green, blue, brown,
@@ -51,11 +52,12 @@ A USB cable that carries 5 V has a red core (`usb: "powered"`); a power-blocked 
 - **In the JSON:** structural changes go here.
   - A device has `top`, `left`, `right` and `bottom` terminal lists; `""` in a list is an empty row (a spacer to line
     terminals up, as with OUT*n* beside *n*+). `sub` is an optional subtitle under the name. `bench: true` marks a
-    device that's only part of the bench test rig, not the install (teal border).
+    device that's only part of the bench test rig, not the install (teal border). `gap` adds that many pixels
+    before the box, e.g. to fit stub labels between two boxes.
   - `bands` sets each row's device order.
   - `comms` places a device under another one. When its top terminals wire to the bottom of the box above in the
     same order (FTDI TX/RX/GND to 13 RX/14 TX/GND), it is sized and shifted so those wires drop straight down.
   - A wire is `{from: "device:terminal", to: "device:terminal" | "pc", bus: id, label: text, via: text, status,
-    color, signal, note}`. Give it one of `to`, `bus` or `label`; with none of them, the terminal is shown unconnected.
+    color, signal, note}` (`via` is drawn near the `to` end). Give it one of `to`, `bus` or `label`; with none of them, the terminal is shown unconnected.
 
 Keep it in step with the bench: when a wire moves or gets confirmed, change it here in the same session.

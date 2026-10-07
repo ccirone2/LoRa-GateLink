@@ -156,16 +156,11 @@ class GateSim:
         """Cut a site's supply rail for `ms`, timed on the Uno."""
         self._ok(f"rail {site} cut {int(ms)}")
 
-    def lipo(self, site, on):
-        """Connect or disconnect a board's LiPo ("gate" or "house")."""
-        self._ok(f"lipo {site} {'on' if on else 'off'}")
-
     def power_rig_auto(self):
-        """Both rails on and following the model (gate supply: explicit cuts only), both LiPos connected."""
+        """Both rails on and following the model (gate supply: explicit cuts only)."""
         self._ok("supply none")
         for site in ("gate", "house"):
             self._ok(f"rail {site} auto")
-            self._ok(f"lipo {site} on")
 
     def relay_auto(self):
         for n in (1, 2, 3):

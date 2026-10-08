@@ -25,9 +25,14 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
    ```sh
    arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all --output-dir <scratchpad>/build firmware/GateLink 2>&1 | grep -E "GateLink[\\/].*warning|Sketch uses"
    arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 --input-dir <scratchpad>/build
-   arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM6 --input-dir <scratchpad>/build
+   arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM21 --input-dir <scratchpad>/build
    ```
-   A board in the bootloader can re-enumerate on another COM number; `arduino-cli board list` shows it. If an
+   If `arduino-cli upload` fails with `No device found` (its port discovery sees nothing on the bench PC; `board
+   list` comes back empty too), upload by hand: open the board's port at 1200 baud and close it with DTR off,
+   wait for the bootloader port to appear (USB PID 0x0059, `serial.tools.list_ports`; a new COM number), then
+   `~/AppData/Local/Arduino15/packages/arduino/tools/bossac/1.7.0-arduino3/bossac.exe -i -d --port=<bootloader port> -U true -i -e -w -v <scratchpad>/build/GateLink.ino.bin -R`
+   and look for `Verify successful`.
+   A board in the bootloader can re-enumerate on another COM number (`python -m serial.tools.list_ports -v` shows it). If an
    upload fails with the port busy, double-tap the board's reset button and retry on the port it shows.
    Upload one board at a time and check `ports` between. If ports report `no answer within 8 s` (every USB
    serial port stuck, seen after uploads), ask the user to replug the USB hub; the boards keep running on their

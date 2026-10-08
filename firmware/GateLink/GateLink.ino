@@ -123,6 +123,7 @@ void appFillStatus(JsonObject o) {
   o["cfg_store"] = configStoreName();
   o["key_set"] = (bool)cfg.key_set;
   o["free_ram"] = freeRam();
+  o["usb_cut"] = consoleUsbCutLines();
   JsonObject io = o["io"].to<JsonObject>();
   io["in1"] = in1.active();
   io["in2"] = in2.active();

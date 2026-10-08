@@ -21,10 +21,9 @@ struct ConsolePort {
   char line[LINE_MAX];
   size_t len;
   bool overflow;
-  // One USB write per line: serialized straight to Serial, every character was its own USB transfer, and with
-  // the radio transmitting asynchronously single bytes went missing on the bench (lines like
-  // `{"event":"lo",...`). If the host doesn't take a USB packet within 70 ms, the core drops the rest of the
-  // write (send() returns -1, which Serial.write passes on as a huge count). The cut line has no newline, so the
+  // Lines go out whole packets at a time (LineWriter): serialized straight to Serial, every character was its
+  // own USB transfer, and single bytes went missing on the bench (lines like `{"event":"lo",...`). If the host
+  // doesn't take a USB packet within 70 ms, the rest of the line is dropped. The cut line has no newline, so the
   // next line would run into it and be lost too: start the next one with a newline instead, so the host
   // discards only the cut line.
   bool lineCut;
@@ -38,31 +37,95 @@ static bool writable(const ConsolePort &p) {
   return p.usb ? Serial.dtr() : uartOn;  // not Serial's bool operator: it delays 10 ms
 }
 
+// How long a USB packet may wait for the host to take the previous one, as in the SAMD core.
+#define USB_TX_TIMEOUT_MS 70
+
+// The USB data IN endpoint (the bulk IN one). Its BK1RDY bit is set while a packet waits for the host.
+static UsbDeviceEndpoint *usbInEndpoint() {
+  for (int ep = 1; ep < 8; ep++)
+    if (USB->DEVICE.DeviceEndpoint[ep].EPCFG.bit.EPTYPE1 == 3) return &USB->DEVICE.DeviceEndpoint[ep];
+  return nullptr;
+}
+
+// Writes one line to a port in 64-byte pieces, and to USB each only once the host has taken the previous one.
+// Handed a longer write, the core's USBDevice.send() waits between packets for the endpoint's transfer-complete
+// flag, which its USB interrupt also clears (the CDC IN endpoint has no handler, so the interrupt acks all its
+// flags; it runs at every 1 ms start of frame): when the interrupt got there first, send() waited out its 70 ms
+// and dropped the rest of the line. A single packet onto an idle endpoint never waits. BK1RDY is cleared only by
+// the hardware.
+class LineWriter : public Print {
+ public:
+  explicit LineWriter(ConsolePort &p) : port(p) {}
+  size_t write(uint8_t c) override { return write(&c, 1); }
+  size_t write(const uint8_t *data, size_t n) override {
+    for (size_t i = 0; i < n; i++) {
+      buf[len++] = data[i];
+      if (len == sizeof(buf)) push();
+    }
+    return n;
+  }
+  // Writes what's left; false if any of the line was lost.
+  bool end() {
+    push();
+    return ok;
+  }
+
+ private:
+  void push() {
+    if (ok && len) ok = port.usb ? usbPacket() : port.io.write(buf, len) == len;
+    len = 0;
+  }
+  bool usbPacket() {
+    // Once the host has left a packet for USB_TX_TIMEOUT_MS, later ones don't wait until it takes that one (as
+    // in the core), or every line would block the loop that long.
+    static bool stalled = false;
+    UsbDeviceEndpoint *ep = usbInEndpoint();
+    if (!ep) return false;
+    uint32_t t0 = millis();
+    while (ep->EPSTATUS.bit.BK1RDY) {
+      if (stalled || elapsed(millis(), t0, USB_TX_TIMEOUT_MS)) {
+        stalled = true;
+        return false;
+      }
+    }
+    stalled = false;
+    // On a failed send the core returns -1, which Serial.write passes on as a huge count.
+    return Serial.write(buf, len) == len;
+  }
+  ConsolePort &port;
+  uint8_t buf[64];
+  size_t len = 0;
+  bool ok = true;
+};
+
+static uint32_t usbCutLines = 0;
+
 // A reply goes back to the port that asked (`to`), events to every open port.
 static void send(JsonDocument &doc, ConsolePort *to = nullptr) {
   ConsolePort *const ports[2] = { &usbPort, &uartPort };
-  static char out[4096];  // out[0] is a spare newline, the line starts at out[1]
+  static char out[4096];
   size_t n = measureJson(doc);
-  bool fits = n + 2 <= sizeof(out);
+  bool fits = n < sizeof(out);  // else stream it
   bool serialized = false;
   for (ConsolePort *p : ports) {
     if ((to && p != to) || !writable(*p)) continue;
-    if (!fits) {  // stream it
-      if (p->lineCut) p->io.write('\n');
-      serializeJson(doc, p->io);
-      p->lineCut = p->io.write('\n') != 1;
-      continue;
-    }
-    if (!serialized) {  // once for both ports
-      out[0] = '\n';
-      serializeJson(doc, out + 1, sizeof(out) - 1);
-      out[n + 1] = '\n';
+    LineWriter w(*p);
+    if (p->lineCut) w.write('\n');
+    if (!fits) {
+      serializeJson(doc, w);
+    } else {
+      if (!serialized) serializeJson(doc, out, sizeof(out));  // once for both ports
       serialized = true;
+      w.write((const uint8_t *)out, n);
     }
-    size_t start = p->lineCut ? 0 : 1;
-    size_t len = n + 2 - start;
-    p->lineCut = p->io.write((const uint8_t *)out + start, len) != len;
+    w.write('\n');
+    p->lineCut = !w.end();
+    if (p->lineCut && p->usb) usbCutLines++;
   }
+}
+
+uint32_t consoleUsbCutLines() {
+  return usbCutLines;
 }
 
 static int hexVal(char c) {
@@ -279,6 +342,9 @@ static void sendError(ConsolePort &from, const char *raw, const char *error) {
   send(res, &from);
 }
 
+// At most one request per call: with the host sending requests back to back, handling them while bytes kept
+// arriving never returned to loop(), and the watchdog reset the board (house, 4 status requests in flight). The
+// rest waits in the port's buffer (USB holds it back from the host when that's full).
 static void poll(ConsolePort &p) {
   while (p.io.available()) {
     char c = p.io.read();
@@ -298,6 +364,7 @@ static void poll(ConsolePort &p) {
     }
     p.len = 0;
     p.overflow = false;
+    return;
   }
 }
 

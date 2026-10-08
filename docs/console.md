@@ -21,9 +21,12 @@ around a power cut: the firmware starts its first UART line with a newline, so t
 `boot` event arrives intact, and a request garbled by it is answered `bad json`.
 `uart_console` takes effect at once; it is off by default and should stay off at the install.
 
-If the host stops reading for more than 70 ms mid-line, the SAMD USB core drops the rest of that line. The
-firmware then starts its next line with an extra newline, so a client sees one cut line (not valid JSON; skip it)
-and then an empty line. Clients should ignore both and time out the request the cut line belonged to.
+Lines go to USB one 64-byte packet at a time. If the host leaves a packet untaken for more than 70 ms (a client that
+stops reading until the host's buffer is full), the rest of that line is dropped, and so are later lines while that
+packet is still waiting; status `usb_cut` counts the lines lost. The firmware then starts its next line with an
+extra newline, so a client sees one cut line (not valid JSON; skip it) and then an empty line. Clients should ignore
+both and time out the request the cut line belonged to. The board handles one request per port per loop pass, so
+requests sent back to back wait in the port's buffer (USB holds back the rest).
 
 ## Requests
 
@@ -72,7 +75,8 @@ LiPo; null if the chip didn't answer), `key_set`, `io` (`in1`–`in4`, `k1`,
 `k2`) and `link` (`verified`, `age_ms`, `rssi`, `snr`, `tx`, `rx`, `retries`, `giveups`, `mac_fail`, `replay`,
 `sessions`, `lbt_defers`, `lbt_forced`, `crc_err` (frames received with a bad CRC), `noise` (smoothed noise floor,
 dBm; null before the first sample), `fei` (frequency error of the last good frame, Hz: the peer's carrier against
-ours, i.e. the two boards' crystal offset)), and `free_ram` (bytes between the heap's high-water mark and the stack).
+ours, i.e. the two boards' crystal offset)), `free_ram` (bytes between the heap's high-water mark and the stack) and
+`usb_cut` (console lines lost on USB since boot, see above).
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,

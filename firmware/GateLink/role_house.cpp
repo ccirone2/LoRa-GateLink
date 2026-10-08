@@ -47,7 +47,7 @@ static uint32_t settleUntil = 0;  // boot / controller power return: no early en
 static bool resyncing = false;
 static uint32_t resyncUntil = 0;
 static uint32_t mismatchSince = 0;
-static bool checkSoon = false;  // boot or controller power return: resync at once if still out of step
+static bool checkSoon = false;  // boot, controller power return, command refused: resync at once if out of step
 static bool k1WasPulsing = false;
 static bool ctrlPower = true;
 static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms (CLOSE only, see below)
@@ -313,6 +313,9 @@ void houseOnAck(Slot slot, uint8_t, bool acked, uint8_t result) {
   if (slot == SLOT_CMD) {
     cmdResult = acked ? result : -2;
     if (!acked) logEvent(EV_CMD_DROPPED, cmdAction, cmdId);
+    // Refused without a pulse (no AC at the gate): the Shelly shows a move that won't happen. Put it back as soon
+    // as nothing else is in the way, as for an overridden command, instead of after mismatch_timeout_s.
+    if (acked && result == RES_NO_POWER) checkSoon = true;
   } else if (slot == SLOT_CFG) {
     consoleEventRemoteSet(acked, result);
   }

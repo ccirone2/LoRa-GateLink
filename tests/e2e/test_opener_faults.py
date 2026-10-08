@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from gatelink.bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, PROFILE_COMMON, PROFILE_HOUSE, RES_NO_POWER, SIM_TRAVEL_S
+from gatelink.bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, PROFILE_COMMON, RES_NO_POWER, SIM_TRAVEL_S
 
 TRAVEL_TIMEOUT_S = PROFILE_COMMON["travel_timeout_s"]
 
@@ -49,7 +49,8 @@ def test_ac_loss_limits_trusted(rig):
     rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m2, timeout=10)
     rig.wait_log("gate", "cmd_refused", a=ACT_OPEN, since=m2, timeout=5)
     rig.wait_house(5, cmd_result=RES_NO_POWER)
-    rig.wait_log("house", "resync", since=m2, timeout=PROFILE_HOUSE["mismatch_timeout_s"] + 10)
+    # Put back at once (0.12.5), not after mismatch_timeout_s.
+    rig.wait_log("house", "resync", since=m2, timeout=5)
     rig.wait_ctrl(False, timeout=30)
     rig.expect_no("gate", "pulse", since=m)
 

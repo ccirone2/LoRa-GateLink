@@ -13,7 +13,7 @@ it.
 
 - **Uploads keep the saved config and key** from 0.5.0 (SPI flash; `ports` shows `cfg spi`). Uploading 0.5.0
   over an older version, a board showing `cfg internal`, or `config.reset` leaves defaults (no role or key,
-  `tx_power` 17; `power_sense` and `ctrl_power_sense` on). `python tools/gatelink.py snapshot` before flashing
+  `tx_power` 17; `power_sense`, `ctrl_power_sense` and `ctrl_power_pmic` on, `ctrl_confirm_ms` 500). `python tools/gatelink.py snapshot` before flashing
   and `restore` after puts them back; the key is read from `~/.gatelink_key`. Boards can't read the key back,
   so keep it safe (e.g. a password manager).
 - **On USB power, keep `tx_power` at about 5 dBm** on both boards: a full-power transmit while a relay is

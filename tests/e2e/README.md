@@ -38,10 +38,11 @@ their role (`info`) at the start, or name them with `--house-uart` / `--gate-uar
 off. The adapter keeps its port while the board is unpowered, so the tap records events USB can't (`boot` the
 moment power returns); each event is recorded once, whichever console delivers it first. While a board's USB is
 down (a power cut, or Windows losing the port until the hub is replugged), every request goes over its UART
-instead. On the bench ~1 % of requests sent over the UART arrived garbled, some still valid JSON with a digit
-changed, so every request carries a CRC-32 of itself and the firmware refuses a UART request without a matching
-one (`bad crc`, never run, so resent). An unanswered request is resent only if repeating it is harmless (reads,
-`config.set`, `config.save`, `key.set`); otherwise it fails, since it may have run. The board-to-PC direction was
+instead. Requests sent over the UART arrive garbled (about 8 % with 1,000 back to back on 0.12.0), some still
+valid JSON with a digit changed, so every request carries a CRC-32 of itself and the firmware refuses a UART
+request without a matching one (`bad crc`, or `crc required` when garbling took the `crc` member; never run, so
+resent). An unanswered request is resent only if repeating it is harmless (reads, `config.set`, `config.save`,
+`key.set`, `identify`); otherwise it fails, since it may have run. The board-to-PC direction was
 clean. If USB doesn't come back the power tests carry on over the UART; a reconnect that fails says whether the
 UART still hears the board. The summary lists the consoles.
 

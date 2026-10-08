@@ -281,6 +281,13 @@ class Bench:
                         gate="closed", link_up=True, armed=True, cmd_pending=False, resyncing=False,
                         sync_window=False, ctrl=False, io__k1=False, io__k2=True)
         self.wait_for(lambda: self.gate.status()["target"] == "", 20, "gate command target cleared")
+        # A controller that rebooted (house rail cuts and dips) and then followed K1 off can leave HA showing it on;
+        # HA then ignores the next turn_on. The relay is off (ctrl False above), so this changes nothing on it.
+        if self.ctrl.state() != "off":
+            self.note("HA showed the controller on while its relay is off: turning it off in HA")
+            m = self.mark()
+            self.ctrl.off()
+            self.expect_no("house", "cmd_sent", seconds=2, since=m)
 
     def snapshot(self):
         snap = {}

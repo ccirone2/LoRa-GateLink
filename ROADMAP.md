@@ -30,8 +30,8 @@ _Nothing decided yet. Move items here from Ideas._
 - **Longer or persistent link history.** The boards keep 96 hourly buckets in RAM (since 0.4.0), and every
   reset wipes them. Open questions:
   - Persist them? Hourly saves could go to the SPI flash that holds config since 0.5.0 (`extflash.cpp`; config
-    uses sectors 0–1). The linker
-    script has no `.noinit` section, so even a watchdog reset clears RAM.
+    uses sectors 0–1). RAM could at best carry them over warm resets (the linker script has no `.noinit`
+    section; see the warm-reset item in [TODO.md](TODO.md)), never a power cut.
   - Go deeper? A week needs a slimmer bucket (64 B now) or 2 h buckets: a `config.get` reply takes ~5 KB of
     heap (`free_ram` in status).
   - Should the gate's own history be fetchable over LoRa (paged, like DIAG), or are the counters in STATUS

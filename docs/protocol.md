@@ -48,7 +48,7 @@ and then fails its contact sensor open (`linkloss_open`).
 
 The STATUS payload layout is defined in `firmware/GateLink/roles.h` and parsed in `role_house.cpp`; the DIAG
 layout is built in `role_gate.cpp` (`sendDiag`) and parsed in `console.cpp`. Message types and the other
-payloads (CMD, ACK, CFG_SET, PING/PONG, HELLO) are listed in `link.h`. A change to them needs both boards updated together; say so in the release notes.
+payloads (CMD, ACK, CFG_SET, PING/PONG, HELLO/HELLO_ACK, DIAG_REQ) are listed in `link.h`. A change to them needs both boards updated together; say so in the release notes.
 
 Since 0.7.0, bit 6 of the STATUS inputs byte is set while the gate has no AC power (IN3 off with `power_sense` on);
 an older house ignores it. Since 0.4.0, STATUS is 24 bytes: the gate also reports its link retries, giveups and CRC errors (running totals,

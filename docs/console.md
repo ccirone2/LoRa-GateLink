@@ -13,7 +13,8 @@ so a power test sees the `boot` event as soon as the board is back, without wait
 port has its own request line; a reply goes to the port the request came from, and events and log lines go to
 both. The UART is always written (no DTR), and a write waits while its 256-byte buffer is full: a ~5 KB
 `config.get` reply holds the loop for ~200 ms. (At 1 Mbaud, the rate in 0.8.0, ~4 % of requests arrived garbled on
-the bench.) Even at 250 kbaud ~1 % of requests arrived garbled while the board was busy, some into
+the bench.) Even at 250 kbaud ~1 % of requests arrived garbled while the board was busy (~8 % of 1,000 sent back to back on
+0.12.0), some into
 still-valid JSON with a number changed, so the UART refuses a request without a matching CRC (`crc required`,
 `bad crc`; see Requests). A refused request never ran, so a client can safely send it again. Wire adapter TX → 10 kΩ → pin 13, pin 14 → adapter RX, GND to GND,
 and leave the adapter's VCC unconnected. Without the resistor the bench gate board still powered down and came

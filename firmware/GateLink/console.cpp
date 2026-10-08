@@ -342,6 +342,40 @@ static void sendError(ConsolePort &from, const char *raw, const char *error) {
   send(res, &from);
 }
 
+// CRC-32 (IEEE 802.3, as zlib's crc32), four bits at a time.
+static uint32_t crc32(const char *p, size_t n, uint32_t crc = 0) {
+  static const uint32_t T[16] = {
+    0x00000000, 0x1DB71064, 0x3B6E20C8, 0x26D930AC, 0x76DC4190, 0x6B6B51F4, 0x4DB26158, 0x5005713C,
+    0xEDB88320, 0xF00F9344, 0xD6D6A3E8, 0xCB61B38C, 0x9B64C2B0, 0x86D3D2D4, 0xA00AE278, 0xBDBDF21C,
+  };
+  crc = ~crc;
+  for (size_t i = 0; i < n; i++) {
+    crc ^= (uint8_t)p[i];
+    crc = (crc >> 4) ^ T[crc & 15];
+    crc = (crc >> 4) ^ T[crc & 15];
+  }
+  return ~crc;
+}
+
+// A request may end with a CRC-32 of itself, `...,"crc":"89abcdef"}`, taken over the line as it reads without
+// that member (up to its comma, then the closing brace). On the UART, where ~1 % of requests arrived garbled
+// on the bench (some still valid JSON with a number changed), it is required, so a damaged request is refused
+// rather than run. Returns 1 if the line has a matching CRC, 0 if it has none, -1 if it has one that doesn't match.
+static int checkCrc(const char *line, size_t len) {
+  static const char head[] = ",\"crc\":\"";
+  const size_t suffix = sizeof(head) - 1 + 8 + 2;  // ,"crc":"xxxxxxxx"}
+  if (len < suffix + 1) return 0;
+  const char *s = line + len - suffix;
+  if (strncmp(s, head, sizeof(head) - 1) || strcmp(s + suffix - 2, "\"}")) return 0;
+  uint32_t want = 0;
+  for (int i = 0; i < 8; i++) {
+    int v = hexVal(s[sizeof(head) - 1 + i]);
+    if (v < 0) return -1;
+    want = (want << 4) | v;
+  }
+  return crc32("}", 1, crc32(line, s - line)) == want ? 1 : -1;
+}
+
 // At most one request per call: with the host sending requests back to back, handling them while bytes kept
 // arriving never returned to loop(), and the watchdog reset the board (house, 4 status requests in flight). The
 // rest waits in the port's buffer (USB holds it back from the host when that's full).
@@ -358,8 +392,11 @@ static void poll(ConsolePort &p) {
     if (p.overflow) {
       sendError(p, p.line, "line too long");
     } else if (p.len) {
+      int crc = checkCrc(p.line, p.len);
       JsonDocument req;
-      if (deserializeJson(req, p.line) == DeserializationError::Ok) handle(req, p);
+      if (crc < 0) sendError(p, p.line, "bad crc");
+      else if (crc == 0 && !p.usb) sendError(p, p.line, "crc required");
+      else if (deserializeJson(req, p.line) == DeserializationError::Ok) handle(req, p);
       else sendError(p, p.line, "bad json");
     }
     p.len = 0;

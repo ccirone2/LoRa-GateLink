@@ -13,12 +13,14 @@ so a power test sees the `boot` event as soon as the board is back, without wait
 port has its own request line; a reply goes to the port the request came from, and events and log lines go to
 both. The UART is always written (no DTR), and a write waits while its 256-byte buffer is full: a ~5 KB
 `config.get` reply holds the loop for ~200 ms. (At 1 Mbaud, the rate in 0.8.0, ~4 % of requests arrived garbled on
-the bench.) A request answered `bad json` never ran, so a client can safely send it again. Wire adapter TX → 10 kΩ → pin 13, pin 14 → adapter RX, GND to GND,
+the bench.) Even at 250 kbaud ~1 % of requests arrived garbled while the board was busy, some into
+still-valid JSON with a number changed, so the UART refuses a request without a matching CRC (`crc required`,
+`bad crc`; see Requests). A refused request never ran, so a client can safely send it again. Wire adapter TX → 10 kΩ → pin 13, pin 14 → adapter RX, GND to GND,
 and leave the adapter's VCC unconnected. Without the resistor the bench gate board still powered down and came
 back with a clean `power_on` reset, but the adapter's TX drove current into the unpowered chip's pins (its own
 bytes came back garbled while the board was off); the resistor keeps that small. Expect junk on the adapter
 around a power cut: the firmware starts its first UART line with a newline, so the junk ends there and the
-`boot` event arrives intact, and a request garbled by it is answered `bad json`.
+`boot` event arrives intact, and a request garbled by it is refused.
 `uart_console` takes effect at once; it is off by default and should stay off at the install.
 
 Lines go to USB one 64-byte packet at a time. If the host leaves a packet untaken for more than 70 ms (a client that
@@ -34,6 +36,11 @@ A request is `{"id": <int>, "cmd": "<name>", ...}`; the reply echoes the id: `{"
 with `"error"` on failure. A line that isn't valid JSON is answered `bad json`, one over 1023 characters
 `line too long`, both with the id if it can be found in the raw text. An unrecognised command is answered
 `unknown cmd`.
+
+A request may end with a CRC-32 of itself (IEEE, as zlib's `crc32`) as its last member, `"crc":"<8 hex digits>"`,
+taken over the request as it reads without that member: send `body[:-1] + ',"crc":"%08x"}' % crc32(body)`, where
+`body` is the JSON text ending in `}`. Where it is present (or on the UART, where it is required) a mismatch is
+answered `bad crc` and the request isn't run. The web console doesn't send one; the e2e suite always does.
 
 | Command | Arguments | Reply / effect |
 |---|---|---|

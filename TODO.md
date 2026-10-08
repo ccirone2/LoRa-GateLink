@@ -22,10 +22,13 @@ once its fix is merged and record it in the pull request.
   resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
 - [ ] **USB stalls cut console lines.** In the 120-minute soak on 0.4.1, 13 replies (11 house, 2 gate) were cut
-  off at 192, 256 or 320 bytes: the host stopped taking IN packets for over 70 ms and the SAMD core dropped the
-  rest of the line. Since 0.4.1 only that line is lost (the suite retries), but the web console and
-  `tools/gatelink.py` see a timed-out request. Unknown whether the host (Windows usbser, pyserial) or the board
-  is to blame. To check: count cut lines with only one board connected, and with the radio idle.
+  off at 192, 256 or 320 bytes (whole 64-byte packets), and later suite runs cut a few lines each, mostly `status`
+  replies. Not reproduced in ~30,000 requests of USB stress on both boards (back to back, with pings and relay
+  pulses), and the PC drops lines only when the program stops reading (Windows' buffer fills). A candidate on the
+  board: the core's `USBDevice.send()` waits between packets on a flag its own USB interrupt clears. 0.11.1 writes
+  one packet at a time and waits on BK1RDY itself, so its status `usb_cut` counts only real host stalls, and the
+  suite lists cut lines and `usb_cut` per test under anomalies. The first full run on 0.11.1 had none. To close
+  it: a `-m longsoak` on 0.11.1 or later; cuts gone = the core race, cuts with `usb_cut` rising = the host.
 
 ## Bench and field tests
 

@@ -20,11 +20,11 @@ export GATELINK_HA_URL=https://<home-assistant>:8123    # token read from ~/.ha_
 export GATELINK_HA_CA=<ca.pem>            # optional: verify HA's certificate (by default it isn't checked)
 pytest tests/e2e -v                       # about 30 min; boards found by role, simulator on COM10 (--sim-port)
 pytest tests/e2e -m soak --cycles 20      # repeated open/close cycles with latency stats
-GATELINK_KEY=<32 hex> pytest tests/e2e -k wrong_key   # wrong-key test, opt-in (rewrites the gate's saved key)
+GATELINK_KEY=<32 hex> pytest tests/e2e -k wrong_key   # wrong-key test, opt-in (marker needs_key; rewrites the gate's saved key)
 GATELINK_KEY=<32 hex> pytest tests/e2e --restore-key -k boards_and_link   # put the shared key back on both boards
 pytest tests/e2e -m longsoak --soak-minutes 120   # hours-long run, outages and opener faults mixed in
 pytest tests/e2e -m rf --rf-cycles 5      # marginal link (2 dBm, SF12); see "Real RF" below
-pytest tests/e2e -m power                 # real power cuts through the power rig, LiPos out; see "Power rig" below
+pytest tests/e2e -m power                 # real power cuts through the power rig, LiPo in or out; see "Power rig" below
 ```
 
 Other options: `--house-port` / `--gate-port` (default: found by role), `GATELINK_SIM_PORT`,

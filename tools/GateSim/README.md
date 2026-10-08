@@ -39,7 +39,7 @@ move), `stop` (strand it between), `power on|off` (AC and the opener's battery t
 `travel <s>` (default 15), `fault none|stuck|both|flicker|deaf`,
 `polarity low|high`, `relay <1-3> on|off|auto` (force the signal to gate IN1/IN2/IN3 for wiring checks, not
 saved; for relay 2, `on` releases D3's coil so its NC contact closes), `help`. `status` reports the signals
-(`relays open= closed= power=`), not the coils.
+(`relays open= closed= power=`), not the coils, plus `travel=`, `fault=` and `polarity=`.
 
 Power rig (not saved; reset by the suite's baseline): `supply none|acc|psu` (what feeds the gate board: `none`,
 the default, only explicit cuts; `acc` the opener's accessory output, so the board loses power only when the
@@ -52,7 +52,8 @@ It prints `evt ...` lines: `evt pulse open|close` on each debounced press of an 
 one input closes while the other is still held: the K1/K2 interlock failed), `evt release open|close <ms>` when it
 opens again, with how long it was held (edge to edge, so the 20 ms debounce cancels out), `evt cmd ...`,
 `evt state <state>`, on every change `evt ac on|off` and `evt rail gate|house on|off`, and `evt house k1|k2 on|off`
-when a house relay's coil energizes or releases. The end-to-end suite relies on these lines; change
+when a house relay's coil energizes or releases; with a fault set, `evt jammed (fault stuck)` and
+`evt ignored (fault deaf)`. The end-to-end suite relies on these lines; change
 `tests/e2e/gatelink/gatesim.py` with them.
 
 ## Model

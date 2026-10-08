@@ -36,6 +36,7 @@ siren sensor.
 | `web/` | Static configuration and diagnostics page (Web Serial over USB, no server), hosted on GitHub Pages |
 | `tests/e2e/` | Bench end-to-end suite (pytest; needs the hardware) |
 | `tools/GateSim/` | Bench-only Uno sketch that simulates the opener |
+| `tools/bench-wiring/` | Bench wiring diagram (`wiring.json`, edited in the page served by `serve.py`) |
 | `tools/gatelink.py` | Command-line access to a board's USB console; config snapshot/restore around a flash; link history as CSV; radio preflight for a new board (`rftest`) |
 | `docs/` | Hardware, protocol, console and bench documentation |
 
@@ -47,6 +48,7 @@ siren sensor.
 - [docs/bench-testing.md](docs/bench-testing.md) — bench rules and the test checklist
 - [tests/e2e/README.md](tests/e2e/README.md) — the end-to-end suite
 - [tools/GateSim/README.md](tools/GateSim/README.md) — the opener simulator
+- [tools/bench-wiring/README.md](tools/bench-wiring/README.md) — the bench wiring diagram
 - [docs/development.md](docs/development.md) — toolchain, workflow, versioning and releases
 
 ## Project tracking
@@ -87,7 +89,8 @@ arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateL
 arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 firmware/GateLink   # your port
 ```
 
-Or flash a release binary: `arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COM5 --input-file GateLink-v0.5.2.bin`.
+Or flash a release binary: `arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COM5 --input-file GateLink-vX.Y.Z.bin`
+(from the [latest release](https://github.com/ccirone2/LoRa-GateLink/releases/latest)).
 Without any tools, use the web console's **Tools → Firmware update** (below).
 
 Flash the same firmware to both boards. From 0.5.0 the config and key are kept in the board's SPI flash chip

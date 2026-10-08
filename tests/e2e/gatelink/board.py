@@ -29,7 +29,7 @@ FTDI_VID = 0x0403  # USB-to-UART adapters on the boards' Serial1 consoles (not t
 READ_ONLY = ("status", "info", "log.get", "hist.get", "config.get")
 RESEND_SAFE = READ_ONLY + ("config.set", "config.save", "key.set", "identify")
 # Errors for requests the board refused unread: they never ran, so sending them again is safe.
-REFUSED = ("bad json", "bad crc")
+REFUSED = ("bad json", "bad crc", "crc required")  # garbling can take the crc member with it
 # USB CDC ignores the rate; a USB-to-UART adapter on the board's Serial1 console (uart_console) needs it.
 BAUD = 250_000
 # config.set params per request: keeps each line far below the firmware's console line limit.

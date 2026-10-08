@@ -27,9 +27,12 @@ public:
   void update(uint32_t now);
   bool on() const { return _on; }
   bool pulsing() const { return _pulseUntil != 0; }
+  // How much of a `gap` ms wait after the coil last released is still left (0 if it has passed).
+  uint32_t gapLeft(uint32_t now, uint32_t gap) const;
 private:
   uint8_t _pin = 0;
   bool _on = false;
   uint32_t _startAt = 0;  // delayed pulse: when the coil goes on (0 = not waiting)
   uint32_t _pulseUntil = 0;
+  uint32_t _offAt = 0;  // when the coil last released (0 = not recently; cleared after RELEASE_MEMO_MS)
 };

@@ -26,9 +26,14 @@ PULSE_TOL_MS = 60  # measured pulse vs requested: relay operate/release and loop
 # needs debounce_ms > the GateSim's 30 ms flicker steps, and the waits assume the default windows.
 PROFILE_COMMON = {"heartbeat_s": 5, "link_timeout_s": 15, "travel_timeout_s": 15, "cmd_ttl_s": 10,
                   "retries": 5, "debounce_ms": 50}
-PROFILE_HOUSE = {"mismatch_timeout_s": 20, "ctrl_power_sense": 0, "in2_invert": 0, "ctrl_sync": 1,
+# The controller power senses are off: most scenarios fake IN2 (gatelink/controller.py, CtrlPower), and the board's
+# supply sense (ctrl_power_pmic) can't be faked; ctrl_confirm_ms is the IN2-only value those fakes rely on. The power
+# tests turn the real senses on with REAL_CTRL_POWER.
+PROFILE_HOUSE = {"mismatch_timeout_s": 20, "ctrl_power_sense": 0, "ctrl_power_pmic": 0, "in2_invert": 0, "ctrl_sync": 1,
                  "sensor_invert": 0, "linkloss_open": 1, "sync_window_ms": 3000, "resync_ms": 1000,
                  "ctrl_confirm_ms": 3000, "ctrl_settle_ms": 10000}
+# The install's controller power sensing (firmware defaults): IN2 opto and the board's supply, short confirm.
+REAL_CTRL_POWER = {"ctrl_power_sense": 1, "ctrl_power_pmic": 1, "ctrl_confirm_ms": 500}
 PROFILE_GATE = {"power_sense": 1, "in1_invert": 0, "in2_invert": 0, "in3_invert": 0}
 
 _ERRORS = (BoardError, GateSimError, ControllerError, KeyError, TypeError)

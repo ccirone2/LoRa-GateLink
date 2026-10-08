@@ -92,8 +92,9 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
 
 - **Faster timings.** The suite applies shorter timings to both boards for the run, unsaved: `heartbeat_s` 5,
   `link_timeout_s` 15, `travel_timeout_s` 15, `mismatch_timeout_s` 20, `cmd_ttl_s` 10, and simulator travel 8 s
-  (saved in the Uno's EEPROM, put back at the end). House `ctrl_power_sense` is off except where a test turns it
-  on (the controller faults, and to switch the controller on without a command). It also pins the settings scenarios rely on at the firmware defaults (`retries`, `debounce_ms`,
+  (saved in the Uno's EEPROM, put back at the end). House `ctrl_power_sense` and `ctrl_power_pmic` are off (with
+  `ctrl_confirm_ms` 3000, as IN2 alone needs) except where a test turns them on: the controller faults and switching
+  the controller on without a command fake IN2, and the power tests use the install's senses (`REAL_CTRL_POWER`). It also pins the settings scenarios rely on at the firmware defaults (`retries`, `debounce_ms`,
   `sync_window_ms`, `resync_ms`, `ctrl_confirm_ms`, `ctrl_settle_ms`, the input inverts, `power_sense`,
   `ctrl_sync`, `sensor_invert`, `linkloss_open`; see `PROFILE_*` in `gatelink/bench.py`). At the end it restores
   every param from `results/<run>/config_backup.json`. Saved config is never written, except by the opt-in

@@ -67,7 +67,8 @@ retries cover.
 
 Common fields: `fw`, `role`, `reboot_pending`, `uptime_ms`, `radio_ok`, `radio_faults`, `reset_cause`
 (`watchdog`, `brownout`, `power_on`, `reset_pin`, `software`, `unknown`), `cfg_loaded`, `cfg_store` (`spi` or
-`internal`, as in `info`), `key_set`, `io` (`in1`–`in4`, `k1`,
+`internal`, as in `info`), `supply` (the board's VIN power good, from the charger chip; false = running on the
+LiPo; null if the chip didn't answer), `key_set`, `io` (`in1`–`in4`, `k1`,
 `k2`) and `link` (`verified`, `age_ms`, `rssi`, `snr`, `tx`, `rx`, `retries`, `giveups`, `mac_fail`, `replay`,
 `sessions`, `lbt_defers`, `lbt_forced`, `crc_err` (frames received with a bad CRC), `noise` (smoothed noise floor,
 dBm; null before the first sample), `fei` (frequency error of the last good frame, Hz: the peer's carrier against
@@ -154,6 +155,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `input` | spare input number (house 2/3/4, 2 only with `ctrl_power_sense` off; gate 3/4) | level |
 | `lbt_forced` | message type | ms the channel stayed busy |
 | `cfg` | at boot, config source: 0 defaults, 1 SPI flash, 2 program flash | saved settings dropped (unknown id or out of range) |
+| `supply` | board supply (VIN) power good: 1 good, 0 lost (on the LiPo); at boot −1 if the charger didn't answer | charger status register (REG08) |
 
 ## Example
 

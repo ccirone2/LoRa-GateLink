@@ -13,7 +13,7 @@ const GROUPS = [
   ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert', 'in3_invert', 'in4_invert', 'power_sense']],
   ['Gate node', ['pulse_ms', 'travel_timeout_s']],
   ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open',
-    'ctrl_power_sense', 'ctrl_confirm_ms', 'ctrl_settle_ms']],
+    'ctrl_power_sense', 'ctrl_power_pmic', 'ctrl_confirm_ms', 'ctrl_settle_ms']],
   ['Board', ['uart_console']],
 ];
 // Config tooltips: what the setting does, then when you'd change it.
@@ -46,7 +46,8 @@ const HELP = {
   sensor_invert: 'House: flips the contact sensor output (K2). Use it if the alarm shows open while the gate is closed.',
   linkloss_open: 'House: the contact sensor reads open while the link is lost, so the alarm never trusts a stale “closed”. Turn off only if dropouts cause too many false alerts.',
   ctrl_power_sense: 'House: IN2 watches the controller’s supply, so a power cut (which drops its relay) isn’t mistaken for a close command. Turn off only if IN2 isn’t wired.',
-  ctrl_confirm_ms: 'House: a controller switch-OFF waits this long before it becomes a CLOSE, so one caused by the controller losing power (its relay drops before the power sense notices) can be discarded. Switch-ON (OPEN) goes at once: a power loss can’t cause it. Keep it above the power sense’s lag (~1.7 s on the bench).',
+  ctrl_power_pmic: 'House: the board’s own supply counts as controller power too, since both run off the same supply (the board through its 5 V converter). It notices a cut or a short dip within milliseconds, before the controller’s relay drops, where the IN2 opto lags ~1.7 s and can miss short dips. Turn off if the board has its own supply, or while it runs on a USB cable that carries power.',
+  ctrl_confirm_ms: 'House: a controller switch-OFF waits this long before it becomes a CLOSE, so one caused by the controller losing power (its relay drops before the power sense notices) can be discarded. Switch-ON (OPEN) goes at once: a power loss can’t cause it. With ctrl_power_pmic the board’s supply drops first, so 0.5 s is plenty; with IN2 alone keep it above the opto’s lag (~1.7 s on the bench, so 3000).',
   uart_console: 'Also run this console on the board’s serial pins (13 RX, 14 TX; 3.3 V, 250 kbaud) for a USB-to-UART adapter. Bench power testing only: the adapter keeps its port while the board is unpowered. Leave off at the install.',
   ctrl_settle_ms: 'House: after the controller powers up (or the house boots), its changes count as sync for at least this long. Raise it if the controller takes longer to settle after power returns.',
 };
@@ -90,9 +91,9 @@ const WIRING = {
     notes: [
       'IN1 reads the controller’s relay contact switched to the board’s 3.3 V (internal pull-down; open = off). The controller output must be a potential-free contact, and nothing above 3.3 V may reach IN1. If ON and OFF come out reversed, fix it in the wiring (use the other relay contact, or change the controller’s output mode), never with <code>in1_invert</code>: inverted, a cut wire would read as ON. Keep all <code>inN_invert</code> at 0.',
       'K1 mirrors the real gate back to the controller so its switch always shows the true state. Set the controller’s switch input to toggle/follow mode (contact closed = ON, open = OFF), not detached. Wire it per the controller’s switch-input diagram. Low voltage only; never switch mains with the shield.',
-      'IN2 senses the controller’s supply through a PNP-output opto channel wired across it (use a channel rated for that voltage; output side from 3.3 V only). When the controller loses power its relay drops, which would otherwise look like a user turning the switch off: while IN2 is off, controller edges are logged but never sent, each edge waits <code>ctrl_confirm_ms</code> in case power is failing, and after power returns its edges count as sync for at least <code>ctrl_settle_ms</code>. Set <code>ctrl_power_sense</code> to 0 if IN2 isn’t wired.',
+      'IN2 senses the controller’s supply through a PNP-output opto channel wired across it (use a channel rated for that voltage; output side from 3.3 V only). When the controller loses power its relay drops, which would otherwise look like a user turning the switch off: while IN2 is off (or, with <code>ctrl_power_pmic</code>, the board’s own supply, which shares the controller’s), controller edges are logged but never sent, each edge waits <code>ctrl_confirm_ms</code> in case power is failing, and after power returns its edges count as sync for at least <code>ctrl_settle_ms</code>. Set <code>ctrl_power_sense</code> to 0 if IN2 isn’t wired.',
       'The contact sensor needs an external terminal input. K2 closes when the gate is closed and opens if the link is lost (<code>linkloss_open</code>). <code>sensor_invert</code> flips it.',
-      'VIN is 5 V max. USB power is fine for the house board.',
+      'VIN is 5 V max. Feed it from the controller’s supply through a 5 V converter, so the board’s supply sense (<code>ctrl_power_pmic</code>) sees the controller’s power. USB power is fine for setup, but a USB cable that carries power keeps that sense reading ok.',
       SPARE_NOTE,
     ],
   },
@@ -701,6 +702,8 @@ function renderStatus(s) {
   $('bFw').textContent = s.fw;
   $('bUp').textContent = fmtDur(s.uptime_ms);
   $('bReset').textContent = (s.reset_cause ?? '—').replaceAll('_', ' ');
+  $('bSupply').innerHTML = s.supply === undefined || s.supply === null ? '—'
+    : s.supply ? '<span class="good">ok</span>' : '<span class="bad">lost · on battery</span>';
   const nf = Number(s.radio_faults) || 0;
   const faults = nf ? ` <span class="bad">· ${nf} TX fault${nf === 1 ? '' : 's'}</span>` : '';
   $('bRadio').innerHTML = (s.radio_ok ? '<span class="good">ok</span>' : '<span class="bad">not initialised</span>') + faults;

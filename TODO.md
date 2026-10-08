@@ -21,22 +21,6 @@ once its fix is merged and record it in the pull request.
   released, before the firmware starts. Remaining options: a bootloader that skips that wait on watchdog/software
   resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
-- [ ] **Shorten the 3 s close delay (the relay drops before the power sense).** Since 0.10.0 a controller
-  switch-OFF waits `ctrl_confirm_ms` (3 s) before it becomes CLOSE, because on a real 12 V cut the Shelly's relay
-  drops ~0.46 s in but the house IN2 opto only notices ~2.1 s in (bench, 2026-10-06: 1.64–1.66 s apart over 7
-  runs; the rail's capacitors keep the opto lit while it sags). Closing from Alarm.com therefore starts ~3 s late.
-  Goal: make IN2 drop before (or with) the relay, so the delay can come down to ~0.5 s again. Ideas: a ~9 V zener
-  in series with the opto input (off as soon as the rail sags), a higher-threshold opto, or a bleeder across the
-  rail. Measure with the power rig: `rail house cut` with the house on its LiPo and the gate open, then read the
-  house log (`ctrl` a=0 vs `ctrl_power` a=0 times); `test_house_supply_cut_rides_through` (`-m power`) must keep
-  passing at the shorter `ctrl_confirm_ms`. The same fix should cover the dip below.
-- [ ] **A short 12 V dip at the house can close then reopen the gate.** Bench, 2026-10-06 (0.10.0, house on its
-  LiPo): a 300 ms dip of the house 12 V rail rebooted the Shelly (its relay off ~3.4 s, then restored on) but the
-  IN2 opto never dropped (the rail's capacitors carried it), so after `ctrl_confirm_ms` (3 s) the OFF edge became
-  CLOSE, and the Shelly's restored ON then sent OPEN. Real cuts are handled (the opto drops ~2.1 s in and the
-  pending CLOSE is discarded). Options: sense the supply faster (a ~9 V zener in series with the opto input, or a
-  higher-threshold opto), or `ctrl_confirm_ms` above the Shelly's reboot time (~5 s), at the cost of slower
-  closing. e2e: `test_house_supply_dips_ride_through` (`-m power`, LiPo in), marked xfail.
 - [ ] **USB stalls cut console lines.** In the 120-minute soak on 0.4.1, 13 replies (11 house, 2 gate) were cut
   off at 192, 256 or 320 bytes: the host stopped taking IN packets for over 70 ms and the SAMD core dropped the
   rest of the line. Since 0.4.1 only that line is lost (the suite retries), but the web console and

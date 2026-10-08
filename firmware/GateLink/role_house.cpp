@@ -9,6 +9,8 @@
 //  K2  = wireless contact sensor. Energized (closed loop) only when the gate is closed.
 //  IN2 = Shelly supply, via a PNP opto (ctrl_power_sense). The Shelly's relay drops when it loses
 //        power and comes back at the K1 level when it boots; neither edge may become a command.
+//        The opto is slow (~2.1 s into a 12 V cut, never on a 300 ms dip), so the board's own supply,
+//        which shares the 12 V through its buck, counts too (ctrl_power_pmic, supply.h): it drops first.
 #include "roles.h"
 #include "config.h"
 #include "log.h"
@@ -16,6 +18,7 @@
 #include "radio.h"
 #include "history.h"
 #include "app.h"
+#include "supply.h"
 
 static uint8_t gateState = GS_UNKNOWN;
 static uint8_t gateInputs = 0;
@@ -129,13 +132,18 @@ static void sendCommand(uint8_t action) {
   logEvent(EV_CMD_SENT, action, cmdId);
 }
 
+// Controller powered: IN2 on (ctrl_power_sense) and the board's supply good (ctrl_power_pmic).
+static bool ctrlPowered() {
+  return (!cfg.ctrl_power_sense || in2.active()) && (!cfg.ctrl_power_pmic || supplyGood());
+}
+
 void houseBegin() {
   // Random start so the gate's duplicate-command check can't match an id from before a reboot.
   cmdId = (uint16_t)radioRandom32();
   shellyLevel = in1.active();
   armed = false;
   armAt = 0;
-  ctrlPower = !cfg.ctrl_power_sense || in2.active();
+  ctrlPower = ctrlPowered();
   checkSoon = true;
   uint32_t now = millis();
   // A shared supply may have just powered up the Shelly too: let it settle to K1 first.
@@ -145,7 +153,7 @@ void houseBegin() {
 }
 
 static void updateCtrlPower(uint32_t now) {
-  bool p = !cfg.ctrl_power_sense || in2.active();
+  bool p = ctrlPowered();
   if (p == ctrlPower) return;
   ctrlPower = p;
   logEvent(EV_CTRL_POWER, p, p ? 0 : pendingAction);
@@ -194,11 +202,11 @@ void houseLoop(uint32_t now) {
       }
     }
   }
-  // The relay can drop before the power sense does: on the bench the controller's relay dropped ~0.46 s into a 12 V
-  // cut and the IN2 opto only ~2.1 s in (the rail's capacitors keep it lit). A power loss can only drop the relay,
-  // which reads as OFF: so a CLOSE is sent only once power has held for ctrl_confirm_ms, while an OPEN (relay on),
-  // which no power loss can produce, goes at once.
-  if (pendingAction && (!cfg.ctrl_power_sense || pendingAction == ACT_OPEN
+  // The relay can drop before the IN2 opto does: on the bench the controller's relay dropped ~0.46 s into a 12 V cut
+  // and the opto only ~2.1 s in (the rail's capacitors keep it lit); the board's power good dropped ~0.2 s before the
+  // relay. A power loss can only drop the relay, which reads as OFF: so a CLOSE is sent only once power has held for
+  // ctrl_confirm_ms, while an OPEN (relay on), which no power loss can produce, goes at once.
+  if (pendingAction && ((!cfg.ctrl_power_sense && !cfg.ctrl_power_pmic) || pendingAction == ACT_OPEN
                         || elapsed(now, pendingAt, cfg.ctrl_confirm_ms))) {
     sendCommand(pendingAction);
     pendingAction = 0;

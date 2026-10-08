@@ -68,9 +68,16 @@ and `firmware/GateLink/pins.h` in sync.
   and reopen it when the Shelly came back. A PNP opto channel across the Shelly's 12 V supply drives IN2 (use a
   channel rated for 12 V input; output side from the board's 3.3 V, as on the gate). While IN2 is off, IN1 edges
   are logged but never sent and resync pauses. The relay drops before the opto does: on the bench the Shelly's relay
-  dropped ~0.46 s into a 12 V cut and the opto only ~2.1 s in, since the rail's capacitors keep it lit. A power loss
-  can only drop the relay (OFF), so an OFF edge (CLOSE) is held for `ctrl_confirm_ms` (default 3 s) and discarded
-  if IN2 drops meanwhile, while an ON edge (OPEN) is sent at once. After power returns (and
+  dropped ~0.46 s into a 12 V cut and the opto only ~2.1 s in, since the rail's capacitors keep it lit, and a 300 ms
+  dip rebooted the Shelly without the opto dropping at all. So the house board's own supply counts too
+  (`ctrl_power_pmic`, default on): the board runs off the same 12 V through its buck, and the MKR's charger chip
+  (BQ24195L, read over I2C) reports VIN power good lost ~0.2 s *before* the Shelly's relay drops, on cuts and on
+  300 ms dips alike, whatever the buck's set point (bench, 2026-10-07: 196–222 ms over 30 runs at 4.81, 5.02 and
+  5.21 V). The controller counts as powered only while both IN2 and the supply are good. This needs the house
+  board fed from the Shelly's supply, and with its LiPo to stay up through the cut; a USB cable that carries power
+  keeps the supply reading good. A power loss can only drop the relay (OFF), so an OFF edge (CLOSE) is still held
+  for `ctrl_confirm_ms` (default 0.5 s, a backstop; 3 s if `ctrl_power_pmic` is off) and discarded if power drops
+  meanwhile, while an ON edge (OPEN) is sent at once. After power returns (and
   after a house boot) IN1 edges count as sync for at least `ctrl_settle_ms` (default 10 s), and up to
   `sync_window_ms` longer while the Shelly doesn't match K1 yet; one still out of step then is resynced at once. A
   Shelly that reboots internally without losing its supply isn't covered. Turn `ctrl_power_sense`

@@ -25,7 +25,8 @@ _Nothing decided yet. Move items here from Ideas._
   window with no matching Alarm.com change, or sense the Shelly's status LED.
 - **Battery backup and supply monitoring at the gate.** A LiPo on the MKR battery connector would keep the gate
   board reporting through an opener power cut; report its voltage (and the 5 V rail) in STATUS so the house can
-  warn before it runs flat.
+  warn before it runs flat. Since 0.11.0 both boards read VIN power good from the charger chip (status `supply`);
+  the gate could put it in STATUS. The chip has no ADC, so the LiPo voltage still needs a divider to an analog pin.
 - **Longer or persistent link history.** The boards keep 96 hourly buckets in RAM (since 0.4.0), and every
   reset wipes them. Open questions:
   - Persist them? Hourly saves could go to the SPI flash that holds config since 0.5.0 (`extflash.cpp`; config

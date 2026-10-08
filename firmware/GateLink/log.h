@@ -29,6 +29,7 @@ enum LogCode : uint8_t {
   EV_LBT_FORCED,     // a = msg type, b = ms the channel stayed busy (sent anyway)
   EV_CFG,            // at boot: a = config source (CfgSource: 0 defaults, 1 SPI flash, 2 program flash),
                      //   b = saved settings dropped (unknown or out of range)
+  EV_SUPPLY,         // a = board supply (VIN) power good, -1 = charger not answering (at boot only), b = REG08
   EV_COUNT
 };
 

@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from gatelink.bench import ACT_OPEN, CAUSE, PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink.bench import ACT_OPEN, CAUSE, PROFILE_COMMON, REAL_CTRL_POWER, SIM_TRAVEL_S
 from gatelink.board import BoardError
 from gatelink.flows import outage
 
@@ -219,7 +219,7 @@ def test_house_power_cut_with_command_pending(rig, lipo):
         rig.power_cut("house", 5000)
         time.sleep(1.0)  # the house is down after ~0.1 s: the radio can come back without it
     rig.wait_power_return("house", cut, timeout=40)
-    rig.house.config_set(ctrl_power_sense=1)  # the opto is real: keep it on (the profile turns it off)
+    rig.house.config_set(**REAL_CTRL_POWER)  # the senses are real: keep them on (the profile turns them off)
     rig.wait_house(45, "settled after power return", gate="closed", io__k1=False, io__k2=True, armed=True,
                    cmd_pending=False, sync_window=False, resyncing=False)
     rig.wait_ctrl(False, timeout=45)
@@ -292,7 +292,7 @@ def test_house_power_cut_gate_open(rig, lipo):
     m = rig.mark()
     rig.power_cut("house", 5000)
     rig.wait_power_return("house", m, timeout=40)
-    rig.house.config_set(ctrl_power_sense=1)  # the opto is real: keep it on (the profile turns it off)
+    rig.house.config_set(**REAL_CTRL_POWER)  # the senses are real: keep them on (the profile turns them off)
     rig.wait_house(45, "settled after power return", gate="open", io__k1=True, io__k2=False, armed=True,
                    sync_window=False, resyncing=False)
     rig.wait_ctrl(True, timeout=45)
@@ -304,7 +304,7 @@ def test_house_supply_dips(rig, lipo):
     may become a command."""
     require(lipo, house=False)
     rig.expect_commands(0)
-    rig.house.config_set(ctrl_power_sense=1)
+    rig.house.config_set(**REAL_CTRL_POWER)
     rig.sim.open_gate()
     rig.wait_house(SIM_TRAVEL_S + 10, gate="open", io__k1=True, io__k2=False)
     rig.wait_ctrl(True, timeout=30)
@@ -316,7 +316,7 @@ def test_house_supply_dips(rig, lipo):
     time.sleep(3)
     if rig.logs("house", "boot", since=m):
         rig.wait_power_return("house", rig.logs("house", "boot", since=m)[-1]["t"] - 0.1, timeout=40)
-        rig.house.config_set(ctrl_power_sense=1)
+        rig.house.config_set(**REAL_CTRL_POWER)
     rig.wait_house(45, "settled", gate="open", io__k1=True, io__k2=False, sync_window=False, resyncing=False)
     rig.wait_ctrl(True, timeout=45)
 
@@ -402,7 +402,7 @@ def test_house_supply_cut_rides_through(rig, lipo):
     returns the controller is put back on."""
     require(lipo, house=True)
     rig.expect_commands(0)
-    rig.house.config_set(ctrl_power_sense=1)
+    rig.house.config_set(**REAL_CTRL_POWER)
     rig.sim.open_gate()
     rig.wait_house(SIM_TRAVEL_S + 10, gate="open", io__k1=True, io__k2=False)
     rig.wait_ctrl(True, timeout=30)
@@ -419,14 +419,13 @@ def test_house_supply_cut_rides_through(rig, lipo):
     rig.wait_ctrl(True, timeout=45)
 
 
-@pytest.mark.xfail(strict=False, reason="TODO.md: a ~300 ms dip reboots the controller without IN2 noticing, so "
-                                       "CLOSE then OPEN is sent")
 def test_house_supply_dips_ride_through(rig, lipo):
     """Dips of the house 12 V rail from 30 to 300 ms with the house on its LiPo and the gate open: the controller's
-    relay and the IN2 opto glitch in every order; the house never reboots and nothing is commanded."""
+    relay and the IN2 opto glitch in every order, and a ~300 ms dip reboots the controller without the opto noticing;
+    the board's supply sense (ctrl_power_pmic) drops first. The house never reboots and nothing is commanded."""
     require(lipo, house=True)
     rig.expect_commands(0)
-    rig.house.config_set(ctrl_power_sense=1)
+    rig.house.config_set(**REAL_CTRL_POWER)
     rig.sim.open_gate()
     rig.wait_house(SIM_TRAVEL_S + 10, gate="open", io__k1=True, io__k2=False)
     rig.wait_ctrl(True, timeout=30)

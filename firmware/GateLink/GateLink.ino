@@ -11,6 +11,7 @@
 #include "link.h"
 #include "io.h"
 #include "log.h"
+#include "supply.h"
 #include "roles.h"
 #include "console.h"
 #include "app.h"
@@ -116,6 +117,8 @@ void appFillStatus(JsonObject o) {
   o["radio_ok"] = radioOk();
   o["radio_faults"] = radioFaults();
   o["reset_cause"] = resetCauseName(resetCause);
+  if (supplyKnown()) o["supply"] = supplyGood();
+  else o["supply"] = nullptr;
   o["cfg_loaded"] = cfgLoaded;
   o["cfg_store"] = configStoreName();
   o["key_set"] = (bool)cfg.key_set;
@@ -220,6 +223,7 @@ void setup() {
   logEvent(EV_BOOT, resetCause, activeRole);
   logEvent(EV_CFG, configSource(), configDropped());
   histBegin();
+  supplyBegin();
 
   if (activeRole != ROLE_UNSET) {
     appRestartRadio();
@@ -235,6 +239,7 @@ void loop() {
   k1.update(now);
   k2.update(now);
   consolePoll();
+  supplyPoll(now);  // before the roles: the house's controller power sense reads it
   if (activeRole != ROLE_UNSET) {
     linkPoll(now);
     if (activeRole == ROLE_HOUSE) houseLoop(now);

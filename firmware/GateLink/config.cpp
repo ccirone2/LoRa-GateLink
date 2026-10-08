@@ -10,7 +10,7 @@
 // program flash (FlashStorage, a struct image checked against CFG_VERSION), which every upload erases.
 
 #define CFG_MAGIC 0x47544C4Bu  // "GTLK"
-#define CFG_VERSION 5
+#define CFG_VERSION 6
 
 const char FW_MARKER[] = FW_MARKER_PREFIX FW_VERSION;
 Config cfg;
@@ -50,6 +50,7 @@ const ParamDef PARAMS[] = {
   { 27, "ctrl_power_sense", &Config::ctrl_power_sense, 0, 1, 0 },
   { 28, "ctrl_confirm_ms", &Config::ctrl_confirm_ms, 0, 5000, 0 },
   { 29, "ctrl_settle_ms", &Config::ctrl_settle_ms, 0, 60000, 0 },
+  { 31, "ctrl_power_pmic", &Config::ctrl_power_pmic, 0, 1, 0 },
   { 30, "uart_console", &Config::uart_console, 0, 1, 0 },
 };
 const size_t PARAM_COUNT = sizeof(PARAMS) / sizeof(PARAMS[0]);
@@ -200,8 +201,10 @@ void configDefaults(Config &c) {
   c.sensor_invert = 0;
   c.linkloss_open = 1;
   c.ctrl_power_sense = 1;
-  c.ctrl_confirm_ms = 3000;  // > the ~1.65 s the IN2 opto lags the controller's relay on a 12 V cut
+  c.ctrl_confirm_ms = 500;  // margin for ctrl_power_pmic (bench: power good drops ~0.2 s before the relay);
+                            // > ~1.65 s (the IN2 opto's lag) if only IN2 senses the controller's power
   c.ctrl_settle_ms = 10000;
+  c.ctrl_power_pmic = 1;
   c.uart_console = 0;
   c.key_set = 0;
 }

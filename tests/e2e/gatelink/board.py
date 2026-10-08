@@ -1,12 +1,13 @@
 """Client for a GateLink board's JSON console over USB (the same contract web/app.js uses), plus an optional
 read-only tap on its UART console (`uart_console`, a USB-to-UART adapter on its Serial1 pins).
 
-Requests go over USB: on the bench the UART garbled ~1 % of requests on their way into the board, some into
-still-valid JSON with a digit changed, so no command may be sent that way. Its board-to-PC direction was clean, and
-the adapter keeps its port while the board is unpowered, so the tap records the board's events (above all `boot`
-the moment power returns, when USB hasn't re-enumerated yet). While USB is down (a power cut; Windows sometimes
-loses the port until the hub is replugged) read-only requests (READ_ONLY) fall back to the UART: a garbled one is
-simply sent again, since it changes nothing on the board.
+Requests go over USB while it's up. The adapter keeps its port while the board is unpowered, so the tap records the
+board's events (above all `boot` the moment power returns, when USB hasn't re-enumerated yet), and while USB is
+down (a power cut; Windows sometimes loses the port until the hub is replugged) requests go over the UART instead.
+On the bench ~1 % of requests arrived garbled over the UART, some into still-valid JSON with a number
+changed, so every request ends with a CRC-32 of itself (`with_crc`; firmware 0.12.0 refuses a UART request without a
+matching one and checks it on USB too). A refused request never ran, so it is sent again; one that went unanswered
+is sent again only if that is harmless (RESEND_SAFE). The board-to-PC direction was clean.
 
 Requests are `{"id","cmd",...}` lines answered by `{"id","ok",...}`; unsolicited `{"event":...}` lines (log
 entries, house status updates, pongs) go to the shared timeline. The firmware only writes while DTR is asserted,
@@ -16,14 +17,19 @@ import itertools
 import json
 import threading
 import time
+import zlib
 
 import serial
 import serial.tools.list_ports
 
 ARDUINO_VID = 0x2341
 FTDI_VID = 0x0403  # USB-to-UART adapters on the boards' Serial1 consoles (not the GateSim's CH340)
-# Requests that change nothing on the board: the only ones that may go over the UART (see the module docstring).
+# Requests that change nothing on the board, and the ones that change nothing more when repeated: an unanswered one
+# may be sent again over the UART (see the module docstring).
 READ_ONLY = ("status", "info", "log.get", "hist.get", "config.get")
+RESEND_SAFE = READ_ONLY + ("config.set", "config.save", "key.set", "identify")
+# Errors for requests the board refused unread: they never ran, so sending them again is safe.
+REFUSED = ("bad json", "bad crc")
 # USB CDC ignores the rate; a USB-to-UART adapter on the board's Serial1 console (uart_console) needs it.
 BAUD = 250_000
 # config.set params per request: keeps each line far below the firmware's console line limit.
@@ -34,6 +40,12 @@ LINKED_PARAMS = ("heartbeat_s", "link_timeout_s")
 
 class BoardError(Exception):
     pass
+
+
+def with_crc(rid, cmd, **kw):
+    """A request line ending with a CRC-32 of itself: the JSON without the `crc` member, then `,"crc":"<hex>"}`."""
+    body = json.dumps({"id": rid, "cmd": cmd, **kw})
+    return (body[:-1] + ',"crc":"%08x"}\n' % zlib.crc32(body.encode())).encode()
 
 
 OPEN_TIMEOUT_S = 8.0
@@ -214,18 +226,18 @@ class Board:
             return False
 
     def request(self, cmd, timeout=3.0, check=True, **kw):
-        if not self.usb_up() and self.uart is not None and cmd in READ_ONLY and not self._usb_back():
-            res = self.uart.request(cmd, **kw)
+        if not self.usb_up() and self.uart is not None and not self._usb_back():
+            res = self.uart.request(cmd, timeout=timeout, **kw)
             self.timeline.add(self.name, "note", text=f"{cmd} over the UART (USB down)")
             if check and not res.get("ok"):
                 raise BoardError(f"{self.name}: {cmd} failed: {res}")
             return res
-        # A request the board couldn't parse ("bad json") never ran, so sending it again is safe.
+        # A request the board refused unread (REFUSED) never ran, so sending it again is safe.
         for attempt in range(3):
             res = self._request_once(cmd, timeout, **kw)
-            if res.get("error") != "bad json":
+            if res.get("error") not in REFUSED:
                 break
-            self.timeline.add(self.name, "note", text=f"{cmd}: bad json, resent")
+            self.timeline.add(self.name, "note", text=f"{cmd}: {res['error']}, resent")
         if check and not res.get("ok"):
             raise BoardError(f"{self.name}: {cmd} failed: {res}")
         return res
@@ -234,7 +246,7 @@ class Board:
         if self.ser is None or not self._reader.is_alive():
             self._reconnect()
         rid = next(self._ids)
-        data = (json.dumps({"id": rid, "cmd": cmd, **kw}) + "\n").encode()
+        data = with_crc(rid, cmd, **kw)
         with self._cond:
             self._waiting.add(rid)
         try:
@@ -363,18 +375,17 @@ class UartTap:
     def heard_within(self, seconds):
         return time.monotonic() - self.last_rx < seconds
 
-    def request(self, cmd, timeout=1.5, tries=5, **kw):
-        """A READ_ONLY request over the UART. Sent again when it comes back `bad json` or unanswered (a garbled id
-        sends the reply elsewhere): harmless, as it changes nothing on the board."""
-        if cmd not in READ_ONLY:
-            raise BoardError(f"{self.board.name}: {cmd!r} may not go over the UART (only {', '.join(READ_ONLY)})")
+    def request(self, cmd, timeout=3.0, tries=5, **kw):
+        """A request over the UART, with its CRC. Sent again when the board refused it unread (REFUSED), and when it
+        went unanswered (garbling can take the newline or the id with it) if that is harmless
+        (RESEND_SAFE); otherwise an unanswered one raises BoardError, as it may have run."""
         for _ in range(tries):
             rid = next(self._ids)
             with self._cond:
                 self._waiting.add(rid)
             try:
                 with self._lock:
-                    self.ser.write((json.dumps({"id": rid, "cmd": cmd, **kw}) + "\n").encode())
+                    self.ser.write(with_crc(rid, cmd, **kw))
                 deadline = time.monotonic() + timeout
                 with self._cond:
                     while rid not in self._replies and time.monotonic() < deadline:
@@ -385,8 +396,10 @@ class UartTap:
             finally:
                 with self._cond:
                     self._waiting.discard(rid)
-            if res is not None and res.get("error") != "bad json":
+            if res is not None and res.get("error") not in REFUSED:
                 return res
+            if res is None and cmd not in RESEND_SAFE:
+                raise BoardError(f"{self.board.name}: no reply over the UART to {cmd!r} (not resent: it may have run)")
         raise BoardError(f"{self.board.name}: no reply over the UART to {cmd!r} in {tries} tries")
 
     def _handle(self, line):
@@ -438,9 +451,8 @@ class UartTap:
 
 
 def find_uarts(timeline, exclude=()):
-    """Which board each FTDI port not in `exclude` taps (the board needs uart_console on). The only request ever
-    sent on a UART is this `info`, retried: a garbled copy can't turn into a command that does anything, and the
-    reply direction is clean. Returns {role: port}."""
+    """Which board each FTDI port not in `exclude` taps (the board needs uart_console on): asks `info`, retried, as a
+    damaged copy is refused (`bad crc`) or goes unanswered. Returns {role: port}."""
     found = {}
     for p in serial.tools.list_ports.comports():
         if p.vid != FTDI_VID or p.device in exclude:

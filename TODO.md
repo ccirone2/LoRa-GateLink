@@ -31,8 +31,8 @@ once its fix is merged and record it in the pull request.
   `snapshot` and the suite report a stuck port instead of hanging. It also happens after power cuts: on
   2026-10-06 both boards came back cleanly (seen on their UART adapters) but Windows lost their USB ports until
   the hub was replugged. The trigger seems to be a board's USB vanishing abruptly (upload resets, power cuts)
-  behind a power-blocked cable. The power tests must not depend on USB coming back: read-only requests should fall
-  back to the UART consoles.
+  behind a power-blocked cable. Since 0.12.0 the suite sends every request over the UART while USB is down (CRC
+  checked), so the power tests don't depend on USB coming back.
 
 - [ ] **SPI flash on both boards.** 0.5.0 keeps config in the on-board SPI flash. Check `info` `flash_id` and
   `cfg_store` `spi` on both bench boards and on any replacement board (an unexpected chip falls back to

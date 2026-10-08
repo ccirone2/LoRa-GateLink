@@ -295,7 +295,7 @@ class Bench:
             b = self.board(n)
             st = b.status()
             snap[n] = {"uptime": st["uptime_ms"], "mac_fail": st["link"]["mac_fail"],
-                       "replay": st["link"]["replay"], "dropped": b.dropped}
+                       "replay": st["link"]["replay"], "dropped": b.dropped, "usb_cut": st.get("usb_cut", 0)}
         return snap
 
     def check_invariants(self, since, snap):
@@ -325,6 +325,14 @@ class Bench:
                     problems.append(f"{n} reset during the test (reset_cause {self.board(n).status()['reset_cause']})")
                 elif n not in self._allowed_counters and end[n]["mac_fail"] != snap[n]["mac_fail"]:
                     problems.append(f"{n} mac_fail went {snap[n]['mac_fail']} -> {end[n]['mac_fail']}")
+            for n in ("house", "gate"):
+                # Lines cut short on USB: what reached us, and what the board counted (only when the host left a
+                # packet untaken for 70 ms; it restarts from 0 at a reset).
+                seen = sum(1 for e in self.timeline.select(src=n, kind="raw", since=since) if "via" not in e)
+                cut = end[n]["usb_cut"] - (snap[n]["usb_cut"] if end[n]["uptime"] >= snap[n]["uptime"] else 0)
+                if seen or cut:
+                    self.anomalies.append(f"{self.test_name}: {n} USB lines cut: {seen} received, "
+                                          f"{cut} counted by the board (usb_cut)")
         for n in ("house", "gate"):
             if n in self._allowed_counters:
                 continue

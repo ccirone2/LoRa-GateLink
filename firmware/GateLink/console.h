@@ -15,3 +15,4 @@ void consoleEventStatus();
 void consoleEventPong(uint16_t id, uint32_t rttMs, int16_t rssi, float snr, int16_t peerRssi, int8_t peerSnr);
 void consoleEventDiag(const uint8_t *p, uint8_t len);
 void consoleEventRemoteSet(bool acked, uint8_t result);
+uint32_t consoleUsbCutLines();  // lines cut short on USB since boot (the host stopped taking packets)

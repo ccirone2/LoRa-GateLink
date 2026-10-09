@@ -77,14 +77,32 @@ Gate relays are **only ever pulsed** (default 500 ms), never held, so the other 
 opener's inputs keep working. Gate state always comes from the opener's limit outputs (and its power sense),
 never from the last command sent.
 
+## What you need
+
+Per install (one house end, one gate end); wiring and settings for each part are in
+[docs/hardware.md](docs/hardware.md).
+
+| Part | Qty | Where | Notes |
+|---|---|---|---|
+| Arduino MKR WAN 1310 | 2 | both | One firmware for both; the role is set in config |
+| Arduino MKR Relay Proto Shield | 2 | both | K1/K2 relays (3 V coils on the 3.3 V rail) |
+| 868/915 MHz antenna (U.FL → SMA pigtail) | 2 | both | Mount it outside the enclosure, away from the relays |
+| 4-channel PNP-output opto isolator (NOYITO MT-301R4P-P or similar) | 1–2 | gate (IN1–IN3), house (IN2) | Outputs from the board's 3.3 V only; a 12 V-rated channel for the house |
+| 24 V → 5 V buck converter | 1 | gate | From the opener's 24 V accessory output (MKR VIN is 5 V max) |
+| 12 V → 5 V buck converter | 1 | house | From the Shelly's 12 V supply |
+| 3.7 V LiPo (JST-PH) | 0–2 | optional | Rides through supply cuts; the house needs one for `ctrl_power_pmic` to see its supply drop |
+| Shelly Wave 1 on a 12 V DC supply | 1 | house | The Z-Wave "controller" Alarm.com switches |
+| 2GIG-compatible contact sensor with terminal input | 1 | house | Driven by K2: closed = gate closed |
+| LiftMaster CSW24UL (AUX relays set to open / closed limit) | 1 | gate | The opener; its OPEN/CLOSE inputs may be shared with other controllers |
+
 ## Build and flash
 
-Needs `arduino-cli` with the SAMD core and five libraries (versions CI builds with are in
+Needs `arduino-cli` with the SAMD core and five libraries, at the versions CI builds with (also in
 [docs/development.md](docs/development.md)):
 
 ```sh
-arduino-cli core install arduino:samd
-arduino-cli lib install "LoRa" "Crypto" "FlashStorage" "ArduinoJson" "Adafruit SleepyDog Library"
+arduino-cli core install arduino:samd@1.8.14
+arduino-cli lib install "LoRa@0.8.0" "Crypto@0.4.0" "FlashStorage@1.0.0" "ArduinoJson@7.4.3"   "Adafruit SleepyDog Library@1.8.4"
 arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink
 arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 firmware/GateLink   # your port
 ```
@@ -144,15 +162,19 @@ table and notes for each board; works without a board connected).
 
 1. Flash both boards.
 2. Connect board A → Config → `role = house` → Apply → Save → Reboot. Board B → `role = gate`, same.
-   If the gate's IN3 power sense isn't wired yet, turn its `power_sense` toggle off too, or the gate reads
-   `no_power` and refuses commands. Likewise turn the house's `ctrl_power_sense` off until IN2 is wired, or
-   Alarm.com commands are ignored (Status: *Controller power: off*).
-3. Security → **Generate** → write the key to board A, then write the **same** key to board B.
+3. Power senses: on the gate, turn `power_sense` off if IN3 (AC power) isn't wired yet, or the gate reads
+   `no_power` and refuses commands. On the house, turn `ctrl_power_sense` off until IN2 is wired, or Alarm.com
+   commands are ignored (Status: *Controller power: off*). Apply and Save.
+4. Security → **Generate** → write the key to board A, then write the **same** key to board B.
    The radio link stays off until a key is set, so a fresh or reset board can never be commanded.
    Store the key somewhere safe: boards can't read it back, and config export doesn't include it.
-4. With both powered, Status on either board should show *Peer verified: yes* within a few seconds.
-5. Tools → Ping to check RSSI/SNR. At the install site aim for ≥10 dB margin above the SF's sensitivity;
+5. With both powered, Status on either board should show *Peer verified: yes* within a few seconds.
+6. Tools → Ping to check RSSI/SNR. At the install site aim for ≥10 dB margin above the SF's sensitivity;
    raise `sf` (and/or `tx_power`) on **both** boards if the link is marginal.
+7. Check end to end, with someone watching the gate: turn the Alarm.com switch on, and the gate should open, the
+   house Status should follow (*between*, then *open*) and the contact sensor should report open; turn it off and
+   it should close again, with the sensor closed. Then move the gate another way (keypad or remote): the switch
+   should follow without the gate being commanded back. Export each board's config (Config → Export) as a record.
 
 ### Status LED
 
@@ -181,3 +203,8 @@ The breathing and heartbeat patterns never go fully dark between pulses.
 - **The Alarm.com switch flips whenever the gate moves**, with `sync` then repeated `resync` in the house log:
   the Shelly's SW input is set to toggle on every edge. Set it to follow the switch (see
   [docs/hardware.md](docs/hardware.md)).
+
+## License
+
+[MIT](LICENSE). Third-party libraries keep their own licenses: the Arduino SAMD core and FlashStorage are LGPL-2.1,
+so the release binaries include LGPL code; its source is available from those libraries, and ours is here.

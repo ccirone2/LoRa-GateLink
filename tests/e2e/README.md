@@ -18,7 +18,7 @@ by hand, and asserts the outcome at every hop. Bench only; there are no unit tes
 ```sh
 export GATELINK_HA_URL=https://<home-assistant>:8123    # token read from ~/.ha_token (GATELINK_HA_TOKEN_FILE)
 export GATELINK_HA_CA=<ca.pem>            # optional: verify HA's certificate (by default it isn't checked)
-pytest tests/e2e -v                       # about 30 min; boards found by role, simulator on COM10 (--sim-port)
+pytest tests/e2e -v                       # about 30 min; boards found by role, simulator on COM10 (this bench's port: set --sim-port)
 pytest tests/e2e -m soak --cycles 20      # repeated open/close cycles with latency stats
 GATELINK_KEY=<32 hex> pytest tests/e2e -k wrong_key   # wrong-key test, opt-in (marker needs_key; rewrites the gate's saved key)
 GATELINK_KEY=<32 hex> pytest tests/e2e --restore-key -k boards_and_link   # put the shared key back on both boards

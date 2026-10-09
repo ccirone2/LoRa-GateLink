@@ -196,7 +196,7 @@
     {
       "id": "sim_relays",
       "name": "GateSim relays (CH1–CH3)",
-      "note": "Active-HIGH (polarity high), coils from the Uno 5 V rail (separate supply on VIN)",
+      "note": "Active-HIGH (polarity high), coils from the Uno 5 V rail (separate 7.55 V supply on VIN)",
       "top": [
         "VCC",
         "GND"
@@ -571,11 +571,11 @@
     },
     {
       "from": "uno:VIN",
-      "label": "separate 5.1 V supply",
+      "label": "separate 7.55 V supply",
       "status": "connected",
-      "signal": "Uno supply (separate 5.1 V)",
+      "signal": "Uno supply (separate 7.55 V)",
       "color": "red",
-      "note": "Added 2026-10-09 so the relay coils (both modules, up to 7) aren't fed from the PC's USB alone. Before it, a third GateSim coil (AC with the gate open) often failed to pull in; after it, 25 of 25 AC returns with the gate open took ~0.24 s and test_ac_loss_mid_travel passed 6 of 6"
+      "note": "Added 2026-10-09 so the relay coils (both modules, up to 7) aren't fed from the PC's USB. Keep it at 7 V or more: the Uno runs from USB until VIN is above ~6.6 V, and its regulator needs ~1–1.5 V of headroom (first set to 5.1 V, then 6.62 V). Before it, a third GateSim coil (AC with the gate open) often failed to pull in; at 7.55 V, 25 of 25 AC returns with the gate open took ~0.25 s and test_ac_loss_mid_travel passed 3 of 3"
     },
     {
       "from": "uno:5 V",
@@ -685,7 +685,7 @@
       "from": "rig:JD-VCC",
       "status": "connected",
       "signal": "Rig coil supply",
-      "note": "Coils from the Uno 5 V rail (confirmed 2026-10-06), which has the separate 5 V supply on VIN since 2026-10-09. Up to 7 coils (~0.5 A) with the GateSim relays: if a coil fails to pull in or the Uno resets while switching, check that supply first",
+      "note": "Coils from the Uno 5 V rail (confirmed 2026-10-06), which has the separate 7.55 V supply on VIN since 2026-10-09. Up to 7 coils (~0.5 A) with the GateSim relays: if a coil fails to pull in or the Uno resets while switching, check that supply first",
       "color": "orange",
       "bus": "v5_uno"
     },

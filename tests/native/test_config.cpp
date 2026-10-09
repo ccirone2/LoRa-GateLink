@@ -226,31 +226,131 @@ TEST(boot_counter_without_the_chip_is_zero) {
   CHECK_EQ(configCountBoot(), 0);
 }
 
-// REVIEW #20, first part: a transient read failure just before a remote write (the bus garbled) makes the save
-// start over at seq 1 in sector 0; the older record in sector 1 then has the higher seq and wins at the next boot.
-// The save reported success, but it is lost. Fixed when the save is refused or survives a reload.
-XFAIL_TEST(config_save_after_a_failed_read_is_not_lost, "REVIEW #20: lost save after a transient read failure") {
+// A save of one setting re-reads the record to save on top of. If that read is garbled, the save must not start
+// over at seq 1 in sector 0: the older record in sector 1 would then have the higher seq and win at the next boot,
+// and the save, reported as done, would be lost. One garbled read is retried.
+TEST(config_save_after_a_garbled_read_is_retried) {
   fresh();
   saveWith(600);
   saveWith(600);
   flash.garbleReads = 2;  // both sectors read back as zeros once
   cfg.pulse_ms = 900;
-  bool ok = configSaveParam(paramByName("pulse_ms"));
+  CHECK(configSaveParam(paramByName("pulse_ms")));
   configDefaults(cfg);
   CHECK(configLoad());
-  CHECK(!ok || cfg.pulse_ms == 900);
+  CHECK_EQ(cfg.pulse_ms, 900);
 }
 
-// REVIEW #20, second part: after a downgrade, any save rewrites the record with this firmware's params only, so
-// settings it doesn't know are lost for the newer firmware.
-XFAIL_TEST(config_save_keeps_settings_this_firmware_does_not_know, "REVIEW #20: unknown ids dropped by a save") {
+TEST(config_save_refused_while_the_record_reads_garbled) {
   fresh();
-  writeRecord(0, 5, { { 16, 700 }, { 200, 5 } });
+  saveWith(600);
+  saveWith(600);
+  int programs = flash.programs;
+  flash.garbleReads = 4;  // the retry is garbled too
+  cfg.pulse_ms = 900;
+  CHECK(!configSaveParam(paramByName("pulse_ms")));
+  flash.garbleReads = 4;
+  CHECK(!configSaveKey());
+  CHECK_EQ(flash.programs, programs);  // nothing written
+  configDefaults(cfg);
   CHECK(configLoad());
+  CHECK_EQ(cfg.pulse_ms, 600);
+  cfg.pulse_ms = 900;  // and the next save works again
+  CHECK(configSaveParam(paramByName("pulse_ms")));
+  configDefaults(cfg);
+  CHECK(configLoad());
+  CHECK_EQ(cfg.pulse_ms, 900);
+}
+
+// The newest record, which verified when written, no longer reads intact: saving one setting on top of the older
+// record would drop the newer one's change, so it's refused. A full save (config.save) still writes the running
+// config.
+TEST(config_save_refused_when_the_newest_record_went_bad) {
+  fresh();
+  saveWith(600);
+  saveWith(700);
+  int s = newestSector();
+  flash.mem[s * EXTFLASH_SECTOR + REC_HDR + 1] ^= 0x01;
+  cfg.retries = 3;
+  CHECK(!configSaveParam(paramByName("retries")));
+  CHECK_EQ(newestSector(), s);  // the older record is untouched
+  CHECK(configSave());
+  configDefaults(cfg);
+  CHECK(configLoad());
+  CHECK_EQ(cfg.pulse_ms, 700);
+  CHECK_EQ(cfg.retries, 3);
+}
+
+// The boot read was garbled, so the board runs on defaults. A save of one setting reads the record again and
+// saves on top of it, not on top of the defaults, with a seq that wins.
+TEST(config_save_after_a_garbled_boot_read_keeps_the_record) {
+  fresh();
+  saveWith(600);
+  saveWith(700);
+  flash.garbleReads = 2;
+  CHECK(!configLoad());
+  CHECK_EQ(cfg.pulse_ms, 500);
+  cfg.retries = 3;
+  CHECK(configSaveParam(paramByName("retries")));
+  configDefaults(cfg);
+  CHECK(configLoad());
+  CHECK_EQ(cfg.pulse_ms, 700);
+  CHECK_EQ(cfg.retries, 3);
+}
+
+// After a downgrade, settings this firmware doesn't know (saved by a newer one) are written back by every save, so
+// the newer firmware finds them again. A known setting out of range is dropped: this firmware saves its own value.
+TEST(config_save_keeps_settings_this_firmware_does_not_know) {
+  fresh();
+  writeRecord(0, 5, { { 16, 700 }, { 200, 5 }, { 201, -7 }, { 17, 9999 } });
+  CHECK(configLoad());
+  CHECK_EQ(configDropped(), 3);
+  auto check = [](const char *what) {
+    const uint8_t *b = flash.mem + newestSector() * EXTFLASH_SECTOR;
+    int found = 0;
+    for (int i = 0; i < b[5]; i++) {
+      const uint8_t *p = b + REC_HDR + 5 * i;
+      int32_t v = (int32_t)getU32(p + 1);
+      if (p[0] == 200) found += v == 5;
+      if (p[0] == 201) found += v == -7;
+      if (p[0] == 17) CHECK_EQ(v, 60);
+    }
+    if (found != 2) throw Failure(std::string("unknown settings lost by ") + what);
+  };
   cfg.pulse_ms = 800;
   CHECK(configSaveParam(paramByName("pulse_ms")));
+  check("configSaveParam");
+  CHECK(configSaveKey());
+  check("configSaveKey");
+  CHECK(configSave());
+  check("configSave");
+  configDefaults(cfg);
+  CHECK(configLoad());  // and this firmware still loads its own
+  CHECK_EQ(cfg.pulse_ms, 800);
+  CHECK_EQ(configDropped(), 2);
+}
+
+TEST(config_factory_reset_forgets_unknown_settings) {
+  fresh();
+  writeRecord(0, 5, { { 200, 5 } });
+  CHECK(configLoad());
+  CHECK(configFactoryReset());
+  CHECK(configSave());
+  for (uint8_t id : recordIds(newestSector())) CHECK(id != 200);
+}
+
+// A record full of unknown settings: this firmware's own come first, and the unknown ones fill what's left of the
+// page.
+TEST(config_unknown_settings_fill_at_most_the_page) {
+  fresh();
+  std::vector<std::pair<uint8_t, int32_t>> many;
+  for (int i = 0; i < 45; i++) many.push_back({ (uint8_t)(200 + i), i });
+  writeRecord(0, 5, many);
+  CHECK(configLoad());
+  CHECK(configSave());
   std::vector<uint8_t> ids = recordIds(newestSector());
-  bool kept = false;
-  for (uint8_t id : ids) kept |= id == 200;
-  CHECK(kept);
+  CHECK_EQ((int)ids.size(), 45);
+  CHECK_EQ(ids[0], 1);
+  configDefaults(cfg);
+  CHECK(configLoad());
 }

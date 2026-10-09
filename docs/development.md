@@ -72,7 +72,8 @@ are built from the pull requests since the last tag.
 - **MAJOR:** reserved for a protocol break with no upgrade path, or 1.0 at the install.
 
 Saved config survives uploads (from 0.5.0) and is matched by param id, so an added setting takes its default
-and a removed one is dropped (log event `cfg`, b). Say so in the release notes when that happens, and when a
+and a removed one is ignored (log event `cfg`, b; from 0.13.3 an older firmware's saves keep it in the record,
+so it's back after the next upgrade). Say so in the release notes when that happens, and when a
 config exported from the old version may not import cleanly.
 
 ## Releasing

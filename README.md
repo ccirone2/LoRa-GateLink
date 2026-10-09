@@ -203,3 +203,8 @@ The breathing and heartbeat patterns never go fully dark between pulses.
 - **The Alarm.com switch flips whenever the gate moves**, with `sync` then repeated `resync` in the house log:
   the Shelly's SW input is set to toggle on every edge. Set it to follow the switch (see
   [docs/hardware.md](docs/hardware.md)).
+
+## License
+
+[MIT](LICENSE). Third-party libraries keep their own licenses: the Arduino SAMD core and FlashStorage are LGPL-2.1,
+so the release binaries include LGPL code; its source is available from those libraries, and ours is here.

@@ -43,8 +43,9 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
    ```sh
    python tools/gatelink.py restore
    ```
-   It matches boards by port, so if a board came back on a different COM number, edit the port keys in
-   `~/.gatelink_config.json` first. It ends with `link verified on ...` naming both roles; anything else is a
+   It finds each board by its USB serial number, so a board that came back on a different COM number is still
+   matched (a snapshot taken before that change is keyed by port: then edit the port keys in
+   `~/.gatelink_config.json` first). It ends with `link verified on ...` naming both roles; anything else is a
    failure to report, with `python tools/gatelink.py ports` output.
    Link check without a restore: `ports` again after ~15 s should show `verified True` on both.
 5. **GateSim** (only if `tools/GateSim` changed): `arduino-cli compile --fqbn arduino:avr:uno --warnings all

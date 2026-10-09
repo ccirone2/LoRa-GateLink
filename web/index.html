@@ -43,12 +43,14 @@
         <div class="card hero">
           <div class="label">Gate</div>
           <div id="gateState" class="gate-state">—</div>
+          <div id="gateStale" class="stale-note" role="status" hidden>Link lost: last known state, not live</div>
           <div class="kv"><span>Cause</span><b id="gateCause">—</b></div>
           <div class="kv"><span>Last command result</span><b id="gateResult">—</b></div>
           <div class="kv"><span>Travelling to</span><b id="gateTarget">—</b></div>
         </div>
         <div class="card">
           <div class="label">Link</div>
+          <div class="kv" data-role="house" title="Down once nothing is heard from the gate for the link timeout: the contact sensor then fails open"><span>Link</span><b id="lnkUp">—</b></div>
           <div class="kv"><span>Peer verified</span><b id="lnkVerified">—</b></div>
           <div class="kv"><span>Last frame</span><b id="lnkAge">—</b></div>
           <div class="kv"><span>RSSI / SNR (here)</span><b id="lnkRssi">—</b></div>

@@ -10,8 +10,9 @@
 
 From firmware 0.5.0 the config and key live in the board's SPI flash chip and survive uploads (`ports` shows
 `cfg spi`); older firmware, or a board whose chip doesn't answer (`cfg internal`), loses them on every upload.
-`snapshot`/`restore` remain the safety net. `snapshot` stores each board's running config by port
-(default ~/.gatelink_config.json); `restore` applies it to the board on the same port, saves it, sets the key
+`snapshot`/`restore` remain the safety net. `snapshot` stores each board's running config by its USB serial number
+(default ~/.gatelink_config.json), so `restore` finds the same board even if Windows gave it another COM port
+after the upload (snapshots from before keyed by port still work); `restore` applies it, saves it, sets the key
 from ~/.gatelink_key and reboots. Take the snapshot from boards in their normal state, not mid-test: an
 interrupted e2e run can leave its unsaved test profile running. Close the web console first; only one program
 can hold a port.
@@ -39,6 +40,13 @@ DEFAULT_KEY_FILE = os.path.expanduser("~/.gatelink_key")
 
 def board_ports():
     return sorted(p.device for p in serial.tools.list_ports.comports() if p.vid == ARDUINO_VID)
+
+
+def port_serials():
+    """{port: USB serial number} for the Arduino ports. The number is the SAMD21's chip id: it stays with the board
+    across uploads, resets and replugs, while the COM port can change."""
+    return {p.device: p.serial_number for p in serial.tools.list_ports.comports()
+            if p.vid == ARDUINO_VID and p.serial_number}
 
 
 def open_board(port):
@@ -139,6 +147,7 @@ def cmd_hist(args):
 
 def cmd_snapshot(args):
     snap = {}
+    serials = port_serials()
     for port in board_ports():
         try:
             b = open_board(port)
@@ -147,9 +156,12 @@ def cmd_snapshot(args):
             continue
         try:
             info = b.info()
-            snap[port] = {"role": info["role"], "fw": info["fw"], "key_set": info["key_set"],
-                          "params": b.config_get(), "taken": time.strftime("%Y-%m-%d %H:%M:%S")}
-            print(f"{port}: {info['role']} fw {info['fw']}, {len(snap[port]['params'])} params")
+            ser = serials.get(port)
+            entry = {"role": info["role"], "fw": info["fw"], "key_set": info["key_set"], "port": port, "serial": ser,
+                     "params": b.config_get(), "taken": time.strftime("%Y-%m-%d %H:%M:%S")}
+            snap[f"usb:{ser}" if ser else port] = entry
+            print(f"{port}: {info['role']} fw {info['fw']}, {len(entry['params'])} params"
+                  + (f" (USB serial {ser})" if ser else " (no USB serial number: keyed by port)"))
         finally:
             b.close()
     if not snap:
@@ -174,9 +186,18 @@ def cmd_restore(args):
     except OSError as e:
         sys.exit(f"no snapshot: {e} (take one with `snapshot` before flashing)")
     key = read_key(args.key_file)
+    by_serial = {s: p for p, s in port_serials().items()}
     boards = []
     try:
-        for port, saved in snap.items():
+        for name, saved in snap.items():
+            # By USB serial number when the snapshot has one (the COM port may have changed); else by port.
+            port = by_serial.get(saved["serial"]) if saved.get("serial") else name
+            if port is None:
+                print(f"{saved.get('port', name)}: the {saved['role']} board (USB serial {saved['serial']}) isn't "
+                      "connected; skipped")
+                continue
+            if saved.get("port") and port != saved["port"]:
+                print(f"{saved['role']} board was on {saved['port']}, now on {port}")
             b = Board(port, Timeline(), name=saved["role"])
             b.open()
             boards.append(b)
@@ -195,6 +216,9 @@ def cmd_restore(args):
             b.reboot()
             print(f"{port}: restored as {b.info()['role']} ({len(params)} params, key set"
                   + (f"; not on this firmware: {', '.join(skipped)}" if skipped else "") + ")")
+        if not boards:
+            print("none of the snapshot's boards is connected")
+            return 1
         deadline = time.monotonic() + args.wait
         while True:
             states = {b.name: b.status()["link"]["verified"] for b in boards}

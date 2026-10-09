@@ -180,6 +180,7 @@ function renderWiring(r) {
     + sub.map((t, i) => `<text class="dim" x="${bx + 12}" y="${54 + i * 15}">${esc(t)}</text>`).join('');
   const svg = $('wiringSvg');
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('aria-label', `${r === 'house' ? 'House' : 'Gate'} board field wiring diagram (the table below lists the same connections)`);
   svg.innerHTML = board + blocks + wires;
 
   $('wiringTable').innerHTML = '<thead><tr><th>Device</th><th>Board terminal</th><th>Device terminal</th></tr></thead><tbody>'
@@ -216,6 +217,9 @@ let lastPort = null;
 let reconnectUntil = 0;
 let reconnectTimer = null;
 let opening = false;
+// The board that went away (boardIdentity()): any granted port that comes back in the window is reopened,
+// and it may be the other board.
+let expectBoard = null;
 
 async function connect() {
   stopReconnect();
@@ -444,6 +448,7 @@ function stopReconnect() {
   clearInterval(reconnectTimer);
   reconnectTimer = null;
   reconnectUntil = 0;
+  expectBoard = null;
 }
 
 async function tryReconnect(p) {
@@ -455,20 +460,47 @@ async function tryReconnect(p) {
     return;
   }
   if (!p) return;
+  const was = expectBoard;
   try {
     await openPort(p);
-    stopReconnect();
-    logLine('reconnected');
-  } catch {} // not back yet; the timer retries
+  } catch {
+    return; // not back yet; the timer retries
+  }
+  stopReconnect();
+  logLine('reconnected');
+  checkSameBoard(was);
+}
+
+// What the board that's going away should come back as. A reboot applies a role saved since (reboot_pending),
+// and a firmware update (flashCheck reports it) changes fw.
+function boardIdentity() {
+  if (!boardInfo) return null;
+  return { role: boardInfo.role, anyRole: rebootPending, fw: boardInfo.fw };
+}
+
+function checkSameBoard(was) {
+  const now = boardInfo;
+  if (!was || !now) return;
+  const roleOk = was.anyRole || now.role === was.role;
+  const fwOk = flashCheck || now.fw === was.fw;
+  if (roleOk && fwOk) return;
+  toast(`Reconnected to a different board: the ${now.role} board (fw ${now.fw}), not the ${was.role} board (fw ${was.fw}) `
+    + 'that went away. Use Connect board to pick another.', 'err');
 }
 
 // Called when the board went away without the user asking (reset, reboot, cable).
 async function connectionLost() {
-  await disconnect(true);
+  // The board that comes back on this port should be the same one; tryReconnect checks it.
+  expectBoard = boardIdentity();
+  await disconnect(true, true);
   startReconnect();
 }
 
-async function disconnect(quiet = false) {
+// Waits for p, but no longer than ms: stream calls on a device that vanished can stay pending for good.
+const within = (p, ms = 1000) => Promise.race([Promise.resolve(p).catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
+
+// lost: the device is gone, so pending writes are aborted rather than flushed.
+async function disconnect(quiet = false, lost = false) {
   if (!port) return;
   const p = port;
   port = null; // also stops readLoop from re-entering disconnect()
@@ -480,10 +512,10 @@ async function disconnect(quiet = false) {
   $('pingAuto').checked = false;
   for (const req of pending.values()) req.reject(new Error('disconnected'));
   pending.clear();
-  try { await reader?.cancel(); } catch {}
-  await readPipe;
-  try { await writer?.close(); } catch {}
-  await writePipe;
+  await within(reader?.cancel());
+  await within(readPipe);
+  await within(lost ? writer?.abort() : writer?.close());
+  await within(writePipe);
   try {
     await p.close();
   } catch (e) {
@@ -664,6 +696,7 @@ async function refreshStatus(timeoutMs) {
 let pollMisses = 0;
 let devline = '';
 let boardInfo = null; // last info reply
+let rebootPending = false; // last status: a saved role waits for a reboot
 // The board answers status at once; a timeout under the poll interval keeps polls from piling up.
 const POLL_MS = 2000;
 let polling = false;
@@ -686,6 +719,7 @@ async function pollStatus() {
 
 function renderStatus(s) {
   if (s.role !== role) applyRole(s.role);
+  rebootPending = !!s.reboot_pending;
   const gs = s.gate || 'unknown';
   const g = $('gateState');
   // With the link down the house still reports the gate's last state: show it struck through, not as live.
@@ -727,6 +761,13 @@ function renderStatus(s) {
   const faults = nf ? ` <span class="bad">· ${nf} TX fault${nf === 1 ? '' : 's'}</span>` : '';
   $('bRadio').innerHTML = (s.radio_ok ? '<span class="good">ok</span>' : '<span class="bad">not initialised</span>') + faults;
   $('keyWarn').hidden = s.key_set;
+  $('bSettling').textContent = 'settling' in s ? (s.settling ? 'yes · first report waits' : 'no') : '—';
+  const store = { spi: 'flash chip', internal: 'program flash' }[s.cfg_store] ?? s.cfg_store;
+  const fid = boardInfo?.flash_id ? ` · id ${boardInfo.flash_id}` : '';
+  $('bCfg').innerHTML = s.cfg_loaded === undefined ? '—'
+    : `${s.cfg_loaded ? 'saved' : '<span class="bad">none · defaults</span>'}${store ? ` · ${esc(store)}` : ''}${esc(fid)}`;
+  const ram = s.free_ram === undefined ? '—' : `${Number(s.free_ram)} B`;
+  $('bMem').innerHTML = `${ram} / ${s.usb_cut ? `<span class="bad">${Number(s.usb_cut)}</span>` : s.usb_cut ?? '—'}`;
 
   if (s.role === 'house') {
     const r = s.remote || {};
@@ -783,7 +824,7 @@ function renderConfig() {
       if (!m) continue;
       const row = document.createElement('div');
       row.className = 'field';
-      const id = `p_${name}`;
+      const id = esc(`p_${name}`); // names come from the board's meta
       let input;
       if (!SELECTS[name] && m.min === 0 && m.max === 1) {
         input = `<input id="${id}" type="checkbox" class="toggle" role="switch">`;
@@ -977,12 +1018,13 @@ async function ping() {
 function drawRssi() {
   const svg = $('rssiChart');
   if (!rssiHist.length) { svg.innerHTML = ''; $('rssiRange').textContent = ''; return; }
-  const all = rssiHist.flatMap((p) => [p.here, p.peer]);
+  const all = rssiHist.flatMap((p) => [p.here, p.peer]).filter(Number.isFinite);
+  if (!all.length) { svg.innerHTML = ''; $('rssiRange').textContent = ''; return; }
   const lo = Math.min(...all) - 3, hi = Math.max(...all) + 3;
   const x = (i) => (rssiHist.length === 1 ? 150 : (i / (rssiHist.length - 1)) * 300);
   const y = (v) => 85 - ((v - lo) / (hi - lo || 1)) * 80;
   const line = (k, color) =>
-    `<polyline stroke="var(${color})" points="${rssiHist.map((p, i) => `${x(i)},${y(p[k])}`).join(' ')}"/>`;
+    `<polyline stroke="var(${color})" points="${rssiHist.map((p, i) => (Number.isFinite(p[k]) ? `${x(i)},${y(p[k])}` : '')).join(' ')}"/>`;
   svg.innerHTML = line('here', '--chart-here') + line('peer', '--chart-peer');
   $('rssiRange').textContent = `${Math.round(lo + 3)} … ${Math.round(hi - 3)} dBm`;
 }
@@ -1363,9 +1405,9 @@ function onEvent(ev) {
       pingWait = null;
       $('pingRtt').textContent = `${ev.rtt_ms} ms`;
       $('pingHere').textContent = `${ev.rssi} dBm / ${Number(ev.snr).toFixed(1)} dB`;
-      $('pingPeer').textContent = `${ev.peer_rssi} dBm / ${ev.peer_snr} dB`;
+      $('pingPeer').textContent = ev.peer_rssi === undefined ? '—' : `${ev.peer_rssi} dBm / ${Number(ev.peer_snr).toFixed(1)} dB`;
       $('pingFei').textContent = fmtFei(ev.fei);
-      rssiHist.push({ here: ev.rssi, peer: ev.peer_rssi });
+      rssiHist.push({ here: Number(ev.rssi), peer: Number(ev.peer_rssi) }); // NaN = missing, left out of the chart
       if (rssiHist.length > 60) rssiHist.shift();
       drawRssi();
       break;
@@ -1812,6 +1854,12 @@ function checkKeyInput() {
 
 function init() {
   if (!('serial' in navigator)) {
+    // Phones and tablets have no Web Serial in any browser.
+    const ua = navigator.userAgent;
+    const mobile = navigator.userAgentData?.mobile || /Android|iPhone|iPad|iPod|Mobile/i.test(ua)
+      || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); // iPadOS reports a desktop Safari
+    if (mobile) $('unsupportedMsg').textContent = 'Phones and tablets can’t talk to the board: browsers there have no Web Serial. '
+      + 'Use a desktop or laptop with Chrome or Edge and a USB cable. The Install tab still works here.';
     $('unsupported').hidden = false;
     $('btnConnect').disabled = true;
   }
@@ -1908,8 +1956,10 @@ function init() {
     const lose = appliedUnsaved ? '\n\nApplied settings haven’t been saved to flash and will be lost.' : '';
     if (!confirm(`Reboot the board? Relays release during reboot.${lose}`)) return;
     await request('reboot', {}, 1500).catch(() => {});
+    const was = boardIdentity();
     await disconnect(true);
     startReconnect();
+    expectBoard = was;
     toast('Board rebooting — reconnecting…');
   });
   $('btnCfgReset').onclick = guard(async () => {
@@ -1920,8 +1970,12 @@ function init() {
     await refreshInfo();
     toast('Defaults restored. Reboot to apply role.');
   });
-  $('btnCfgExport').onclick = () =>
-    download(`gatelink-${role}-config-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ role, params: formValues(false) }, null, 2));
+  // Exports what the board is running (applied, saved or not), not edits still in the form.
+  $('btnCfgExport').onclick = () => {
+    download(`gatelink-${role}-config-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ role, params }, null, 2));
+    const n = dirtyCount();
+    if (n) toast(`Exported the board’s settings. ${n} unapplied edit${n === 1 ? ' isn’t' : 's aren’t'} included: Apply first to export ${n === 1 ? 'it' : 'them'}.`);
+  };
   $('fileImport').onchange = (e) => { if (e.target.files[0]) importConfig(e.target.files[0]); e.target.value = ''; };
 
   $('btnKeyGen').onclick = () => {

@@ -30,7 +30,11 @@ void Relay::begin(uint8_t pin) {
   _pulseUntil = 0;
 }
 
+// Longer than any gap asked of gapLeft(); clearing _offAt then keeps the signed comparison from wrapping.
+#define RELEASE_MEMO_MS 1000
+
 void Relay::set(bool on) {
+  if (_on && !on) _offAt = millis() | 1;
   _startAt = 0;
   _pulseUntil = 0;
   _on = on;
@@ -55,4 +59,12 @@ void Relay::update(uint32_t now) {
     digitalWrite(_pin, HIGH);
   }
   if (_pulseUntil && !_startAt && (int32_t)(now - _pulseUntil) >= 0) set(false);
+  if (_offAt && (int32_t)(now - _offAt) >= RELEASE_MEMO_MS) _offAt = 0;
+}
+
+uint32_t Relay::gapLeft(uint32_t now, uint32_t gap) const {
+  if (!_offAt) return 0;
+  int32_t since = (int32_t)(now - _offAt);
+  if (since < 0) since = 0;  // stamped with millis(), which can be later than the caller's `now`
+  return (uint32_t)since < gap ? gap - since : 0;
 }

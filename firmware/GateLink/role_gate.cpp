@@ -102,12 +102,13 @@ static void clearTarget() {
 
 // Interlock: never both. Releasing one relay and energizing the other in the same instant isn't enough (a contact
 // can make before the other has broken: the bench opener saw OPEN and CLOSE together), so wait for the release.
+// That holds when the other relay released by itself just before, too (its pulse ended a few ms ago).
 #define INTERLOCK_MS 100
 
 static void interlockedPulse(Relay &r, Relay &other, uint32_t now, uint32_t ms) {
   bool wasOn = other.on() || other.pulsing();
   other.set(false);
-  r.pulse(now, ms, wasOn ? INTERLOCK_MS : 0);
+  r.pulse(now, ms, wasOn ? INTERLOCK_MS : other.gapLeft(now, INTERLOCK_MS));
 }
 
 static void pulse(Relay &r, Relay &other, uint8_t which, uint32_t now) {

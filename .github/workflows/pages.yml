@@ -43,6 +43,13 @@ jobs:
             exit 0
           fi
           f="GateLink-$tag.bin"
+          # Check it against the checksum published with the release (attached since v0.13.0), so a damaged or
+          # swapped download isn't deployed with a checksum of its own.
+          if gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$f.sha256" --dir "$RUNNER_TEMP"; then
+            (cd web/firmware && sha256sum -c "$RUNNER_TEMP/$f.sha256")
+          else
+            echo "::warning::$tag has no $f.sha256 (released before v0.13.0); deploying it unchecked"
+          fi
           printf '{"version":"%s","file":"%s","sha256":"%s","size":%d}\n' \
             "${tag#v}" "$f" "$(sha256sum "web/firmware/$f" | cut -d' ' -f1)" "$(stat -c %s "web/firmware/$f")" \
             > web/firmware/latest.json

@@ -1,7 +1,8 @@
 name: Release firmware binary
 
-# Builds the firmware at a release's tag and attaches GateLink-<tag>.bin to the release.
-# Run by hand (workflow_dispatch) to add the binary to an existing release.
+# Builds the firmware at a release's tag and attaches GateLink-<tag>.bin and its .sha256 to the release.
+# Run by hand (workflow_dispatch) to add the binary to an existing release. A binary already attached is never
+# replaced unless `replace` is ticked: the web console and anyone who downloaded it rely on it staying the same.
 on:
   release:
     types: [published]
@@ -10,6 +11,10 @@ on:
       tag:
         description: Release tag to build, e.g. v0.3.5
         required: true
+      replace:
+        description: Replace a binary already attached to the release
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -41,9 +46,18 @@ jobs:
         run: |
           v=$(sed -n 's/^#define FW_VERSION "\(.*\)"/\1/p' firmware/GateLink/config.h)
           [ "v$v" = "$TAG" ] || { echo "FW_VERSION $v doesn't match tag $TAG"; exit 1; }
-      - name: Attach binary to the release
+      - name: Attach binary and checksum to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          REPLACE: ${{ inputs.replace || false }}
         run: |
-          cp build/GateLink.ino.bin "GateLink-$TAG.bin"
-          gh release upload "$TAG" "GateLink-$TAG.bin" --clobber
+          f="GateLink-$TAG.bin"
+          cp build/GateLink.ino.bin "$f"
+          sha256sum "$f" > "$f.sha256"
+          cat "$f.sha256"
+          have=$(gh release view "$TAG" --json assets -q '.assets[].name')
+          if grep -qx "$f" <<< "$have" && [ "$REPLACE" != "true" ]; then
+            echo "::error::$TAG already has $f; run this workflow with 'replace' ticked to rebuild and replace it"
+            exit 1
+          fi
+          gh release upload "$TAG" "$f" "$f.sha256" --clobber

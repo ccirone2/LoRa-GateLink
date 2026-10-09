@@ -68,6 +68,9 @@ void linkSendReliable(Slot slot, uint8_t type, const uint8_t *payload, uint8_t l
 bool linkPending(Slot slot);
 // Acknowledge a reliable message (call from RxHandler).
 void linkAck(uint32_t seq, uint8_t result);
+// Accept a reliable message now and ACK it later with linkAck: until then its retransmits are dropped quietly
+// (not counted as replays), and the sender keeps retrying within its TTL.
+void linkAckLater(uint32_t seq);
 const LinkStats &linkStats();
 bool linkPeerVerified();
 // Debug: retransmit the last frame verbatim (peer must reject it as a replay), or with hello our first HELLO since

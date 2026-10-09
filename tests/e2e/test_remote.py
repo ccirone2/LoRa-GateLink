@@ -81,6 +81,53 @@ def test_remote_set_busy(rig):
     assert rig.gate.config_get()["retries"] == old
 
 
+HOLD_PULSE_MS = 2000  # long enough that a save during it is clearly inside it
+
+
+def test_remote_set_waits_for_pulse(rig):
+    """A remote write landing while a gate relay pulses waits until the pulse is over before the gate saves it
+    (a save blocks the loop for ~1 s, which held the relay that much longer). The gate takes it at once and holds
+    the house's retries quietly (not counted as replays), then saves and ACKs. The invariant checks measure the
+    press at the simulator, so a stretched pulse fails them. K2 with the gate closed: nothing moves."""
+    pid = _meta(rig.gate)["retries"]["id"]
+    old = rig.gate.config_get()["retries"]
+    new = old - 1 if old > 0 else 1
+    replays = rig.gate.status()["link"]["replay"]
+    rig.saved.add("gate")
+    try:
+        m = rig.mark()
+        rig.relay_test("gate", 2, HOLD_PULSE_MS)
+        pulse = rig.wait_log("gate", "pulse", a=2, since=m, timeout=2)
+        ev, _ = _remote_set(rig, "retries", new)
+        assert ev["acked"] and ev["ok"], f"remote.set retries={new} during a pulse not applied: {ev}"
+        saved = rig.wait_log("gate", "cfg_remote", a=pid, b=new, since=m, timeout=2)
+        assert saved["t"] >= pulse["t"] + HOLD_PULSE_MS / 1000 - 0.1, \
+            f"saved {saved['t'] - pulse['t']:.2f} s into a {HOLD_PULSE_MS} ms pulse"
+        assert rig.gate.config_get()["retries"] == new
+        assert rig.gate.status()["link"]["replay"] == replays, "the held retries were counted as replays"
+        ev, _ = _remote_set(rig, "retries", old)
+        assert ev["acked"] and ev["ok"], f"remote.set retries={old} (restore) not applied: {ev}"
+    finally:
+        rig.resave("gate")
+
+
+def test_console_save_waits_for_pulse(rig):
+    """config.save on the gate's console during a relay pulse is answered only once the pulse is over, so the
+    save doesn't hold the relay on. A short pulse, so a save that didn't wait would still be running when it should
+    end (on 0.13.1 a 500 ms press measured 603 ms at the simulator, which the invariant checks fail)."""
+    ms = 500
+    m = rig.mark()
+    rig.relay_test("gate", 2, ms)
+    pulse = rig.wait_log("gate", "pulse", a=2, since=m, timeout=2)
+    rig.saved.add("gate")
+    try:
+        rig.gate.request("config.save", timeout=ms / 1000 + 3)
+        done = rig.mark()
+        assert done >= pulse["t"] + ms / 1000 - 0.1, f"config.save answered {done - pulse['t']:.2f} s into a {ms} ms pulse"
+    finally:
+        rig.resave("gate")
+
+
 def test_remote_diag(rig):
     """remote.diag: the gate answers with its firmware, uptime, link counters and remote-writable params."""
     meta = _meta(rig.gate)

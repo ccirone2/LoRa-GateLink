@@ -100,6 +100,10 @@ void appRelayTest(uint8_t k, uint32_t ms) {
   else if (activeRole == ROLE_GATE) gateRelayTest(k, ms);
 }
 
+bool appRelaysPulsing() {
+  return k1.pulsing() || k2.pulsing();
+}
+
 // Gap between the heap's high-water mark and the stack: what's left for the deepest stack and a bigger reply.
 extern "C" char *sbrk(int incr);
 static uint32_t freeRam() {

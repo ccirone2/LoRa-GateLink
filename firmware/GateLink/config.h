@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.13.1"
+#define FW_VERSION "0.13.2"
 #define FW_MARKER_PREFIX "GATELINK_FW="
 // FW_MARKER_PREFIX FW_VERSION: the web console looks for it in a .bin to check the file is GateLink and
 // read its version. The version is reported from it (fwVersion()) so the linker keeps it in the image.
@@ -100,6 +100,7 @@ bool configFactoryReset();  // defaults in RAM; saved config and key erased
 uint32_t configCountBoot();
 const ParamDef *paramByName(const char *name);
 const ParamDef *paramById(uint8_t id);
+bool paramValid(const ParamDef *p, int32_t value);  // range check, as paramSet does
 bool paramSet(const ParamDef *p, int32_t value);  // range-checked
 uint8_t myNodeId();
 uint8_t peerNodeId();

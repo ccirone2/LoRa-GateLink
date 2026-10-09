@@ -72,7 +72,10 @@ survive firmware uploads; they're stored per param id, so a newer firmware keeps
 flash (`cfg_store` `internal`), which every upload erases. `config.save`, `config.reset` and `key.set` reply
 `ok: false`, `error: "flash write failed"` if the write doesn't verify (the change still applies until reboot).
 Each save re-initialises the radio (the flash chip shares its bus): about 0.5 s off the air, which the link's
-retries cover.
+retries cover. Saving, and restarting the radio, stops the loop for up to ~1 s, so while a relay pulse runs (or
+waits for its interlock start) `config.set`, `config.save`, `config.reset` and `key.set` wait in the port's
+buffer and are answered after it (at most the pulse's length, 5 s for a `relay.test`); a held relay would
+otherwise stay on until the save was done.
 `config.reset` erases the saved config and key.
 
 ## Status

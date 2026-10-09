@@ -115,8 +115,6 @@ static size_t encode(const Config &c, uint32_t seq, uint8_t *buf) {
   return len;
 }
 
-static bool paramValid(const ParamDef *p, int32_t value);
-
 // Applies a record on top of c (which holds the defaults). Returns false if buf holds no valid record.
 static bool decode(const uint8_t *buf, Config &c, uint32_t &seq, int32_t &skipped) {
   if (get32(buf) != REC_MAGIC || buf[4] != REC_FMT || buf[5] > REC_MAX_PARAMS) return false;
@@ -351,7 +349,7 @@ const ParamDef *paramById(uint8_t id) {
   return nullptr;
 }
 
-static bool paramValid(const ParamDef *p, int32_t value) {
+bool paramValid(const ParamDef *p, int32_t value) {
   if (!p || value < p->minV || value > p->maxV) return false;
   if (p->field == &Config::bw_hz && value != 125000 && value != 250000 && value != 500000) return false;
   // No heartbeat_s vs link_timeout_s check here: only the gate uses heartbeat_s and only the house

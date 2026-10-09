@@ -43,6 +43,7 @@ struct QueuedFrame {
 
 struct AckMemo {
   bool valid;
+  bool pending;  // accepted, answer still to come (linkAckLater): retransmits are held, not answered
   uint32_t seq;
   uint8_t result;
 };
@@ -336,10 +337,21 @@ static void sendAck(uint32_t seq, uint8_t result) {
   linkSend(MSG_ACK, p, 5);
 }
 
-void linkAck(uint32_t seq, uint8_t result) {
-  acks[ackNext] = { true, seq, result };
+static AckMemo *ackMemo(uint32_t seq) {
+  for (auto &m : acks)
+    if (m.valid && m.seq == seq) return &m;
+  AckMemo *m = &acks[ackNext];
   ackNext = (ackNext + 1) % ACK_MEMO;
+  return m;
+}
+
+void linkAck(uint32_t seq, uint8_t result) {
+  *ackMemo(seq) = { true, false, seq, result };
   sendAck(seq, result);
+}
+
+void linkAckLater(uint32_t seq) {
+  *ackMemo(seq) = { true, true, seq, 0 };
 }
 
 static void handleAck(const uint8_t *p, uint8_t len) {
@@ -354,11 +366,12 @@ static void handleAck(const uint8_t *p, uint8_t len) {
   }
 }
 
-// Re-ACK a retransmission we already accepted (our ACK was lost). False if it isn't in the memo.
+// Re-ACK a retransmission we already accepted (our ACK was lost), or hold it quietly while its answer is still to
+// come (linkAckLater). False if it isn't in the memo.
 static bool resendAck(uint32_t seq) {
   for (auto &m : acks) {
     if (m.valid && m.seq == seq) {
-      sendAck(seq, m.result);
+      if (!m.pending) sendAck(seq, m.result);
       return true;
     }
   }

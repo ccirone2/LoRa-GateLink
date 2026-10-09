@@ -8,6 +8,7 @@
 #include "log.h"
 #include "radio.h"
 #include "history.h"
+#include "app.h"
 
 #define STATUS_TTL_MS 10000
 // After boot, the first STATUS waits until the inputs have been steady this long (at most BOOT_SETTLE_MAX_MS): the
@@ -38,6 +39,8 @@ static uint32_t bootAt = 0, steadySince = 0;
 static uint32_t betweenAt = 0;  // when the inputs started reading between while we report something else (0 = not)
 static bool rebootAfterCmd = false;  // debug: next pulsed command reboots us before its ACK (a power cut)
 static uint32_t rebootAt = 0;
+
+static void drainCfgQueue();
 
 // IN3 = AC power (the 24 V supply on mains). The opener has battery backup, so it keeps running without AC.
 static bool acPower() {
@@ -201,6 +204,8 @@ void gateLoop(uint32_t now) {
   if (elapsed(now, lastStatusAt, (uint32_t)cfg.heartbeat_s * 1000) || cfg.heartbeat_s != reportedHeartbeat) {
     sendStatus(now);
   }
+
+  drainCfgQueue();
 }
 
 static void handleCmd(const RxMsg &m, uint32_t now) {
@@ -249,6 +254,26 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   sendStatus(now);
 }
 
+// Remote writes waiting for the relays: a save blocks the loop (sector erase, then radioRestart: ~1 s), and
+// Relay::update doesn't run meanwhile, so a pulse in progress would be held that much longer. They are accepted
+// at once (linkAckLater) and applied, saved and ACKed once no pulse is running or waiting for its interlock start;
+// the house's CFG slot keeps retrying meanwhile, and its retransmits are held, not answered.
+#define CFG_QUEUE 4
+struct QueuedCfg {
+  uint32_t seq;
+  const ParamDef *p;
+  int32_t v;
+};
+static QueuedCfg cfgQueue[CFG_QUEUE];
+static uint8_t cfgQueued = 0;
+
+static void applyCfgSet(const QueuedCfg &q) {
+  paramSet(q.p, q.v);  // checked on arrival
+  bool saved = configSaveParam(q.p);  // not configSave(): that would also persist unsaved console edits
+  logEvent(EV_CFG_REMOTE, q.p->id, q.v);
+  linkAck(q.seq, saved ? RES_OK : RES_NOT_SAVED);
+}
+
 static void handleCfgSet(const RxMsg &m) {
   if (m.len < 5) {
     linkAck(m.seq, RES_BAD);
@@ -256,13 +281,27 @@ static void handleCfgSet(const RxMsg &m) {
   }
   const ParamDef *p = paramById(m.payload[0]);
   int32_t v = (int32_t)getU32(m.payload + 1);
-  if (!p || !(p->flags & P_REMOTE) || !paramSet(p, v)) {
+  if (!p || !(p->flags & P_REMOTE) || !paramValid(p, v)) {
     linkAck(m.seq, RES_BAD);
     return;
   }
-  bool saved = configSaveParam(p);  // not configSave(): that would also persist unsaved console edits
-  logEvent(EV_CFG_REMOTE, p->id, v);
-  linkAck(m.seq, saved ? RES_OK : RES_NOT_SAVED);
+  QueuedCfg q = { m.seq, p, v };
+  if (!cfgQueued && !appRelaysPulsing()) {
+    applyCfgSet(q);
+  } else if (cfgQueued < CFG_QUEUE) {
+    cfgQueue[cfgQueued++] = q;
+    linkAckLater(m.seq);
+  } else {
+    applyCfgSet(q);  // can't happen with one CFG slot on the house; better a longer pulse than a lost write
+  }
+}
+
+// One queued write per loop pass, in order, while no pulse runs (a command may start one between them).
+static void drainCfgQueue() {
+  if (!cfgQueued || appRelaysPulsing()) return;
+  QueuedCfg q = cfgQueue[0];
+  memmove(cfgQueue, cfgQueue + 1, --cfgQueued * sizeof(QueuedCfg));
+  applyCfgSet(q);
 }
 
 static void sendDiag() {

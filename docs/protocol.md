@@ -50,7 +50,10 @@ lost the ACK to the reset, and its record of the last command went with it, so a
 then resyncs the controller to the real gate. A HELLO from a new gate session only holds the command (log
 `cmd_hold`), since it may be an old HELLO replayed to make the house drop it. The command is dropped once that
 session answers the house's challenge; it is sent after all if the verified session answers instead, or sends
-anything new. A new command replaces a held one. Every transmission listens before talking: responses go
+anything new. A new command replaces a held one. A config write that reaches the gate while one of its relays
+pulses is taken at once but saved and ACKed only when the pulse is over (a save stops the loop for ~1 s, which would
+hold the relay on that much longer); the house's retries meanwhile are dropped quietly, not counted as replays.
+Every transmission listens before talking: responses go
 after a 25 ms turnaround, new frames after the response slot plus a random backoff.
 
 ## Link supervision

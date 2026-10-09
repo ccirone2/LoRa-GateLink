@@ -27,10 +27,11 @@ struct ConsolePort {
   // next line would run into it and be lost too: start the next one with a newline instead, so the host
   // discards only the cut line.
   bool lineCut;
+  bool held;  // line holds a request that waits for the relays (blocksLoop)
 };
 
-static ConsolePort usbPort = { Serial, true, {}, 0, false, false };
-static ConsolePort uartPort = { Serial1, false, {}, 0, false, false };
+static ConsolePort usbPort = { Serial, true, {}, 0, false, false, false };
+static ConsolePort uartPort = { Serial1, false, {}, 0, false, false, false };
 static bool uartOn = false;
 
 static bool writable(const ConsolePort &p) {
@@ -380,11 +381,20 @@ static int checkCrc(const char *line, size_t len) {
   return crc32("}", 1, crc32(line, s - line)) == want ? 1 : -1;
 }
 
+// Requests that save to flash or restart the radio, which blocks the loop for up to ~1 s: while a relay pulses they
+// wait (appRelaysPulsing), or the pulse would be held that much longer. config.set restarts the radio for a radio
+// param; it waits whatever it sets, which costs at most one pulse.
+static bool blocksLoop(const char *cmd) {
+  return !strcmp(cmd, "config.set") || !strcmp(cmd, "config.save") || !strcmp(cmd, "config.reset")
+         || !strcmp(cmd, "key.set");
+}
+
 // At most one request per call: with the host sending requests back to back, handling them while bytes kept
 // arriving never returned to loop(), and the watchdog reset the board (house, 4 status requests in flight). The
 // rest waits in the port's buffer (USB holds it back from the host when that's full).
 static void poll(ConsolePort &p) {
-  while (p.io.available()) {
+  if (p.held && appRelaysPulsing()) return;
+  while (!p.held && p.io.available()) {
     char c = p.io.read();
     if (c == '\r') continue;
     if (c != '\n') {
@@ -393,20 +403,28 @@ static void poll(ConsolePort &p) {
       continue;
     }
     p.line[p.len] = 0;
-    if (p.overflow) {
-      sendError(p, p.line, "line too long");
-    } else if (p.len) {
-      int crc = checkCrc(p.line, p.len);
-      JsonDocument req;
-      if (crc < 0) sendError(p, p.line, "bad crc");
-      else if (crc == 0 && !p.usb) sendError(p, p.line, "crc required");
-      else if (deserializeJson(req, p.line) == DeserializationError::Ok) handle(req, p);
-      else sendError(p, p.line, "bad json");
-    }
-    p.len = 0;
-    p.overflow = false;
-    return;
+    p.held = true;  // a complete line, handled below
   }
+  if (!p.held) return;
+  if (p.overflow) {
+    sendError(p, p.line, "line too long");
+  } else if (p.len) {
+    int crc = checkCrc(p.line, p.len);
+    JsonDocument req;
+    if (crc < 0) {
+      sendError(p, p.line, "bad crc");
+    } else if (crc == 0 && !p.usb) {
+      sendError(p, p.line, "crc required");
+    } else if (deserializeJson(req, p.line) == DeserializationError::Ok) {
+      if (blocksLoop(req["cmd"] | "") && appRelaysPulsing()) return;  // keep it until the pulse is over
+      handle(req, p);
+    } else {
+      sendError(p, p.line, "bad json");
+    }
+  }
+  p.len = 0;
+  p.overflow = false;
+  p.held = false;
 }
 
 void consolePoll() {

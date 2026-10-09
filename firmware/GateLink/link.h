@@ -75,7 +75,7 @@ const LinkStats &linkStats();
 bool linkPeerVerified();
 // Debug: retransmit the last frame verbatim (peer must reject it as a replay), or with hello our first HELLO since
 // boot (from an old session after a link restart: the peer must challenge it, not act on it).
-void linkDebugReplay(bool hello = false);
+bool linkDebugReplay(bool hello = false);  // false if not sent (nothing to replay, or the radio is busy)
 // Debug: ignore received frames for ms (0 = stop), as if the receiver had gone deaf.
 void linkDebugMute(uint32_t ms);
 

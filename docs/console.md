@@ -61,7 +61,7 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 | `hist.clear` | `period_s` (60–3600, default unchanged) | Empties the history and restarts it at bucket 0. The period lasts until the next boot (then 3600) |
 | `reboot` | | Replies, then resets the board (USB re-enumerates) |
 | `identify` | `ms` (default 6000, max 60000) | Strobes the LED |
-| `debug.replay` | `hello` (bool, default false) | Re-sends the last frame as-is, to test the peer's replay protection. With `hello`, re-sends this board's first HELLO since boot instead (an old session's once the link has restarted, e.g. after a radio param change) |
+| `debug.replay` | `hello` (bool, default false) | Re-sends the last frame as-is, to test the peer's replay protection. With `hello`, re-sends this board's first HELLO since boot instead (an old session's once the link has restarted, e.g. after a radio param change). Sent as-is, without listening first; `sent` is false if there was nothing to replay or the radio was busy |
 | `debug.mute` | `ms` (max 60000; 0 stops) | The link ignores received frames for `ms`, as if the receiver had gone deaf (it still transmits) |
 | `debug.reboot_after_cmd` | | Gate only, one-shot: the next command that pulses resets the gate right after the pulse, without ACKing it (a power cut or crash at the worst moment) |
 
@@ -92,8 +92,9 @@ LiPo; null if the chip didn't answer), `key_set`, `io` (`in1`–`in4`, `k1`,
 `k2`) and `link` (`verified`, `age_ms` (since the last authenticated frame; -1 = never; tops out at ~12.4 days), `rssi`, `snr`, `tx`, `rx`, `retries`, `giveups`, `mac_fail`, `replay`,
 `sessions`, `lbt_defers`, `lbt_forced`, `crc_err` (frames received with a bad CRC), `noise` (smoothed noise floor,
 dBm; null before the first sample), `fei` (frequency error of the last good frame, Hz: the peer's carrier against
-ours, i.e. the two boards' crystal offset)), `free_ram` (bytes between the heap's high-water mark and the stack) and
-`usb_cut` (console lines lost on USB since boot, see above).
+ours, i.e. the two boards' crystal offset)), `free_ram` (bytes between the heap's high-water mark and the stack),
+`usb_cut` (console lines lost on USB since boot, see above) and `loop_max_us` (the longest loop pass since boot, µs:
+how close the loop has come to the 8 s watchdog; a flash save or radio restart takes up to ~1 s).
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,

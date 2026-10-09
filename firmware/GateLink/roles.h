@@ -4,14 +4,14 @@
 #include "io.h"
 #include "link.h"
 
-enum GateState : uint8_t { GS_UNKNOWN = 0, GS_CLOSED, GS_OPEN, GS_BETWEEN, GS_FAULT, GS_NO_POWER };
+enum GateState : uint8_t { GS_UNKNOWN = 0, GS_CLOSED, GS_OPEN, GS_BETWEEN, GS_FAULT, GS_NO_POWER, GS_COUNT };
 enum Cause : uint8_t { CAUSE_NONE = 0, CAUSE_LORA, CAUSE_EXTERNAL };
 enum Action : uint8_t { ACT_OPEN = 1, ACT_CLOSE = 2 };
 enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 
 // STATUS payload layout (gate -> house)
 #define ST_STATE 0
-#define ST_INPUTS 1   // bit0 in1, bit1 in2, bit2 k1, bit3 k2, bit4 in3, bit5 in4, bit6 AC lost (0.7.0)
+#define ST_INPUTS 1   // STI_* bits
 #define ST_CAUSE 2
 #define ST_RESULT 3
 #define ST_CMD_ID 4   // u16
@@ -29,6 +29,23 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 #define ST_LEN_V2 24     // 0.4.0 up to 0.12.x; the field below was added in 0.13.0
 #define ST_TRAVEL 24     // u16, gate travel_timeout_s: the house holds K1 through a travel for as long
 #define ST_LEN 26
+
+// ST_INPUTS bits: the gate's inputs and relays as it sees them
+#define STI_IN1 0x01      // open limit
+#define STI_IN2 0x02      // close limit
+#define STI_K1 0x04
+#define STI_K2 0x08
+#define STI_IN3 0x10      // AC power sense
+#define STI_IN4 0x20
+#define STI_AC_LOST 0x40  // 0.7.0
+
+// DIAG payload layout (gate -> house, answering DIAG_REQ; built by sendDiag, parsed by consoleEventDiag)
+#define DIAG_FW 0        // u8 x3: major, minor, patch
+#define DIAG_UPTIME 3    // u32 seconds
+#define DIAG_COUNTERS 7  // u16 x DC_COUNT, saturating, in DiagCounter order
+enum DiagCounter : uint8_t { DC_TX = 0, DC_RX, DC_MAC_FAIL, DC_REPLAY, DC_RETRIES, DC_GIVEUPS, DC_COUNT };
+#define DIAG_HDR (DIAG_COUNTERS + 2 * DC_COUNT)  // then (param id u8, value i32) per remote-writable param
+static_assert(DIAG_HDR == 19, "DIAG header changed: both boards must be updated together");
 
 extern Input in1, in2, in3, in4;
 extern Relay k1, k2;

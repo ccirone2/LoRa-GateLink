@@ -591,10 +591,12 @@ bool linkPeerVerified() {
   return peerOk;
 }
 
-void linkDebugReplay(bool hello) {
+bool linkDebugReplay(bool hello) {
   const uint8_t *f = hello ? bootHello : lastFrame;
   uint8_t len = hello ? bootHelloLen : lastFrameLen;
-  if (len && txIdle() && radioSend(f, len)) txOnAir = true;
+  if (!len || !txIdle() || !radioSend(f, len)) return false;
+  txOnAir = true;
+  return true;
 }
 
 void linkDebugMute(uint32_t ms) {

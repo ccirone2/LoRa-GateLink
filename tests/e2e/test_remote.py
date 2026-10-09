@@ -185,3 +185,17 @@ def test_console_line_limit(bench):
     res = bench.house.request("info", check=False, pad="x" * 950)  # about 1000 chars with the id and cmd
     assert res["ok"] and res["role"] == "house", f"line under the limit: {res}"
     assert bench.house.info()["role"] == "house"
+
+
+def test_relay_test_out_of_range_is_refused(rig):
+    """relay.test checks its arguments before narrowing them: k 257 or -255 (K1 as a byte), a negative ms and one
+    past int32 (which ArduinoJson's `| default` turned into the default 500) are refused, and nothing pulses (up to
+    0.13.4, k 257 and ms 2^32 + 500 pulsed K1)."""
+    m = rig.mark()
+    accepted = []
+    for kw in ({"k": 257}, {"k": 258}, {"k": -255}, {"k": 1, "ms": -1}, {"k": 1, "ms": 2**32 + 500}):
+        res = rig.gate.request("relay.test", check=False, **kw)
+        if res.get("ok"):
+            accepted.append(kw)
+    assert not accepted, f"relay.test accepted {accepted}"
+    rig.expect_no("gate", "pulse", seconds=1, since=m)

@@ -62,8 +62,9 @@ static void sendStatus(uint32_t now) {
   if (settling) return;  // the first one goes out once the inputs have settled
   uint8_t p[ST_LEN];
   p[ST_STATE] = state;
-  p[ST_INPUTS] = in1.active() | (in2.active() << 1) | (k1.on() << 2) | (k2.on() << 3)
-                 | (in3.active() << 4) | (in4.active() << 5) | (!acPower() << 6);
+  p[ST_INPUTS] = (in1.active() ? STI_IN1 : 0) | (in2.active() ? STI_IN2 : 0) | (k1.on() ? STI_K1 : 0)
+                 | (k2.on() ? STI_K2 : 0) | (in3.active() ? STI_IN3 : 0) | (in4.active() ? STI_IN4 : 0)
+                 | (acPower() ? 0 : STI_AC_LOST);
   p[ST_CAUSE] = cause;
   p[ST_RESULT] = lastResult;
   putU16(p + ST_CMD_ID, lastCmdId);
@@ -305,22 +306,26 @@ static void drainCfgQueue() {
 }
 
 static void sendDiag() {
-  // fw(3) uptime(4) tx rx macFail replay retries giveups (u16 x6) then (id u8, value i32) per remote param
+  // Layout: DIAG_* in roles.h.
   uint8_t p[100];
-  uint8_t n = 0;
-  int maj = 0, min = 0, pat = 0;
-  sscanf(FW_VERSION, "%d.%d.%d", &maj, &min, &pat);
-  p[n++] = maj;
-  p[n++] = min;
-  p[n++] = pat;
-  putU32(p + n, millis() / 1000);
-  n += 4;
-  const LinkStats &st = linkStats();
-  uint32_t counters[6] = { st.tx, st.rx, st.macFail, st.replay, st.retries, st.giveups };
-  for (uint32_t c : counters) {
-    putU16(p + n, c > 0xFFFF ? 0xFFFF : c);
-    n += 2;
+  const char *v = fwVersion();  // "x.y.z"
+  for (int i = 0; i < 3; i++) {
+    uint8_t x = 0;
+    while (*v >= '0' && *v <= '9') x = x * 10 + (*v++ - '0');
+    p[DIAG_FW + i] = x;
+    if (*v == '.') v++;
   }
+  putU32(p + DIAG_UPTIME, millis() / 1000);
+  const LinkStats &st = linkStats();
+  uint32_t counters[DC_COUNT];
+  counters[DC_TX] = st.tx;
+  counters[DC_RX] = st.rx;
+  counters[DC_MAC_FAIL] = st.macFail;
+  counters[DC_REPLAY] = st.replay;
+  counters[DC_RETRIES] = st.retries;
+  counters[DC_GIVEUPS] = st.giveups;
+  for (int i = 0; i < DC_COUNT; i++) putU16(p + DIAG_COUNTERS + 2 * i, counters[i] > 0xFFFF ? 0xFFFF : counters[i]);
+  uint8_t n = DIAG_HDR;
   for (size_t i = 0; i < PARAM_COUNT && n + 5u <= sizeof(p); i++) {
     if (!(PARAMS[i].flags & P_REMOTE)) continue;
     p[n++] = PARAMS[i].id;

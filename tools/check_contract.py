@@ -30,7 +30,8 @@ def read(p):
 
 
 def enum(src, name):
-    """{member: value} of `enum name ... { ... };`, implicit values counted up as in C."""
+    """{member: value} of `enum name ... { ... };`, implicit values counted up as in C. A trailing *_COUNT member
+    (the number of values, not a value) is left out."""
     m = re.search(r"enum\s+" + name + r"\b[^{]*\{(.*?)\};", src, re.S)
     if not m:
         problems.append(f"enum {name} not found")
@@ -40,7 +41,8 @@ def enum(src, name):
     for item in filter(None, (s.strip() for s in body.split(","))):
         k, _, v = (p.strip() for p in item.partition("="))
         nxt = int(v, 0) if v else nxt
-        out[k] = nxt
+        if not k.endswith("_COUNT"):
+            out[k] = nxt
         nxt += 1
     return out
 

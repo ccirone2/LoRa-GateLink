@@ -1,6 +1,7 @@
 """Long soak: hours of open/close cycles with outages and opener faults mixed in.
 
-Watches for what short runs can't show: watchdog resets, radio faults, MAC failures or replays, and counter drift.
+Watches for what short runs can't show: watchdog resets, radio faults, MAC failures or replays, counter drift, and the
+longest loop pass (loop_max_us) creeping toward the 8 s watchdog.
 Both boards' counters are appended to results/<run>/soak_counters.csv after every scenario. Opt-in:
     pytest tests/e2e -m longsoak --soak-minutes 120
 """
@@ -16,6 +17,7 @@ LINK_TIMEOUT_S = PROFILE_COMMON["link_timeout_s"]
 HEARTBEAT_S = PROFILE_COMMON["heartbeat_s"]
 TRAVEL_TIMEOUT_S = PROFILE_COMMON["travel_timeout_s"]
 COUNTERS = ("tx", "rx", "retries", "giveups", "mac_fail", "replay", "sessions", "lbt_defers", "lbt_forced")
+LOOP_MAX_US = 4_000_000  # half the watchdog; a flash save or radio restart takes up to ~1 s
 
 
 # Each scenario starts from the baseline and returns how many commands the house should have sent.
@@ -89,7 +91,7 @@ def test_long_soak(rig, request):
     deadline = time.monotonic() + minutes * 60
     path = rig.run_dir / "soak_counters.csv"
     cols = ["t_s", "scenario"] + [f"{n}_{c}" for n in ("house", "gate")
-                                  for c in ("uptime_s", "reset_cause", "radio_faults") + COUNTERS]
+                                  for c in ("uptime_s", "reset_cause", "radio_faults", "loop_max_us") + COUNTERS]
     expected = 0
     last_uptime = {}
     t0 = rig.mark()
@@ -111,7 +113,9 @@ def test_long_soak(rig, request):
                 last_uptime[n] = st["uptime_ms"]
                 if st["radio_faults"]:
                     rig.fail(f"{n} radio_faults {st['radio_faults']} after {scenario.__name__}")
-                row += [st["uptime_ms"] // 1000, st["reset_cause"], st["radio_faults"]]
+                if st.get("loop_max_us", 0) > LOOP_MAX_US:
+                    rig.fail(f"{n} loop_max_us {st['loop_max_us']} after {scenario.__name__}")
+                row += [st["uptime_ms"] // 1000, st["reset_cause"], st["radio_faults"], st.get("loop_max_us")]
                 row += [st["link"][c] for c in COUNTERS]
             w.writerow(row)
             f.flush()

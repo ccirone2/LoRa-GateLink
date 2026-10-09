@@ -51,11 +51,13 @@ are built from the pull requests since the last tag.
    ```sh
    arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink   # no warnings in GateLink/
    node --check web/app.js
+   ruff check tests tools     # pip install ruff==0.16.10 (the version CI pins); rules in ruff.toml
    pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI
-   compiles the firmware and GateSim (failing on warnings in project files) and syntax-checks the web console
-   and Python.
+   compiles the firmware and GateSim (failing on warnings in project files), syntax-checks the web console,
+   byte-compiles and lints the Python (`ruff check tests tools`) and collects the e2e suite (`pytest
+   --collect-only`, which catches import and fixture errors without the bench).
 6. Merge to `main`. A change under `web/` deploys the web console to GitHub Pages.
 
 ## Versioning

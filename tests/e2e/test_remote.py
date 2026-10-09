@@ -91,7 +91,7 @@ def test_remote_diag(rig):
         m = rig.mark()
         rig.house.request("remote.diag")
         try:
-            diag = rig.wait_for(lambda: rig.timeline.first("house", "remote_diag", m), 5, "remote_diag", poll=0.05)
+            diag = rig.wait_for(lambda m=m: rig.timeline.first("house", "remote_diag", m), 5, "remote_diag", poll=0.05)
             break
         except AssertionError:
             continue

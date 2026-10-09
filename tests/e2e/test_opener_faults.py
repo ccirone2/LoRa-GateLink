@@ -54,7 +54,6 @@ def test_ac_loss_limits_trusted(rig):
     rig.wait_ctrl(False, timeout=30)
     rig.expect_no("gate", "pulse", since=m)
 
-    m3 = rig.mark()
     rig.sim.ac(True)
     rig.wait_gate("closed", ac_power=True, timeout=5)
     rig.wait_house(10, gate="closed", io__k2=True, remote__ac_power=True)

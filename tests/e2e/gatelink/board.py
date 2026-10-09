@@ -233,7 +233,7 @@ class Board:
                 raise BoardError(f"{self.name}: {cmd} failed: {res}")
             return res
         # A request the board refused unread (REFUSED) never ran, so sending it again is safe.
-        for attempt in range(3):
+        for _ in range(3):
             res = self._request_once(cmd, timeout, **kw)
             if res.get("error") not in REFUSED:
                 break
@@ -333,7 +333,7 @@ class Board:
         buckets, frm = [], None
         while True:
             res = self.request("hist.get", **({} if frm is None else {"from": frm}))
-            buckets += [dict(zip(res["fields"], r)) for r in res["rows"]]
+            buckets += [dict(zip(res["fields"], r, strict=True)) for r in res["rows"]]
             # A bucket that closes while paging moves `current` on: keep going until the last page reaches it.
             if not res["rows"] or res["rows"][-1][0] >= res["current"]:
                 return buckets, {k: res[k] for k in ("period_s", "now_s", "oldest", "current")}

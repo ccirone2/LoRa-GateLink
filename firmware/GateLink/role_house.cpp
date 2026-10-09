@@ -5,7 +5,7 @@
 //        the Alarm.com switch) follows the real gate even when another controller
 //        moved it. While the gate travels (BETWEEN) K1 holds its level until the far
 //        limit is reached, falling back to open only if it stays BETWEEN longer than
-//        travel_timeout_s. Edges on IN1 caused by K1 fall inside a sync window and are ignored.
+//        the gate's travel_timeout_s (from its STATUS). Edges on IN1 caused by K1 fall inside a sync window and are ignored.
 //  K2  = wireless contact sensor. Energized (closed loop) only when the gate is closed.
 //  IN2 = Shelly supply, via a PNP opto (ctrl_power_sense). The Shelly's relay drops when it loses
 //        power and comes back at the K1 level when it boots; neither edge may become a command.
@@ -29,6 +29,7 @@ static uint32_t gateUptime = 0;
 static int16_t gateRssi = 0;  // RSSI measured at the gate
 static int8_t gateSnr = 0;
 static uint16_t gateHeartbeat = 0;  // gate heartbeat_s, from its STATUS
+static uint16_t gateTravel = 0;  // gate travel_timeout_s, from its STATUS (0 = gate before 0.13.0: use ours)
 static bool gateExt = false;  // its STATUS carries the link counters and noise (0.4.0 on)
 static uint16_t gateRetries = 0, gateGiveups = 0, gateCrc = 0;
 static int8_t gateNoise = 0;  // dBm, 0 = no sample
@@ -57,10 +58,15 @@ static uint16_t cmdId = 0;
 static uint8_t cmdAction = 0;
 static int cmdResult = -1;  // last ACK result, -2 = gave up, -1 = none
 
+// The gate's travel_timeout_s, which only it can have set right (it's the remote-writable one): a hold shorter
+// than the gate's flips the controller to not-closed in the middle of a slow but normal travel.
+static uint32_t travelTimeoutMs() {
+  return (uint32_t)(gateTravel ? gateTravel : cfg.travel_timeout_s) * 1000;
+}
+
 // Gate in travel from a known limit: K1 keeps showing where it started.
 static bool holdingTravel(uint32_t now) {
-  return gateState == GS_BETWEEN && lastEnd != GS_UNKNOWN
-         && !elapsed(now, betweenSince, (uint32_t)cfg.travel_timeout_s * 1000);
+  return gateState == GS_BETWEEN && lastEnd != GS_UNKNOWN && !elapsed(now, betweenSince, travelTimeoutMs());
 }
 
 // The gate only reports every heartbeat_s, so the link timeout must cover a few of them whatever this board's
@@ -274,7 +280,8 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   gateSnr = (int8_t)m.payload[ST_SNR];
   gateTarget = m.payload[ST_TARGET];
   gateHeartbeat = getU16(m.payload + ST_HEARTBEAT);
-  PeerReport r = { gateRssi, gateSnr, m.len >= ST_LEN, 0, 0, 0, 0, 0 };
+  gateTravel = m.len >= ST_LEN ? getU16(m.payload + ST_TRAVEL) : 0;
+  PeerReport r = { gateRssi, gateSnr, m.len >= ST_LEN_V2, 0, 0, 0, 0, 0 };
   gateExt = r.ext;
   if (r.ext) {
     r.retries = gateRetries = getU16(m.payload + ST_RETRIES);
@@ -341,6 +348,7 @@ void houseStatus(JsonObject o) {
   g["rssi"] = gateRssi;
   g["snr"] = gateSnr;
   g["heartbeat_s"] = gateHeartbeat;
+  if (gateTravel) g["travel_timeout_s"] = gateTravel;
   g["open_limit"] = (bool)(gateInputs & 1);
   g["close_limit"] = (bool)(gateInputs & 2);
   g["k1"] = (bool)(gateInputs & 4);

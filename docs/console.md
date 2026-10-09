@@ -95,7 +95,8 @@ ours, i.e. the two boards' crystal offset)), `free_ram` (bytes between the heap'
   `cmd_pending`, `cmd_result` (ACK result: 0 ok, 1 already, 2 rejected, 4 no AC power; −1 none, −2 gave up)
   and `remote` (the gate's `uptime_s`, `rssi`, `snr`, `heartbeat_s`, `open_limit`, `close_limit`, `k1`, `k2`,
   `in3`, `in4`, `ac_power` (from gate firmware 0.7.0; true from older gates); from gate firmware 0.4.0 also its `retries`, `giveups`, `crc_err` (running totals, low 16 bits)
-  and `noise` (its average since the previous STATUS; null if it had no sample)).
+  and `noise` (its average since the previous STATUS; null if it had no sample); from gate firmware 0.13.0 also its
+  `travel_timeout_s`, which the house then uses for its travel hold).
 
 ## Link history
 

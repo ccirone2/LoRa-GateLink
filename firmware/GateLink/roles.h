@@ -26,7 +26,9 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 #define ST_CRC 20        // u16, CRC errors at the gate radio (same)
 #define ST_NOISE 22      // i8, gate noise floor since its previous STATUS, dBm (0 = no sample)
 #define ST_NOISE_MAX 23  // i8, its peak
-#define ST_LEN 24
+#define ST_LEN_V2 24     // 0.4.0 up to 0.12.x; the field below was added in 0.13.0
+#define ST_TRAVEL 24     // u16, gate travel_timeout_s: the house holds K1 through a travel for as long
+#define ST_LEN 26
 
 extern Input in1, in2, in3, in4;
 extern Relay k1, k2;

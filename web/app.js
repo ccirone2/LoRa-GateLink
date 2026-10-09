@@ -507,13 +507,27 @@ async function readLoop() {
       while ((i = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, i).trim();
         buf = buf.slice(i + 1);
-        if (line) onLine(line);
+        if (line) handleLine(line);
       }
     }
   } catch (e) {
     logLine(`serial read ended: ${e.message}`, 'err');
   }
   if (port) connectionLost();
+}
+
+// A line that throws while being handled (e.g. a status from other firmware missing a field) is logged and
+// skipped. Thrown inside readLoop it ended the read loop, which dropped the connection and the buffered lines.
+let lastLineError = '';
+function handleLine(line) {
+  try {
+    onLine(line);
+  } catch (e) {
+    console.error(e, line);
+    const msg = `couldn't handle a line from the board: ${e.message}`;
+    if (msg !== lastLineError) logLine(`${msg} · ${line.slice(0, 120)}`, 'err'); // once, not on every poll
+    lastLineError = msg;
+  }
 }
 
 function onLine(line) {
@@ -684,10 +698,11 @@ function renderStatus(s) {
   $('gateResult').textContent = s.last_result ?? '—';
   $('gateTarget').textContent = s.target || '—';
 
-  const l = s.link;
+  const l = s.link || {}; // absent from a malformed or foreign status: render what's there
+  const heard = l.age_ms >= 0;
   $('lnkVerified').innerHTML = l.verified ? '<span class="good">yes</span>' : '<span class="bad">no</span>';
-  $('lnkAge').textContent = l.age_ms < 0 ? 'never' : `${fmtDur(l.age_ms)} ago`;
-  $('lnkRssi').textContent = l.age_ms < 0 ? '—' : `${l.rssi} dBm / ${Number(l.snr).toFixed(1)} dB`;
+  $('lnkAge').textContent = heard ? `${fmtDur(l.age_ms)} ago` : 'never';
+  $('lnkRssi').textContent = heard ? `${l.rssi} dBm / ${Number(l.snr).toFixed(1)} dB` : '—';
   $('lnkTxRx').textContent = `${l.tx} / ${l.rx}`;
   $('lnkRetry').textContent = `${l.retries} / ${l.giveups}`;
   $('lnkBad').textContent = `${l.mac_fail} / ${l.replay}`;
@@ -695,11 +710,12 @@ function renderStatus(s) {
   // Newer fields: absent on older firmware; noise is null before its first sample, fei before the first frame.
   $('lnkCrc').textContent = l.crc_err ?? '—';
   $('lnkNoise').textContent = l.noise === undefined || l.noise === null ? '—' : `${fmtNum(l.noise)} dBm`;
-  $('lnkFei').textContent = fmtFei(l.age_ms < 0 ? null : l.fei);
+  $('lnkFei').textContent = fmtFei(heard ? l.fei : null);
 
   const labels = IO_LABELS[s.role] || IO_LABELS.unset;
-  $('ioList').innerHTML = ['in1', 'in2', 'in3', 'in4', 'k1', 'k2'].filter((k) => k in s.io)
-    .map((k) => `<div class="kv"><span>${labels[k]}</span>${pill(s.io[k])}</div>`).join('');
+  const io = s.io || {};
+  $('ioList').innerHTML = ['in1', 'in2', 'in3', 'in4', 'k1', 'k2'].filter((k) => k in io)
+    .map((k) => `<div class="kv"><span>${labels[k]}</span>${pill(io[k])}</div>`).join('');
 
   $('bRole').textContent = s.reboot_pending ? `${s.role} (reboot to apply saved role)` : s.role;
   $('bFw').textContent = s.fw;

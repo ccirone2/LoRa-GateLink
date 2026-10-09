@@ -92,8 +92,9 @@ LiPo; null if the chip didn't answer), `key_set`, `io` (`in1`–`in4`, `k1`,
 `k2`) and `link` (`verified`, `age_ms` (since the last authenticated frame; -1 = never; tops out at ~12.4 days), `rssi`, `snr`, `tx`, `rx`, `retries`, `giveups`, `mac_fail`, `replay`,
 `sessions`, `lbt_defers`, `lbt_forced`, `crc_err` (frames received with a bad CRC), `noise` (smoothed noise floor,
 dBm; null before the first sample), `fei` (frequency error of the last good frame, Hz: the peer's carrier against
-ours, i.e. the two boards' crystal offset)), `free_ram` (bytes between the heap's high-water mark and the stack) and
-`usb_cut` (console lines lost on USB since boot, see above).
+ours, i.e. the two boards' crystal offset)), `free_ram` (bytes between the heap's high-water mark and the stack),
+`usb_cut` (console lines lost on USB since boot, see above) and `loop_max_us` (the longest loop pass since boot, µs:
+how close the loop has come to the 8 s watchdog; a flash save or radio restart takes up to ~1 s).
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,

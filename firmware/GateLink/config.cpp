@@ -1,4 +1,5 @@
 #include "config.h"
+#include "crc32.h"
 #include "extflash.h"
 #include "radio.h"
 #include <FlashStorage.h>
@@ -94,17 +95,8 @@ static int8_t spiSector = -1;  // sector holding the newest valid record (-1 = n
 static uint32_t spiSeq = 0;
 static Extras extras;  // the newest record's
 
-static uint32_t crc32(const uint8_t *data, size_t len) {
-  uint32_t crc = 0xFFFFFFFFu;
-  for (size_t i = 0; i < len; i++) {
-    crc ^= data[i];
-    for (int b = 0; b < 8; b++) crc = (crc >> 1) ^ (0xEDB88320u & -(crc & 1));
-  }
-  return ~crc;
-}
-
 static uint32_t configCrc(const Config &c) {
-  return crc32((const uint8_t *)&c, offsetof(Config, crc));
+  return crc32(&c, offsetof(Config, crc));
 }
 
 static void put32(uint8_t *p, uint32_t v) {

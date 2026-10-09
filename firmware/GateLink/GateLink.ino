@@ -39,7 +39,8 @@ static uint32_t pingAt = 0;
 
 const char *gateStateName(uint8_t s) {
   static const char *const n[] = { "unknown", "closed", "open", "between", "fault", "no_power" };
-  return s < 6 ? n[s] : "?";
+  static_assert(sizeof(n) / sizeof(n[0]) == GS_COUNT, "a name per GateState");
+  return s < GS_COUNT ? n[s] : "?";
 }
 
 const char *causeName(uint8_t c) {
@@ -104,6 +105,8 @@ bool appRelaysPulsing() {
   return k1.pulsing() || k2.pulsing();
 }
 
+static uint32_t loopMaxUs;  // longest loop pass since boot: how close the loop has come to the 8 s watchdog
+
 // Gap between the heap's high-water mark and the stack: what's left for the deepest stack and a bigger reply.
 extern "C" char *sbrk(int incr);
 static uint32_t freeRam() {
@@ -133,6 +136,7 @@ void appFillStatus(JsonObject o) {
   o["key_set"] = (bool)cfg.key_set;
   o["free_ram"] = freeRam();
   o["usb_cut"] = consoleUsbCutLines();
+  o["loop_max_us"] = loopMaxUs;
   JsonObject io = o["io"].to<JsonObject>();
   io["in1"] = in1.active();
   io["in2"] = in2.active();
@@ -254,6 +258,7 @@ void setup() {
 }
 
 void loop() {
+  uint32_t start = micros();
   uint32_t now = millis();
   Watchdog.reset();
   k1.update(now);
@@ -267,4 +272,6 @@ void loop() {
     histPoll(now, appLinkUp(now));
   }
   updateLed(now);
+  uint32_t took = micros() - start;
+  if (took > loopMaxUs) loopMaxUs = took;
 }

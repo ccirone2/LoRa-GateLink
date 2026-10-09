@@ -1,6 +1,7 @@
 #include "console.h"
 #include "app.h"
 #include "config.h"
+#include "crc32.h"
 #include "extflash.h"
 #include "link.h"
 #include "roles.h"
@@ -227,13 +228,13 @@ static void handle(JsonDocument &req, ConsolePort &from) {
       res["error"] = "key must be 32 hex chars";
     }
   } else if (!strcmp(cmd, "relay.test")) {
-    uint8_t k = req["k"] | 0;
-    uint32_t ms = req["ms"] | 500;
+    int32_t k = req["k"] | 0;  // read wide: as a uint8_t, k 257 would be K1
+    int32_t ms = req["ms"] | 500;
     if ((k != 1 && k != 2) || ms < 50 || ms > 5000 || activeRole == ROLE_UNSET) {
       res["ok"] = false;
       res["error"] = "k must be 1|2, ms 50..5000, role set";
     } else {
-      appRelayTest(k, ms);
+      appRelayTest((uint8_t)k, (uint32_t)ms);
     }
   } else if (!strcmp(cmd, "radio.ping")) {
     if (!appPing()) {
@@ -253,7 +254,7 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     if (!req["value"].is<int32_t>()) {
       res["ok"] = false;
       res["error"] = "value must be an integer";
-    } else if (activeRole != ROLE_HOUSE || !p || !(p->flags & P_REMOTE) || v < p->minV || v > p->maxV) {
+    } else if (activeRole != ROLE_HOUSE || !p || !(p->flags & P_REMOTE) || !paramValid(p, v)) {
       res["ok"] = false;
       res["error"] = "house node only; param must be remote-writable and in range";
     } else if (linkPending(SLOT_CFG)) {
@@ -345,21 +346,6 @@ static void sendError(ConsolePort &from, const char *raw, const char *error) {
   res["ok"] = false;
   res["error"] = error;
   send(res, &from);
-}
-
-// CRC-32 (IEEE 802.3, as zlib's crc32), four bits at a time.
-static uint32_t crc32(const char *p, size_t n, uint32_t crc = 0) {
-  static const uint32_t T[16] = {
-    0x00000000, 0x1DB71064, 0x3B6E20C8, 0x26D930AC, 0x76DC4190, 0x6B6B51F4, 0x4DB26158, 0x5005713C,
-    0xEDB88320, 0xF00F9344, 0xD6D6A3E8, 0xCB61B38C, 0x9B64C2B0, 0x86D3D2D4, 0xA00AE278, 0xBDBDF21C,
-  };
-  crc = ~crc;
-  for (size_t i = 0; i < n; i++) {
-    crc ^= (uint8_t)p[i];
-    crc = (crc >> 4) ^ T[crc & 15];
-    crc = (crc >> 4) ^ T[crc & 15];
-  }
-  return ~crc;
 }
 
 // A request may end with a CRC-32 of itself, `...,"crc":"89abcdef"}`, taken over the line as it reads without
@@ -464,18 +450,19 @@ void consoleEventPong(uint16_t id, uint32_t rttMs, int16_t rssi, float snr, int1
 }
 
 void consoleEventDiag(const uint8_t *p, uint8_t len) {
-  if (len < 19) return;
+  if (len < DIAG_HDR) return;
   JsonDocument doc;
   doc["event"] = "remote_diag";
   char fw[16];
-  snprintf(fw, sizeof(fw), "%u.%u.%u", p[0], p[1], p[2]);
+  snprintf(fw, sizeof(fw), "%u.%u.%u", p[DIAG_FW], p[DIAG_FW + 1], p[DIAG_FW + 2]);
   doc["fw"] = fw;
-  doc["uptime_s"] = getU32(p + 3);
-  static const char *const names[6] = { "tx", "rx", "mac_fail", "replay", "retries", "giveups" };
+  doc["uptime_s"] = getU32(p + DIAG_UPTIME);
+  static const char *const names[] = { "tx", "rx", "mac_fail", "replay", "retries", "giveups" };  // DiagCounter order
+  static_assert(sizeof(names) / sizeof(names[0]) == DC_COUNT, "a name per DIAG counter");
   JsonObject c = doc["counters"].to<JsonObject>();
-  for (int i = 0; i < 6; i++) c[names[i]] = getU16(p + 7 + 2 * i);
+  for (int i = 0; i < DC_COUNT; i++) c[names[i]] = getU16(p + DIAG_COUNTERS + 2 * i);
   JsonObject params = doc["params"].to<JsonObject>();
-  for (uint8_t n = 19; n + 5 <= len; n += 5) {
+  for (uint8_t n = DIAG_HDR; n + 5 <= len; n += 5) {
     const ParamDef *def = paramById(p[n]);
     if (def) params[def->name] = (int32_t)getU32(p + n + 1);
   }

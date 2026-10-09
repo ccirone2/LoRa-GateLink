@@ -349,13 +349,13 @@ void houseStatus(JsonObject o) {
   g["snr"] = gateSnr;
   g["heartbeat_s"] = gateHeartbeat;
   if (gateTravel) g["travel_timeout_s"] = gateTravel;
-  g["open_limit"] = (bool)(gateInputs & 1);
-  g["close_limit"] = (bool)(gateInputs & 2);
-  g["k1"] = (bool)(gateInputs & 4);
-  g["k2"] = (bool)(gateInputs & 8);
-  g["in3"] = (bool)(gateInputs & 16);
-  g["in4"] = (bool)(gateInputs & 32);
-  g["ac_power"] = !(gateInputs & 64);
+  g["open_limit"] = (bool)(gateInputs & STI_IN1);
+  g["close_limit"] = (bool)(gateInputs & STI_IN2);
+  g["k1"] = (bool)(gateInputs & STI_K1);
+  g["k2"] = (bool)(gateInputs & STI_K2);
+  g["in3"] = (bool)(gateInputs & STI_IN3);
+  g["in4"] = (bool)(gateInputs & STI_IN4);
+  g["ac_power"] = !(gateInputs & STI_AC_LOST);
   if (gateExt) {
     g["retries"] = gateRetries;
     g["giveups"] = gateGiveups;

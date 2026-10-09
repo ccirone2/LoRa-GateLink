@@ -31,6 +31,9 @@ jobs:
         run: |
           arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink 2>&1 | tee build.log
           ! grep -E "GateLink/[^:]+:[0-9]+:[0-9]+: warning" build.log
+      # link.cpp and config.cpp on the host, against the Crypto library installed above.
+      - name: Host unit tests (tests/native)
+        run: make -C tests/native CRYPTO="$HOME/Arduino/libraries/Crypto/src"
       - name: Compile GateSim (no warnings in project files)
         run: |
           arduino-cli compile --fqbn arduino:avr:uno --warnings all tools/GateSim 2>&1 | tee sim.log

@@ -80,7 +80,7 @@ Common fields: `fw`, `role`, `reboot_pending`, `uptime_ms`, `radio_ok`, `radio_f
 (`watchdog`, `brownout`, `power_on`, `reset_pin`, `software`, `unknown`), `cfg_loaded`, `cfg_store` (`spi` or
 `internal`, as in `info`), `supply` (the board's VIN power good, from the charger chip; false = running on the
 LiPo; null if the chip didn't answer), `key_set`, `io` (`in1`–`in4`, `k1`,
-`k2`) and `link` (`verified`, `age_ms`, `rssi`, `snr`, `tx`, `rx`, `retries`, `giveups`, `mac_fail`, `replay`,
+`k2`) and `link` (`verified`, `age_ms` (since the last authenticated frame; -1 = never; tops out at ~12.4 days), `rssi`, `snr`, `tx`, `rx`, `retries`, `giveups`, `mac_fail`, `replay`,
 `sessions`, `lbt_defers`, `lbt_forced`, `crc_err` (frames received with a bad CRC), `noise` (smoothed noise floor,
 dBm; null before the first sample), `fei` (frequency error of the last good frame, Hz: the peer's carrier against
 ours, i.e. the two boards' crystal offset)), `free_ram` (bytes between the heap's high-water mark and the stack) and

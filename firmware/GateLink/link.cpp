@@ -15,6 +15,7 @@
 #define TURNAROUND_MS 25        // let the peer get back into RX between frames
 #define TXQ_LEN 4               // unreliable frames (ACK, HELLO, PING...) waiting for a clear channel
 #define RESPONSE_SLACK_MS 40    // how late a response may start (the peer's loop can stall on USB writes)
+#define RX_AGE_CAP_MS 0x40000000UL  // ~12.4 days: lastRxAt is kept no older (see linkPoll)
 
 struct PendingSlot {
   bool active;
@@ -443,6 +444,12 @@ void linkPoll(uint32_t now) {
   txIdle();
   size_t n = radioReceive(buf, sizeof(buf), rssi, snr);
   if (n) handleFrame(buf, n, rssi, snr, now);
+  // Ages are signed (elapsed()): after 2^31 ms of silence lastRxAt would read as fresh again and the link as up
+  // (house K2 no longer failing open). Keep it at most RX_AGE_CAP_MS old; status age_ms tops out there.
+  if (stats.lastRxAt && elapsed(now, stats.lastRxAt, RX_AGE_CAP_MS)) {
+    stats.lastRxAt = now - RX_AGE_CAP_MS;
+    if (!stats.lastRxAt) stats.lastRxAt = 1;  // 0 means never
+  }
   if (helloDueAt && (int32_t)(now - helloDueAt) >= 0) {
     helloDueAt = 0;
     // While verified, the usual HELLO interval applies: that limits what replayed HELLOs can provoke.

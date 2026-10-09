@@ -674,9 +674,12 @@ function renderStatus(s) {
   if (s.role !== role) applyRole(s.role);
   const gs = s.gate || 'unknown';
   const g = $('gateState');
+  // With the link down the house still reports the gate's last state: show it struck through, not as live.
+  const stale = s.role === 'house' && s.link_up === false && gs !== 'unknown';
   g.textContent = s.role === 'unset' ? 'role not set' : gs.replaceAll('_', ' ');
-  g.className = `gate-state ${gs}`;
-  updateTitle(s.role === 'unset' ? '' : cap(gs.replaceAll('_', ' ')));
+  g.className = `gate-state ${stale ? 'stale' : gs}`;
+  $('gateStale').hidden = !stale;
+  updateTitle(s.role === 'unset' ? '' : stale ? 'Link lost' : cap(gs.replaceAll('_', ' ')));
   $('gateCause').textContent = s.cause ?? '—';
   $('gateResult').textContent = s.last_result ?? '—';
   $('gateTarget').textContent = s.target || '—';
@@ -711,6 +714,7 @@ function renderStatus(s) {
 
   if (s.role === 'house') {
     const r = s.remote || {};
+    $('lnkUp').innerHTML = s.link_up ? '<span class="good">up</span>' : '<span class="bad">down</span>';
     $('lnkRemoteRssi').textContent = r.uptime_s ? `${r.rssi} dBm / ${Number(r.snr).toFixed(1)} dB` : '—';
     $('hCtrl').innerHTML = pill(s.ctrl);
     $('hCtrlPower').innerHTML = 'ctrl_power' in s ? (s.ctrl_power ? pill(true) : '<span class="bad">off · edges ignored</span>') : '—';

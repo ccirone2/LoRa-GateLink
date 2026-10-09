@@ -52,6 +52,7 @@ are built from the pull requests since the last tag.
    arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink   # no warnings in GateLink/
    node --check web/app.js
    ruff check tests tools     # pip install ruff==0.16.10 (the version CI pins); rules in ruff.toml
+   python tools/check_contract.py   # firmware enums, log events and console commands vs the suite and docs
    pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI

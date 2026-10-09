@@ -54,3 +54,5 @@ jobs:
       # Catches import and fixture errors; no test runs (they need the bench).
       - name: Collect the e2e suite
         run: python -m pytest --collect-only -q -m "" tests/e2e
+      - name: Firmware, suite and docs agree (enums, log events, console commands)
+        run: python tools/check_contract.py

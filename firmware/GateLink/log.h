@@ -30,6 +30,8 @@ enum LogCode : uint8_t {
   EV_CFG,            // at boot: a = config source (CfgSource: 0 defaults, 1 SPI flash, 2 program flash),
                      //   b = saved settings dropped (unknown or out of range)
   EV_SUPPLY,         // a = board supply (VIN) power good, -1 = charger not answering (at boot only), b = REG08
+  EV_CMD_HOLD,       // a = 1 command held (HELLO from an unverified session b), 0 sent after all (verified
+                     //     session b answered), 2 dropped (new session b verified: the peer restarted)
   EV_COUNT
 };
 

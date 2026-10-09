@@ -279,6 +279,55 @@ bool configSaveKey() {
   return store(c);
 }
 
+// Boot counter: append-only 4-byte slots in two sectors after the config record's, so a boot programs one slot
+// and a sector is erased only every 1024 boots. The count is the largest value found + 1: a slot cut short by a
+// power loss holds more 1 bits than intended, so it can only read high. When the sector holding the largest value
+// is full, the other one (all smaller values) is erased and continues; a power cut during that erase still
+// leaves the largest value in place.
+#define BOOT_SECTOR0 REC_SECTORS
+
+
+uint32_t configCountBoot() {
+  if (!extFlashPresent()) return 0;
+  FlashAccess fa;
+  uint8_t buf[EXTFLASH_PAGE];
+  uint32_t maxV = 0;
+  int8_t maxSector = 0;
+  int32_t freeSlot[2] = { -1, -1 };  // first unwritten slot in each sector
+  for (int8_t s = 0; s < 2; s++) {
+    uint32_t base = (BOOT_SECTOR0 + s) * EXTFLASH_SECTOR;
+    for (uint32_t off = 0; off < EXTFLASH_SECTOR && freeSlot[s] < 0; off += sizeof(buf)) {
+      extFlashRead(base + off, buf, sizeof(buf));
+      for (uint32_t i = 0; i < sizeof(buf); i += 4) {
+        uint32_t v = get32(buf + i);
+        if (v == 0xFFFFFFFFu) {
+          freeSlot[s] = (off + i) / 4;
+          break;
+        }
+        if (v > maxV) {
+          maxV = v;
+          maxSector = s;
+        }
+      }
+    }
+  }
+  uint32_t count = maxV + 1;
+  if (count == 0xFFFFFFFFu) count = 1;  // would read as unwritten; not reachable at one boot per second for 136 years
+  int8_t s = maxSector;
+  int32_t slot = freeSlot[s];
+  if (slot < 0) {
+    s = 1 - s;
+    if (!extFlashEraseSector((BOOT_SECTOR0 + s) * EXTFLASH_SECTOR)) return 0;
+    slot = 0;
+  }
+  uint32_t addr = (BOOT_SECTOR0 + s) * EXTFLASH_SECTOR + slot * 4;
+  uint8_t b[4], check[4];
+  put32(b, count);
+  if (!extFlashProgram(addr, b, 4)) return 0;
+  extFlashRead(addr, check, 4);
+  return memcmp(b, check, 4) ? 0 : count;
+}
+
 bool configFactoryReset() {
   configDefaults(cfg);
   if (!extFlashPresent()) return store(cfg);

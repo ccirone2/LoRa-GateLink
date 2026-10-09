@@ -178,6 +178,7 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     char id[7];
     snprintf(id, sizeof(id), "%06lx", (unsigned long)extFlashId());
     res["flash_id"] = id;
+    res["boot_count"] = appBootCount();
   } else if (!strcmp(cmd, "status")) {
     appFillStatus(res["status"].to<JsonObject>());
   } else if (!strcmp(cmd, "config.get")) {
@@ -289,7 +290,10 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     uint32_t ms = req["ms"] | 6000;
     appIdentify(ms > 60000 ? 60000 : ms);
   } else if (!strcmp(cmd, "debug.replay")) {
-    linkDebugReplay();
+    linkDebugReplay(req["hello"] | false);
+  } else if (!strcmp(cmd, "debug.mute")) {
+    uint32_t ms = req["ms"] | 0;
+    linkDebugMute(ms > 60000 ? 60000 : ms);
   } else if (!strcmp(cmd, "debug.reboot_after_cmd")) {
     if (activeRole != ROLE_GATE) {
       res["ok"] = false;

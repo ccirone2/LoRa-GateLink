@@ -125,6 +125,66 @@ def test_replayed_frames_rejected(rig):
     assert st["gate"] == "closed" and st["link_up"], "replays must not disturb the link or the state"
 
 
+def _restart_gate_link(rig):
+    """Restart the gate's link without a reboot (a radio param change): new session, but its first HELLO since boot
+    (debug.replay hello) is kept, and is now an old session's."""
+    sessions = rig.house.status()["link"]["sessions"]
+    tx = rig.gate.config_get()["tx_power"]
+    rig.gate.config_set(tx_power=tx - 1 if tx > 2 else tx + 1)
+    rig.gate.config_set(tx_power=tx)
+    rig.wait_for(lambda: rig.house.status()["link"]["sessions"] >= sessions + 1 and rig.gate.status()["link"]["verified"],
+                 20, "gate's new session verified")
+    rig.wait_house(10, link_up=True, gate="closed", armed=True)
+
+
+def test_replayed_hello_holds_command(rig):
+    """A recorded HELLO from an old gate session arrives while a command waits for its ACK. That is also what a
+    gate restart looks like, so the house holds the command (rather than resending it, which could pulse twice);
+    but as the verified gate session answers the house's challenge, it was a replay: the command goes after all.
+    Before 0.13.1 the house dropped it, so a replayed HELLO could cancel any command."""
+    rig.expect_commands(1)
+    rig.allow_counters("house")
+    rig.allow_counters("gate")
+    _restart_gate_link(rig)
+    sessions = rig.house.status()["link"]["sessions"]
+    m = rig.mark()
+    rig.gate.request("debug.mute", ms=2500)  # the command's frames go unheard, so it stays pending
+    rig.ctrl.on()
+    rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m, timeout=5)
+    rig.gate.request("debug.replay", hello=True)
+    held = rig.wait_log("house", "cmd_hold", a=1, since=m, timeout=3)
+    sent = rig.wait_log("house", "cmd_hold", a=0, since=m, timeout=CMD_TTL_S)
+    rig.latency("replayed HELLO -> held command released", sent["t"] - held["t"])
+    rig.wait_log("gate", "pulse", a=1, since=m, timeout=CMD_TTL_S)
+    rig.wait_gate("open", timeout=SIM_TRAVEL_S + 10)
+    rig.wait_house(15, gate="open", io__k1=True, io__k2=False, ctrl=True)
+    assert len(rig.logs("gate", "pulse", since=m)) == 1
+    rig.expect_no("house", "cmd_dropped", since=m)
+    rig.expect_no("house", "cmd_hold", a=2, since=m)
+    assert rig.house.status()["link"]["sessions"] == sessions, "the replayed session must never verify"
+
+
+def test_replayed_hello_flood_answered_once_a_second(rig):
+    """HELLOs bypass the replay window, so the house answers replayed ones too, but at most once a second per kind:
+    a flood can't use the channel up or keep renumbering (and so postponing) pending messages."""
+    rig.expect_commands(0)
+    rig.allow_counters("house")
+    rig.allow_counters("gate")
+    _restart_gate_link(rig)
+    tx0 = rig.house.status()["link"]["tx"]
+    m = rig.mark()
+    for _ in range(15):  # old-session HELLOs about every 100 ms for 1.5 s
+        rig.gate.request("debug.replay", hello=True)
+        time.sleep(0.1)
+    time.sleep(0.5)
+    tx = rig.house.status()["link"]["tx"] - tx0
+    # 2 HELLO_ACKs (1.5 s at one a second), the house's own challenge, and a heartbeat's ACK or two.
+    assert tx <= 6, f"the house sent {tx} frames during the flood: replayed HELLOs aren't rate-limited"
+    st = rig.house.status()
+    assert st["link_up"] and st["gate"] == "closed"
+    rig.expect_no("house", "cmd_hold", since=m)
+
+
 @pytest.mark.needs_key
 def test_wrong_key_rejected(rig):
     """A gate with a different key can't be commanded: frames fail authentication; restored afterwards."""

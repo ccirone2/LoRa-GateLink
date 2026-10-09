@@ -11,7 +11,8 @@
 // have verified and its seq is new: above the HELLO_ACK that verified the session,
 // and not seen before in a 32-frame sliding window. Unknown sessions are verified
 // with a HELLO challenge that the peer must echo in a MAC'd HELLO_ACK; until one
-// answers, the verified session stays in place (a replayed HELLO can't drop it).
+// answers, the verified session stays in place (a replayed HELLO can't drop it). A pending CMD is held, not
+// dropped, until it is known whether the peer restarted (see link.cpp, MSG_HELLO).
 
 enum MsgType : uint8_t {
   MSG_HELLO = 1,      // challenge u32
@@ -69,8 +70,11 @@ bool linkPending(Slot slot);
 void linkAck(uint32_t seq, uint8_t result);
 const LinkStats &linkStats();
 bool linkPeerVerified();
-// Debug: retransmit the last frame verbatim (peer must reject it as a replay).
-void linkDebugReplay();
+// Debug: retransmit the last frame verbatim (peer must reject it as a replay), or with hello our first HELLO since
+// boot (from an old session after a link restart: the peer must challenge it, not act on it).
+void linkDebugReplay(bool hello = false);
+// Debug: ignore received frames for ms (0 = stop), as if the receiver had gone deaf.
+void linkDebugMute(uint32_t ms);
 
 // Little-endian helpers
 inline void putU16(uint8_t *p, uint16_t v) { p[0] = v; p[1] = v >> 8; }

@@ -74,8 +74,25 @@ struct FlashAccess {
     if (extFlashPresent()) radioRestart();
   }
 };
+// Settings in the record that this firmware doesn't know (saved by a newer one, before a downgrade). Every save
+// writes them back, so going back to the newer firmware finds them again, as many as fit the page after its own.
+#define EXTRAS_MAX (REC_MAX_PARAMS - sizeof(PARAMS) / sizeof(PARAMS[0]))
+struct Extras {
+  uint8_t n;
+  uint8_t id[EXTRAS_MAX];
+  uint32_t value[EXTRAS_MAX];
+};
+// What reading the SPI flash found: the newest valid record's sector (-1 = none), its seq, its unknown settings,
+// and how many settings it held that this firmware didn't accept.
+struct SpiRecord {
+  int8_t sector;
+  uint32_t seq;
+  int32_t skipped;
+  Extras extras;
+};
 static int8_t spiSector = -1;  // sector holding the newest valid record (-1 = none)
 static uint32_t spiSeq = 0;
+static Extras extras;  // the newest record's
 
 static uint32_t crc32(const uint8_t *data, size_t len) {
   uint32_t crc = 0xFFFFFFFFu;
@@ -101,7 +118,6 @@ static uint32_t get32(const uint8_t *p) {
 static size_t encode(const Config &c, uint32_t seq, uint8_t *buf) {
   put32(buf, REC_MAGIC);
   buf[4] = REC_FMT;
-  buf[5] = PARAM_COUNT;
   put32(buf + 6, seq);
   memcpy(buf + 14, c.key, 16);
   buf[30] = c.key_set ? 1 : 0;
@@ -110,13 +126,18 @@ static size_t encode(const Config &c, uint32_t seq, uint8_t *buf) {
     p[0] = PARAMS[i].id;
     put32(p + 1, (uint32_t)(c.*(PARAMS[i].field)));
   }
+  for (uint8_t i = 0; i < extras.n; i++, p += 5) {
+    p[0] = extras.id[i];
+    put32(p + 1, extras.value[i]);
+  }
+  buf[5] = (p - buf - REC_HDR) / 5;
   size_t len = p - buf;
   put32(buf + 10, crc32(buf + 14, len - 14));
   return len;
 }
 
 // Applies a record on top of c (which holds the defaults). Returns false if buf holds no valid record.
-static bool decode(const uint8_t *buf, Config &c, uint32_t &seq, int32_t &skipped) {
+static bool decode(const uint8_t *buf, Config &c, uint32_t &seq, int32_t &skipped, Extras &x) {
   if (get32(buf) != REC_MAGIC || buf[4] != REC_FMT || buf[5] > REC_MAX_PARAMS) return false;
   size_t len = REC_HDR + 5 * buf[5];
   if (get32(buf + 10) != crc32(buf + 14, len - 14)) return false;
@@ -124,33 +145,52 @@ static bool decode(const uint8_t *buf, Config &c, uint32_t &seq, int32_t &skippe
   memcpy(c.key, buf + 14, 16);
   c.key_set = buf[30] ? 1 : 0;
   skipped = 0;
+  x.n = 0;
   for (const uint8_t *p = buf + REC_HDR; p < buf + len; p += 5) {
     const ParamDef *d = paramById(p[0]);
     int32_t v = (int32_t)get32(p + 1);
-    if (d && paramValid(d, v)) c.*(d->field) = v;
-    else skipped++;  // setting no longer exists, or its range shrank
+    if (d && paramValid(d, v)) {
+      c.*(d->field) = v;
+      continue;
+    }
+    skipped++;  // setting unknown here, or its range shrank (then it's dropped: this firmware saves its own value)
+    if (!d && x.n < EXTRAS_MAX) {
+      x.id[x.n] = p[0];
+      x.value[x.n++] = v;
+    }
   }
   return true;
 }
 
-// Loads the newest valid record from SPI flash on top of the defaults.
-static bool spiRead(Config &c, int32_t &skipped) {
+// Loads the newest valid record from SPI flash on top of the defaults. Leaves the cached sector and seq alone.
+static bool spiRead(Config &c, SpiRecord &r) {
   uint8_t buf[EXTFLASH_PAGE];
-  spiSector = -1;
+  r.sector = -1;
+  r.seq = 0;
+  r.skipped = 0;
+  r.extras.n = 0;
   for (int8_t s = 0; s < REC_SECTORS; s++) {
     Config t;
     configDefaults(t);
     uint32_t seq;
     int32_t sk;
+    Extras x;
     extFlashRead(s * EXTFLASH_SECTOR, buf, sizeof(buf));
-    if (!decode(buf, t, seq, sk)) continue;
-    if (spiSector >= 0 && (int32_t)(seq - spiSeq) <= 0) continue;
-    spiSector = s;
-    spiSeq = seq;
+    if (!decode(buf, t, seq, sk, x)) continue;
+    if (r.sector >= 0 && (int32_t)(seq - r.seq) <= 0) continue;
+    r.sector = s;
+    r.seq = seq;
+    r.skipped = sk;
+    r.extras = x;
     c = t;
-    skipped = sk;
   }
-  return spiSector >= 0;
+  return r.sector >= 0;
+}
+
+static void adopt(const SpiRecord &r) {
+  spiSector = r.sector;
+  spiSeq = r.seq;
+  extras = r.extras;
 }
 
 // Writes into the sector not holding the newest record, then reads it back.
@@ -213,7 +253,11 @@ bool configLoad() {
   dropped = 0;
   Config c;
   if (extFlashBegin()) {
-    if (!spiRead(c, dropped)) return false;
+    SpiRecord r;
+    bool found = spiRead(c, r);
+    adopt(r);
+    if (!found) return false;
+    dropped = r.skipped;
   } else {
     cfgStore.read(&c);
     if (!valid(c)) return false;
@@ -249,29 +293,42 @@ bool configSave() {
   return store(cfg);
 }
 
-// What's saved, or the running config if nothing valid is saved yet (nothing to protect then).
-static Config persisted() {
-  Config c;
-  if (extFlashPresent()) {
-    int32_t skipped;
-    if (!spiRead(c, skipped)) c = cfg;
-  } else {
+// What's saved, or the running config if nothing valid is saved yet (nothing to protect then). False if the
+// read-back finds no record, or one older than the newest this boot has seen, although that one verified: a
+// garbled read, or a newer record gone bad. Saving on top of it would lose settings, or be written with a seq
+// that loses to the newer record at the next boot. One retry covers a transient garble.
+static bool persisted(Config &c) {
+  if (!extFlashPresent()) {
     cfgStore.read(&c);
     if (!valid(c)) c = cfg;
+    return true;
   }
-  return c;
+  for (int tries = 0; tries < 2; tries++) {
+    SpiRecord r;
+    if (!spiRead(c, r)) {
+      if (spiSector >= 0) continue;
+      c = cfg;
+      return true;
+    }
+    if (spiSector >= 0 && (int32_t)(r.seq - spiSeq) < 0) continue;
+    adopt(r);
+    return true;
+  }
+  return false;
 }
 
 bool configSaveParam(const ParamDef *p) {
   FlashAccess fa;
-  Config c = persisted();
+  Config c;
+  if (!persisted(c)) return false;
   c.*(p->field) = cfg.*(p->field);
   return store(c);
 }
 
 bool configSaveKey() {
   FlashAccess fa;
-  Config c = persisted();
+  Config c;
+  if (!persisted(c)) return false;
   memcpy(c.key, cfg.key, sizeof(c.key));
   c.key_set = cfg.key_set;
   return store(c);
@@ -334,6 +391,7 @@ bool configFactoryReset() {
   bool ok = true;
   for (int8_t s = 0; s < REC_SECTORS; s++) ok &= extFlashEraseSector(s * EXTFLASH_SECTOR);
   spiSector = -1;
+  extras.n = 0;
   return ok;
 }
 

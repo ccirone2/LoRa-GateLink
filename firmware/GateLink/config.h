@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.13.2"
+#define FW_VERSION "0.13.3"
 #define FW_MARKER_PREFIX "GATELINK_FW="
 // FW_MARKER_PREFIX FW_VERSION: the web console looks for it in a .bin to check the file is GateLink and
 // read its version. The version is reported from it (fwVersion()) so the linker keeps it in the image.
@@ -89,9 +89,11 @@ bool configLoad();  // returns false if nothing valid was saved (defaults loaded
 uint8_t configSource();
 int32_t configDropped();        // saved settings this firmware didn't accept (unknown id or out of range)
 const char *configStoreName();  // "spi" (survives uploads) or "internal" (SPI flash missing; erased by uploads)
-// The saves return false if the write didn't verify.
+// The saves return false if the write didn't verify. Settings in the record that this firmware doesn't know are
+// written back as they were.
 bool configSave();
-// Persist one param, or the key, on top of what is already saved, leaving other unsaved edits unsaved.
+// Persist one param, or the key, on top of what is already saved, leaving other unsaved edits unsaved. These also
+// return false, writing nothing, if what's saved can't be read back intact (see persisted()).
 bool configSaveParam(const ParamDef *p);
 bool configSaveKey();
 bool configFactoryReset();  // defaults in RAM; saved config and key erased

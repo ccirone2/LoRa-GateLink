@@ -68,9 +68,14 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 Settings are listed in the `PARAMS[]` table in `firmware/GateLink/config.cpp`; the web console's Config tab
 shows each with help text. Saved config and the key live in the board's SPI flash chip (`cfg_store` `spi`) and
 survive firmware uploads; they're stored per param id, so a newer firmware keeps every setting it still knows
-(the `cfg` log event counts the ones it dropped). If the chip doesn't answer, config falls back to program
-flash (`cfg_store` `internal`), which every upload erases. `config.save`, `config.reset` and `key.set` reply
-`ok: false`, `error: "flash write failed"` if the write doesn't verify (the change still applies until reboot).
+(the `cfg` log event counts the ones it didn't accept). Settings an older firmware doesn't know are written back
+by its saves, so after a downgrade and back they're still there; a value out of the older firmware's range is
+replaced by its own. If the chip doesn't answer, config falls back to program flash (`cfg_store` `internal`),
+which every upload erases. `config.save`, `config.reset` and `key.set` reply `ok: false`, `error: "flash write
+failed"` if the write doesn't verify (the change still applies until reboot). `key.set` and remote writes save on
+top of what's saved, so they also fail, writing nothing, if the saved record can't be read back intact (twice),
+or reads older than the newest this boot has written or loaded; `config.save` writes the running config and
+clears that.
 Each save re-initialises the radio (the flash chip shares its bus): about 0.5 s off the air, which the link's
 retries cover. Saving, and restarting the radio, stops the loop for up to ~1 s, so while a relay pulse runs (or
 waits for its interlock start) `config.set`, `config.save`, `config.reset` and `key.set` wait in the port's

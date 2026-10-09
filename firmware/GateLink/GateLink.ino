@@ -212,9 +212,13 @@ void setup() {
   k1.begin(PIN_K1);
   k2.begin(PIN_K2);
   pinMode(LED_BUILTIN, OUTPUT);
+  // Then the watchdog: the steps below touch the flash chip, the charger's I2C bus (the core's Wire waits without
+  // a timeout) and the radio, and a hang in any of them must reset the board, not leave it stuck until power cycles.
+  Watchdog.enable(8000);
 
   consoleBegin();
   cfgLoaded = configLoad();
+  Watchdog.reset();
   consoleConfigure();  // before the boot event, so a UART console sees it
   activeRole = cfg.role;
   in1.begin(PIN_IN1, cfg.in1_invert);
@@ -225,13 +229,13 @@ void setup() {
   logEvent(EV_CFG, configSource(), configDropped());
   histBegin();
   supplyBegin();
+  Watchdog.reset();
 
   if (activeRole != ROLE_UNSET) {
     appRestartRadio();
     if (activeRole == ROLE_HOUSE) houseBegin();
     else gateBegin();
   }
-  Watchdog.enable(8000);
 }
 
 void loop() {

@@ -73,4 +73,4 @@ The boards can be driven from scripts over USB serial with the same JSON console
 - Timing comparisons must be wrap-safe and signed (`elapsed(now, t, ms)` in `link.h`, i.e. `(int32_t)(now - t) >= ms`): handlers invoked from `linkPoll` stamp times with `millis()`, which can be slightly later than the loop's `now`.
 - All inputs use the internal **pull-down** (`INPUT_PULLDOWN`, active = HIGH) to suit the gate's PNP-output opto board: a dead opto or cut wire must read inactive. Keep `inN_invert` at 0; don't fix polarity with invert (it makes faults read active). Bench jumpers go to 3.3 V, not GND.
 - Use `Serial.dtr()` rather than `if (Serial)` — the SAMD core's bool operator has a 10 ms `delay`.
-- Hardware watchdog is 8 s; keep blocking work well under that.
+- Hardware watchdog is 8 s, enabled in `setup()` right after the relays are de-energised (so a hang during init resets too); keep blocking work well under that.

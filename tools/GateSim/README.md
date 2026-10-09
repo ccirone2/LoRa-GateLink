@@ -21,9 +21,10 @@ closed-limit AUX relay energizes when *not* at the close limit. D3's coil is dri
 | D12 | house K1 NC (K1 COM → Uno GND) | senses the house K1 coil; D8 repeats it to the controller |
 
 D7–D10 drive an optional 4-channel relay module (CH4 is a spare, held off). The power rig channels are wired through NC, so a released coil
-means powered/connected: a Uno reset (opening its port) never cuts a board. Power the module's coils from a separate
-5 V (JD-VCC), not the Uno. D11/D12 are optional too; unwired, they read as energized (and D8 follows). CH2 lags K1 by
-the 20 ms debounce, and a Uno reset releases it, which the controller sees as OFF.
+means powered/connected: a Uno reset (opening its port) never cuts a board. Power the coils from a separate
+5 V, not the PC's USB: on the bench a 5 V supply feeds the Uno's VIN, and both modules' coils run from the Uno's
+5 V rail. On USB alone, a third GateSim coil (AC with the gate open) often failed to pull in. D11/D12 are optional
+too; unwired, they read as energized (and D8 follows). CH2 lags K1 by the 20 ms debounce, and a Uno reset releases it, which the controller sees as OFF.
 
 ```sh
 arduino-cli compile --fqbn arduino:avr:uno --warnings all tools/GateSim

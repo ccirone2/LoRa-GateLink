@@ -21,11 +21,23 @@ off until a key is set, so a fresh or reset board can never be commanded.
 
 ## Sessions and replay protection
 
-Each board picks a random session id at boot; a peer's session is accepted only after it echoes a fresh
-challenge (HELLO / HELLO_ACK), and only seq numbers above that HELLO_ACK's are accepted, each once, so recorded
-frames can't be replayed — even across reboots, with no counters in flash. A 32-frame sliding window tolerates
-reordering between retried messages. A HELLO from an unknown session (a restarted peer, or a replayed old one)
-is challenged, but the verified session stays in place until the new one answers.
+Each board picks a random session id at boot (and a random starting seq); a peer's session is accepted only after
+it echoes a fresh challenge (HELLO / HELLO_ACK), and only seq numbers above that HELLO_ACK's are accepted, each once,
+so recorded frames can't be replayed — even across reboots. A 32-frame sliding window tolerates reordering between
+retried messages. A HELLO from an unknown session (a restarted peer, or a replayed old one) is challenged, but the
+verified session stays in place until the new one answers.
+
+That only holds while session ids never repeat under one key. The random source hashes radio noise, chained with a
+per-boot seed: a boot counter kept in the SPI flash (one 4-byte slot per boot, apart from the config record, so
+`config.reset` doesn't restart it) and the chip's serial number. If the radio failed to initialise at boot, the
+session is drawn again once it comes up, before anything is sent.
+
+HELLOs can't be checked against the replay window (a restarted peer's must get through), so a recorded HELLO is
+acted on: it is answered, and pending frames are renumbered. Each board answers at most one HELLO a second from the
+verified session and one from all other sessions, so replayed HELLOs can't keep pushing pending messages back.
+
+The frame payloads aren't encrypted: someone listening learns the message types, the gate state and when mains
+power is lost. They can't forge or replay frames.
 
 ## Reliable delivery
 
@@ -33,9 +45,12 @@ Commands, status and remote config writes are acknowledged and retried: the `ret
 the message's lifetime with doubling gaps (`cmd_ttl_s` for commands: at 10 s and 5 retries about 0.3, 0.9, 2.2,
 4.7 and 9.7 s; STATUS: `heartbeat_s` capped at 10 s; config writes: 10 s), so a command survives an outage of nearly `cmd_ttl_s` and is dropped, never fired late, after
 it. Duplicate commands are detected and not re-pulsed. If the gate restarts while a command is still waiting
-for its ACK (a HELLO from a new gate session), the house drops the command instead of sending it again: the gate
-may already have pulsed for it and lost the ACK to the reset, and its record of the last command went with it, so a
-resend would pulse twice. The house then resyncs the controller to the real gate. Every transmission listens before talking: responses go
+for its ACK, the house drops the command instead of sending it again: the gate may already have pulsed for it and
+lost the ACK to the reset, and its record of the last command went with it, so a resend would pulse twice. The house
+then resyncs the controller to the real gate. A HELLO from a new gate session only holds the command (log
+`cmd_hold`), since it may be an old HELLO replayed to make the house drop it. The command is dropped once that
+session answers the house's challenge; it is sent after all if the verified session answers instead, or sends
+anything new. A new command replaces a held one. Every transmission listens before talking: responses go
 after a 25 ms turnaround, new frames after the response slot plus a random backoff.
 
 ## Link supervision

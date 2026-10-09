@@ -235,12 +235,23 @@ uint32_t radioAirtimeMs(size_t payloadLen) {
   return (uint32_t)ceilf(tpre + nPayload * tsym);
 }
 
+static uint8_t randState[32];  // radioRandom32()'s hash chain
+
+void radioAddEntropy(const void *data, size_t len) {
+  SHA256 h;
+  h.update(randState, sizeof(randState));
+  h.update(data, len);
+  h.finalize(randState, sizeof(randState));
+}
+
 uint32_t radioRandom32() {
   // Wideband RSSI noise only changes while the radio is receiving: sample its LSB in continuous RX, mix in
   // timer jitter, and hash, chained with the previous state. Never leaves RX (that aborted a frame being
   // received and dropped an unread one) and doesn't sample during TX (the chain still changes the result).
-  // Called rarely (session ids, challenges, command ids).
-  static uint8_t state[32];
+  // Called rarely (session ids, challenges, command ids). Seeded per boot (radioAddEntropy) so it differs per boot
+  // when the radio is down and timing is all there is.
+  uint8_t *state = randState;
+  const size_t stateLen = sizeof(randState);
   uint8_t pool[64];
   uint32_t t = micros();
   bool sample = ok && !radioTxBusy();
@@ -254,14 +265,14 @@ uint32_t radioRandom32() {
     pool[i] = b ^ (uint8_t)micros();
   }
   SHA256 h;
-  h.update(state, sizeof(state));
+  h.update(state, stateLen);
   h.update(pool, sizeof(pool));
   h.update(&t, sizeof(t));
-  h.finalize(state, sizeof(state));
+  h.finalize(state, stateLen);
   uint32_t out;
   memcpy(&out, state, sizeof(out));
   h.reset();
-  h.update(state, sizeof(state));
-  h.finalize(state, sizeof(state));  // so the output doesn't reveal the next state
+  h.update(state, stateLen);
+  h.finalize(state, stateLen);  // so the output doesn't reveal the next state
   return out;
 }

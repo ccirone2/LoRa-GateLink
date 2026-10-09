@@ -28,3 +28,5 @@ size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr);
 int16_t radioNoiseDbm();
 uint32_t radioAirtimeMs(size_t payloadLen);
 uint32_t radioRandom32();
+// Mixes data into radioRandom32()'s state (per-boot seeds, so the output differs per boot even without RSSI noise).
+void radioAddEntropy(const void *data, size_t len);

@@ -20,6 +20,7 @@
 Input in1, in2, in3, in4;
 static uint8_t resetCause = 0;  // PM->RCAUSE at boot
 static bool cfgLoaded = false;
+static uint32_t bootCount = 0;
 static uint32_t identifyUntil = 0;  // LED strobes until then (0 = off)
 
 static const char *resetCauseName(uint8_t rc) {
@@ -74,6 +75,10 @@ static void onRx(const RxMsg &m) {
 static void onAck(Slot slot, uint8_t type, bool acked, uint8_t result) {
   if (activeRole == ROLE_HOUSE) houseOnAck(slot, type, acked, result);
   else if (activeRole == ROLE_GATE) gateOnAck(slot, type, acked, result);
+}
+
+uint32_t appBootCount() {
+  return bootCount;
 }
 
 void appRestartRadio() {
@@ -218,6 +223,12 @@ void setup() {
 
   consoleBegin();
   cfgLoaded = configLoad();
+  bootCount = configCountBoot();
+  // Per-boot seed for session ids (link.cpp): a count that never repeats, this chip's serial number and timing. Without
+  // the radio (init failed) these are all radioRandom32() has.
+  uint32_t seed[] = { bootCount, *(volatile uint32_t *)0x0080A00C, *(volatile uint32_t *)0x0080A040,
+                      *(volatile uint32_t *)0x0080A044, *(volatile uint32_t *)0x0080A048, resetCause, micros() };
+  radioAddEntropy(seed, sizeof(seed));
   Watchdog.reset();
   consoleConfigure();  // before the boot event, so a UART console sees it
   activeRole = cfg.role;

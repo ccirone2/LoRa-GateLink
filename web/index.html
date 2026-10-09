@@ -21,7 +21,7 @@
   </header>
 
   <div id="unsupported" class="banner warn" hidden>
-    This page needs the Web Serial API. Use desktop Chrome or Edge, served from https:// or http://localhost.
+    <span id="unsupportedMsg">This page needs the Web Serial API. Use desktop Chrome or Edge, served from https:// or http://localhost.</span>
   </div>
   <div id="keyWarn" class="banner warn" hidden>
     No link key set on this board — the radio link stays disabled until you set one under <b>Security</b>.
@@ -87,6 +87,9 @@
           <div class="kv"><span>Last reset</span><b id="bReset">—</b></div>
           <div class="kv"><span>Supply (VIN)</span><b id="bSupply">—</b></div>
           <div class="kv"><span>Radio</span><b id="bRadio">—</b></div>
+          <div class="kv" data-role="gate" title="After boot the first report to the house waits until the gate inputs have been steady for 3 s (at most 10 s)"><span>Inputs settling</span><b id="bSettling">—</b></div>
+          <div class="kv" title="Whether a saved config was found at boot, where it lives, and the flash chip's id (000000 = chip not answering)"><span>Config at boot</span><b id="bCfg">—</b></div>
+          <div class="kv" title="Free RAM: bytes between the heap's high-water mark and the stack. USB lines lost: console lines dropped since boot"><span>Free RAM / USB lines lost</span><b id="bMem">—</b></div>
         </div>
       </div>
     </section>
@@ -99,7 +102,7 @@
         <button id="btnCfgSave">Save to flash</button>
         <button id="btnReboot">Reboot</button>
         <span class="spacer"></span>
-        <button id="btnCfgExport">Export JSON</button>
+        <button id="btnCfgExport" title="Download the settings the board is running (unapplied edits aren't included)">Export JSON</button>
         <label class="button">Import JSON<input id="fileImport" type="file" accept=".json,application/json" hidden></label>
         <button id="btnCfgReset" class="danger">Factory reset</button>
       </div>
@@ -214,7 +217,7 @@
         <button id="btnLogSave">Download</button>
         <label class="check"><input id="logRaw" type="checkbox"> show raw serial</label>
       </div>
-      <div id="logView" class="log mono" tabindex="0" aria-label="Log"></div>
+      <div id="logView" class="log mono" tabindex="0" role="log" aria-label="Log"></div>
     </section>
 
     <!-- INSTALL -->

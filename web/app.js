@@ -871,6 +871,10 @@ async function applyConfig() {
     const m = meta.find((x) => x.name === k);
     if (!Number.isInteger(v) || v < m.min || v > m.max) return toast(`${k} must be an integer ${m.min}–${m.max}`, 'err');
   }
+  // These take effect at once, and the boards only hear each other while they all match.
+  const radio = Object.keys(changes).filter((k) => MUST_MATCH.has(k));
+  if (radio.length && !confirm(`Changing ${radio.join(', ')} takes the link down until the other board has the same `
+      + `value${radio.length === 1 ? '' : 's'}. Connect that board next and change ${radio.length === 1 ? 'it' : 'them'} there too. Continue?`)) return;
   // Send at most CFG_CHUNK params per request so a full import stays well inside the board's line buffer.
   const entries = Object.entries(changes);
   const applied = [], errors = [];
@@ -904,9 +908,14 @@ async function importConfig(file) {
   try { data = JSON.parse(await file.text()); } catch { return toast('Not a valid JSON file.', 'err'); }
   const src = data?.params || data;
   if (!src || typeof src !== 'object') return toast('No GateLink settings found in that file.', 'err');
+  // A file exported from the other board would turn this one into its twin: keep this board's role, unless it has
+  // none yet (restoring a blank board).
+  const roleName = (v) => SELECTS.role.find(([n]) => n === v)?.[1] ?? v;
+  const keepRole = Number.isInteger(src.role) && params.role && src.role !== params.role;
   let found = 0;
   for (const m of meta) {
     const el = $(`p_${m.name}`);
+    if (m.name === 'role' && keepRole) continue;
     if (el && Number.isInteger(src[m.name])) {
       setField(el, src[m.name]);
       el.dispatchEvent(new Event('input'));
@@ -915,7 +924,8 @@ async function importConfig(file) {
   }
   if (!found) return toast('No GateLink settings found in that file.', 'err');
   const n = dirtyCount();
-  toast(`Imported ${found} setting${found === 1 ? '' : 's'}; ${n ? `${n} differ${n === 1 ? 's' : ''} from the board. Review, then Apply and Save.` : 'all match the board already.'}`);
+  const kept = keepRole ? ` Kept this board’s role (${roleName(params.role)}); the file is from a ${roleName(src.role)} board.` : '';
+  toast(`Imported ${found} setting${found === 1 ? '' : 's'}; ${n ? `${n} differ${n === 1 ? 's' : ''} from the board. Review, then Apply and Save.` : 'all match the board already.'}${kept}`);
 }
 
 // ---------- Tools ----------

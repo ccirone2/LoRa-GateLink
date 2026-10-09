@@ -89,7 +89,7 @@ arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateL
 arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 firmware/GateLink   # your port
 ```
 
-Or flash a release binary: `arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COM5 --input-file GateLink-vX.Y.Z.bin`
+Or flash a release binary (check it first: `sha256sum -c GateLink-vX.Y.Z.bin.sha256`): `arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COM5 --input-file GateLink-vX.Y.Z.bin`
 (from the [latest release](https://github.com/ccirone2/LoRa-GateLink/releases/latest)).
 Without any tools, use the web console's **Tools → Firmware update** (below).
 

@@ -33,8 +33,9 @@ The changelog is the list of GitHub releases, one per `FW_VERSION`. Process and 
    ```sh
    gh release create vX.Y.Z --target main --title "vX.Y.Z — <one-line summary>" --notes-file <notes.md>
    ```
-6. **Check the binary.** The `release` workflow builds the tag and attaches `GateLink-vX.Y.Z.bin`:
-   `gh run list --workflow release.yml --limit 1`, then `gh release view vX.Y.Z` should list the asset. If the
+6. **Check the binary.** The `release` workflow builds the tag and attaches `GateLink-vX.Y.Z.bin` and its
+   `.sha256`: `gh run list --workflow release.yml --limit 1`, then `gh release view vX.Y.Z` should list both assets.
+   It refuses to replace a binary already attached (re-run by hand with `replace` only if one must be rebuilt). If the
    workflow failed, show its log (`gh run view <id> --log-failed`).
 7. **Tidy the trackers.** Remove items shipped in this release from `TODO.md` and `ROADMAP.md` if the PR didn't
    already, on a branch with a PR.

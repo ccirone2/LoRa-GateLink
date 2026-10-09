@@ -39,6 +39,7 @@ struct AirFrame {
   Bytes b;
   uint32_t start, end;
   bool dropped = false;   // lost on the way (Sim::drop): the receiver never hears it
+  bool corrupt = false;   // heard with a bad CRC (Sim::corrupt): the radio counts it but returns nothing
   bool collided = false;  // the receiver was transmitting meanwhile (half duplex)
   bool delivered = false;
   uint8_t type() const { return b[1]; }
@@ -73,7 +74,8 @@ struct Node {
   // Radio
   bool radioUp = true;
   uint32_t txEnd = 0;
-  std::deque<Bytes> rxq;
+  std::deque<Bytes> rxq;  // frames heard, not yet read (an empty one: a bad CRC)
+  uint32_t rxDone = 0;   // radioRxDoneCount()
   uint64_t rng;
   // What the link handed up
   std::vector<LogRec> logs;
@@ -111,6 +113,8 @@ struct Sim {
   std::vector<AirFrame> air;
   // Decides, when a frame starts, whether it gets through. Default: everything does.
   std::function<bool(const AirFrame &)> drop;
+  // Decides, when a frame starts, whether it arrives with a bad CRC. Default: none does.
+  std::function<bool(const AirFrame &)> corrupt;
 
   explicit Sim(uint32_t start = 1000);
   ~Sim();

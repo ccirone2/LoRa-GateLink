@@ -346,3 +346,115 @@ TEST(silence_never_reads_as_fresh) {
     CHECK(elapsed(simNow, at, timeout));
   }
 }
+
+TEST(full_tx_queue_keeps_the_newest_response) {
+  // Frames wait in a 4-deep queue while ours is on the air: responses at the head, new frames at the tail. When
+  // it's full, the newest new frame goes, not the ACK the peer is waiting for.
+  Sim s;
+  CHECK(s.handshake());
+  s.run(2000);
+  size_t acks = s.sent(s.house, MSG_ACK).size();
+  size_t pings = s.sent(s.house, MSG_PING).size();
+  s.house.send(MSG_PING, { 0, 1 });  // on the air at once
+  s.house.ack(1234, RES_OK);           // waits behind it
+  for (uint8_t i = 2; i < 6; i++) s.house.send(MSG_PING, { 0, i });  // the last one overflows the queue
+  s.run(3000);
+  auto sent = s.sent(s.house, MSG_ACK);
+  CHECK_EQ(sent.size(), acks + 1);
+  CHECK_EQ(getU32(&sent.back()->b[13]), 1234u);
+  CHECK_EQ(s.sent(s.house, MSG_PING).size(), pings + 4);
+}
+
+TEST(full_tx_queue_of_responses_drops_the_oldest) {
+  Sim s;
+  CHECK(s.handshake());
+  s.run(2000);
+  s.house.send(MSG_PING, { 0, 1 });
+  for (uint32_t seq = 1; seq <= 5; seq++) s.house.ack(seq, RES_OK);
+  s.run(3000);
+  auto sent = s.sent(s.house, MSG_ACK);
+  CHECK(sent.size() >= 4);
+  std::vector<uint32_t> seqs;
+  for (size_t i = sent.size() - 4; i < sent.size(); i++) seqs.push_back(getU32(&sent[i]->b[13]));
+  CHECK((seqs == std::vector<uint32_t>{ 5, 4, 3, 2 }));
+}
+
+TEST(frame_with_a_bad_crc_restarts_the_backoff) {
+  // A frame heard with a bad CRC was still on the air: a new frame waits out the turnaround and the backoff
+  // after it, as after any other, since the peer may be answering it.
+  Sim s;
+  CHECK(s.handshake());
+  s.run(2000);
+  s.corrupt = [](const AirFrame &f) { return f.from == 1 && f.type() == MSG_PING; };
+  s.gate.send(MSG_PING, { 0, 9 });
+  const AirFrame *bad = last(s.sent(s.gate, MSG_PING));
+  uint32_t badEnd = bad->end;
+  CHECK(s.runUntil([&] { return simNow >= badEnd; }, 2000));
+  s.step();  // the house has read it (nothing returned)
+  s.house.send(MSG_PING, { 0, 1 });
+  s.run(1000);
+  const AirFrame *mine = last(s.sent(s.house, MSG_PING));
+  CHECK((int32_t)(mine->start - badEnd) >= 25);
+  CHECK_EQ(s.house.rxCount(MSG_PING), 0);
+}
+
+TEST(recorded_hello_ack_does_not_release_a_held_command) {
+  // An answer to an old challenge, recorded and kept from us, played back much later: here just after the gate
+  // restarted having run a command whose ACK was lost. Taken as the verified session answering, it would release
+  // the held command, and the restarted gate would run it twice. What stops it is the challenge being redrawn
+  // (holding the command sends a HELLO at once, and a challenge over 10 s old is replaced when sent); the check
+  // on receive (a challenge last sent over 10 s ago) covers a challenge left open without a HELLO following.
+  Sim s;
+  CHECK(s.handshake());
+  Bytes oldHello = last(s.sent(s.gate, MSG_HELLO))->b;
+  s.gate.begin();
+  CHECK(s.runUntil([&] { return s.gate.verified() && s.house.stats().sessions == 2; }, 10000));
+  s.run(1500);
+  // A replayed HELLO makes the house challenge the verified gate; its answer is recorded, not delivered.
+  Bytes recorded;
+  bool record = true;
+  s.drop = [&](const AirFrame &f) {
+    if (!record || f.from != 1 || f.type() != MSG_HELLO_ACK) return false;
+    recorded = f.b;
+    return true;
+  };
+  s.inject(s.house, oldHello);
+  CHECK(s.runUntil([&] { return !recorded.empty(); }, 3000));
+  record = false;
+  s.run(60000);
+  // The gate runs a command, its ACK is lost, it restarts.
+  bool acksLost = true;
+  s.drop = [&](const AirFrame &f) { return acksLost && f.from == 1 && f.type() == MSG_ACK; };
+  s.house.sendReliable(SLOT_CMD, MSG_CMD, CMD_OPEN, 10000);
+  CHECK(s.runUntil([&] { return s.gate.rxCount(MSG_CMD) == 1; }, 2000));
+  s.gate.begin();
+  CHECK(s.runUntil([&] { return s.house.count(EV_CMD_HOLD, 1) == 1; }, 5000));
+  s.inject(s.house, recorded);
+  acksLost = false;
+  CHECK(s.runUntil([&] { return !s.house.pending(SLOT_CMD); }, 10000));
+  CHECK_EQ(s.house.count(EV_CMD_HOLD, 0), 0);
+  CHECK_EQ(s.house.count(EV_CMD_HOLD, 2), 1);
+  s.run(3000);
+  CHECK_EQ(s.gate.rxCount(MSG_CMD), 1);
+  CHECK(s.house.verified() && s.gate.verified());
+}
+
+TEST(throttled_rechallenge_is_sent_later_not_forgotten) {
+  // A HELLO from another session while verified is challenged back. Within the HELLO interval of our last HELLO
+  // the challenge waits for the interval, and still goes.
+  Sim s;
+  CHECK(s.handshake());
+  Bytes oldHello = last(s.sent(s.gate, MSG_HELLO))->b;
+  s.gate.begin();
+  CHECK(s.runUntil([&] { return s.gate.verified() && s.house.stats().sessions == 2; }, 10000));
+  s.run(5000);
+  s.drop = [](const AirFrame &f) { return f.from == 1 && f.type() == MSG_HELLO_ACK; };  // challenges stay open
+  size_t hellos = s.sent(s.house, MSG_HELLO).size();
+  s.inject(s.house, oldHello);
+  s.run(1100);  // the house challenged once, and may answer the next HELLO from another session again
+  CHECK_EQ(s.sent(s.house, MSG_HELLO).size(), hellos + 1);
+  s.inject(s.house, oldHello);
+  s.run(200);
+  CHECK_EQ(s.sent(s.house, MSG_HELLO).size(), hellos + 1);  // held back by the HELLO interval
+  CHECK(s.runUntil([&] { return s.sent(s.house, MSG_HELLO).size() == hellos + 2; }, 5000));
+}

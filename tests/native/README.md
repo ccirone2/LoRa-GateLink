@@ -39,8 +39,9 @@ Docker, `setarch -R` needs `--security-opt seccomp=unconfined`.
 - **`sim.cpp`** holds the fakes:
   - The radio (`radio.h`): one SX127x per node on a shared channel. It models LoRa airtime at the node's
     SF/BW/CR, half duplex (a node can't hear while it transmits), and a channel that reads busy a few symbols
-    into the other node's frame. `Sim::drop` decides per frame whether it gets through, and `Sim::inject`
-    plays a recorded frame into a receiver.
+    into the other node's frame. `Sim::drop` decides per frame whether it gets through, `Sim::corrupt`
+    whether it arrives with a bad CRC (counted by `radioRxDoneCount`, not returned), and `Sim::inject` plays a
+    recorded frame into a receiver.
   - The SPI NOR flash (`extflash.h`, sectors 0–3). Programming only clears bits. `cutNextProgram` simulates a
     power cut mid-write; `garbleReads` simulates a garbled bus.
   - `logEvent`, which records events per node.
@@ -62,7 +63,7 @@ Docker, `setarch -R` needs `--security-opt seccomp=unconfined`.
 - Link: build a `Sim`, call `s.handshake()`, then drive the two `Node`s:
   - `sendReliable`, `send`, `ack`, `ackLater`, and `begin` (a restart)
   - `onRx`, to answer the way a role would (by default reliable messages are ACKed `RES_OK`)
-  - `drop` and `inject` for the channel
+  - `drop`, `corrupt` and `inject` for the channel
 
   Then check `stats()`, `rx`, `acks`, `logs` and `s.sent(node, type)`.
 - Config: call `fresh()` first (blank flash, defaults), then change `cfg`, save, load and inspect `flash.mem`.

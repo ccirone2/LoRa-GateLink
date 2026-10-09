@@ -52,6 +52,7 @@ bool radioSend(const uint8_t *buf, size_t len) {
   f.start = simNow;
   f.end = simNow + airtimeMs(len);
   if (sim->drop) f.dropped = sim->drop(f);
+  if (sim->corrupt) f.corrupt = sim->corrupt(f);
   cur->txEnd = f.end;
   sim->air.push_back(f);
   return true;
@@ -60,7 +61,7 @@ bool radioTxBusy() { return cur && (int32_t)(simNow - cur->txEnd) < 0; }
 uint32_t radioTxEndAt() { return cur ? cur->txEnd : 0; }
 uint32_t radioFaults() { return 0; }
 uint32_t radioCrcErrors() { return 0; }
-uint32_t radioRxDoneCount() { return 0; }
+uint32_t radioRxDoneCount() { return cur ? cur->rxDone : 0; }
 int32_t radioLastFei() { return 0; }
 bool radioChannelBusy() {
   if (!cur) return false;
@@ -75,6 +76,8 @@ size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
   if (!cur || cur->rxq.empty()) return 0;
   Bytes f = cur->rxq.front();
   cur->rxq.pop_front();
+  cur->rxDone++;
+  if (f.empty()) return 0;  // bad CRC
   size_t n = f.size() < max ? f.size() : max;
   memcpy(buf, f.data(), n);
   rssi = -60;
@@ -241,7 +244,7 @@ void Sim::deliver() {
     for (const AirFrame &o : air) {  // half duplex: deaf while transmitting
       if (o.from == to.idx && (int32_t)(o.start - f.end) < 0 && (int32_t)(f.start - o.end) < 0) f.collided = true;
     }
-    if (!f.collided && to.radioUp) to.rxq.push_back(f.b);
+    if (!f.collided && to.radioUp) to.rxq.push_back(f.corrupt ? Bytes() : f.b);
   }
 }
 

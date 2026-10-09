@@ -25,7 +25,8 @@ Each board picks a random session id at boot (and a random starting seq); a peer
 it echoes a fresh challenge (HELLO / HELLO_ACK), and only seq numbers above that HELLO_ACK's are accepted, each once,
 so recorded frames can't be replayed — even across reboots. A 32-frame sliding window tolerates reordering between
 retried messages. A HELLO from an unknown session (a restarted peer, or a replayed old one) is challenged, but the
-verified session stays in place until the new one answers.
+verified session stays in place until the new one answers. A challenge is good for 10 s after the last HELLO that
+carried it, so an answer recorded earlier can't be played back later.
 
 That only holds while session ids never repeat under one key. The random source hashes radio noise, chained with a
 per-boot seed: a boot counter kept in the SPI flash (one 4-byte slot per boot, apart from the config record, so
@@ -44,7 +45,9 @@ power is lost. They can't forge or replay frames.
 Commands, status and remote config writes are acknowledged and retried: the `retries` resends are spread over
 the message's lifetime with doubling gaps (`cmd_ttl_s` for commands: at 10 s and 5 retries about 0.3, 0.9, 2.2,
 4.7 and 9.7 s; STATUS: `heartbeat_s` capped at 10 s; config writes: 10 s), so a command survives an outage of nearly `cmd_ttl_s` and is dropped, never fired late, after
-it. Duplicate commands are detected and not re-pulsed. If the gate restarts while a command is still waiting
+it. Duplicate commands are detected by their command id and not re-pulsed. A message still waiting when the peer
+answers a HELLO is renumbered, and if the peer had already taken it (its ACK lost) the resend is taken as new: every
+reliable message must therefore be safe to repeat, which STATUS and config writes are and commands are by their id. If the gate restarts while a command is still waiting
 for its ACK, the house drops the command instead of sending it again: the gate may already have pulsed for it and
 lost the ACK to the reset, and its record of the last command went with it, so a resend would pulse twice. The house
 then resyncs the controller to the real gate. A HELLO from a new gate session only holds the command (log
@@ -54,7 +57,10 @@ anything new. A new command replaces a held one. A config write that reaches the
 pulses is taken at once but saved and ACKed only when the pulse is over (a save stops the loop for ~1 s, which would
 hold the relay on that much longer); the house's retries meanwhile are dropped quietly, not counted as replays.
 Every transmission listens before talking: responses go
-after a 25 ms turnaround, new frames after the response slot plus a random backoff.
+after a 25 ms turnaround, new frames after the response slot plus a random backoff, both counted from the end of
+the last frame on the air (any frame heard, also one with a bad CRC). Unreliable frames waiting for a clear channel
+are queued four deep with responses first; when the queue is full the newest new frame is dropped, or with only
+responses waiting the oldest response.
 
 ## Link supervision
 

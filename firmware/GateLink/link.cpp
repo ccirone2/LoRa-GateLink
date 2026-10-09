@@ -86,6 +86,7 @@ static uint8_t lastFrameLen;
 static uint8_t bootHello[HDR_LEN + 4 + TAG_LEN];  // debug: our first HELLO since boot (an old session's after a link restart)
 static uint8_t bootHelloLen;
 static uint32_t lastAirAt;  // end of our last TX or RX
+static uint32_t rxDoneSeen;  // radioRxDoneCount() when last looked at
 static bool txOnAir;  // our frame is being transmitted
 
 static void computeTag(const uint8_t *buf, size_t len, uint8_t *tag) {
@@ -200,10 +201,10 @@ void linkSend(uint8_t type, const uint8_t *payload, uint8_t len) {
     transmit(frame, n);  // the usual case: nothing queued, channel clear
     return;
   }
-  if (txqCount == TXQ_LEN) {  // full: the oldest is the stalest
-    txqHead = (txqHead + 1) % TXQ_LEN;
-    txqCount--;
-  }
+  // Full: drop the tail. Responses go in at the head and new frames at the tail, so that's the newest new frame
+  // (a HELLO or PING, sent again later anyway), or with only responses waiting the oldest response. Never the
+  // newest response, an ACK the peer is waiting for.
+  if (txqCount == TXQ_LEN) txqCount--;
   uint8_t slot;
   if (isResponse(type)) {  // ahead of any new frame waiting out its backoff
     txqHead = (txqHead + TXQ_LEN - 1) % TXQ_LEN;
@@ -251,6 +252,10 @@ static uint32_t retryDelay(const PendingSlot &s) {
 
 // The peer is verifying our session from the HELLO_ACK just built, and will accept only later seqs from us:
 // renumber everything still waiting (the HELLO_ACK, a response, is ahead of it all, see linkSend).
+// A renumbered slot no longer matches the peer's ACK memo (keyed by seq), so if the peer had already accepted it
+// (and its ACK was lost), the resend is accepted as new. That's safe only because every reliable message is
+// idempotent: STATUS and CFG_SET are, and the gate runs a CMD only once per cmd_id (lastCmdId). A new reliable
+// type must be too.
 static void reframePending(uint32_t now) {
   for (auto &s : slots) {
     if (!s.active) continue;
@@ -295,6 +300,7 @@ void linkBegin(RxHandler rx, AckHandler ack) {
   txqBusySince = txqBackoff = 0;
   txOnAir = false;  // radioBegin() abandoned any TX
   lastAirAt = millis();
+  rxDoneSeen = radioRxDoneCount();
   randomSeed(radioRandom32());
   drawSession();
   peerOk = false;
@@ -395,7 +401,6 @@ static bool acceptSeq(uint32_t seq) {
 }
 
 static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint32_t now) {
-  lastAirAt = millis();
   if (!cfg.key_set) return;
   if (len < HDR_LEN + TAG_LEN || len > MAX_FRAME) return;
   if (buf[0] != PROTO_VER || buf[2] != (uint8_t)cfg.net_id) return;
@@ -442,7 +447,11 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
     return;
   }
   if (type == MSG_HELLO_ACK) {
+    // The challenge stays current until answered, which while verified can be long after the last HELLO carrying
+    // it: an answer recorded back then (and kept from us) mustn't count later. Sending a HELLO already replaces a
+    // challenge over CHALLENGE_LIFE_MS old, and holding a command sends one at once; this covers the rest.
     if (plen < 4 || challenge == 0 || getU32(payload) != challenge) return;
+    if (elapsed(now, lastHelloAt, CHALLENGE_LIFE_MS)) return;
     challenge = 0;
     stats.lastRxAt = now;
     stats.lastRssi = rssi;
@@ -510,6 +519,13 @@ void linkPoll(uint32_t now) {
   float snr;
   txIdle();
   size_t n = radioReceive(buf, sizeof(buf), rssi, snr);
+  // Any frame heard is air activity, also one the radio drops (bad CRC, oversize) or one we ignore: it restarts the
+  // turnaround and the backoff (clearToSend), as an answer to it, or the frame it answered, may follow.
+  uint32_t done = radioRxDoneCount();
+  if (done != rxDoneSeen) {
+    rxDoneSeen = done;
+    lastAirAt = millis();
+  }
   if (sessionWeak && radioOk()) {
     // Nothing has been sent with the weak session (transmit() refuses): draw it again and renumber what waits.
     drawSession();

@@ -93,6 +93,35 @@ def test_power_sense_off_ignores_in3(rig):
     rig.wait_house(10, gate="closed", io__k1=False, io__k2=True)
 
 
+def test_house_holds_travel_for_gate_travel_timeout(rig):
+    """The house holds K1 through a travel for the gate's travel_timeout_s (in STATUS since 0.13.0), not its own:
+    with the gate at 35 s and the house at the profile's 15 s, K1 still holds "closed" at 20 s and lets go by ~35 s."""
+    rig.expect_commands(0)
+    gate_s = 35
+    house_s = PROFILE_COMMON["travel_timeout_s"]
+    try:
+        rig.gate.config_set(travel_timeout_s=gate_s, power_sense=0)
+        rig.wait_house(HEARTBEAT_S + 5, "house has the gate's travel_timeout_s", remote__travel_timeout_s=gate_s)
+        assert rig.house.config_get()["travel_timeout_s"] == house_s
+        m = rig.mark()
+        rig.sim.power(False)  # with power_sense off the gate reads between, as in a stuck travel
+        t0 = rig.wait_log("gate", "gate_state", a=GS["between"], since=m, timeout=5)["t"]
+        rig.wait_house(10, gate="between", io__k1=False, io__k2=False)
+        time.sleep(max(0.0, t0 + house_s + 5 - rig.mark()))
+        st = rig.house.status()
+        assert st["gate"] == "between" and not st["io"]["k1"], \
+            f"K1 let go after the house's own {house_s} s, not the gate's {gate_s} s: {st['io']}"
+        rig.wait_house(gate_s - house_s + 5, "K1 not-closed after the gate's travel timeout", io__k1=True)
+        assert rig.mark() - t0 >= gate_s - 1, f"K1 let go after {rig.mark() - t0:.1f} s, before the gate's {gate_s} s"
+        rig.sim.power(True)
+        rig.wait_gate("closed", timeout=5)
+    finally:
+        rig.sim.power(True)
+        rig.gate.config_set(travel_timeout_s=house_s, power_sense=1)
+    rig.wait_house(10, gate="closed", io__k1=False, io__k2=True)
+    rig.wait_ctrl(False, timeout=30)
+
+
 def test_linkloss_open_off_keeps_sensor(rig):
     """House linkloss_open 0: on link loss K2 stays as it was (gate closed: closed). Turning it back on during the
     outage fails K2 open at once."""

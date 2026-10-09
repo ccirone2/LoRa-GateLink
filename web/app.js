@@ -38,7 +38,7 @@ const HELP = {
   in4_invert: `IN4 (spare on both boards). ${NO_INVERT}`,
   power_sense: 'Gate: IN3 watches the AC-powered 24 V supply. Without AC, commands are refused; a limit that still reads (the opener runs on its battery) is trusted, and with none the gate reads “no power” instead of between. Turn off only if IN3 isn’t wired.',
   pulse_ms: 'Gate: how long the OPEN/CLOSE contact closes. Raise it if the opener misses short presses; keep it short, as other devices share these inputs.',
-  travel_timeout_s: 'Longest a full open or close should take. Set it a little above your gate’s real travel time; past it, the gate counts as stuck.',
+  travel_timeout_s: 'Longest a full open or close should take. Set it a little above your gate’s real travel time; past it, the gate counts as stuck. Set it on the gate (here or with a remote write): the house follows the gate’s value.',
   ctrl_sync: 'House: K1 drives the controller’s switch input so the controller always shows the real gate state. Turn off only if the controller has no switch input.',
   sync_window_ms: 'House: after K1 changes, controller changes count as its echo, not a command, for this long. Raise it if a slow controller’s echo turns into an unwanted gate command.',
   resync_ms: 'House: how long K1 is released when re-syncing a controller that is out of step. Raise it if the controller doesn’t notice a short blip.',

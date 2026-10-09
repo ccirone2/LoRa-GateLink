@@ -78,6 +78,7 @@ static void sendStatus(uint32_t now) {
   histNoiseTake(noise, noiseMax);
   p[ST_NOISE] = (uint8_t)noise;
   p[ST_NOISE_MAX] = (uint8_t)noiseMax;
+  putU16(p + ST_TRAVEL, cfg.travel_timeout_s);
   reportedHeartbeat = cfg.heartbeat_s;
   // Retries spread over the TTL: cap it so a lost status is retried within a fraction of a second even with a
   // long heartbeat (the next heartbeat supersedes it anyway).

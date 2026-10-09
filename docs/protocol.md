@@ -50,6 +50,10 @@ The STATUS payload layout is defined in `firmware/GateLink/roles.h` and parsed i
 layout is built in `role_gate.cpp` (`sendDiag`) and parsed in `console.cpp`. Message types and the other
 payloads (CMD, ACK, CFG_SET, PING/PONG, HELLO/HELLO_ACK, DIAG_REQ) are listed in `link.h`. A change to them needs both boards updated together; say so in the release notes.
 
+Since 0.13.0, STATUS is 26 bytes: it ends with the gate's `travel_timeout_s`, and the house holds K1 through a travel
+for that long instead of its own setting (only the gate's copy can be changed remotely, so the two could
+differ). An older gate's 24-byte STATUS still works; the house then uses its own value.
+
 Since 0.7.0, bit 6 of the STATUS inputs byte is set while the gate has no AC power (IN3 off with `power_sense` on);
 an older house ignores it. Since 0.4.0, STATUS is 24 bytes: the gate also reports its link retries, giveups and CRC errors (running totals,
 low 16 bits) and its noise floor since the previous STATUS (average and peak). The house uses them for the link

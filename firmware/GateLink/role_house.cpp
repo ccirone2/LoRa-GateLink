@@ -164,7 +164,18 @@ static void updateCtrlPower(uint32_t now) {
   }
 }
 
+// elapsed() is signed, so a time stamp left alone for 2^31 ms (~24.8 days) reads as in the future. Keep the ones
+// that can sit unused that long (no controller power changes, a dead link, a gate left between) from getting there.
+#define STAMP_CAP_MS 0x40000000UL
+
+static void capStamps(uint32_t now) {
+  if (elapsed(now, settleUntil, 0)) settleUntil = now;  // passed: no longer holds a sync window open
+  if (mismatchSince && elapsed(now, mismatchSince, STAMP_CAP_MS)) mismatchSince = (now - STAMP_CAP_MS) | 1;
+  if (elapsed(now, betweenSince, STAMP_CAP_MS)) betweenSince = now - STAMP_CAP_MS;
+}
+
 void houseLoop(uint32_t now) {
+  capStamps(now);
   bool up = appLinkUp(now);
   if (up != linkUp) {
     linkUp = up;

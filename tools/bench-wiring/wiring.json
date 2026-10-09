@@ -571,9 +571,9 @@
     },
     {
       "from": "uno:VIN",
-      "label": "separate 5 V supply",
+      "label": "separate 5.1 V supply",
       "status": "connected",
-      "signal": "Uno supply (separate 5 V)",
+      "signal": "Uno supply (separate 5.1 V)",
       "color": "red",
       "note": "Added 2026-10-09 so the relay coils (both modules, up to 7) aren't fed from the PC's USB alone. Before it, a third GateSim coil (AC with the gate open) often failed to pull in; after it, 25 of 25 AC returns with the gate open took ~0.24 s and test_ac_loss_mid_travel passed 6 of 6"
     },

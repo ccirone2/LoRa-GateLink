@@ -1,6 +1,6 @@
 {
   "title": "GateLink bench wiring",
-  "updated": "2026-10-07",
+  "updated": "2026-10-09",
   "statuses": {
     "connected": "In place and confirmed (by eye, a meter, or the e2e suite)",
     "unverified": "Believed to be in place (from the docs) but not confirmed yet",
@@ -130,6 +130,7 @@
       "name": "GateSim Arduino Uno",
       "note": "COM10 (CH340), tools/GateSim",
       "top": [
+        "VIN",
         "5 V",
         "GND"
       ],
@@ -195,7 +196,7 @@
     {
       "id": "sim_relays",
       "name": "GateSim relays (CH1–CH3)",
-      "note": "Active-HIGH (polarity high), coils from the Uno",
+      "note": "Active-HIGH (polarity high), coils from the Uno 5 V rail (separate supply on VIN)",
       "top": [
         "VCC",
         "GND"
@@ -569,6 +570,14 @@
       "signal": "Opto output ground"
     },
     {
+      "from": "uno:VIN",
+      "label": "separate 5 V supply",
+      "status": "connected",
+      "signal": "Uno supply (separate 5 V)",
+      "color": "red",
+      "note": "Added 2026-10-09 so the relay coils (both modules, up to 7) aren't fed from the PC's USB alone. Before it, a third GateSim coil (AC with the gate open) often failed to pull in; after it, 25 of 25 AC returns with the gate open took ~0.24 s and test_ac_loss_mid_travel passed 6 of 6"
+    },
+    {
       "from": "uno:5 V",
       "bus": "v5_uno",
       "status": "connected",
@@ -676,7 +685,7 @@
       "from": "rig:JD-VCC",
       "status": "connected",
       "signal": "Rig coil supply",
-      "note": "Coils from the Uno 5 V (confirmed 2026-10-06). With the GateSim relays that is up to 7 coils (~0.5 A) on the Uno's USB: fine for one or two at a time; suspect it if the Uno resets while switching",
+      "note": "Coils from the Uno 5 V rail (confirmed 2026-10-06), which has the separate 5 V supply on VIN since 2026-10-09. Up to 7 coils (~0.5 A) with the GateSim relays: if a coil fails to pull in or the Uno resets while switching, check that supply first",
       "color": "orange",
       "bus": "v5_uno"
     },

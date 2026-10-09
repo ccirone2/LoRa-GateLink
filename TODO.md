@@ -34,14 +34,6 @@ once its fix is merged and record it in the pull request.
   behind a power-blocked cable. Since 0.12.0 the suite sends every request over the UART while USB is down (CRC
   checked), so the power tests don't depend on USB coming back.
 
-- [ ] **GateSim AC relay doesn't pull in with the gate open.** With the simulated gate at its open limit, the
-  GateSim's relay CH1 (open limit) and CH2 (closed limit, NC: energized when not closed) are both on, and switching
-  CH3 (AC → gate IN3) on often fails: on 2026-10-08 the gate didn't see AC return within 10 s in 21 of 25 tries
-  (`ac off`/`ac on` with the gate open), on 0.12.5 and 0.13.0 alike, while with the gate closed (one coil on) 50 of
-  50 edges took under 1 s. IN3 then came on as soon as another relay dropped. It fails
-  `test_ac_loss_mid_travel` about one run in three. Likely the relay module's 5 V sagging (three coils, the third
-  pulling in): power the module's JD-VCC from its own 5 V supply, or check its feed from the Uno.
-
 - [ ] **SPI flash on both boards.** 0.5.0 keeps config in the on-board SPI flash. Check `info` `flash_id` and
   `cfg_store` `spi` on both bench boards and on any replacement board (an unexpected chip falls back to
   program flash, which uploads erase).

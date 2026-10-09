@@ -879,17 +879,44 @@ async function applyConfig() {
   const entries = Object.entries(changes);
   const applied = [], errors = [];
   let reboot = false;
+  let unsure = null; // params from the chunk that got no reply onwards: the board may or may not have them
   for (let i = 0; i < entries.length; i += CFG_CHUNK) {
     const chunk = Object.fromEntries(entries.slice(i, i + CFG_CHUNK));
-    const res = await request('config.set', { params: chunk });
+    let res;
+    try {
+      res = await request('config.set', { params: chunk });
+    } catch (e) {
+      unsure = { keys: entries.slice(i).map(([k]) => k), error: e.message };
+      break; // don't send more to a board that stopped answering
+    }
     applied.push(...(res.applied || []));
     errors.push(...(res.errors || []));
     // A request-level error (no per-param list) rejects the whole chunk.
     if (!res.ok && !res.errors?.length) errors.push(...Object.keys(chunk).map((k) => `${k} (${res.error || 'failed'})`));
     reboot ||= !!res.reboot_required;
   }
-  await loadConfig();
-  if (applied.length) markUnsaved(true);
+  // Show what the board has now, even after a failure part-way: earlier chunks are applied.
+  try {
+    await loadConfig();
+  } catch (e) {
+    markUnsaved(true);
+    return toast(`Applying stopped (${unsure?.error || e.message}) and the board didn't answer config.get: reconnect and check the settings.`, 'err');
+  }
+  const took = unsure ? unsure.keys.filter((k) => params[k] === changes[k]) : [];
+  if (applied.length || took.length) markUnsaved(true);
+  if (unsure) {
+    // Keep the edits the board doesn't have as unapplied edits, so Apply can send them again.
+    const left = unsure.keys.filter((k) => params[k] !== changes[k]);
+    for (const k of left) {
+      const el = $(`p_${k}`);
+      if (!el) continue;
+      setField(el, changes[k]);
+      el.dispatchEvent(new Event('input'));
+    }
+    const got = [...applied, ...took];
+    return toast(`Applying stopped: ${unsure.error}. ${got.length ? `The board has ${got.join(', ')}. ` : ''}`
+      + `${left.length ? `Not applied: ${left.join(', ')} (still in the form; Apply again).` : ''}`, 'err');
+  }
   const done = applied.length ? `Applied ${applied.join(', ')}. ${reboot ? 'Save and reboot for role change.' : 'Remember to Save.'}` : '';
   if (errors.length) toast(`Rejected: ${errors.join(', ')}. ${done}`, 'err');
   else toast(done || 'Nothing changed.');

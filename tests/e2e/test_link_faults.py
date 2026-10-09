@@ -151,8 +151,23 @@ def test_replayed_hello_holds_command(rig):
     rig.gate.request("debug.mute", ms=2500)  # the command's frames go unheard, so it stays pending
     rig.ctrl.on()
     rig.wait_log("house", "cmd_sent", a=ACT_OPEN, since=m, timeout=5)
-    rig.gate.request("debug.replay", hello=True)
-    held = rig.wait_log("house", "cmd_hold", a=1, since=m, timeout=3)
+    # debug.replay sends without listening first (not at all if the gate's radio is busy), so the HELLO can be lost,
+    # e.g. while the house sends a retry: replay it again until the house holds the command.
+    held = None
+    for _ in range(4):
+        res = rig.gate.request("debug.replay", hello=True)
+        if not res.get("sent", True):
+            rig.note("debug.replay: gate radio busy, not sent")
+        held = rig.timeline.first("house", "log", m, ev="cmd_hold", a=1)
+        if not held:
+            try:
+                held = rig.wait_log("house", "cmd_hold", a=1, since=m, timeout=1.5)
+            except AssertionError:
+                rig.note("replayed HELLO not answered with a hold: replaying again")
+                continue
+        break
+    if not held:
+        rig.fail("house never held the command after 4 replayed HELLOs", since=m)
     sent = rig.wait_log("house", "cmd_hold", a=0, since=m, timeout=CMD_TTL_S)
     rig.latency("replayed HELLO -> held command released", sent["t"] - held["t"])
     rig.wait_log("gate", "pulse", a=1, since=m, timeout=CMD_TTL_S)

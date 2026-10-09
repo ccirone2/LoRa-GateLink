@@ -294,7 +294,7 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     uint32_t ms = req["ms"] | 6000;
     appIdentify(ms > 60000 ? 60000 : ms);
   } else if (!strcmp(cmd, "debug.replay")) {
-    linkDebugReplay(req["hello"] | false);
+    res["sent"] = linkDebugReplay(req["hello"] | false);
   } else if (!strcmp(cmd, "debug.mute")) {
     uint32_t ms = req["ms"] | 0;
     linkDebugMute(ms > 60000 ? 60000 : ms);

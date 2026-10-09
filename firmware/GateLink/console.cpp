@@ -228,8 +228,10 @@ static void handle(JsonDocument &req, ConsolePort &from) {
       res["error"] = "key must be 32 hex chars";
     }
   } else if (!strcmp(cmd, "relay.test")) {
-    int32_t k = req["k"] | 0;  // read wide: as a uint8_t, k 257 would be K1
-    int32_t ms = req["ms"] | 500;
+    // Read wide: as a uint8_t, k 257 would be K1. And `| default` stands in for a value that doesn't fit, so
+    // ms 2^32 + 500 would be the default 500: one given must be an int32.
+    int32_t k = req["k"] | 0;
+    int32_t ms = req["ms"].isNull() ? 500 : req["ms"].is<int32_t>() ? req["ms"].as<int32_t>() : -1;
     if ((k != 1 && k != 2) || ms < 50 || ms > 5000 || activeRole == ROLE_UNSET) {
       res["ok"] = false;
       res["error"] = "k must be 1|2, ms 50..5000, role set";

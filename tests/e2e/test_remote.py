@@ -188,8 +188,9 @@ def test_console_line_limit(bench):
 
 
 def test_relay_test_out_of_range_is_refused(rig):
-    """relay.test checks its arguments before narrowing them: k 257 or -255 (K1 as a byte) and a negative ms are
-    refused, and nothing pulses (up to 0.13.4, k 257 pulsed K1)."""
+    """relay.test checks its arguments before narrowing them: k 257 or -255 (K1 as a byte), a negative ms and one
+    past int32 (which ArduinoJson's `| default` turned into the default 500) are refused, and nothing pulses (up to
+    0.13.4, k 257 and ms 2^32 + 500 pulsed K1)."""
     m = rig.mark()
     accepted = []
     for kw in ({"k": 257}, {"k": 258}, {"k": -255}, {"k": 1, "ms": -1}, {"k": 1, "ms": 2**32 + 500}):

@@ -1,0 +1,68 @@
+{
+  "_comment": "Console replies shaped as the firmware's (config.cpp PARAMS/configDefaults, app.cpp appFillStatus, role_*.cpp *Status). The fake board in fake-serial.js serves them.",
+  "meta": [
+    { "name": "role", "id": 1, "min": 0, "max": 2, "radio": false, "remote": false, "reboot": true },
+    { "name": "net_id", "id": 2, "min": 0, "max": 255, "radio": false, "remote": false, "reboot": false },
+    { "name": "freq_hz", "id": 3, "min": 862000000, "max": 928000000, "radio": true, "remote": false, "reboot": false },
+    { "name": "sf", "id": 4, "min": 7, "max": 12, "radio": true, "remote": false, "reboot": false },
+    { "name": "bw_hz", "id": 5, "min": 125000, "max": 500000, "radio": true, "remote": false, "reboot": false },
+    { "name": "cr", "id": 6, "min": 5, "max": 8, "radio": true, "remote": false, "reboot": false },
+    { "name": "tx_power", "id": 7, "min": 2, "max": 20, "radio": true, "remote": false, "reboot": false },
+    { "name": "sync_word", "id": 8, "min": 0, "max": 255, "radio": true, "remote": false, "reboot": false },
+    { "name": "retries", "id": 9, "min": 0, "max": 10, "radio": false, "remote": true, "reboot": false },
+    { "name": "heartbeat_s", "id": 10, "min": 5, "max": 3600, "radio": false, "remote": true, "reboot": false },
+    { "name": "link_timeout_s", "id": 11, "min": 15, "max": 10800, "radio": false, "remote": true, "reboot": false },
+    { "name": "cmd_ttl_s", "id": 12, "min": 2, "max": 120, "radio": false, "remote": false, "reboot": false },
+    { "name": "debounce_ms", "id": 13, "min": 10, "max": 1000, "radio": false, "remote": true, "reboot": false },
+    { "name": "in1_invert", "id": 14, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "in2_invert", "id": 15, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "pulse_ms", "id": 16, "min": 100, "max": 5000, "radio": false, "remote": true, "reboot": false },
+    { "name": "travel_timeout_s", "id": 17, "min": 5, "max": 300, "radio": false, "remote": true, "reboot": false },
+    { "name": "ctrl_sync", "id": 18, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "sync_window_ms", "id": 19, "min": 500, "max": 10000, "radio": false, "remote": false, "reboot": false },
+    { "name": "resync_ms", "id": 20, "min": 200, "max": 5000, "radio": false, "remote": false, "reboot": false },
+    { "name": "mismatch_timeout_s", "id": 21, "min": 10, "max": 600, "radio": false, "remote": false, "reboot": false },
+    { "name": "sensor_invert", "id": 22, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "linkloss_open", "id": 23, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "in3_invert", "id": 24, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "in4_invert", "id": 25, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "power_sense", "id": 26, "min": 0, "max": 1, "radio": false, "remote": true, "reboot": false },
+    { "name": "ctrl_power_sense", "id": 27, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "ctrl_confirm_ms", "id": 28, "min": 0, "max": 5000, "radio": false, "remote": false, "reboot": false },
+    { "name": "ctrl_settle_ms", "id": 29, "min": 0, "max": 60000, "radio": false, "remote": false, "reboot": false },
+    { "name": "ctrl_power_pmic", "id": 31, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "uart_console", "id": 30, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false }
+  ],
+  "params": {
+    "role": 0, "net_id": 66, "freq_hz": 915000000, "sf": 9, "bw_hz": 500000, "cr": 5, "tx_power": 17, "sync_word": 18,
+    "retries": 5, "heartbeat_s": 30, "link_timeout_s": 100, "cmd_ttl_s": 10, "debounce_ms": 50, "in1_invert": 0,
+    "in2_invert": 0, "pulse_ms": 500, "travel_timeout_s": 60, "ctrl_sync": 1, "sync_window_ms": 3000, "resync_ms": 1000,
+    "mismatch_timeout_s": 75, "sensor_invert": 0, "linkloss_open": 1, "in3_invert": 0, "in4_invert": 0, "power_sense": 1,
+    "ctrl_power_sense": 1, "ctrl_confirm_ms": 500, "ctrl_settle_ms": 10000, "ctrl_power_pmic": 1, "uart_console": 0
+  },
+  "status_common": {
+    "fw": "0.13.6", "reboot_pending": false, "uptime_ms": 3723000, "radio_ok": true, "radio_faults": 0,
+    "reset_cause": "power_on", "supply": true, "cfg_loaded": true, "cfg_store": "spi", "key_set": true, "free_ram": 9120,
+    "usb_cut": 0, "loop_max_us": 1350,
+    "link": { "verified": true, "age_ms": 1200, "rssi": -61, "snr": 9.5, "fei": -1450, "tx": 140, "rx": 152, "retries": 1,
+      "giveups": 0, "mac_fail": 0, "replay": 0, "sessions": 1, "lbt_defers": 2, "lbt_forced": 0, "crc_err": 0, "noise": -118 }
+  },
+  "status_house": {
+    "io": { "in1": false, "in2": true, "in3": false, "in4": false, "k1": false, "k2": true },
+    "gate": "closed", "cause": "none", "last_result": "none", "target": "", "link_up": true, "link_timeout_eff_s": 100,
+    "armed": true, "ctrl": false, "ctrl_power": true, "sync_window": false, "resyncing": false, "cmd_id": 4711,
+    "cmd_pending": false, "cmd_result": -1,
+    "remote": { "uptime_s": 3600, "rssi": -60, "snr": 9, "heartbeat_s": 30, "travel_timeout_s": 60, "open_limit": false,
+      "close_limit": true, "k1": false, "k2": false, "in3": true, "in4": false, "ac_power": true, "retries": 0, "giveups": 0,
+      "crc_err": 0, "noise": -117 }
+  },
+  "status_gate": {
+    "io": { "in1": false, "in2": true, "in3": true, "in4": false, "k1": false, "k2": false },
+    "gate": "closed", "cause": "none", "last_result": "none", "target": "", "last_cmd_id": 4710, "power_sense": true,
+    "ac_power": true, "settling": false
+  },
+  "hist_fields": ["idx", "tx", "rx", "retries", "giveups", "crc_err", "mac_fail", "lbt_defers", "lbt_forced", "sessions",
+    "radio_faults", "down_s", "rssi_min", "rssi_avg", "snr_min", "snr_avg", "noise_avg", "noise_max", "peer_n",
+    "peer_rssi_min", "peer_rssi_avg", "peer_snr_min", "peer_snr_avg", "peer_noise_avg", "peer_noise_max",
+    "peer_retries", "peer_giveups", "peer_crc_err"]
+}

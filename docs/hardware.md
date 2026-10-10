@@ -1,7 +1,7 @@
 # Hardware and wiring
 
 Wiring and device settings for both boards. The web console's **Install** tab shows the same wiring per board
-(diagram, terminal table and notes); it is driven by the `WIRING` table in `web/app.js`, so keep that, this page
+(diagram, terminal table and notes); it is driven by the `WIRING` table in `web/js/wiring.js`, so keep that, this page
 and `firmware/GateLink/pins.h` in sync.
 
 ## Board and pins

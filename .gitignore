@@ -14,3 +14,8 @@ web/firmware/
 
 # Local settings (Home Assistant address etc.); never commit
 .env
+
+# Web console tooling (npm install)
+node_modules/
+tests/web/test-results/
+tests/web/report/

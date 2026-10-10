@@ -1,4 +1,4 @@
-"""Client for a GateLink board's JSON console over USB (the same contract web/app.js uses), plus an optional
+"""Client for a GateLink board's JSON console over USB (the same contract the web console uses), plus an optional
 read-only tap on its UART console (`uart_console`, a USB-to-UART adapter on its Serial1 pins).
 
 Requests go over USB while it's up. The adapter keeps its port while the board is unpowered, so the tap records the

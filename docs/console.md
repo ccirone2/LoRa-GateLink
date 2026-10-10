@@ -52,7 +52,7 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 | `config.save` | | Writes the running config to flash |
 | `config.reset` | | Running config back to defaults at once (key cleared, so the link stops) and the saved config and key erased; `reboot_required` |
 | `key.set` | `key`: 32 hex chars | Sets and saves only the key; restarts the radio and sessions. The key can't be read back |
-| `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command, except while the opener is unpowered). Needs a role |
+| `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command, unless the gate is already at that limit or the opener is unpowered). Needs a role |
 | `radio.ping` | | Sends a PING; a `pong` event follows if the peer answers. Needs a role, a key and a working radio |
 | `remote.diag` | | House only. Requests the gate's diagnostics; a `remote_diag` event follows |
 | `remote.set` | `name`, `value` (int) | House only, remote-writable params only. `busy` while one is pending; a `remote_set` event follows |
@@ -65,9 +65,9 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 | `debug.mute` | `ms` (max 60000; 0 stops) | The link ignores received frames for `ms`, as if the receiver had gone deaf (it still transmits) |
 | `debug.reboot_after_cmd` | | Gate only, one-shot: the next command that pulses resets the gate right after the pulse, without ACKing it (a power cut or crash at the worst moment) |
 
-Settings are listed in the `PARAMS[]` table in `firmware/GateLink/config.cpp`; the web console's Config tab
-shows each with help text. Saved config and the key live in the board's SPI flash chip (`cfg_store` `spi`) and
-survive firmware uploads; they're stored per param id, so a newer firmware keeps every setting it still knows
+Settings are listed in [config.md](config.md) (range, default, when a change applies, what it does), generated
+from the `PARAMS[]` table in `firmware/GateLink/config.cpp` and the Config tab's help text. Saved config and the
+key live in the board's SPI flash chip (`cfg_store` `spi`) and survive firmware uploads; they're stored per param id, so a newer firmware keeps every setting it still knows
 (the `cfg` log event counts the ones it didn't accept). Settings an older firmware doesn't know are written back
 by its saves, so after a downgrade and back they're still there; a value out of the older firmware's range is
 replaced by its own. If the chip doesn't answer, config falls back to program flash (`cfg_store` `internal`),
@@ -134,7 +134,7 @@ Each row lists the values in `fields` order. Counters are what happened during t
 | `peer_noise_avg`, `peer_noise_max` | House: the gate's noise floor |
 | `peer_retries`, `peer_giveups`, `peer_crc_err` | House: the gate's counters, from its STATUS (its retries are lost STATUS frames or their ACKs) |
 
-Averages are rounded to 0.25 dB. On the gate the `peer_` columns stay empty.
+Averages are rounded to 0.25 dB. On the gate the `peer_` levels stay null and its `peer_` counts 0.
 
 ## Events
 

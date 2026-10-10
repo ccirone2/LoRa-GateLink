@@ -44,8 +44,9 @@ siren sensor.
 ## Documentation
 
 - [docs/hardware.md](docs/hardware.md) — wiring and device settings for each board, power and antenna
-- [docs/protocol.md](docs/protocol.md) — radio defaults, framing, sessions and replay protection
+- [docs/protocol.md](docs/protocol.md) — radio defaults, framing, sessions and replay protection, wire formats
 - [docs/console.md](docs/console.md) — USB JSON console: commands, status fields, events, log codes
+- [docs/config.md](docs/config.md) — every setting: range, default, when a change applies, what it does
 - [docs/bench-testing.md](docs/bench-testing.md) — bench rules and the test checklist
 - [tests/e2e/README.md](tests/e2e/README.md) — the end-to-end suite
 - [tools/GateSim/README.md](tools/GateSim/README.md) — the opener simulator

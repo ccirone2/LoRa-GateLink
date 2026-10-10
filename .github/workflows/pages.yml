@@ -13,10 +13,6 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
   # A CI run on a commit main has since moved past deploys nothing: the run on the newer commit will.
   latest:
@@ -45,9 +41,14 @@ jobs:
           fi
           echo "deploy=true" >> "$GITHUB_OUTPUT"
 
+  # Concurrency on this job, not the workflow: every CI run (pull requests too) starts this workflow, and those
+  # skip at `latest`; at workflow level they would cancel a deploy in progress.
   deploy:
     needs: latest
     if: needs.latest.outputs.deploy == 'true'
+    concurrency:
+      group: pages
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:

@@ -52,6 +52,7 @@ siren sensor.
 - [tools/bench-wiring/README.md](tools/bench-wiring/README.md) — the bench wiring diagram
 - [docs/development.md](docs/development.md) — toolchain, workflow, versioning and releases
 - [docs/release-criteria.md](docs/release-criteria.md) — what a release must pass on the bench, and its evidence
+- [docs/agent-tooling.md](docs/agent-tooling.md) — Claude Code hooks, skills and nightly routines
 
 ## Project tracking
 

@@ -53,12 +53,13 @@ The repository is public: every attacker knows the frame format, the defaults an
 
 - **No forged frames.** Every frame carries HMAC-SHA256 truncated to 64 bits, checked (in constant time) before any
   payload is parsed. Without the key no command, state or config write can be forged (`frame-forgery`: low).
-- **No replay of frames that were already delivered.** Each boot draws a fresh random session id and starting
-  seq. A peer's session counts only once it has echoed a fresh challenge, and from then on only seqs above that,
+- **No replay of frames that were already delivered.** Each boot draws a fresh session id (unique by construction
+  from the boot counter while it works, 0.13.9) and a random starting seq. A peer's session counts only once it has echoed a fresh challenge, and from then on only seqs above that,
   each once (32-frame window). Delivered frames can't be replayed, within a session or across reboots
   (`recorded-frame-replay`: low).
-  - The exceptions are frames that were **withheld** (jammed at the receiver and recorded) and replayed later, and a
-    **library of recorded challenge answers**. Both are open; see below.
+  - The exceptions are commands that were **withheld** (jammed at the gate and recorded) and replayed later, and a
+    **library of recorded challenge answers**. Both are open; see below. A withheld gate STATUS no longer counts
+    (0.13.9).
 - **No duplicate pulses** for one command, whatever is lost or restarted. The gate de-duplicates by command id, and
   a command pending across a gate restart is dropped, not resent.
 - **Fail-safe outputs.** Relays drop on any reset. The gate's inputs are pulled down, so a dead opto or cut wire
@@ -83,15 +84,15 @@ Severity is after verification: **H**igh, **M**edium, **L**ow. Status says where
 
 | Id | Threat | Sev | Status |
 |---|---|---|---|
-| `hello-answer-stamp-deadlock` | After ~24.9 days of steady link, a peer restart's HELLOs were ignored for up to another ~24.9 days (the HELLO answer stamps read as recent under the signed `elapsed()`): link down, sensor open | H | **Fixed** in 0.13.7, with host tests past 25 days (link PR) |
+| `hello-answer-stamp-deadlock` | After ~24.9 days of steady link, a peer restart's HELLOs were ignored for up to another ~24.9 days (the HELLO answer stamps read as recent under the signed `elapsed()`): link down, sensor open | H | **Fixed** in 0.13.7, with host tests past 25 days (#84) |
 | `backoff-starvation-by-frequent-frames` | Any LoRa frame heard every ~100 ms held all new frames off until their TTL: a cheap, silent DoS | M | **Fixed** in 0.13.7 (link PR) |
 | `jam-and-delay-replay-window` / `withheld-command-fires-late` | A command jammed at the gate and recorded can be replayed later, while still inside the 32-frame window (about 16 minutes of normal traffic): the gate opens at a time the attacker picks, after the house had dropped the command. The receiver can't tell a delayed frame from a retry | H | Open: protocol hardening (CMD carries freshness; ROADMAP) |
-| `withheld-gate-frames-replayed` | The same, gate to house: a withheld "closed" STATUS replayed later keeps the sensor closed and the link up while the gate is open | M | Open: house-only fix (accept STATUS only in seq order); TODO |
+| `withheld-gate-frames-replayed` | The same, gate to house: a withheld "closed" STATUS replayed later keeps the sensor closed and the link up while the gate is open | M | **Fixed** in 0.13.9 (#86): the house takes a STATUS only in seq order and its link stays up on STATUS alone. A relay that delays every STATUS, in order, can still hold the house behind by up to its link timeout (`link-loss-concealment-window`) |
 | `challenge-library-session-rebind` | The HELLO challenge is 32 bits and a HELLO_ACK isn't bound to the challenger's session, so answers farmed over weeks can re-verify a superseded peer session, whose recorded commands then replay | M | Open: protocol hardening (128-bit challenge bound to the session, no re-verifying an old session; ROADMAP) |
 | `link-loss-concealment-window` | Jamming (or cutting the gate board's power) during an open–pass–close cycle hides it: the sensor stays closed until the link timeout, 100 s by default | H | Open: a "moved since you last heard" latch in STATUS, reported late rather than never (ROADMAP, with fault reporting) |
 | `jamming-hides-state-until-link-timeout` | Jamming freezes the reported state for up to the link timeout and drops commands | H | Accepted, bounded by the timeout. Shorten `heartbeat_s`/`link_timeout_s` at the install if the window matters; report link loss separately (ROADMAP) |
 | `cleartext-traffic-analysis` | Listeners learn gate state, AC loss, command times, reboots, firmware version | M | Accepted for now. Payload encryption (encrypt-then-MAC, per-direction keys) is on the ROADMAP with the protocol hardening |
-| `session-id-repeat` | A session id repeating under one key (birthday bound, flash replaced or rolled back) lets old frames replay | M | Partly open: unique-by-construction ids from the boot counter (PATCH) and the boot counter's torn-slot bug (TODO); per-session MAC keys with the protocol hardening (ROADMAP) |
+| `session-id-repeat` | A session id repeating under one key (birthday bound, flash replaced or rolled back) lets old frames replay | M | Partly: unique by construction in 0.13.9 (#86), a keyed permutation of the boot count, the draws this boot and 8 random bits, so a rolled-back count repeats an id 1 time in 256. Open: per-session MAC keys with the protocol hardening (ROADMAP) |
 | `replayed-hello-side-effects` | Replayed HELLOs can delay a held command until it expires | L | Accepted (availability only; the house resyncs the switch) |
 | `replay-flood-erases-evidence-and-reflects` | Floods overwrite the 64-entry log; memo'd seqs are re-ACKed without a limit | L | Open: coalesce flood events, persistent history (ROADMAP) |
 | `pre-auth-parsing-surface` | Malformed frames reaching parsers | L | Mitigated: MAC before parse; fuzzed (`tests/native/fuzz`) |
@@ -133,8 +134,8 @@ removes this on this hardware; the controls are physical security, tamper detect
 | `plaintext-key-copies` | Copies in `~/.gatelink_key`, environment variables, the clipboard | M | **Fixed** for backups: one encrypted backup format (GLKB v1) in the page and the tools; the bench file stays a bench convenience |
 | `key-lifecycle-unverifiable` | No way to tell which key a board holds; rotation and restore fail silently | M | **Fixed**: boards report a key id (a 32-bit HMAC of the key) |
 | `keygen-in-hosted-page` | Keys generated in a page that can also flash firmware | H | Mitigated: generate field keys offline (`tools/gatelink.py key gen`), or from a local checkout |
-| `old-key-in-older-record` | After key.set the old key stays in the older flash sector until the next save | L | Open (TODO) |
-| `boot-counter-torn-slot` | A torn boot-counter slot sticks the counter at 1 (found by fuzzing) | L | Open (TODO) |
+| `old-key-in-older-record` | After key.set the old key stayed in the older flash sector until the next save | L | **Fixed** in 0.13.9 (#86): zeroed once the new record verifies |
+| `boot-counter-torn-slot` | A torn boot-counter slot stuck the counter at 1 (found by fuzzing) | L | **Fixed** in 0.13.9 (#86): two-step slot writes; a garbled read gives no count |
 | `rng-health`, `crypto-wearout` | Entropy health; years under one key | L | Accepted; rotation is driven by events, not age |
 
 ### Supply chain and the web console

@@ -18,14 +18,6 @@ once its fix is merged and record it in the pull request.
   resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
 
-- [ ] **A withheld STATUS can be delivered late** (threat model `withheld-gate-frames-replayed`). The house takes any
-  STATUS inside the replay window, so a "closed" jammed at the house, recorded and played back later keeps the sensor
-  closed and the link up. House-only fix: apply a STATUS only if its seq is above the last applied one, and refresh
-  link liveness only from such a STATUS. Host-sim test: withhold with `World::drop`, replay with `inject`.
-- [ ] **Session ids unique by construction** (threat model `session-id-repeat`). While the boot counter works, derive
-  the session from it (count and restarts this boot) instead of only random, so repeats can't happen by chance.
-- [ ] **The old key stays in the older config sector after key.set** (threat model `old-key-in-older-record`). Rewrite
-  or erase the other sector once the new record verifies; test that no sector still holds the old key.
 
 ## Bench and field tests
 

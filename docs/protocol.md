@@ -52,9 +52,9 @@ verified session and one from all other sessions, so replayed HELLOs can't keep 
 
 The frame payloads aren't encrypted: someone listening learns the message types, the gate state and when mains
 power is lost. They can't forge frames, or replay frames that were delivered. Two gaps remain, both on the
-[threat model](threat-model.md)'s open list: a frame **withheld** from its receiver (jammed there and recorded) can
+[threat model](threat-model.md)'s open list: a command **withheld** from the gate (jammed there and recorded) can
 still be delivered later while inside the replay window, and a library of recorded challenge answers could in time
-re-verify an old session.
+re-verify an old session. (A withheld STATUS can't: the house takes STATUS only in seq order, from 0.13.9.)
 
 ## Reliable delivery
 

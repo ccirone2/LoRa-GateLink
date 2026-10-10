@@ -1,0 +1,4 @@
+{"id":9,"cmd":"key.set","key":"00112233445566778899aabbccddeeff"}
+{"id":9,"cmd":"key.set","key":"00112233445566778899aabbccddeeff","crc":"76b3b743"}
+{"id":10,"cmd":"key.set","key":"xyz"}
+{"id":10,"cmd":"key.set","key":"xyz","crc":"c2e4fc41"}

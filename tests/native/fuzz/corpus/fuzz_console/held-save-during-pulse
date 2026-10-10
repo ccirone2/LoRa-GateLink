@@ -1,0 +1,3 @@
+{"id":31,"cmd":"relay.test","k":2,"ms":1500}
+{"id":32,"cmd":"config.save"}
+{"id":33,"cmd":"status"}

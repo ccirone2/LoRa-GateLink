@@ -2,6 +2,7 @@
 #   make LIBS=<Arduino libraries directory>     (or CRYPTO=<Crypto/src> JSON=<ArduinoJson/src>)
 # tests:    link.cpp and config.cpp on their own (test_link.cpp, test_config.cpp)
 # systests: both boards' whole firmware in the simulated site (world.h; test_system*.cpp)
+# fuzz:     the fuzz corpus replayed as a regression test (g++; fuzzing itself needs clang, see fuzz/README.md)
 FW := ../../firmware/GateLink
 LIBS ?= $(HOME)/Arduino/libraries
 CRYPTO ?= $(LIBS)/Crypto/src
@@ -39,8 +40,8 @@ JOBS ?= $(shell nproc 2>/dev/null || echo 1)
 NORAND := $(shell setarch $$(uname -m) -R true 2>/dev/null && echo setarch $$(uname -m) -R)
 HEADERS := $(wildcard *.h stubs/*.h $(FW)/*.h)
 
-.PHONY: run run-tests run-systests clean
-run: run-tests run-systests
+.PHONY: run run-tests run-systests run-fuzz-replay clean
+run: run-tests run-systests run-fuzz-replay
 run-tests: $(BUILD)/tests
 	$(NORAND) $(BUILD)/tests
 # The system tests run in JOBS processes, each a shard of them (--shard=I/N); their outputs are shown in turn.
@@ -50,6 +51,9 @@ run-systests: $(BUILD)/systests $(BUILD)/node.so
 	done; for p in $$pids; do wait $$p || rc=1; done; \
 	cat $(BUILD)/systests.*.out; grep -h 'tests, ' $(BUILD)/systests.*.out | \
 	  awk '{t += $$1; f += $$3} END {print "systests: " t " tests, " f " failed in " NR " shards"}'; exit $$rc
+# Every input in fuzz/corpus must run clean, and every reproducer in fuzz/crashes must still crash.
+run-fuzz-replay:
+	$(MAKE) -f fuzz/Makefile CXX="$(CXX)" CRYPTO="$(CRYPTO)" JSON="$(JSON)" BUILD="$(BUILD)" replay
 
 $(BUILD)/tests: $(OBJS) $(LIB_OBJS)
 	$(CXX) $(FLAGS) -o $@ $^

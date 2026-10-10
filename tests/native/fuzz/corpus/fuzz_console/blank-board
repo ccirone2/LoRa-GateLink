@@ -1,0 +1,4 @@
+{"id":43,"cmd":"relay.test","k":1}
+{"id":44,"cmd":"radio.ping"}
+{"id":45,"cmd":"config.set","params":{"role":2}}
+{"id":46,"cmd":"status"}

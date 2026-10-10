@@ -1,0 +1,4 @@
+{"id":26,"cmd":"debug.replay"}
+{"id":26,"cmd":"debug.replay","crc":"c1795c2d"}
+{"id":27,"cmd":"debug.replay","hello":true}
+{"id":27,"cmd":"debug.replay","hello":true,"crc":"0f2a6dc6"}

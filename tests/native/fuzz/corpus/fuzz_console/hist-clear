@@ -1,0 +1,4 @@
+{"id":21,"cmd":"hist.clear","period_s":60}
+{"id":21,"cmd":"hist.clear","period_s":60,"crc":"0ec5bbc6"}
+{"id":22,"cmd":"hist.clear"}
+{"id":22,"cmd":"hist.clear","crc":"592abb39"}

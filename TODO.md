@@ -55,12 +55,36 @@ once its fix is merged and record it in the pull request.
   limit is reported with cause `lora`.
 - [ ] **A second pulse of a relay already pulsing restarts its timer** (`gate_relays_second_open_cmd_mid_pulse_keeps_pulse_ms`,
   `gate_relays_second_relay_test_mid_pulse_keeps_its_ms`; XFAIL). Two OPENs ~200 ms apart hold K1 for 738 ms. Don't
-  restart a running pulse (ACK the command as done; refuse the test `busy`).
-- [ ] **A radio restart can run during a pulse** (`gate_relays_radio_reinit_waits_for_the_pulse`; XFAIL). The 5 s retry
-  in `radioReceive` and `fault()` re-initialise the radio without checking `appRelaysPulsing()`; `LoRa.begin()` holds the
-  loop ~470 ms, stretching the pulse.
+  restart a running pulse (ACK the command as done; refuse the test `busy`). The fuzzer measures a re-pulsed relay from its latest pulse until then
+  (`GATELINK_FUZZ_STRICT_PULSE=1` for the strict check).
 - [ ] **HELLO answer stamps go stale after 24.9 days** (`robustness_quiet_26_days_then_*_reboot_relinks`; XFAIL): fixed
   on the link-robustness branch (0.13.7), which flips these tests.
+- [ ] **The boot counter sticks at 1 once a slot reads 0xFFFFFFFD or more.** `configCountBoot` returns the largest
+  slot value + 1 and maps 0xFFFFFFFF to 1, but the large slot stays (the sector holding the largest value is never
+  erased), so every later boot counts 1 again. A slot can read that high if programming it was cut short (a cut
+  slot "can only read high": a value like 0xFFFFFF23 reaches the wrap within ~220 boots) or a read was garbled.
+  The count seeds the session id, which must never repeat under one key; `boot_count` in `info` shows it. Found
+  by `fuzz_config`; reproducers in `tests/native/fuzz/crashes/fuzz_config/`: `boot-counter-wraps-to-1` (a slot of
+  0xFFFFFFFD) and `boot-counter-high-slot-then-1` (CI's first run: a high torn slot, 3392943128, then 1); they must keep
+  crashing until fixed, then move it to the corpus and drop the tolerance in `fuzz_config.cpp`).
+- [ ] **A console `reboot` during a gate relay pulse holds the relay up to 100 ms long.** `reboot` flushes its
+  reply and `delay(100)`s before `boardReset()`, and isn't held while a relay pulses as `config.save` and the
+  other loop-blocking commands are, so a pulse ending in that 100 ms runs on until the reset (K1 575 ms for a
+  500 ms `relay.test`). Hold `reboot` too (`blocksLoop`), or drop the relays before the wait. Found by
+  `fuzz_frames`; reproducer `tests/native/fuzz/crashes/fuzz_frames/console-reboot-during-pulse` (tolerance in
+  `boardReset()`, `tests/native/fuzz/hal.cpp`).
+- [ ] **A radio restart during a gate relay pulse holds the relay up to ~0.45 s long.** `radio.cpp` re-initialises
+  the radio whenever a fault or the 5 s retry calls for it, even mid-pulse, and `LoRa.begin()` blocks the loop
+  ~450 ms (200 + 200 + 50 ms of reset delays), against the rule that nothing stopping the loop runs during a pulse.
+  The likeliest trigger is the relay coil dipping the supply as the gate sends the command's ACK. The same stall in
+  the 100 ms interlock gap shortens or skips the next pulse. Defer the restart while `appRelaysPulsing()`. Found by
+  `fuzz_frames`; reproducer `tests/native/fuzz/crashes/fuzz_frames/radio-fault-during-pulse`; host test
+  `gate_relays_radio_reinit_waits_for_the_pulse` (XFAIL).
+- [ ] **Decide: a fifth remote config write during one pulse is saved at once.** The gate queues `CFG_SET`s that
+  arrive during a pulse (4 deep) and saves a fifth straight away, holding the relay ~0.5 s long (K1 1,372 ms for a
+  1,000 ms test with real timings). A real house sends one at a time, but its resends get new sequence numbers
+  whenever replayed HELLOs at the house renumber them, so in principle they can queue up. Refuse it `busy`
+  instead of saving. The fuzzer would flag it; `fuzz_frames` hasn't reached it yet.
 
 ## Bench and field tests
 

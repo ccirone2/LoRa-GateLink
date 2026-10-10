@@ -89,13 +89,15 @@ def make(build, fw, libs, targets, timeout=1800):
 
 
 def run_tests(build, fw, libs, timeout, names=None, jobs=None):
-    """With `names`, those system tests; else both programs, the system tests in parallel shards (`make run`).
-    Returns (failed test names, crashed: a program that died without its summary line)."""
+    """With `names`, those system tests; else both programs, the system tests in parallel shards (`make run-tests
+    run-systests`: not the fuzz replay, which builds the unmutated firmware). Returns (failed test names, crashed: a
+    program that died without its summary line)."""
     if names:
         norand = ["setarch", platform.machine(), "-R"] if shutil.which("setarch") else []
         cmd = [*norand, str(Path(build) / "systests"), "--exact", *names]
     else:
-        cmd = ["make", "-s", "-C", str(NATIVE), f"BUILD={build}", f"FW={fw}", f"LIBS={libs}", "run"]
+        cmd = ["make", "-s", "-C", str(NATIVE), f"BUILD={build}", f"FW={fw}", f"LIBS={libs}", "run-tests",
+               "run-systests"]
         if jobs:
             cmd.append(f"JOBS={jobs}")
     try:

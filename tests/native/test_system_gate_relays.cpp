@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <exception>
+#include <set>
 #include "crc32.h"
 
 namespace {
@@ -449,12 +450,16 @@ TEST(gate_relays_renumbered_resend_of_a_run_command_pulses_once) {
 }
 
 // [pulse-only]
-XFAIL_TEST(gate_relays_second_open_cmd_mid_pulse_keeps_pulse_ms,
-           "an OPEN arriving while K1 still pulses for the previous OPEN restarts K1's timer (Relay::pulse on a closed "
-           "relay): the opener's OPEN input stays closed for the gap plus pulse_ms") {
+TEST(gate_relays_second_open_cmd_mid_pulse_keeps_pulse_ms) {
+  // A running pulse is never restarted: an OPEN arriving while K1 still pulses for the previous OPEN is the same
+  // press, ACKed as done (restarting K1's timer held the opener's OPEN input for the gap plus pulse_ms). pulse_ms
+  // 1500, so the second OPEN lands inside the pulse even when its first send collides (with the gate's STATUS, say)
+  // and the resend ~0.3 s later is what gets through.
   World w;
   Guard g{ w };
-  w.commission();
+  w.commission([](Board &b) {
+    if (b.idx == 1) CHECK(b.set("pulse_ms", 1500));
+  });
   Rec r(w);
   // The switch goes on, off and on again inside ctrl_confirm_ms: the CLOSE never goes, two OPENs do.
   w.user(true);
@@ -473,15 +478,22 @@ XFAIL_TEST(gate_relays_second_open_cmd_mid_pulse_keeps_pulse_ms,
   CHECK(r.until([&] { return w.opener.atOpen(); }, 20000));
   r.run(2000);
   CHECK_EQ(r.count(2), 0);
-  for (const Pulse &p : r.of(1)) CHECK_IN(p.len(), 1, 501);
-  for (auto &pr : w.opener.presses[0]) CHECK_IN(pr.second, 1, 501);
+  CHECK_EQ(r.count(1), 1);
+  CHECK_EQ(w.gate.count("pulse"), 1);
+  for (const Pulse &p : r.of(1)) CHECK_IN(p.len(), 1500, 1501);
+  CHECK_EQ(w.opener.presses[0].size(), 1);
+  for (auto &pr : w.opener.presses[0]) CHECK_IN(pr.second, 1500, 1501);
+  JsonDocument h = w.house.status();
+  CHECK(h["cmd_pending"] == false);
+  CHECK(h["cmd_result"] == 0);  // the second OPEN ACKed as done
+  CHECK_EQ(w.house.count("tx_giveup"), 0);
   w.checkClean();
 }
 
 // [pulse-only]
-XFAIL_TEST(gate_relays_second_relay_test_mid_pulse_keeps_its_ms,
-           "a relay.test of the relay already pulsing restarts its timer (Relay::pulse on a closed relay): one "
-           "closure of the gap plus ms instead of pulses of ms") {
+TEST(gate_relays_second_relay_test_mid_pulse_keeps_its_ms) {
+  // A relay.test of the relay already pulsing (or waiting out the interlock to start) is refused busy: restarting
+  // its timer made one closure of the gap plus ms. The other relay's test still cuts it short (interlock).
   World w;
   Guard g{ w };
   w.commission();
@@ -489,13 +501,34 @@ XFAIL_TEST(gate_relays_second_relay_test_mid_pulse_keeps_its_ms,
   uint32_t t0, t1;
   CHECK(req(r, w.gate, "relay.test", "\"k\":1,\"ms\":500", &t0)["ok"] == true);
   r.run(199);
-  CHECK(req(r, w.gate, "relay.test", "\"k\":1,\"ms\":500", &t1)["ok"] == true);
+  JsonDocument d = req(r, w.gate, "relay.test", "\"k\":1,\"ms\":500", &t1);
+  CHECK(d["ok"] == false);
+  CHECK(d["error"] == "busy");
   CHECK_EQ(t1 - t0, 200);
   r.run(1500);
-  CHECK_EQ(w.gate.count("pulse"), 2);
+  CHECK_EQ(w.gate.count("pulse"), 1);
   CHECK_EQ(r.count(2), 0);
-  for (const Pulse &p : r.of(1)) CHECK_IN(p.len(), 1, 501);
-  for (auto &pr : w.opener.presses[0]) CHECK_IN(pr.second, 1, 501);
+  CHECK_EQ(r.count(1), 1);
+  CHECK_IN(r.last(1).len(), 500, 501);
+  CHECK_EQ(w.opener.presses[0].size(), 1);
+  CHECK_IN(w.opener.presses[0].back().second, 500, 501);
+
+  // K1 then K2 asked for while K1 still runs: K2 waits out the interlock, and a K2 test meanwhile is busy too.
+  uint32_t t2, t3;
+  CHECK(req(r, w.gate, "relay.test", "\"k\":1,\"ms\":500", &t2)["ok"] == true);
+  r.run(99);
+  CHECK(req(r, w.gate, "relay.test", "\"k\":2,\"ms\":300", &t3)["ok"] == true);
+  CHECK(!w.gate.coil(1));
+  r.run(49);
+  d = req(r, w.gate, "relay.test", "\"k\":2,\"ms\":300");
+  CHECK(d["ok"] == false);
+  CHECK(d["error"] == "busy");
+  r.run(1000);
+  CHECK_EQ(r.count(2), 1);
+  CHECK_IN(r.last(2).on - r.last(1).off, INTERLOCK, INTERLOCK + 1);
+  CHECK_IN(r.last(2).len(), 300, 301);
+  CHECK_EQ(w.gate.count("pulse"), 3);
+  r.checkInterlock();
   w.checkClean();
 }
 
@@ -1044,6 +1077,35 @@ TEST(gate_relays_console_hold_ends_exactly_with_the_pulse) {
   w.checkClean();
 }
 
+// [no-stall-in-pulse] [pulse-only]
+TEST(gate_relays_console_reboot_waits_for_the_pulse) {
+  // reboot replies, waits 100 ms and resets the board. Asked for during a pulse it didn't wait for it, so a pulse due
+  // to end in those 100 ms ran on until the reset (on the board; the sim resets at once, which cut it short instead).
+  // It is held like a save: answered in the pass that releases the relay.
+  World w;
+  Guard g{ w };
+  w.commission();
+  Rec r(w);
+  uint32_t t0, at;
+  CHECK(req(r, w.gate, "relay.test", "\"k\":1,\"ms\":500", &t0)["ok"] == true);
+  CHECK(r.until([&] { return w.now == t0 + 474; }, 600));
+  uint32_t boots = w.gate.boots;
+  int id = sendReq(w, w.gate, "reboot");  // reaches the console 25 ms before K1 is due to release
+  CHECK(reply(r, w.gate, id, 2000, &at)["ok"] == true);
+  Pulse p = r.last(1);
+  CHECK(!p.open);
+  CHECK_EQ(p.on, t0);
+  CHECK_IN(p.len(), 500, 501);
+  CHECK_EQ(at, p.off);
+  CHECK(r.until([&] { return w.gate.boots == boots + 1; }, 2000));
+  CHECK(r.poll([&] { return w.gate.running() && w.gate.status()["link"]["verified"] == true; }, 15000));
+  r.run(2000);
+  CHECK_EQ(r.count(1), 1);
+  CHECK_EQ(r.count(2), 0);
+  CHECK_EQ(w.gate.count("pulse"), 1);  // nothing pulsed after the reboot
+  w.checkClean();
+}
+
 // [no-stall-in-pulse]
 TEST(gate_relays_remote_write_waits_for_the_pulse_then_saves) {
   World w;
@@ -1124,6 +1186,74 @@ TEST(gate_relays_remote_write_waits_for_the_pulse_then_saves) {
 }
 
 // [no-stall-in-pulse]
+TEST(gate_relays_fifth_remote_write_in_one_pulse_waits_too) {
+  // The gate holds remote writes arriving during a pulse, four deep. The house sends one at a time, but each HELLO it
+  // answers (a replayed one too) renumbers its resend, so copies of one write can fill the queue. A fifth was saved
+  // at once, holding the relay ~0.5 s long; now it isn't taken (no ACK, its seq forgotten) and the house's resend
+  // of it is, once the pulse is over.
+  World w;
+  Guard g{ w };
+  w.commission();
+  Rec r(w);
+  int erases = w.gate.flashErases, erasedInPulse = 0, savedInPulse = 0;
+  r.each = [&] {
+    bool closed = w.gate.coil(1) || w.gate.coil(2);
+    if (closed && w.gate.flashErases != erases) erasedInPulse++;
+    if (closed && w.gate.count("cfg_remote")) savedInPulse++;
+    erases = w.gate.flashErases;
+  };
+  uint32_t replays = w.gate.status()["link"]["replay"];
+  uint32_t t0;
+  CHECK(req(r, w.gate, "relay.test", "\"k\":2,\"ms\":4000", &t0)["ok"] == true);  // closed already: nothing moves
+  size_t ev0 = w.house.events.size();
+  CHECK(req(r, w.house, "remote.set", "\"name\":\"travel_timeout_s\",\"value\":70")["ok"] == true);
+  // The copies the gate has heard: CFG_SETs on the air since t0, one per seq.
+  auto copies = [&] {
+    std::set<uint32_t> seqs;
+    for (const AirFrame *f : w.sent(w.house, MSG_CFG_SET_))
+      if ((int32_t)(f->start - t0) >= 0 && !f->dropped && (int32_t)(w.now - f->end) > 0) seqs.insert(le32(f->b, F_SEQ));
+    return seqs.size();
+  };
+  CHECK(r.until([&] { return copies() == 1; }, 2000));
+  // Four more: the gate's boot HELLO played to the house (it answers one a second from the verified session), each
+  // answer renumbering the write it still has waiting.
+  for (size_t n = 2; n <= 5; n++) {
+    size_t a0 = w.sent(w.house, MSG_HELLO_ACK_).size();
+    bool answered = false;
+    for (int i = 0; i < 30 && !answered; i++) {
+      if (req(r, w.gate, "debug.replay", "\"hello\":true")["sent"] == true)
+        answered = r.until([&] { return w.sent(w.house, MSG_HELLO_ACK_).size() > a0; }, 200);
+      else
+        r.run(10);
+    }
+    CHECK(answered);
+    CHECK(r.until([&] { return copies() == n; }, 1000));
+  }
+  CHECK(w.gate.coil(2));  // all five heard while K2 is closed
+  CHECK_EQ(w.gate.count("cfg_remote"), 0);
+  CHECK(r.until([&] { return !w.gate.coil(2); }, 1000));
+  Pulse p = r.last(2);
+  CHECK_EQ(p.on, t0);
+  CHECK_IN(p.len(), 4000, 4001);
+  // The four queued copies are saved after the release, one per pass; the fifth comes back as the house's resend.
+  CHECK(r.until([&] { return eventSince(w.house, "remote_set", ev0) != nullptr; }, 8000));
+  const JsonDocument &e = *eventSince(w.house, "remote_set", ev0);
+  CHECK(e["acked"] == true);
+  CHECK(e["ok"] == true);
+  CHECK_EQ(w.gate.count("cfg_remote"), 5);
+  CHECK_EQ(w.gate.get("travel_timeout_s"), 70);
+  CHECK_EQ(erasedInPulse, 0);
+  CHECK_EQ(savedInPulse, 0);
+  CHECK(w.gate.status()["link"]["replay"] == replays);  // the resends meanwhile were held or refused, not replays
+  r.run(2000);
+  w.gate.reset(PM_RCAUSE_EXT);
+  CHECK(r.until([&] { return w.gate.running(); }, 2000));
+  CHECK_EQ(w.gate.get("travel_timeout_s"), 70);
+  r.run(5000);
+  w.checkClean();
+}
+
+// [no-stall-in-pulse]
 TEST(gate_relays_command_lost_to_a_save_still_gets_its_full_pulse) {
   World w;
   Guard g{ w };
@@ -1184,34 +1314,67 @@ TEST(gate_relays_command_lost_to_a_save_still_gets_its_full_pulse) {
 }
 
 // [no-stall-in-pulse]
-XFAIL_TEST(gate_relays_radio_reinit_waits_for_the_pulse,
-           "radio.cpp re-initialises the radio without waiting for appRelaysPulsing (the 5 s retry in radioReceive, "
-           "and fault()): the pass is held for LoRa.begin() (25 ms in the sim, ~470 ms of module reset delays on the MKR "
-           "WAN 1310) and a pulse ending meanwhile is released late") {
+TEST(gate_relays_radio_reinit_waits_for_the_pulse) {
+  // A radio restart (LoRa.begin(): ~470 ms of module reset delays on the MKR WAN 1310) stops the loop, so the
+  // firmware runs radio.cpp's recovery (appLoop: radioRecover) only once no relay pulses: the 5 s retry of a radio
+  // that didn't start, and the restart after a fault. Run mid-pulse, it held the relay that much longer.
   World w;
   Guard g{ w };
   w.commission();
   Rec r(w);
-  // The radio stops answering. A restart then fails, and the radio is retried every 5 s from radioReceive().
+  // The radio stops answering. A restart then fails, and the radio is retried every 5 s.
   w.gate.radioPresent = false;
   CHECK(req(r, w.gate, "config.set", "\"params\":{\"tx_power\":5}")["ok"] == true);
   const LogEv *f = w.gate.last("radio_fail");
   CHECK(f);
   CHECK_EQ(f->a, 0);
-  uint32_t retry = (f->t + 5000) | 1;  // the next try's pass (RETRY_MS after the failed one ended)
-  uint32_t busyAtRetry = 0;
+  uint32_t retry = (f->t + 5000) | 1;  // when the next try is due (RETRY_MS after the failed one ended)
+  // The first pass from `from` on that blocked for a radio start (`restartAt`), and how long it was held.
+  uint32_t from = retry, restartAt = 0, held = 0;
   r.each = [&] {
-    if (w.now == retry) busyAtRetry = w.gate.busyUntil;
+    if (!restartAt && (int32_t)(w.now - from) >= 0 && (int32_t)(w.gate.busyUntil - w.now) >= 400) {
+      restartAt = w.now;
+      held = w.gate.busyUntil - w.now;
+    }
   };
-  // A relay test due to end 10 ms into that retry.
+  // A relay test due to end 10 ms after the retry is due.
   CHECK(r.until([&] { return w.now == retry - 191; }, 6000));
   uint32_t t0;
   CHECK(req(r, w.gate, "relay.test", "\"k\":1,\"ms\":200", &t0)["ok"] == true);
   CHECK_EQ(retry - t0, 190);
   r.run(1000);
+  Pulse p = r.last(1);
+  CHECK_IN(p.len(), 200, 201);
+  CHECK(restartAt != 0);
+  CHECK_EQ(restartAt, p.off);  // it waited for the pulse, and ran in the pass that released K1
+  CHECK(held >= 400);
+  CHECK_EQ(w.gate.count("radio_fail", 3), 0);  // still no radio: it failed again
+
+  // The radio answers again: the next retry brings it back, logged (a=3).
+  w.gate.radioPresent = true;
+  CHECK(r.until([&] { return w.gate.count("radio_fail", 3) == 1; }, 6000));
+  CHECK(r.poll([&] { return w.gate.status()["radio_ok"] == true; }, 1000));
+  r.run(3000);
+
+  // A fault (the radio reset itself, seen in RX: a=2) 100 ms into a 300 ms pulse: down until the pulse is over,
+  // then restarted.
+  int faults = w.gate.count("radio_fail", 2);
+  CHECK(req(r, w.gate, "relay.test", "\"k\":2,\"ms\":300", &t0)["ok"] == true);
+  CHECK(r.until([&] { return w.now == t0 + 100; }, 200));
+  w.gate.radioFault = true;
+  from = w.now;
+  restartAt = held = 0;
+  CHECK(r.until([&] { return w.gate.count("radio_fail", 2) == faults + 1; }, 50));
+  CHECK(w.gate.status()["radio_ok"] == false);
+  r.run(1000);
   r.each = nullptr;
-  CHECK(busyAtRetry - retry >= 20);  // the retry did hold that pass
-  CHECK_IN(r.last(1).len(), 200, 201);
+  p = r.last(2);
+  CHECK_IN(p.len(), 300, 301);
+  CHECK_EQ(restartAt, p.off);
+  CHECK(held >= 400);
+  CHECK(w.gate.status()["radio_ok"] == true);
+  CHECK_EQ(w.gate.count("radio_fail", 3), 1);  // a=3 is for a retry that brought a radio back, not a fault's restart
+  r.checkInterlock();
   w.checkClean();
 }
 

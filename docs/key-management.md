@@ -12,7 +12,7 @@ page covers how to create, keep, check and replace it. Commands are in [console.
 
 | Place | Form | Notes |
 |---|---|---|
-| Each board's SPI flash | Plaintext | Survives firmware uploads. Anyone holding the board and a flash reader or debugger can read it, so a board that leaves your hands takes the key with it (see Rotating) |
+| Each board's SPI flash | Plaintext | Survives firmware uploads. Only the current key: `key.set` overwrites the old one in the older config record too (firmware 0.13.9 or later; before, it stayed there until the next save). Anyone holding the board and a flash reader or debugger can read it, so a board that leaves your hands takes the key with it (see Rotating) |
 | Encrypted backup (`.glkey`) | AES-GCM under a passphrase | Safe to store anywhere on its own; useless without the passphrase |
 | Password manager | The backup's passphrase (or the key itself) | The one thing that must not be lost |
 | `~/.gatelink_key` (bench only) | Plaintext | What `gatelink.py restore` and the e2e suite (`GATELINK_KEY`) use. Give the bench boards their own key, never the install's |

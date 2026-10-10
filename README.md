@@ -73,7 +73,7 @@ siren sensor.
 | Gate moved by AES Prime Edge / siren / keypad | Gate reports it (`cause: external`, even right after one of our commands); house flips K1, the Shelly follows, **no command is sent back**. `cause: lora` means the gate is moving toward the limit our last command asked for |
 | Gate travelling (`between`) | K1 (and so the Shelly) keeps showing the limit it left and flips only when the other limit is reached; if the gate stays `between` longer than the gate's `travel_timeout_s` it shows open. The contact sensor reads open as soon as the gate leaves closed |
 | Command ignored by opener (e.g. siren holding gate open) | Gate reports `timeout`; house re-syncs the Shelly to the real state |
-| Command already satisfied (OPEN while open) | Suppressed at the house, or acknowledged as `already` at the gate — unless the opposite command is still in flight (switch flipped and straight back), which is sent and pulsed to reverse it |
+| Command already satisfied (OPEN while open) | Suppressed at the house, or acknowledged as `already` at the gate — unless the opposite command is still in flight or not yet reported by the gate (switch flipped and straight back), which is sent and pulsed to reverse it |
 | Link lost | Contact sensor reads **open** (fail-safe, configurable); commands expire after `cmd_ttl_s` rather than firing late |
 | AC power lost (gate IN3 off) | The opener runs on its battery, so a limit that still reads is trusted and the house shows the real state. Commands are refused (gate log `cmd_refused`; house shows *refused: no AC power*) and the Shelly is resynced to the gate at once. With no limit reading (moving, or the opener's battery dead too) the gate reports `no_power` instead of `between`: its position can't be verified, so the house shows not-closed (contact sensor open, K1 energized, the Shelly on). When AC returns everything follows the limits again |
 | Shelly loses power (house IN2 off) | Its relay drops, but that edge is never sent as a command (house log `ctrl_power 0`, then `ctrl` with b=1); the house board's own supply (`ctrl_power_pmic`, the same 12 V through its buck) drops ~0.2 s before the relay, where the IN2 opto lags it by ~1.7 s and misses short dips; a switch-OFF still waits `ctrl_confirm_ms` (0.5 s) before it becomes a CLOSE, and is discarded if power drops meanwhile; a switch-ON (OPEN) is sent at once, since a power loss can't cause it. When power returns the Shelly comes back at the K1 level and that edge is logged `sync` |
@@ -193,7 +193,7 @@ table and notes for each board; works without a board connected).
 |---|---|
 | Solid, full brightness | No role set |
 | Dim breathing (2.5 s) | Link up |
-| Very dim, fast lub-dub heartbeat | No link (nothing heard for `link_timeout_s`; on the house at least 2.5 gate heartbeats) |
+| Very dim, fast lub-dub heartbeat | No link (nothing heard for `link_timeout_s`; on the house, no status report from the gate for that long, at least 2.5 gate heartbeats) |
 | Fast bright strobe (6 s) | **Identify** requested from the web console |
 
 The breathing and heartbeat patterns never go fully dark between pulses.

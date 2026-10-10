@@ -22,17 +22,29 @@ ids) and replacing the key: [key-management.md](key-management.md).
 
 ## Sessions and replay protection
 
-Each board picks a random session id at boot (and a random starting seq); a peer's session is accepted only after
-it echoes a fresh challenge (HELLO / HELLO_ACK), and only seq numbers above that HELLO_ACK's are accepted, each once,
-so recorded frames can't be replayed — even across reboots. A 32-frame sliding window tolerates reordering between
-retried messages. A HELLO from an unknown session (a restarted peer, or a replayed old one) is challenged, but the
+Each board picks a new session id at boot and at every link restart (a new key or radio setting), and a random
+starting seq; a peer's session is accepted only after it echoes a fresh challenge (HELLO / HELLO_ACK), and only seq
+numbers above that HELLO_ACK's are accepted, each once, so recorded frames can't be replayed — even across reboots. A
+32-frame sliding window tolerates reordering between retried messages. A HELLO from an unknown session (a restarted peer, or a replayed old one) is challenged, but the
 verified session stays in place until the new one answers. A challenge is good for 10 s after the last HELLO that
 carried it, so an answer recorded earlier can't be played back later.
 
-That only holds while session ids never repeat under one key. The random source hashes radio noise, chained with a
-per-boot seed: a boot counter kept in the SPI flash (one 4-byte slot per boot, apart from the config record, so
-`config.reset` doesn't restart it) and the chip's serial number. If the radio failed to initialise at boot, the
-session is drawn again once it comes up, before anything is sent.
+That only holds while session ids never repeat under one key, so since 0.13.9 they are unique by construction
+(before, they were random: by the birthday bound, even odds of a repeat within ~77,000 sessions). The id is a
+permutation of three fields: the boot count (20 bits), the ids drawn so far this boot (4 bits: link restarts) and 8
+random bits. The permutation, a 4-round Feistel network on HMAC-SHA256, is keyed with the link key, the board's node
+id and its chip serial number: distinct fields give distinct ids, nobody without the key can tell the next one, and
+another board given the same key (its count starting over) draws from another permutation. The random bits make an
+id whose count repeats anyway (the flash rolled back or replaced) differ but for a 1 in 256 chance.
+
+The boot counter is kept in the SPI flash, apart from the config record (so `config.reset` doesn't restart it): one
+4-byte slot per boot, written in two steps, the count with its top bit set and then that bit cleared, so a slot torn
+by a power cut (bits left at 1) is recognised and skipped. It never returns a count twice; should it ever run out
+(2^31 boots, or a slot torn by older firmware that reads that high) it returns 0, as it does for a read garbled on the
+bus (a slot reading 0, which no slot is ever written), which could hide the largest count. Past a million boots, from
+the 16th id in one boot, or without a count (no flash chip, a garbled read), ids are random as before: radio noise
+hashed with a per-boot seed (the count and the chip's serial number). If the radio failed to initialise at boot, the session is drawn again
+once it comes up, before anything is sent.
 
 HELLOs can't be checked against the replay window (a restarted peer's must get through), so a recorded HELLO is
 acted on: it is answered, and pending frames are renumbered. Each board answers at most one HELLO a second from the
@@ -49,7 +61,9 @@ gaps double from a 32nd of the lifetime, so a lost frame is retried quickly, but
 what's left, so the later resends come evenly up to just before the end: at 10 s and the default 8 retries about
 0.3, 0.9, 2.2, 3.7, 5.2, 6.7, 8.2 and 9.7 s; with 5 retries, as before 0.13.7, about 0.3, 0.9, 2.2, 4.7 and 9.7 s. A
 command still has four sends after a 5 s outage and two after 8 s, and is dropped, never fired late, after
-`cmd_ttl_s`. Duplicate commands are detected by their command id and not re-pulsed. A message still waiting when the peer
+`cmd_ttl_s`. Duplicate commands are detected by their command id and not re-pulsed, and a
+command for the relay that is still pulsing (a second OPEN while K1 still pulses for the first) is the same press:
+ACKed, and the pulse isn't restarted. A message still waiting when the peer
 answers a HELLO is renumbered, and if the peer had already taken it (its ACK lost) the resend is taken as new: every
 reliable message must therefore be safe to repeat, which STATUS and config writes are and commands are by their id. If the gate restarts while a command is still waiting
 for its ACK, the house drops the command instead of sending it again: the gate may already have pulsed for it and
@@ -59,7 +73,11 @@ then resyncs the controller to the real gate. A HELLO from a new gate session on
 session answers the house's challenge; it is sent after all if the verified session answers instead, or sends
 anything new. A new command replaces a held one. A config write that reaches the gate while one of its relays
 pulses is taken at once but saved and ACKed only when the pulse is over (a save stops the loop for ~1 s, which would
-hold the relay on that much longer); the house's retries meanwhile are dropped quietly, not counted as replays.
+hold the relay on that much longer); the house's retries meanwhile are dropped quietly, not counted as replays. The
+gate holds four that way. The house sends one at a time, but a renumbered resend (after it answers a HELLO, a
+replayed one too) arrives as a new message, so copies can fill the queue: one arriving when it's full isn't taken
+at all. It isn't ACKed and its seq is forgotten, as if the frame had been lost, so the house's next resend of it is
+taken once there's room (a frame lost on the way can arrive late as well, so that replays nothing new).
 Every transmission listens before talking: responses go
 after a 25 ms turnaround, new frames after the response slot plus a random backoff, both counted from the end of
 the last frame on the air (any frame heard, also one with a bad CRC). Frames heard more often than that (another
@@ -74,8 +92,14 @@ responses waiting the oldest response.
 ## Link supervision
 
 The gate sends STATUS every `heartbeat_s` (and on every change); STATUS carries that heartbeat. The house
-declares the link lost after max(`link_timeout_s`, 2.5 × the gate's heartbeat) without hearing from the gate,
-and then fails its contact sensor open (`linkloss_open`).
+declares the link lost after max(`link_timeout_s`, 2.5 × the gate's heartbeat) without a STATUS from the gate,
+and then fails its contact sensor open (`linkloss_open`). Only a STATUS counts, and only one later than the last it
+took (a higher seq in that gate session): the link layer takes any frame it hasn't seen inside its window, also one
+jammed at the house while it was recorded and played back later, which would set the house back to an old state
+(a "closed" after the gate opened) and keep the link up. Such a STATUS is ACKed and dropped (log `replay`, with the
+seq of the last one taken). The house's own link restart (a new key or radio setting) takes the link down until the
+gate's next STATUS, which it sends as soon as it has verified the house's new session. Since 0.13.9; before, any
+frame from the gate kept the link up.
 
 ## Wire formats
 

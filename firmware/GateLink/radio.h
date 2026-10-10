@@ -5,11 +5,16 @@
 bool radioBegin();  // (re)initialise with current cfg radio params
 void radioRestart();  // radioBegin() again if it has been started (after the module was held in reset)
 bool radioOk();
+// A radio that faulted (radio_fail a=1/2) is down until radioRecover() re-initialises it, and one that failed to
+// start is retried there every 5 s. That blocks the loop ~0.5 s (LoRa.begin()'s reset delays), so the app calls it
+// only while no relay pulses (appLoop). True while a restart is due.
+bool radioRecoverDue();
+void radioRecover();
 // Starts transmitting and returns at once (false if the radio is down or still transmitting). The radio
 // goes back to RX continuous as soon as TX is done.
 bool radioSend(const uint8_t *buf, size_t len);
 // True while a frame is on the air. A TX that overruns its airtime (stuck or reset radio) is logged as a
-// fault and the radio is re-initialised.
+// fault, and the radio is down until radioRecover().
 bool radioTxBusy();
 uint32_t radioTxEndAt();  // millis() when the last TX ended
 uint32_t radioFaults();  // TX faults since boot

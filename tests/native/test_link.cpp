@@ -109,6 +109,37 @@ TEST(ack_later_holds_retransmits_quietly) {
   CHECK_EQ(s.house.acks.back().result, RES_NOT_SAVED);
 }
 
+TEST(refused_message_is_taken_when_resent) {
+  // The gate can't take a CFG_SET now (its queue is full during a relay pulse, 0.13.9): no ACK, and the seq is
+  // forgotten as if the frame had been lost. The house's resends (the same seq) reach the handler again, aren't
+  // counted as replays, and the one it takes is ACKed; after that the seq is spent.
+  Sim s;
+  CHECK(s.handshake());
+  int refusals = 2;
+  uint32_t seq = 0;
+  s.gate.onRx = [&](Node &n, const RxMsg &m) {
+    if (m.type != MSG_CFG_SET) return;
+    CHECK(!seq || m.seq == seq);
+    seq = m.seq;
+    if (refusals-- > 0) n.refuse(m.seq);
+    else n.ack(m.seq, RES_OK);
+  };
+  s.house.sendReliable(SLOT_CFG, MSG_CFG_SET, { 9, 4, 0, 0, 0 }, 10000);
+  CHECK(s.runUntil([&] { return !s.house.pending(SLOT_CFG); }, 10000));
+  CHECK(s.house.acks.back().acked);
+  CHECK_EQ(s.house.acks.back().result, RES_OK);
+  CHECK_EQ(s.gate.rxCount(MSG_CFG_SET), 3);
+  CHECK_EQ(s.sent(s.gate, MSG_ACK).size(), 1);
+  CHECK_EQ(s.gate.stats().replay, 0);
+  for (const AirFrame *f : s.sent(s.house, MSG_CFG_SET)) CHECK_EQ(f->seq(), seq);  // never renumbered
+  // Taken: a copy now is answered from the ACK memo, not handed up again.
+  s.inject(s.gate, last(s.sent(s.house, MSG_CFG_SET))->b);
+  s.run(500);
+  CHECK_EQ(s.gate.rxCount(MSG_CFG_SET), 3);
+  CHECK_EQ(s.sent(s.gate, MSG_ACK).size(), 2);  // re-ACKed from the memo
+  CHECK_EQ(s.gate.stats().replay, 0);
+}
+
 TEST(replayed_frame_is_rejected) {
   Sim s;
   CHECK(s.handshake());
@@ -180,6 +211,54 @@ TEST(sessions_never_repeat_across_restarts) {
     for (uint32_t o : seen) CHECK(o != session);
     seen.push_back(session);
   }
+}
+
+static uint32_t helloSession(Sim &s, Node &n) {
+  size_t before = s.sent(n, MSG_HELLO).size();
+  CHECK(s.runUntil([&] { return s.sent(n, MSG_HELLO).size() > before; }, 2000));
+  return last(s.sent(n, MSG_HELLO))->session();
+}
+
+// With a boot count (linkSetBoot), the session id is a keyed permutation of the count, the draws this boot and 8
+// random bits: two boots, or two link restarts in one boot, never share one, even with an entropy source that's stuck
+// (radioRandom32() returning one value). Before 0.13.9 the id was random, and such a node drew the same one each time.
+TEST(sessions_from_the_boot_count_never_repeat_even_with_a_stuck_rng) {
+  Sim s;
+  s.gate.stuckRng = 0x5A5A5A5Au;
+  std::vector<uint32_t> seen;
+  for (uint32_t boot = 1; boot <= 40; boot++) {
+    for (int restart = 0; restart < 4; restart++) {
+      if (restart == 0) s.gate.boot(boot);
+      else s.gate.begin();  // a key or radio setting changed
+      uint32_t session = helloSession(s, s.gate);
+      for (uint32_t o : seen) CHECK(o != session);
+      seen.push_back(session);
+    }
+  }
+  CHECK(s.handshake(10000));  // and they verify as any other
+}
+
+// The count can repeat all the same: the flash rolled back or replaced. The random bits still give another id.
+TEST(a_boot_count_that_repeats_still_draws_another_session) {
+  Sim s;
+  s.gate.boot(7);
+  uint32_t a = helloSession(s, s.gate);
+  s.gate.boot(7);
+  CHECK(helloSession(s, s.gate) != a);
+}
+
+// The permutation is keyed with the chip serial too: another board given the same key (its count starting over)
+// draws other ids. With a stuck entropy source, only that tells the two apart.
+TEST(another_board_with_the_same_key_and_count_draws_another_session) {
+  Sim s;
+  s.gate.stuckRng = 0x5A5A5A5Au;
+  s.gate.boot(3);
+  uint32_t a = helloSession(s, s.gate);
+  s.gate.boot(3);
+  CHECK_EQ(helloSession(s, s.gate), a);  // the same board, count and random bits: the same id
+  s.gate.serial[0] ^= 1;
+  s.gate.boot(3);
+  CHECK(helloSession(s, s.gate) != a);
 }
 
 TEST(replayed_old_hello_holds_the_command_until_the_live_session_answers) {

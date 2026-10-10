@@ -345,6 +345,50 @@ TEST(house_sync_between_after_no_power_or_fault_holds_no_limit) {
   }
 }
 
+// [k1-mirror]
+TEST(house_sync_switch_back_before_the_gates_status_is_a_command) {
+  // Gate open. The user switches off: CLOSE, sent and ACKed. Back on ~150 ms later, after that ACK but before the
+  // gate's STATUS that reports heading for closed: the house still hears open and no target, but the CLOSE it just
+  // had ACKed is on its way. The OPEN must go (the gate reverses), not be suppressed as "already open" while the gate
+  // closes under a switch showing ON.
+  Site w;
+  w.commission();
+  openByUser(w);
+  w.run(4000);
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  w.user(false);
+  Found cs = waitFor(w, w.house, "cmd_sent", h0, 2000, ACT_CLOSE_);
+  CHECK(cs.ok);
+  w.run(150);
+  w.user(true);
+  Found on = waitFor(w, w.house, "ctrl", h0, 100, 1);
+  CHECK(on.ok);
+  CHECK_EQ(on.e.b, 0);
+  // Between the two: the CLOSE's ACK heard, the gate's STATUS after it not yet
+  uint32_t ackEnd = sentEnd(w, w.gate, MSG_ACK_, cs.e.at);
+  CHECK(ackEnd != 0);
+  CHECK((int32_t)(on.e.at - ackEnd) > 0);
+  uint32_t stEnd = 0;
+  CHECK(w.runUntil([&] { return (stEnd = sentEnd(w, w.gate, MSG_STATUS_, cs.e.at)) != 0; }, 2000));
+  CHECK((int32_t)(stEnd - on.e.at) > 0);
+  Found os = find(w.house, "cmd_sent", h0, ACT_OPEN_);
+  CHECK(os.ok);
+  CHECK_EQ(os.e.at, on.e.at);
+  CHECK_EQ(countSince(w.house, "cmd_suppressed", h0), 0);
+  Found rx = waitFor(w, w.gate, "cmd_rx", g0, 2000, ACT_OPEN_);
+  CHECK(rx.ok);
+  CHECK(waitFor(w, w.gate, "pulse", g0, 1000, 1).ok);
+  // It ends open, the switch ON and K1 on
+  CHECK(w.runUntil([&] { return w.opener.atOpen() && w.houseSees() == GS_OPEN_; }, 20000));
+  w.run(SYNC_MS + 2000);
+  CHECK(w.opener.atOpen());
+  CHECK(w.house.coil(1));
+  CHECK(w.alarmSwitch());
+  CHECK(!w.sensorClosed());
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0), 2);
+  CHECK_EQ(countSince(w.house, "resync", h0), 0);
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // [travel-hold]
 
@@ -845,7 +889,8 @@ TEST(house_sync_k1_relay_test_before_the_first_status_does_not_arm) {
   JsonDocument s = w.house.status();
   CHECK(s["sync_window"] == false);
   CHECK(s["armed"] == false);
-  CHECK(s["link_up"] == true);
+  CHECK(s["link"]["verified"] == true);
+  CHECK(s["link_up"] == false);  // no STATUS yet: only a STATUS keeps the link up
   CHECK_STR(str(s, "gate"), "unknown");
 
   JsonDocument r = w.house.request("relay.test", "\"k\":1,\"ms\":500");
@@ -1050,11 +1095,10 @@ TEST(house_sync_result_timeout_resyncs_at_once) {
 }
 
 // [resync]
-XFAIL_TEST(house_sync_siren_override_mid_travel_resyncs_at_once,
-           "role_house.cpp handleStatus: the TR_TIMEOUT fast-forward needs mismatchSince set, but holdingTravel() keeps "
-           "it at 0 all through the travel, so a command overridden mid-travel waits mismatch_timeout_s (75 s)") {
+TEST(house_sync_siren_override_mid_travel_resyncs_at_once) {
   // The user closes; mid-travel the siren sensor holds OPEN and takes the gate back to open: our command was overridden
-  // (result timeout). The Shelly shows the user's OFF with the gate open; it should be put back at once.
+  // (result timeout). The Shelly shows the user's OFF with the gate open; it should be put back at once, although the
+  // travel hold (holdingTravel()) kept the mismatch from starting, not mismatch_timeout_s (75 s) later.
   Site w;
   w.commission();
   openByUser(w);
@@ -1178,9 +1222,9 @@ TEST(house_sync_house_restart_never_moves_the_gate) {
 namespace {
 
 // ctrl_settle_ms 0, so the boot's sync window is only sync_window_ms. The house restarts and the gate's STATUS doesn't
-// get through for a while: the window is over and the link verified, but nothing is armed, so the user's switch (ON,
-// then OFF again) is noted, never sent. Then the first STATUS (closed); returns when the house arms (that STATUS +
-// sync_window_ms, stamped `| 1`), with the world just after it.
+// get through for a while: the window is over and the link verified (not up: no STATUS), but nothing is armed, so the
+// user's switch (ON, then OFF again) is noted, never sent. Then the first STATUS (closed); returns when the house arms
+// (that STATUS + sync_window_ms, stamped `| 1`), with the world just after it.
 uint32_t bootWithLateStatus(Site &w, size_t h0) {
   bool block = true;
   w.drop = [&block](const AirFrame &f) { return block && f.from == 1 && f.type() == MSG_STATUS_; };
@@ -1192,7 +1236,7 @@ uint32_t bootWithLateStatus(Site &w, size_t h0) {
   CHECK(s["sync_window"] == false);
   CHECK(s["armed"] == false);
   CHECK(s["link"]["verified"] == true);
-  CHECK(s["link_up"] == true);
+  CHECK(s["link_up"] == false);  // no STATUS yet: only a STATUS keeps the link up
   CHECK_STR(str(s, "gate"), "unknown");
   w.user(true);
   Found c1 = waitFor(w, w.house, "ctrl", h0, 200, 1);
@@ -1300,13 +1344,11 @@ TEST(house_sync_edge_on_arming_is_a_command) {
 }
 
 // [armed-after-status] [check-soon] [resync]
-XFAIL_TEST(house_sync_edge_on_arming_is_not_reverted_by_the_boot_check_soon,
-           "role_house.cpp: checkSoon from the boot outlives the user's command (sendCommand() clears mismatchSince "
-           "but not checkSoon), so once its ACK lets the mismatch check run, the gate still reads closed and the house "
-           "resyncs the Shelly OFF while the gate opens") {
+TEST(house_sync_edge_on_arming_is_not_reverted_by_the_boot_check_soon) {
   // The user's ON debounced on the arming pass: a command, sent at once. The Shelly was in step until the user moved
   // it; it must keep showing the user's ON while the gate opens (K1 holds closed, but mid-travel the Shelly may
-  // already show the new command), not be cycled back OFF by a check-soon meant for the boot.
+  // already show the new command), not be cycled back OFF by a check-soon meant for the boot: the command clears it,
+  // or once its ACK lets the mismatch check run the gate still reads closed.
   Site w;
   w.commission([](Board &b) { configureHouse(b, "ctrl_settle_ms", 0); });
   w.run(2000);

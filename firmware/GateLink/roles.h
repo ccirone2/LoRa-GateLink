@@ -66,11 +66,13 @@ void houseRelayTest(uint8_t k, uint32_t ms);
 void houseRemoteDiag();
 void houseRemoteSet(uint8_t id, int32_t value);
 uint32_t houseLinkTimeoutMs();
+uint32_t houseStatusAt();  // millis() when the last STATUS was taken (0 = none yet): the link's liveness (appLinkUp)
+void houseLinkRestarted();  // our link started over (a key or radio setting): down until the gate's next STATUS
 
 void gateBegin();
 void gateLoop(uint32_t now);
 void gateOnRx(const RxMsg &m);
 void gateOnAck(Slot slot, uint8_t type, bool acked, uint8_t result);
 void gateStatus(JsonObject o);
-void gateRelayTest(uint8_t k, uint32_t ms);
+bool gateRelayTest(uint8_t k, uint32_t ms);  // false: that relay is pulsing already (busy)
 void gateDebugRebootAfterCmd();  // bench: the next pulsed command resets the gate before its ACK

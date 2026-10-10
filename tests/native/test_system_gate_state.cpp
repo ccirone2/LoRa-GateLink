@@ -468,9 +468,9 @@ TEST(gate_state_override_to_the_far_limit_ends_the_target_with_timeout) {
 }
 
 // [cause]
-XFAIL_TEST(gate_state_override_to_the_far_limit_resyncs_the_controller_at_once,
-           "role_house.cpp: the TR_TIMEOUT fast-forward needs mismatchSince set, but holdingTravel() zeroes it all "
-           "through the travel, so an override mid-travel waits mismatch_timeout_s (75 s)") {
+TEST(gate_state_override_to_the_far_limit_resyncs_the_controller_at_once) {
+  // The house held K1 at closed through the travel (holdingTravel()), so the mismatch never started; the timeout
+  // result must still resync at once, not mismatch_timeout_s (75 s) later.
   Site w;
   w.commission();
   size_t g0 = w.gate.logs.size(), h0 = w.house.logs.size();
@@ -501,8 +501,7 @@ TEST(gate_state_our_reversal_before_leaving_the_limit_is_ours) {
   w.user(false);
   Found cs = waitFor(w, w.house, "cmd_sent", h0, 2000, ACT_CLOSE_);
   CHECK(cs.ok);
-  // Back on once the house knows the gate is heading for closed (until then it suppresses an OPEN: the gate reads
-  // open), while the gate still reads open.
+  // Back on once the house knows the gate is heading for closed, while the gate still reads open.
   CHECK(poll(w, [&] { return str(w.house.status(), "target") == "closed"; }, 1000, 2));
   w.user(true);
   Found os = waitFor(w, w.house, "cmd_sent", h0, 2000, ACT_OPEN_);
@@ -524,11 +523,10 @@ TEST(gate_state_our_reversal_before_leaving_the_limit_is_ours) {
 }
 
 // [cause]
-XFAIL_TEST(gate_state_leaving_mark_does_not_outlive_our_pulse,
-           "role_gate.cpp: `leaving` stays set after a reversal whose first pulse never moved the gate, so a later "
-           "external move off that limit is attributed to lora") {
+TEST(gate_state_leaving_mark_does_not_outlive_our_pulse) {
   // The siren holds OPEN: our CLOSE is ignored and the user flips back to OPEN (a reversal while the gate reads open).
-  // Neither pulse moves the gate. Seconds later the AES closes it: that is not ours.
+  // Neither pulse moves the gate. Seconds later the AES closes it: that is not ours. (`leaving`, the limit our pulse
+  // is moving the gate off, stayed set as long as the target, so this move was attributed to lora.)
   Site w;
   w.commission();
   openByUser(w);

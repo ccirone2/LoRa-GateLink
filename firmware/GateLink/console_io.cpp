@@ -63,9 +63,9 @@ static UsbDeviceEndpoint *usbInEndpoint() {
 // send() waited out its 70 ms and dropped the rest of the line. A single packet onto an idle endpoint never waits.
 // BK1RDY is cleared only by the hardware.
 struct LineOut {
-  uint8_t buf[64];
-  size_t len;
-  bool lost;  // part of this line was dropped
+  uint8_t buf[64] = {};
+  size_t len = 0;
+  bool lost = false;  // part of this line was dropped
 };
 static LineOut lines[CON_PORTS];
 

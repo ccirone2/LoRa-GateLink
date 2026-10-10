@@ -1,5 +1,6 @@
 // The whole site on a hostile or busy channel: another transmitter on our frequency, SF and sync word, and outages.
 #include "world.h"
+#include <Arduino.h>
 
 // A short frame of another network (net_id 0x43 against our 0x42), as a neighbour's LoRa would send it: heard, then
 // dropped on its header. 13 bytes: ~41 ms at SF9/500 kHz.
@@ -152,4 +153,91 @@ TEST(link_command_held_on_a_replayed_hello_keeps_its_backoff) {
   CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
   CHECK_EQ(w.gate.count("pulse"), pulses0 + 1);
   CHECK_EQ(w.house.count("cmd_dropped"), 0);
+}
+
+static uint32_t seqOf(const Bytes &f) { return f[9] | f[10] << 8 | f[11] << 16 | (uint32_t)f[12] << 24; }
+
+// [sensor-closed-only-known] A STATUS kept from the house (jammed at it while recorded) and played back once the gate
+// has opened (threat model withheld-gate-frames-replayed). The link takes it, a seq it hasn't seen inside its window,
+// but it's older than the last STATUS the house took, so it changes nothing: the house goes on showing open, the
+// contact sensor stays open, and it doesn't count as hearing from the gate. Before 0.13.9 it set the house back to
+// closed, closing the sensor with the gate open, and kept the link up for another link timeout.
+TEST(link_withheld_status_delivered_late_changes_nothing) {
+  World w;
+  w.commission();
+  CHECK(w.sensorClosed());
+  // The gate's next STATUS (closed), every send of it.
+  Bytes kept;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from != w.gate.idx || f.type() != 5) return false;
+    if (kept.empty()) kept = f.b;
+    return seqOf(f.b) == seqOf(kept);
+  };
+  CHECK(w.runUntil([&] { return !kept.empty(); }, 40000));
+  CHECK_EQ(kept[13], GS_CLOSED_);  // ST_STATE
+  w.run(11000);  // the gate gives up on it (STATUS TTL 10 s)
+  // Someone else opens the gate; the house takes its new STATUS.
+  w.extPress(true, 500);
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_OPEN_; }, 20000));
+  CHECK(!w.sensorClosed());
+  // From here on nothing from the gate gets through. Just before the link timeout runs out, the kept STATUS arrives.
+  w.drop = [&](const AirFrame &f) { return f.from == w.gate.idx; };
+  uint32_t taken = w.now, timeout = w.houseLinkTimeoutMs();
+  w.run(timeout - 5000);
+  CHECK(w.houseLinkUp());
+  int replays = w.house.count("replay");
+  w.inject(w.house, kept);
+  w.run(200);
+  CHECK_EQ(w.house.count("replay"), replays + 1);
+  CHECK_EQ(w.houseSees(), GS_OPEN_);
+  CHECK(!w.sensorClosed());
+  CHECK(w.house.status()["gate"] == "open");
+  // Nor does it keep the link up: down as the timeout after the open STATUS runs out.
+  CHECK(w.runUntil([&] { return !w.houseLinkUp(); }, 6000));
+  CHECK_IN(w.now - taken, timeout - 100, timeout + 100);
+  CHECK(w.opener.atOpen());
+}
+
+static std::string testKeyHex() {
+  std::string s;
+  char b[3];
+  for (uint8_t v : TEST_KEY) snprintf(b, sizeof(b), "%02x", v), s += b;
+  return s;
+}
+
+// [restarts] Session ids are drawn from the boot count and the draws this boot, so they never repeat, even with an
+// entropy source that's stuck: this gate's radioRandom32() returns one value every time. Reboots, a radio setting and
+// the key each start a new session, and the house verifies each, never taking the gate's frames for replays. Before
+// 0.13.9 the ids were random: this gate came back with the same session (and the same starting seq), and the house
+// dropped its frames as replays.
+TEST(link_sessions_never_repeat_across_reboots_and_restarts_even_with_a_stuck_rng) {
+  World w;
+  w.gate.stuckRng = 0x5A5A5A5Au;
+  w.commission();
+  std::vector<int32_t> seen = { w.house.last("session")->a };
+  auto restarted = [&](const char *what) {
+    int n = w.house.count("session");
+    if (!w.runUntil([&] { return w.house.count("session") > n; }, 20000))
+      throw Failure(std::string("the house verified no new gate session after ") + what);
+    int32_t s = w.house.last("session")->a;
+    for (int32_t o : seen)
+      if (o == s) throw Failure(std::string("the gate's session repeated after ") + what);
+    seen.push_back(s);
+    w.run(5000);
+  };
+  for (int i = 0; i < 3; i++) {
+    w.gate.reset(PM_RCAUSE_SYST);
+    restarted("a reboot");
+  }
+  CHECK(w.gate.request("config.set", "\"params\":{\"tx_power\":5}")["ok"] == true);
+  restarted("a radio setting");
+  CHECK(w.gate.request("key.set", "\"key\":\"" + testKeyHex() + "\"")["ok"] == true);
+  restarted("key.set");
+  w.gate.reset(PM_RCAUSE_SYST);
+  restarted("a reboot");
+  CHECK_EQ(w.house.status()["link"]["replay"].as<int>(), 0);
+  // And the link works: the user opens the gate.
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 20000));
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_OPEN_; }, 5000));
 }

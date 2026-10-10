@@ -172,7 +172,7 @@ FRAMES = {
     + console(T_STATUS, uart=True, crc=True) + console(T_STATUS, uart=True),
     # Relay monitor regressions. A relay.test of K1 waits out the interlock after K2, and four refused ones (bad crc)
     # follow before it starts: they mustn't push its allowance out. A relay.test read in the very pass a delayed
-    # pulse starts extends that pulse: the allowance is the longer of the two.
+    # pulse starts is refused busy (0.13.9; it used to restart that pulse, and the allowance was the longer of the two).
     "gate-relay-test-refused-after-one-that-waits": head(True)
     + console(T_RELAY_TEST, b"\x02" + struct.pack("<H", 100)) + console(T_RELAY_TEST, b"\x01" + struct.pack("<H", 600))
     + console(T_RAW, bytes([len(BAD_CRC_TEST)]) + BAD_CRC_TEST) * 4 + wait(2000),

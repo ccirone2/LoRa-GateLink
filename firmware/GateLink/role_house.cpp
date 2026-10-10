@@ -34,6 +34,8 @@ static bool gateExt = false;  // its STATUS carries the link counters and noise 
 static uint16_t gateRetries = 0, gateGiveups = 0, gateCrc = 0;
 static int8_t gateNoise = 0;  // dBm, 0 = no sample
 static bool haveStatus = false;
+// The last STATUS taken: its gate session and seq (only later ones count), and when (the link's liveness).
+static uint32_t statusSession = 0, statusSeq = 0, statusAt = 0;
 static uint8_t lastEnd = GS_UNKNOWN;  // last limit reached (OPEN/CLOSED), held while BETWEEN
 static uint32_t betweenSince = 0;
 
@@ -44,11 +46,11 @@ static bool shellyLevel = false;
 static bool syncActive = false;
 static uint32_t syncUntil = 0;
 static bool syncExpect = false;
-static uint32_t settleUntil = 0;  // boot / controller power return: no early end of the sync window before this
+static uint32_t settleUntil = 0;  // no early end of the sync window before this (boot, controller power return, resync)
 static bool resyncing = false;
 static uint32_t resyncUntil = 0;
 static uint32_t mismatchSince = 0;
-static bool checkSoon = false;  // boot, controller power return, command refused: resync at once if out of step
+static bool checkSoon = false;  // boot, power return, command refused or overridden: resync at once if out of step
 static bool k1WasPulsing = false;
 static bool ctrlPower = true;
 static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms (CLOSE only, see below)
@@ -57,6 +59,7 @@ static uint32_t pendingAt = 0;
 static uint16_t cmdId = 0;
 static uint8_t cmdAction = 0;
 static int cmdResult = -1;  // last ACK result, -2 = gave up, -1 = none
+static bool cmdUnreported = false;  // the last command ACKed ok, but no STATUS since: its target isn't known here yet
 
 // The gate's travel_timeout_s, which only it can have set right (it's the remote-writable one): a hold shorter
 // than the gate's flips the controller to not-closed in the middle of a slow but normal travel.
@@ -75,6 +78,14 @@ uint32_t houseLinkTimeoutMs() {
   uint32_t ms = (uint32_t)cfg.link_timeout_s * 1000;
   uint32_t hb = (uint32_t)gateHeartbeat * 2500;
   return hb > ms ? hb : ms;
+}
+
+uint32_t houseStatusAt() {
+  return statusAt;
+}
+
+void houseLinkRestarted() {
+  statusAt = 0;  // nothing heard on this link yet; the gate reports as soon as it has verified our new session
 }
 
 static bool k1Target(uint32_t now) {
@@ -120,9 +131,10 @@ static void applyOutputs(uint32_t now) {
 
 static void sendCommand(uint8_t action) {
   uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
-  // Don't suppress while an opposite command is queued or the gate is still heading the other way
-  // (switch flipped off and straight back on before the gate left its limit).
-  bool opposing = (linkPending(SLOT_CMD) && cmdAction != action) || (gateTarget != GS_UNKNOWN && gateTarget != want);
+  // Don't suppress while an opposite command is queued, or ACKed but not yet reported in a STATUS, or the gate is
+  // still heading the other way (switch flipped off and straight back on before the gate left its limit).
+  bool opposing = ((linkPending(SLOT_CMD) || cmdUnreported) && cmdAction != action)
+                  || (gateTarget != GS_UNKNOWN && gateTarget != want);
   if (linkUp && gateState == want && !opposing) {
     logEvent(EV_CMD_SUPPRESSED, action, gateState);
     return;
@@ -130,11 +142,13 @@ static void sendCommand(uint8_t action) {
   cmdId++;
   cmdAction = action;
   cmdResult = -1;
+  cmdUnreported = false;
   uint8_t p[3];
   putU16(p, cmdId);
   p[2] = action;
   linkSendReliable(SLOT_CMD, MSG_CMD, p, 3, (uint32_t)cfg.cmd_ttl_s * 1000);
   mismatchSince = 0;
+  checkSoon = false;  // a boot's or power return's check is for the old level, not the user's new one
   logEvent(EV_CMD_SENT, action, cmdId);
 }
 
@@ -178,6 +192,7 @@ static void capStamps(uint32_t now) {
   if (elapsed(now, settleUntil, 0)) settleUntil = now;  // passed: no longer holds a sync window open
   if (mismatchSince && elapsed(now, mismatchSince, STAMP_CAP_MS)) mismatchSince = (now - STAMP_CAP_MS) | 1;
   if (elapsed(now, betweenSince, STAMP_CAP_MS)) betweenSince = now - STAMP_CAP_MS;
+  if (statusAt && elapsed(now, statusAt, STAMP_CAP_MS)) statusAt = (now - STAMP_CAP_MS) | 1;  // else it reads as fresh
 }
 
 void houseLoop(uint32_t now) {
@@ -258,6 +273,10 @@ void houseLoop(uint32_t now) {
       resyncUntil = now + cfg.resync_ms;
       k1.set(!t);
       openSyncWindow(now, t, cfg.resync_ms);
+      // The window covers K1 at !t and its return, so no edge may end it before K1 is back: one at t meanwhile (the
+      // user's, still in its debounce, or chatter) would, and the controller then following K1 to !t would be taken
+      // as the user.
+      if (elapsed(resyncUntil, settleUntil, 0)) settleUntil = resyncUntil;
       mismatchSince = 0;
     }
   }
@@ -269,6 +288,18 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
     return;
   }
   linkAck(m.seq, RES_OK);
+  // Only a STATUS later than the last one taken, in this gate session. The link takes any frame it hasn't seen inside
+  // its window, also one kept from us and delivered late (an old "closed", recorded while it was jammed here, and
+  // played back once the gate has opened): that one tells nothing new, and it mustn't keep the link up either.
+  uint32_t session = linkPeerSession();
+  if (session == statusSession && m.seq <= statusSeq) {
+    logEvent(EV_REPLAY, (int32_t)m.seq, (int32_t)statusSeq);
+    return;
+  }
+  statusSession = session;
+  statusSeq = m.seq;
+  statusAt = now | 1;
+  cmdUnreported = false;
   uint8_t prevState = gateState;
   uint8_t prevResult = gateResult;
   gateState = m.payload[ST_STATE];
@@ -298,9 +329,11 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   if (gateState == GS_OPEN || gateState == GS_CLOSED) lastEnd = gateState;
   else if (gateState != GS_BETWEEN) lastEnd = GS_UNKNOWN;  // fault/no power (no AC, no limit): show not-closed
   if (gateState == GS_BETWEEN && prevState != GS_BETWEEN) betweenSince = now;
-  // Command overridden (e.g. siren holding the gate open): resync the Shelly right away.
-  if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT && mismatchSince) {
-    mismatchSince = (now - (uint32_t)cfg.mismatch_timeout_s * 1000) | 1;
+  // Command overridden (e.g. siren holding the gate open): resync the Shelly right away. A mismatch held off through
+  // the travel (holdingTravel()) never started: check it as soon as nothing is in the way.
+  if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT) {
+    if (mismatchSince) mismatchSince = (now - (uint32_t)cfg.mismatch_timeout_s * 1000) | 1;
+    else checkSoon = true;
   }
   applyOutputs(now);
   // Accept user commands once the initial sync has settled.
@@ -323,6 +356,8 @@ void houseOnAck(Slot slot, uint8_t, bool acked, uint8_t result) {
     // Refused without a pulse (no AC at the gate): the Shelly shows a move that won't happen. Put it back as soon
     // as nothing else is in the way, as for an overridden command, instead of after mismatch_timeout_s.
     if (acked && result == RES_NO_POWER) checkSoon = true;
+    // Pulsed: until its STATUS says where the gate is heading, an opposite command must not be suppressed.
+    if (acked && result == RES_OK) cmdUnreported = true;
   } else if (slot == SLOT_CFG) {
     consoleEventRemoteSet(acked, result);
   }

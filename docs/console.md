@@ -45,21 +45,21 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 
 | Command | Arguments | Reply / effect |
 |---|---|---|
-| `info` | | `fw`, `board`, `role` (running), `saved_role`, `key_set`, `key_id` (see below), `cfg_store`, `flash_id` (SPI flash JEDEC id, hex; `000000` if it doesn't answer), `boot_count` (boots counted in the SPI flash; seeds the session id; 0 if the chip didn't answer) |
+| `info` | | `fw`, `board`, `role` (running), `saved_role`, `key_set`, `key_id` (see below), `cfg_store`, `flash_id` (SPI flash JEDEC id, hex; `000000` if it doesn't answer), `boot_count` (boots counted in the SPI flash; session ids are drawn from it; 0 if the chip didn't answer, its read was garbled, or should the count ever run out) |
 | `status` | | `status` object (below) |
 | `config.get` | | `params` (name → value), `meta` (per param: `name`, `id`, `min`, `max`, `radio`, `remote`, `reboot`), `key_set`, `key_id` |
 | `config.set` | `params`: {name: int} | Applies (doesn't save). `applied`, `errors` (names rejected: unknown, not an integer or out of range; `ok` is false if any), `reboot_required`. Unchanged values are skipped. Radio params restart the radio. Send at most ~8 params per request |
 | `config.save` | | Writes the running config to flash |
 | `config.reset` | | Running config back to defaults at once (key cleared, so the link stops) and the saved config and key erased; `reboot_required` |
 | `key.set` | `key`: 32 hex chars | Sets and saves only the key; restarts the radio and sessions. The key can't be read back; `info` then reports its key id. A weak key is refused (see Weak keys, below) |
-| `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command, unless the gate is already at that limit or the opener is unpowered). Needs a role |
+| `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command, unless the gate is already at that limit or the opener is unpowered). Needs a role. On the gate, `busy` while that relay is pulsing already (or waiting out the interlock to start): a running pulse is never restarted. Testing the other relay cuts it short, as a reversal does |
 | `radio.ping` | | Sends a PING; a `pong` event follows if the peer answers. Needs a role, a key and a working radio |
 | `remote.diag` | | House only. Requests the gate's diagnostics; a `remote_diag` event follows |
 | `remote.set` | `name`, `value` (int) | House only, remote-writable params only. `busy` while one is pending; a `remote_set` event follows |
 | `log.get` | | `log`: the ring buffer (64 entries: `t`, `ev`, `a`, `b`), `now` (board millis) |
 | `hist.get` | `from` (bucket number, default the oldest), `n` (1–12, default 12) | One page of the link history (below): `period_s`, `now_s`, `oldest`, `current`, `fields`, `rows` |
 | `hist.clear` | `period_s` (60–3600, default unchanged) | Empties the history and restarts it at bucket 0. The period lasts until the next boot (then 3600) |
-| `reboot` | | Replies, then resets the board (USB re-enumerates) |
+| `reboot` | | Replies, then resets the board 100 ms later (USB re-enumerates). Held while a relay pulses, like a save (below) |
 | `identify` | `ms` (default 6000, max 60000) | Strobes the LED |
 | `debug.replay` | `hello` (bool, default false) | Re-sends the last frame as-is, to test the peer's replay protection. With `hello`, re-sends this board's first HELLO since boot instead (an old session's once the link has restarted, e.g. after a radio param change). Sent as-is, without listening first; `sent` is false if there was nothing to replay or the radio was busy |
 | `debug.mute` | `ms` (max 60000; 0 stops) | The link ignores received frames for `ms`, as if the receiver had gone deaf (it still transmits) |
@@ -88,9 +88,10 @@ or reads older than the newest this boot has written or loaded; `config.save` wr
 clears that.
 Each save re-initialises the radio (the flash chip shares its bus): about 0.5 s off the air, which the link's
 retries cover. Saving, and restarting the radio, stops the loop for up to ~1 s, so while a relay pulse runs (or
-waits for its interlock start) `config.set`, `config.save`, `config.reset` and `key.set` wait in the port's
+waits for its interlock start) `config.set`, `config.save`, `config.reset`, `key.set` and `reboot` wait in the port's
 buffer and are answered after it (at most the pulse's length, 5 s for a `relay.test`); a held relay would
-otherwise stay on until the save was done.
+otherwise stay on until the save was done (or, for `reboot`, until the reset 100 ms after its reply). A radio that
+faulted (`radio_fail` 1 or 2) stays down until the pulse is over too, and is restarted then.
 `config.reset` erases the saved config and key.
 
 ## Status
@@ -110,7 +111,8 @@ how close the loop has come to the 8 s watchdog; a flash save or radio restart t
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,
   `power_sense`, `ac_power` (IN3, or true with `power_sense` off), `settling` (after boot: the first STATUS waits
   until the inputs have been steady for 3 s, at most 10 s).
-- **House:** the gate's `gate`, `cause`, `last_result` and `target` as last reported, plus `link_up`,
+- **House:** the gate's `gate`, `cause`, `last_result` and `target` as last reported, plus `link_up` (a STATUS from the
+  gate within `link_timeout_eff_s`; other frames, and a STATUS older than the last one taken, don't count),
   `link_timeout_eff_s`, `armed`, `ctrl` (controller level), `ctrl_power`, `sync_window`, `resyncing`, `cmd_id`,
   `cmd_pending`, `cmd_result` (ACK result: 0 ok, 1 already, 2 rejected, 4 no AC power; −1 none, −2 gave up)
   and `remote` (the gate's `uptime_s`, `rssi`, `snr`, `heartbeat_s`, `open_limit`, `close_limit`, `k1`, `k2`,
@@ -165,11 +167,11 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | Event | a | b |
 |---|---|---|
 | `boot` | reset cause (PM RCAUSE bits) | role |
-| `radio_fail` | 0 init failed (once until a retry succeeds), 1 TX fault, 2 reset seen in RX, 3 init retry succeeded | fault count |
+| `radio_fail` | 0 init failed (once until a retry succeeds, every 5 s), 1 TX fault, 2 reset seen in RX (after 1 or 2 the radio restarts at once, or once a relay pulse is over), 3 init retry succeeded | fault count |
 | `link_up`, `link_down` | (house) | |
 | `mac_fail` | message type | RSSI |
 | `session` | peer session id (accepted) | |
-| `replay` | seq | last seq |
+| `replay` | seq | last seq (house: also a STATUS older than the last one it took, withheld and delivered late, which it drops: b = that one's seq) |
 | `tx_giveup` | message type | seq |
 | `cmd_sent` | action (1 open, 2 close) | command id |
 | `cmd_suppressed` | action | gate state |

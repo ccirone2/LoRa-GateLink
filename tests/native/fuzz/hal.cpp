@@ -35,7 +35,6 @@ void halReset(uint32_t startMs) {
   hal.kickAt = startMs;
   hal.prng = 0x243F6A8885A308D3ULL;
   hal.rng = 0x9E3779B97F4A7C15ULL;
-  hal.strictPulse = getenv("GATELINK_FUZZ_STRICT_PULSE") != nullptr;
   hal.knownBugs = getenv("GATELINK_FUZZ_KNOWN_BUGS") != nullptr;
   hal.trace = getenv("GATELINK_FUZZ_TRACE") != nullptr;
 }
@@ -122,33 +121,12 @@ static void onTestReply(int port, bool ok) {
   *slot = { true, p.at, p.ms };
 }
 
-// A stall the harness doesn't hold against the relays (a known firmware bug, see radioInit): their timers, and the
-// relay.test requests they are measured against, move on by it.
-static void excuseStall(uint32_t ms) {
-  for (RelayMon &r : hal.relay) {
-    if (!r.on) continue;
-    r.onAt += ms;
-    r.pulseAt += ms;
-  }
-  for (auto &asks : hal.test)
-    for (Hal::TestAsk &t : asks) t.at += ms;
-  for (Hal::PendingAsk &p : hal.asked) p.at += ms;
-}
-
 static void checkOnTime(int k, uint32_t now) {
   const RelayMon &r = hal.relay[k];
   if (!r.on) return;
   uint32_t onFor = now - r.onAt;
-  if (onFor <= r.allowMs + HAL_PULSE_SLACK_MS) return;
-  if (r.repulsed && !hal.strictPulse) {
-    // Pulsed again while on (a second command, or a test): that pulse runs its own length from its start.
-    uint32_t since = now - r.pulseAt;
-    if (since <= r.pulseAllowMs + HAL_PULSE_SLACK_MS) return;
-    halTrap("gate K%d still on %u ms after its latest pulse started (allowed %u + %u ms; on %u ms in all)", k + 1,
-            since, r.pulseAllowMs, HAL_PULSE_SLACK_MS, onFor);
-  }
-  halTrap("gate K%d on for %u ms (allowed %u + %u ms%s)", k + 1, onFor, r.allowMs, HAL_PULSE_SLACK_MS,
-          r.repulsed ? "; it was pulsed again while on" : "");
+  if (onFor > r.allowMs + HAL_PULSE_SLACK_MS)
+    halTrap("gate K%d on for %u ms (allowed %u + %u ms)", k + 1, onFor, r.allowMs, HAL_PULSE_SLACK_MS);
 }
 
 static void relayEdge(int k, bool on) {
@@ -163,7 +141,6 @@ static void relayEdge(int k, bool on) {
     r.on = true;
     r.onAt = now;
     r.allowMs = allowance(k, now);
-    r.repulsed = false;
   } else {
     checkOnTime(k, now);
     r.on = false;
@@ -172,23 +149,15 @@ static void relayEdge(int k, bool on) {
   }
 }
 
-// The firmware logged `pulse` (a = relay, b = ms): a pulse was asked for. If the relay is already on (it went on
-// before this call), it's a second pulse that restarts the timer. In the very millisecond it went on, it may be a
-// second request too (a delayed start goes on at the top of the loop pass, a console relay.test is read later in
-// the same pass): then what it may stay on for is the longer of the two, from that same start.
+// The firmware logged `pulse` (a = relay, b = ms): a pulse was asked for. The relay went on just now, or goes on
+// later (it waits out the interlock): the allowance is taken when it does. A running pulse is never restarted (a
+// second command for that relay is the same press, a relay.test of it is refused busy), so a relay that was on
+// already, before this millisecond, is a breach.
 static void onPulseEvent(int32_t relay, int32_t ms) {
   if (activeRole != ROLE_GATE || (relay != 1 && relay != 2)) return;
-  RelayMon &r = hal.relay[relay - 1];
-  if (!r.on) return;  // it starts later (interlock): the allowance is taken when it goes on
-  uint32_t a = allowance(relay - 1, hal.ms);
-  if (hal.ms == r.onAt) {
-    if (a > r.allowMs) r.allowMs = a;
-    return;
-  }
-  r.repulsed = true;
-  r.pulseAt = hal.ms;
-  r.pulseAllowMs = a;
-  (void)ms;
+  const RelayMon &r = hal.relay[relay - 1];
+  if (r.on && hal.ms != r.onAt)
+    halTrap("gate K%d pulsed again (%d ms) while on for %u ms: a running pulse restarted", relay, ms, hal.ms - r.onAt);
 }
 
 // House K2 is the alarm's contact sensor: closed only while the house knows the gate as closed and, with
@@ -235,12 +204,9 @@ void analogWrite(uint32_t pin, int value) {
 void boardKick() { hal.kickAt = hal.ms; }
 
 void boardReset() {
-  // The reset drops the relays now: what they were on for up to here counts. Known bug (README.md): the console's
-  // reboot flushes its reply, waits 100 ms and resets, even while a relay pulses, so the pulse can run up to 100 ms
-  // long. Unless knownBugs, judge the relays as they were before that wait.
-  uint32_t at = hal.ms;
-  if (!hal.knownBugs && hal.rebootFlushed && hal.ms - hal.rebootFlushAt <= 100) at = hal.rebootFlushAt;
-  for (int k = 0; k < 2; k++) checkOnTime(k, at);
+  // The reset drops the relays now: what they were on for up to here counts (the console's reboot waits 100 ms
+  // after its reply first).
+  for (int k = 0; k < 2; k++) checkOnTime(k, hal.ms);
   throw BoardReset{ PM_RCAUSE_SYST };
 }
 
@@ -257,18 +223,15 @@ uint32_t halAirtimeMs(size_t len) {  // SX1276 time on air, as world.cpp (explic
   return (uint32_t)ceil(symbols * tsym);
 }
 
-// radio.cpp's radioBegin(). `recovery`: called by radio.cpp itself, to recover from a fault or retry a radio that
-// didn't answer. Those run whenever they're due, also while a gate relay pulses, and the ~0.45 s they block the loop
-// holds the pulse that much longer: a known firmware bug (README.md), which the relay monitors excuse unless
-// knownBugs. Every other start (boot, a radio setting, the key, after a flash access) waits for the relays.
-static bool radioInit(bool recovery) {
+// radio.cpp's radioBegin(): every start (boot, a radio setting, the key, after a flash access, radioRecover()) blocks
+// the loop ~0.45 s, so the firmware runs none while a gate relay pulses; the relay monitors catch one that does.
+bool radioBegin() {
   hal.radioBegun = true;
   hal.radioHeld = false;
+  hal.restartDue = false;
   hal.rxq.clear();     // the reset loses whatever was in the FIFO
   hal.txEnd = hal.ms;  // and abandons a TX
-  uint32_t t0 = hal.ms;
   block(HAL_RADIO_INIT_US);
-  if (recovery && !hal.knownBugs) excuseStall(hal.ms - t0);
   hal.radioUp = hal.radioPresent;
   if (!hal.radioUp) {
     if (!hal.retryAt) logEvent(EV_RADIO_FAIL, 0, (int32_t)hal.faults);
@@ -279,14 +242,24 @@ static bool radioInit(bool recovery) {
   return true;
 }
 
-bool radioBegin() { return radioInit(false); }
-
 void halRadioFault() {
   if (!hal.radioUp) return;
   hal.faults++;
   logEvent(EV_RADIO_FAIL, 1, (int32_t)hal.faults);
-  radioInit(true);
+  hal.radioUp = false;
+  hal.restartDue = true;
+  hal.rxq.clear();
   hal.txEnd = hal.ms;
+}
+
+bool radioRecoverDue() {
+  return hal.restartDue || (!hal.radioUp && hal.retryAt && after(hal.ms, hal.retryAt));
+}
+
+void radioRecover() {
+  if (!radioRecoverDue()) return;
+  bool retry = !hal.restartDue;
+  if (radioBegin() && retry) logEvent(EV_RADIO_FAIL, 3, (int32_t)hal.faults);
 }
 
 void radioRestart() {
@@ -322,11 +295,7 @@ bool radioChannelBusy() {
 }
 
 size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
-  if (!hal.radioUp) {
-    if (hal.retryAt && after(hal.ms, hal.retryAt) && radioInit(true)) logEvent(EV_RADIO_FAIL, 3, (int32_t)hal.faults);
-    return 0;
-  }
-  if (hal.radioHeld || radioTxBusy() || hal.rxq.empty()) return 0;
+  if (!hal.radioUp || hal.radioHeld || radioTxBusy() || hal.rxq.empty()) return 0;
   RxFrame f = hal.rxq.front();
   hal.rxq.pop_front();
   hal.rxDone++;
@@ -494,11 +463,8 @@ int conIoRead(uint8_t port) {
   return c;
 }
 
-// Only the console's reboot flushes (its reply, before it waits 100 ms and resets).
-void conIoFlush(uint8_t) {
-  hal.rebootFlushed = true;
-  hal.rebootFlushAt = hal.ms;
-}
+// Only the console's reboot flushes (its reply, before it waits 100 ms and resets): nothing to do here.
+void conIoFlush(uint8_t) {}
 
 void conIoLineWrite(uint8_t port, const uint8_t *data, size_t n) {
   if (port >= CON_PORTS) halTrap("conIoLineWrite port %u", port);

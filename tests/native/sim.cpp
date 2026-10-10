@@ -45,7 +45,7 @@ bool radioBegin() { return true; }
 void radioRestart() {}
 bool radioOk() { return cur ? cur->radioUp : true; }
 bool radioSend(const uint8_t *buf, size_t len) {
-  if (!cur || !cur->radioUp || (int32_t)(simNow - cur->txEnd) < 0) return false;
+  if (!cur || !cur->radioUp || radioTxBusy()) return false;
   AirFrame f;
   f.from = cur->idx;
   f.b.assign(buf, buf + len);
@@ -53,11 +53,13 @@ bool radioSend(const uint8_t *buf, size_t len) {
   f.end = simNow + airtimeMs(len);
   if (sim->drop) f.dropped = sim->drop(f);
   if (sim->corrupt) f.corrupt = sim->corrupt(f);
+  cur->txStart = f.start;
   cur->txEnd = f.end;
   sim->air.push_back(f);
   return true;
 }
-bool radioTxBusy() { return cur && (int32_t)(simNow - cur->txEnd) < 0; }
+// Unsigned: a frame sent weeks ago must not read as still on the air once the signed difference flips.
+bool radioTxBusy() { return cur && simNow - cur->txStart < cur->txEnd - cur->txStart; }
 uint32_t radioTxEndAt() { return cur ? cur->txEnd : 0; }
 uint32_t radioFaults() { return 0; }
 uint32_t radioCrcErrors() { return 0; }
@@ -163,7 +165,7 @@ static void onAckThunk(Slot slot, uint8_t type, bool acked, uint8_t result) {
 
 void Node::begin() {
   Ctx c(*this);
-  txEnd = simNow;  // radioBegin() abandons a TX
+  txStart = txEnd = simNow;  // radioBegin() abandons a TX
   rxq.clear();
   api.begin(onRxThunk, onAckThunk);
 }
@@ -220,7 +222,7 @@ static void setupNode(Node &n, int idx, const char *name, int32_t role, uint64_t
   n.cfg.key_set = 1;
   for (int i = 0; i < 16; i++) n.cfg.key[i] = (uint8_t)(0xA0 + i);
   n.rng = seed;
-  n.txEnd = simNow;
+  n.txStart = n.txEnd = simNow;
 }
 
 Sim::Sim(uint32_t start) {
@@ -289,45 +291,9 @@ void Sim::dumpAir(uint32_t since) const {
   }
 }
 
-// --- test runner -------------------------------------------------------------------------------------------------
-std::vector<TestCase> &registry() {
-  static std::vector<TestCase> r;
-  return r;
-}
-
-std::string where(const char *file, int line, const std::string &what) {
-  const char *base = strrchr(file, '/');
-  return std::string(base ? base + 1 : file) + ":" + std::to_string(line) + ": " + what;
-}
-
-int main(int argc, char **argv) {
-  int failed = 0, run = 0;
-  for (const TestCase &t : registry()) {
-    if (argc > 1 && !strstr(t.name, argv[1])) continue;
-    run++;
-    std::string err;
-    try {
-      flash.reset();
-      t.fn();
-    } catch (const std::exception &e) {
-      err = e.what();
-    }
-    sim = nullptr;
-    cur = nullptr;
-    if (t.xfail) {
-      if (err.empty()) {
-        printf("XPASS %s: fixed? remove XFAIL (%s)\n", t.name, t.xfail);
-        failed++;
-      } else {
-        printf("xfail %s (%s)\n", t.name, t.xfail);
-      }
-    } else if (err.empty()) {
-      printf("ok    %s\n", t.name);
-    } else {
-      printf("FAIL  %s\n      %s\n", t.name, err.c_str());
-      failed++;
-    }
-  }
-  printf("%d tests, %d failed\n", run, failed);
-  return failed ? 1 : 0;
-}
+// --- per test ------------------------------------------------------------------------------------------------
+static TestHooks resetEach([] { flash.reset(); },
+                           [] {
+                             sim = nullptr;
+                             cur = nullptr;
+                           });

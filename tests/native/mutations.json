@@ -1,0 +1,1890 @@
+[
+ {
+  "name": "gate_relays_p1_relay_update_ends_pulse",
+  "invariant": "pulse-only",
+  "why": "P1: Relay::update ends a pulse one pass late (off-by-one: > instead of >=), so pulses run ms+1..ms+2",
+  "killed_by": [
+   "gate_relays_cmd_open_pulses_k1_close_pulses_k2_once_each",
+   "gate_relays_cmd_pulse_is_pulse_ms_at_both_bounds",
+   "gate_relays_relay_test_pulses_its_ms_and_refuses_out_of_range",
+   "gate_relays_lost_acks_retried_command_pulses_once",
+   "gate_relays_interlock_after_the_other_pulse_ended_by_itself",
+   "gate_relays_interlock_open_cmd_5ms_after_close_pulse_ended",
+   "gate_relays_interlock_holds_under_rapid_alternating_tests",
+   "gate_relays_test_sets_no_target_while_the_opener_is_unpowered",
+   "gate_relays_console_hold_ends_exactly_with_the_pulse",
+   "gate_relays_remote_write_waits_for_the_pulse_then_saves",
+   "gate_relays_command_lost_to_a_save_still_gets_its_full_pulse"
+  ],
+  "edits": [
+   {
+    "file": "io.cpp",
+    "find": "  if (_pulseUntil && !_startAt && (int32_t)(now - _pulseUntil) >= 0) set(false);",
+    "replace": "  if (_pulseUntil && !_startAt && (int32_t)(now - _pulseUntil) > 0) set(false);"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_p2_gaterelaytest_pulses_cfg",
+  "invariant": "pulse-only",
+  "why": "P2: gateRelayTest pulses cfg.pulse_ms instead of the test's own ms (a 50 ms test closes for 500 ms)",
+  "killed_by": [
+   "gate_relays_relay_test_pulses_its_ms_and_refuses_out_of_range",
+   "gate_relays_reset_mid_pulse_releases_and_nothing_closes_after_boot",
+   "gate_relays_interlock_reversal_test_cuts_the_first_pulse_short",
+   "gate_relays_interlock_after_the_other_pulse_ended_by_itself",
+   "gate_relays_interlock_cancelled_waiting_pulse_never_closes",
+   "gate_relays_interlock_holds_under_rapid_alternating_tests",
+   "gate_relays_interlock_across_the_millis_wrap",
+   "gate_relays_console_flash_and_radio_requests_wait_for_the_pulse",
+   "gate_relays_console_hold_ends_exactly_with_the_pulse"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  interlockedPulse(r, other, now, ms);\n  // Track it like a command",
+    "replace": "  interlockedPulse(r, other, now, cfg.pulse_ms);\n  // Track it like a command"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_p3_handlecmd_never_sets_havecmd",
+  "invariant": "pulse-only",
+  "why": "P3: handleCmd never sets haveCmd, so the lastCmdId dedup never matches. Survives all 26 group tests and test_system.cpp: gate_relays_lost_acks_retried_command_pulses_once only drops ACKs, and the link's ACK memo already absorbs those retransmits. The lastCmdId check is only reached by a renumbered resend (reframePending after the house answers a HELLO). A scratch probe (ACKs dropped, then gate debug.replay hello:true so the house answers its verified session's HELLO) kills it: the gate pulses K1 twice for one cmd id (monitor: 'gate pulsed twice for command'). Pristine logs cmd_dup and pulses once.",
+  "killed_by": [
+   "gate_relays_renumbered_resend_of_a_run_command_pulses_once"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  logEvent(EV_CMD_RX, action, id);\n  haveCmd = true;\n",
+    "replace": "  logEvent(EV_CMD_RX, action, id);\n"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_p4_relay_set_longer_clears",
+  "invariant": "pulse-only",
+  "why": "P4: Relay::set no longer clears a pending delayed start (_startAt). A pulse cancelled while it waits for its interlock start still closes later, with _pulseUntil cleared, so it is held with no end.",
+  "killed_by": [
+   "gate_relays_interlock_cancelled_waiting_pulse_never_closes",
+   "gate_relays_interlock_holds_under_rapid_alternating_tests"
+  ],
+  "edits": [
+   {
+    "file": "io.cpp",
+    "find": "  if (_on && !on) _offAt = millis() | 1;\n  _startAt = 0;\n",
+    "replace": "  if (_on && !on) _offAt = millis() | 1;\n"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_i1_interlockedpulse_waits_only_when",
+  "invariant": "interlock",
+  "why": "I1: interlockedPulse waits only when it cuts the other relay short and drops the gapLeft wait after the other relay ended by itself",
+  "killed_by": [
+   "gate_relays_interlock_after_the_other_pulse_ended_by_itself",
+   "gate_relays_interlock_open_cmd_5ms_after_close_pulse_ended",
+   "gate_relays_interlock_holds_under_rapid_alternating_tests",
+   "gate_relays_interlock_across_the_millis_wrap"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  r.pulse(now, ms, wasOn ? INTERLOCK_MS : other.gapLeft(now, INTERLOCK_MS));",
+    "replace": "  r.pulse(now, ms, wasOn ? INTERLOCK_MS : 0);"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_i2_command_pulses_bypass_interlockedpulse",
+  "invariant": "interlock",
+  "why": "I2: command pulses bypass interlockedPulse. The other relay is released, but the new one closes in the same instant (relay tests are still interlocked).",
+  "killed_by": [
+   "gate_relays_interlock_close_cmd_cuts_open_pulse_short",
+   "gate_relays_interlock_open_cmd_5ms_after_close_pulse_ended"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  interlockedPulse(r, other, now, cfg.pulse_ms);\n  logEvent(EV_PULSE, which, cfg.pulse_ms);",
+    "replace": "  other.set(false);\n  r.pulse(now, cfg.pulse_ms);\n  logEvent(EV_PULSE, which, cfg.pulse_ms);"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_i3_relay_gapleft_computes_time",
+  "invariant": "interlock",
+  "why": "I3: Relay::gapLeft computes the time since release with an unsigned, non-wrap-safe comparison, so across the millis() wrap the remaining gap is wrong",
+  "killed_by": [
+   "gate_relays_interlock_across_the_millis_wrap"
+  ],
+  "edits": [
+   {
+    "file": "io.cpp",
+    "find": "  int32_t since = (int32_t)(now - _offAt);\n  if (since < 0) since = 0;  // stamped with millis(), which can be later than the caller's `now`\n",
+    "replace": "  uint32_t since = now > _offAt ? now - _offAt : 0;\n"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_i4_relay_gapleft_drops_clamp",
+  "invariant": "interlock",
+  "why": "I4: Relay::gapLeft drops the clamp for a release stamped (millis() | 1) one ms after the caller's now. since = -1 then reads as huge, and no gap is left. Survives all 26 group tests and test_system.cpp: no test asks for the other relay in the very pass that releases one at an even ms, which happens when a pass runs late over the pulse's end (the sim's 20 ms radioRandom32 block, a USB stall). A scratch probe kills it: K2 200 ms, the gate's next pass held until end+1 (even), relay.test K1 handled in that pass. K1 closes in the same ms K2 releases ('gate K1 energized while K2 is'). Pristine: gap 101 ms.",
+  "killed_by": [
+   "gate_relays_interlock_after_a_release_in_a_late_loop_pass"
+  ],
+  "edits": [
+   {
+    "file": "io.cpp",
+    "find": "  if (since < 0) since = 0;  // stamped with millis(), which can be later than the caller's `now`\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_t1_gaterelaytest_sets_target_even",
+  "invariant": "relay-test-target",
+  "why": "T1: gateRelayTest sets a target even when the gate is already at the limit the test drives to",
+  "killed_by": [
+   "gate_relays_test_at_the_limit_it_drives_to_sets_no_target"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (state != want && state != GS_NO_POWER) setTarget(want, now);",
+    "replace": "  if (state != GS_NO_POWER) setTarget(want, now);"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_t2_gaterelaytest_sets_target_while",
+  "invariant": "relay-test-target",
+  "why": "T2: gateRelayTest sets a target while the opener is unpowered (no_power)",
+  "killed_by": [
+   "gate_relays_test_sets_no_target_while_the_opener_is_unpowered"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (state != want && state != GS_NO_POWER) setTarget(want, now);",
+    "replace": "  if (state != want) setTarget(want, now);"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_t3_gaterelaytest_maps_relay_wrong",
+  "invariant": "relay-test-target",
+  "why": "T3: gateRelayTest maps the relay to the wrong limit (K1 -> closed, K2 -> open)",
+  "killed_by": [
+   "gate_relays_test_toward_the_other_limit_or_from_between_sets_a_target",
+   "gate_relays_test_at_the_limit_it_drives_to_sets_no_target"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  uint8_t want = k == 1 ? GS_OPEN : GS_CLOSED;\n  if (state != want",
+    "replace": "  uint8_t want = k == 1 ? GS_CLOSED : GS_OPEN;\n  if (state != want"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_t4_gaterelaytest_sets_target_only",
+  "invariant": "relay-test-target",
+  "why": "T4: gateRelayTest sets a target only from a limit (a 'from the other limit' refactor), so a test from between sets none",
+  "killed_by": [
+   "gate_relays_test_toward_the_other_limit_or_from_between_sets_a_target"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (state != want && state != GS_NO_POWER) setTarget(want, now);",
+    "replace": "  if ((state == GS_OPEN || state == GS_CLOSED) && state != want) setTarget(want, now);"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_n1_blocksloop_leaves_out_key",
+  "invariant": "no-stall-in-pulse",
+  "why": "N1: blocksLoop leaves out key.set (it saves and restarts the radio), so key.set runs during a pulse",
+  "killed_by": [
+   "gate_relays_console_flash_and_radio_requests_wait_for_the_pulse"
+  ],
+  "edits": [
+   {
+    "file": "console.cpp",
+    "find": "  return !strcmp(cmd, \"config.set\") || !strcmp(cmd, \"config.save\") || !strcmp(cmd, \"config.reset\")\n         || !strcmp(cmd, \"key.set\");",
+    "replace": "  return !strcmp(cmd, \"config.set\") || !strcmp(cmd, \"config.save\") || !strcmp(cmd, \"config.reset\");"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_n2_apprelayspulsing_checks_coils_pulsing",
+  "invariant": "no-stall-in-pulse",
+  "why": "N2: appRelaysPulsing checks the coils (on()) instead of pulsing(), so a pulse waiting for its interlock start doesn't count",
+  "killed_by": [
+   "gate_relays_console_hold_ends_exactly_with_the_pulse"
+  ],
+  "edits": [
+   {
+    "file": "app.cpp",
+    "find": "  return k1.pulsing() || k2.pulsing();",
+    "replace": "  return k1.on() || k2.on();"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_n3_handlecfgset_applies_saves_remote",
+  "invariant": "no-stall-in-pulse",
+  "why": "N3: handleCfgSet applies and saves a remote write at once whenever nothing is queued, even during a pulse",
+  "killed_by": [
+   "gate_relays_remote_write_waits_for_the_pulse_then_saves"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (!cfgQueued && !appRelaysPulsing()) {",
+    "replace": "  if (!cfgQueued) {"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_n4_draincfgqueue_doesn_t_wait",
+  "invariant": "no-stall-in-pulse",
+  "why": "N4: drainCfgQueue doesn't wait for the pulse, so a write queued during a pulse is saved at the end of the same loop pass",
+  "killed_by": [
+   "gate_relays_remote_write_waits_for_the_pulse_then_saves"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (!cfgQueued || appRelaysPulsing()) return;",
+    "replace": "  if (!cfgQueued) return;"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_w1_consolepoll_handles_up_16",
+  "invariant": "watchdog",
+  "why": "W1: consolePoll handles up to 16 queued USB requests per loop pass instead of one (monitor: 'loop blocked 8274 ms without a watchdog reset')",
+  "killed_by": [
+   "gate_relays_watchdog_burst_of_saves_one_per_loop_pass"
+  ],
+  "edits": [
+   {
+    "file": "console.cpp",
+    "find": "  poll(usbPort);\n  if (uartOn) poll(uartPort);",
+    "replace": "  for (int i = 0; i < 16; i++) poll(usbPort);\n  if (uartOn) poll(uartPort);"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_w2_config",
+  "invariant": "watchdog",
+  "why": "W2: config.reset erases the first 16 flash sectors instead of the two record sectors (6.4 s per request at eraseMs 400; both ports: 'loop blocked 8072 ms')",
+  "killed_by": [
+   "gate_relays_console_flash_and_radio_requests_wait_for_the_pulse",
+   "gate_relays_watchdog_worst_pass_factory_reset_on_both_ports"
+  ],
+  "edits": [
+   {
+    "file": "config.cpp",
+    "find": "  for (int8_t s = 0; s < REC_SECTORS; s++) ok &= extFlashEraseSector(s * EXTFLASH_SECTOR);",
+    "replace": "  for (int8_t s = 0; s < 16; s++) ok &= extFlashEraseSector(s * EXTFLASH_SECTOR);"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_w3_consolepoll_handles_up_16",
+  "invariant": "watchdog",
+  "why": "W3: consolePoll handles up to 16 queued UART requests per pass (a plausible change to keep Serial1's small RX buffer from overflowing). Survives all 26 group tests and test_system.cpp: the burst test sends only on USB, and the both-ports test sends one request per port. A scratch probe kills it: 20 CRC-tagged config.save requests on the UART at eraseMs 400 give 'loop blocked 8274 ms without a watchdog reset' and a watchdog reboot.",
+  "killed_by": [
+   "gate_relays_watchdog_burst_of_saves_on_the_uart_one_per_loop_pass"
+  ],
+  "edits": [
+   {
+    "file": "console.cpp",
+    "find": "  poll(usbPort);\n  if (uartOn) poll(uartPort);",
+    "replace": "  poll(usbPort);\n  if (uartOn)\n    for (int i = 0; i < 16; i++) poll(uartPort);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl1_optimistic_state_after_pulsing",
+  "invariant": "state-from-limits",
+  "why": "SL1: optimistic state: after pulsing a command the gate takes the commanded state as its state",
+  "killed_by": [
+   "gate_state_command_reports_limits_not_the_command",
+   "gate_state_deaf_opener_stays_closed_until_travel_timeout",
+   "gate_state_ignored_pulse_keeps_reporting_the_limit",
+   "gate_state_jammed_gate_reads_between_never_the_target",
+   "gate_state_dead_open_limit_never_reports_open",
+   "gate_state_external_right_after_our_command_is_external",
+   "gate_state_override_to_the_far_limit_ends_the_target_with_timeout",
+   "gate_state_our_reversal_before_leaving_the_limit_is_ours",
+   "gate_state_boot_mid_travel_reports_between_with_no_cause",
+   "gate_state_boot_reports_a_move_made_while_down_with_no_cause",
+   "gate_state_power_sense_off_ignores_in3_and_does_not_hold",
+   "gate_state_no_power_transitions_have_no_cause",
+   "gate_state_power_return_mid_travel_is_not_a_move",
+   "gate_state_power_and_limit_lost_together_read_no_power"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    setTarget(want, now);\n    lastCmdAck = RES_OK;",
+    "replace": "    setTarget(want, now);\n    state = want;\n    lastCmdAck = RES_OK;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl2_both_limits_reading_longer",
+  "invariant": "state-from-limits",
+  "why": "SL2: both limits reading no longer reads fault (the closed limit wins)",
+  "killed_by": [
+   "gate_state_both_limits_read_fault"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (open && closed) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "replace": "  if (closed) return GS_CLOSED;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl3_status_reports_pending_command",
+  "invariant": "state-from-limits",
+  "why": "SL3: STATUS reports the pending command's target as the gate state",
+  "killed_by": [
+   "gate_state_deaf_opener_stays_closed_until_travel_timeout",
+   "gate_state_ignored_pulse_keeps_reporting_the_limit",
+   "gate_state_jammed_gate_reads_between_never_the_target",
+   "gate_state_our_reversal_before_leaving_the_limit_is_ours",
+   "gate_state_boot_mid_travel_reports_between_with_no_cause",
+   "gate_state_no_power_transitions_have_no_cause"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  p[ST_STATE] = state;",
+    "replace": "  p[ST_STATE] = target != GS_UNKNOWN ? target : state;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl4_travel_timeout_gate_still",
+  "invariant": "state-from-limits",
+  "why": "SL4: at the travel timeout a gate still between is taken to have reached the target (result reached, no travel_timeout)",
+  "killed_by": [
+   "gate_state_jammed_gate_reads_between_never_the_target",
+   "gate_state_dead_open_limit_never_reports_open",
+   "gate_state_power_return_mid_travel_is_not_a_move"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    if (state == target) {\n      lastResult = TR_REACHED;",
+    "replace": "    if (state == target || state == GS_BETWEEN) {\n      lastResult = TR_REACHED;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_c2_back_time_window_any",
+  "invariant": "cause",
+  "why": "C2: back to a time window: any movement within travel_timeout_s of our last pulse is lora",
+  "killed_by": [
+   "gate_state_external_right_after_our_command_is_external",
+   "gate_state_override_to_the_far_limit_ends_the_target_with_timeout",
+   "gate_state_relay_test_sets_a_target",
+   "gate_state_power_sense_off_ignores_in3_and_does_not_hold"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    bool ours = target != GS_UNKNOWN\n                && (s == target || (s == GS_BETWEEN && (prev != target || prev == leaving)));",
+    "replace": "    bool ours = s != prev && targetSince && !elapsed(now, targetSince, (uint32_t)cfg.travel_timeout_s * 1000);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_c3_override_far_limit_reports",
+  "invariant": "cause",
+  "why": "C3: an override to the far limit reports timeout but keeps the target, so a later external move toward it reads lora",
+  "killed_by": [
+   "gate_state_override_to_the_far_limit_ends_the_target_with_timeout"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "      lastResult = TR_TIMEOUT;\n      clearTarget();\n    }",
+    "replace": "      lastResult = TR_TIMEOUT;\n    }"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_c4_relay",
+  "invariant": "cause",
+  "why": "C4: relay.test no longer sets a target (its movement reads external)",
+  "killed_by": [
+   "gate_state_relay_test_sets_a_target"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (state != want && state != GS_NO_POWER) setTarget(want, now);\n  logEvent(EV_PULSE, k, ms);",
+    "replace": "  (void)want;\n  logEvent(EV_PULSE, k, ms);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_c5_house_tr_timeout_restarts",
+  "invariant": "cause",
+  "why": "C5: house: a TR_TIMEOUT restarts the mismatch clock instead of fast-forwarding it, so the controller is resynced only after mismatch_timeout_s",
+  "killed_by": [
+   "gate_state_deaf_opener_stays_closed_until_travel_timeout",
+   "gate_state_ignored_pulse_keeps_reporting_the_limit"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    mismatchSince = (now - (uint32_t)cfg.mismatch_timeout_s * 1000) | 1;\n  }",
+    "replace": "    mismatchSince = now | 1;\n  }"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_b1_settling_longer_restarts_steady",
+  "invariant": "boot-settle",
+  "why": "B1: settling no longer restarts the steady timer on an input change (first STATUS 3 s after boot whatever the inputs do)",
+  "killed_by": [
+   "gate_state_boot_waits_for_limits_that_come_back_late",
+   "gate_state_boot_settle_is_capped_at_10s"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    if (s != state) {\n      state = s;\n      steadySince = now;\n    }",
+    "replace": "    if (s != state) {\n      state = s;\n    }"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_b2_10_s_cap_settling",
+  "invariant": "boot-settle",
+  "why": "B2: the 10 s cap on settling dropped",
+  "killed_by": [
+   "gate_state_boot_settle_is_capped_at_10s"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    if (elapsed(now, steadySince, BOOT_SETTLE_MS) || elapsed(now, bootAt, BOOT_SETTLE_MAX_MS)) {",
+    "replace": "    if (elapsed(now, steadySince, BOOT_SETTLE_MS)) {"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_b3_sendstatus_longer_waits_settling",
+  "invariant": "boot-settle",
+  "why": "B3: sendStatus no longer waits for settling (the heartbeat/session paths send STATUS at once after boot)",
+  "killed_by": [
+   "gate_state_boot_first_status_waits_for_settled_inputs",
+   "gate_state_boot_waits_for_limits_that_come_back_late",
+   "gate_state_boot_settle_is_capped_at_10s",
+   "gate_state_boot_reports_a_move_made_while_down_with_no_cause"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (settling) return;  // the first one goes out once the inputs have settled\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "gate_state_b4_settled_state_reported_through",
+  "invariant": "boot-settle",
+  "why": "B4: the settled state is reported through the normal change path (state reset to unknown), so the boot gets a cause and a gate_state log",
+  "killed_by": [
+   "gate_state_boot_first_status_waits_for_settled_inputs",
+   "gate_state_boot_waits_for_limits_that_come_back_late",
+   "gate_state_boot_settle_is_capped_at_10s",
+   "gate_state_boot_mid_travel_reports_between_with_no_cause",
+   "gate_state_boot_reports_a_move_made_while_down_with_no_cause"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "      settling = false;\n      sendStatus(now);\n    }",
+    "replace": "      settling = false;\n      state = GS_UNKNOWN;  // the next pass reports the settled state\n    }"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_h1_between_hold_applies_power",
+  "invariant": "between-hold",
+  "why": "H1: the between hold applies with power_sense off too",
+  "killed_by": [
+   "gate_state_power_sense_off_ignores_in3_and_does_not_hold"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  bool holdBetween = betweenAt && cfg.power_sense\n                     && !elapsed",
+    "replace": "  bool holdBetween = betweenAt\n                     && !elapsed"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_h2_out_power_hold_between",
+  "invariant": "between-hold",
+  "why": "H2: out of no_power the hold is BETWEEN_HOLD_MS, not BOOT_SETTLE_MS",
+  "killed_by": [
+   "gate_state_power_return_holds_between_for_boot_settle",
+   "gate_state_power_return_mid_travel_is_not_a_move"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "                     && !elapsed(now, betweenAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);",
+    "replace": "                     && !elapsed(now, betweenAt, BETWEEN_HOLD_MS);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_h3_betweenat_cleared_only_once",
+  "invariant": "between-hold",
+  "why": "H3: betweenAt is cleared only once between is reported (dropped `s != GS_BETWEEN ||`), so the stamp goes stale and the hold no longer applies",
+  "killed_by": [
+   "gate_state_our_reversal_before_leaving_the_limit_is_ours",
+   "gate_state_failing_input_supply_reads_no_power_not_a_move",
+   "gate_state_between_hold_is_500ms",
+   "gate_state_power_return_holds_between_for_boot_settle",
+   "gate_state_power_return_mid_travel_is_not_a_move",
+   "gate_state_ac_edge_on_the_hold_expiry_reads_no_power"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (s != GS_BETWEEN || state == GS_BETWEEN) {\n    betweenAt = 0;",
+    "replace": "  if (state == GS_BETWEEN) {\n    betweenAt = 0;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_h4_off_hand_written_comparison",
+  "invariant": "between-hold",
+  "why": "H4: off-by-one: hand-written <= comparison holds one ms longer than the hold",
+  "killed_by": [
+   "gate_state_between_hold_is_500ms",
+   "gate_state_power_return_holds_between_for_boot_settle",
+   "gate_state_power_return_mid_travel_is_not_a_move",
+   "gate_state_ac_edge_on_the_hold_expiry_reads_no_power"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "                     && !elapsed(now, betweenAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);",
+    "replace": "                     && (int32_t)(now - betweenAt) <= (int32_t)(state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_a1_commands_are_refused_without",
+  "invariant": "ac-power",
+  "why": "A1: commands are refused without AC only when no limit reads (pulsed on battery with a limit reading)",
+  "killed_by": [
+   "gate_state_commands_refused_without_ac"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (!acPower()) {\n    logEvent(EV_CMD_REFUSED, action, id);",
+    "replace": "  if (!acPower() && state == GS_NO_POWER) {\n    logEvent(EV_CMD_REFUSED, action, id);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_a2_swapped_order_readstate_without",
+  "invariant": "ac-power",
+  "why": "A2: swapped order in readState: without AC the state is no_power even with a limit reading",
+  "killed_by": [
+   "gate_state_ac_lost_limit_still_trusted",
+   "gate_state_commands_refused_without_ac",
+   "gate_state_no_power_transitions_have_no_cause"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  bool open = in1.active(), closed = in2.active();\n  if (open && closed) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may\n  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.\n  if (!acPower()) return GS_NO_POWER;\n  return GS_BETWEEN;",
+    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (open && closed) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  return GS_BETWEEN;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_a3_only_transitions_into_power",
+  "invariant": "ac-power",
+  "why": "A3: only transitions into no_power have no cause; out of no_power gets lora/external",
+  "killed_by": [
+   "gate_state_relay_test_without_power_sets_no_target",
+   "gate_state_failing_input_supply_reads_no_power_not_a_move",
+   "gate_state_power_return_holds_between_for_boot_settle",
+   "gate_state_ac_lost_limit_still_trusted",
+   "gate_state_no_power_transitions_have_no_cause",
+   "gate_state_power_return_mid_travel_is_not_a_move",
+   "gate_state_power_and_limit_lost_together_read_no_power"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    bool power = s == GS_NO_POWER || state == GS_NO_POWER;",
+    "replace": "    bool power = s == GS_NO_POWER;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_a4_status_bit_6_ac",
+  "invariant": "ac-power",
+  "why": "A4: STATUS bit 6 (AC lost) taken from raw IN3, ignoring power_sense",
+  "killed_by": [
+   "gate_state_power_sense_off_ignores_in3_and_does_not_hold"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "                 | (acPower() ? 0 : STI_AC_LOST);",
+    "replace": "                 | (in3.active() ? 0 : STI_AC_LOST);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_s1_swapped_order_readstate_before",
+  "invariant": "spare-before-state",
+  "why": "S1: swapped order: readState() before updateSpareInputs() in gateLoop",
+  "killed_by": [
+   "gate_state_power_return_holds_between_for_boot_settle",
+   "gate_state_ac_edge_on_the_hold_expiry_reads_no_power"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense\n\n  uint8_t s = readState();",
+    "replace": "  uint8_t s = readState();\n  bool spareChanged = updateSpareInputs(now);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_s3_in3_power_sense_debounced",
+  "invariant": "spare-before-state",
+  "why": "S3: IN3 (power sense) debounced twice as long as the limits, so a limit drop and a power loss in the same instant no longer land on the same pass",
+  "killed_by": [
+   "gate_state_failing_input_supply_reads_no_power_not_a_move",
+   "gate_state_power_return_holds_between_for_boot_settle",
+   "gate_state_power_return_mid_travel_is_not_a_move",
+   "gate_state_power_and_limit_lost_together_read_no_power",
+   "gate_state_ac_edge_on_the_hold_expiry_reads_no_power"
+  ],
+  "edits": [
+   {
+    "file": "app.cpp",
+    "find": "  if (in3.update(now, cfg.debounce_ms, cfg.in3_invert)) {",
+    "replace": "  if (in3.update(now, cfg.debounce_ms * 2, cfg.in3_invert)) {"
+   }
+  ]
+ },
+ {
+  "name": "house_power_c1_ctrlpowered_ignores_board_s",
+  "invariant": "ctrl-power",
+  "why": "C1: ctrlPowered() ignores the board's VIN power good (ctrl_power_pmic), so only the slow IN2 opto counts. In a 12 V cut the relay's OFF edge (about 511 ms in) then reads as the user's CLOSE.",
+  "killed_by": [
+   "house_power_cut_lipo_in_gate_open",
+   "house_power_cut_lipo_in_gate_closed",
+   "house_power_dips_lipo_in_gate_open",
+   "house_power_dip_600ms_lipo_in_relay_drops_opto_misses_it",
+   "house_power_close_discarded_by_power_loss_inside_confirm",
+   "house_power_close_sent_when_power_lost_after_confirm",
+   "house_power_vin_off_alone_blocks_commands_and_resync",
+   "house_power_settle_user_edge_just_inside_window_ignored",
+   "house_power_settle_user_edge_just_after_window_commands",
+   "house_power_settle_matching_edge_after_settle_until_ends_window",
+   "house_power_settle_matching_edge_1ms_before_settle_until_holds_window",
+   "house_power_settle_matching_edge_at_settle_until_ends_window",
+   "house_power_settle_window_not_shortened_by_k1_change"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  return (!cfg.ctrl_power_sense || in2.active()) && (!cfg.ctrl_power_pmic || supplyGood());",
+    "replace": "  return (!cfg.ctrl_power_sense || in2.active());"
+   }
+  ]
+ },
+ {
+  "name": "house_power_c2_updatectrlpower_longer_discards_pending",
+  "invariant": "ctrl-power",
+  "why": "C2: updateCtrlPower no longer discards a pending CLOSE when controller power drops inside ctrl_confirm_ms, so the CLOSE is sent after the confirm wait.",
+  "killed_by": [
+   "house_power_opto_only_cut_gate_open_discards_close",
+   "house_power_close_discarded_by_power_loss_inside_confirm"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (!p) pendingAction = 0;  // the edge was the relay dropping with the supply",
+    "replace": "  if (!p) {}  // the edge was the relay dropping with the supply"
+   }
+  ]
+ },
+ {
+  "name": "house_power_c3_sensing_shortcut_uses",
+  "invariant": "ctrl-power",
+  "why": "C3: the no-sensing shortcut uses || instead of &&. With either sense off (opto-only: ctrl_power_pmic 0) a CLOSE goes at once with no confirm wait, so the relay drop at a cut becomes a command.",
+  "killed_by": [
+   "house_power_opto_only_cut_gate_open_discards_close",
+   "house_power_opto_only_dip_600ms_gate_open"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "(!cfg.ctrl_power_sense && !cfg.ctrl_power_pmic)",
+    "replace": "(!cfg.ctrl_power_sense || !cfg.ctrl_power_pmic)"
+   }
+  ]
+ },
+ {
+  "name": "house_power_c4_resync_longer_pauses_while",
+  "invariant": "ctrl-power",
+  "why": "C4: resync no longer pauses while the controller is unpowered (the !ctrlPower branch of the resync chain is dropped), so K1 is cycled after mismatch_timeout_s even though the controller can't follow.",
+  "killed_by": [
+   "house_power_in2_off_alone_blocks_commands_and_resync",
+   "house_power_vin_off_alone_blocks_commands_and_resync"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  } else if (!ctrlPower) {\n    mismatchSince = 0;  // an unpowered Shelly can't follow K1; start over once it's back\n  } else if (cfg.ctrl_sync && armed",
+    "replace": "  } else if (cfg.ctrl_sync && armed"
+   }
+  ]
+ },
+ {
+  "name": "house_power_s1_matching_in1_edge_ends",
+  "invariant": "settle-window",
+  "why": "S1: a matching IN1 edge ends the sync window at once, ignoring settleUntil (the settle guard is dropped).",
+  "killed_by": [
+   "house_power_cut_lipo_in_gate_open",
+   "house_power_settle_user_edge_just_inside_window_ignored",
+   "house_power_settle_matching_edge_1ms_before_settle_until_holds_window",
+   "house_power_boot_settle_window_holds_through_k1_sync_and_chatter",
+   "house_power_settle_window_not_shortened_by_k1_change"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncActive = false;",
+    "replace": "      if (shellyLevel == syncExpect) syncActive = false;"
+   }
+  ]
+ },
+ {
+  "name": "house_power_s2_off",
+  "invariant": "settle-window",
+  "why": "S2: off-by-one. A matching edge exactly at settleUntil no longer ends the window; it needs settleUntil + 1.",
+  "killed_by": [
+   "house_power_settle_matching_edge_after_settle_until_ends_window",
+   "house_power_settle_matching_edge_at_settle_until_ends_window"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncActive = false;",
+    "replace": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 1)) syncActive = false;"
+   }
+  ]
+ },
+ {
+  "name": "house_power_s3_opensyncwindow_always_overwrites_syncuntil",
+  "invariant": "settle-window",
+  "why": "S3: openSyncWindow always overwrites syncUntil, so a K1 change's 3 s window shortens an open settle window.",
+  "killed_by": [
+   "house_power_boot_settle_window_holds_through_k1_sync_and_chatter",
+   "house_power_settle_window_not_shortened_by_k1_change"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (!syncActive || (int32_t)(until - syncUntil) > 0) syncUntil = until;",
+    "replace": "  syncUntil = until;"
+   }
+  ]
+ },
+ {
+  "name": "house_power_s4_house_boot_opens_only",
+  "invariant": "settle-window",
+  "why": "S4: house boot opens only a plain sync window (sync_window_ms) instead of the ctrl_settle_ms settle window. Power return is unchanged.",
+  "killed_by": [
+   "house_power_boot_settle_window_holds_through_k1_sync_and_chatter"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  settleUntil = now;\n  openSettleWindow(now);",
+    "replace": "  settleUntil = now;\n  openSyncWindow(now, k1.on(), 0);"
+   }
+  ]
+ },
+ {
+  "name": "house_power_u1_lastend_longer_cleared_fault",
+  "invariant": "unknown-shows-open",
+  "why": "U1: lastEnd is no longer cleared on fault/no_power. A later `between` (gate pushed by hand while unpowered) then holds the stale closed level (K1 off) instead of showing not-closed.",
+  "killed_by": [
+   "house_power_between_after_no_power_shows_not_closed"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  else if (gateState != GS_BETWEEN) lastEnd = GS_UNKNOWN;  // fault/no power (no AC, no limit): show not-closed",
+    "replace": "  // (mutant) lastEnd kept through fault/no power"
+   }
+  ]
+ },
+ {
+  "name": "house_power_u2_applyoutputs_leaves_k1_alone",
+  "invariant": "unknown-shows-open",
+  "why": "U2: applyOutputs leaves K1 alone while the gate is no_power or fault (\"don't move K1 while the position is unknown\"), so from closed the house keeps showing closed.",
+  "killed_by": [
+   "house_power_gate_no_power_shows_not_closed",
+   "house_power_gate_fault_shows_not_closed",
+   "house_power_no_ac_with_limit_follows_limit",
+   "house_power_between_after_no_power_shows_not_closed"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (cfg.ctrl_sync && haveStatus && !resyncing && !k1.pulsing()) {",
+    "replace": "  if (cfg.ctrl_sync && haveStatus && !resyncing && !k1.pulsing() && gateState != GS_NO_POWER && gateState != GS_FAULT) {"
+   }
+  ]
+ },
+ {
+  "name": "house_power_u3_gate_readstate_checks_closed",
+  "invariant": "unknown-shows-open",
+  "why": "U3: gate readState checks the closed limit before the both-limits fault, so both limits reading reports closed instead of fault.",
+  "killed_by": [
+   "house_power_gate_fault_shows_not_closed"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (open && closed) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "replace": "  if (closed) return GS_CLOSED;\n  if (open && closed) return GS_FAULT;"
+   }
+  ]
+ },
+ {
+  "name": "house_power_u4_gate_readstate_reports_power",
+  "invariant": "unknown-shows-open",
+  "why": "U4: gate readState reports no_power whenever AC is off, before looking at the limits. A limit that reads is no longer trusted without AC.",
+  "killed_by": [
+   "house_power_no_ac_with_limit_follows_limit"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  bool open = in1.active(), closed = in2.active();\n  if (open && closed) return GS_FAULT;",
+    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (open && closed) return GS_FAULT;"
+   }
+  ]
+ },
+ {
+  "name": "house_power_k1_houselinktimeoutms_stretches_only_2",
+  "invariant": "sensor-closed-only-known",
+  "why": "K1: houseLinkTimeoutMs stretches to only 2 x the gate heartbeat instead of 2.5 x.",
+  "killed_by": [
+   "house_power_sensor_fails_open_after_2_5_heartbeats"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  uint32_t hb = (uint32_t)gateHeartbeat * 2500;",
+    "replace": "  uint32_t hb = (uint32_t)gateHeartbeat * 2000;"
+   }
+  ]
+ },
+ {
+  "name": "house_power_k2_houselinktimeoutms_takes_min_max",
+  "invariant": "sensor-closed-only-known",
+  "why": "K2: houseLinkTimeoutMs takes the min instead of the max of link_timeout_s and 2.5 x heartbeat_s.",
+  "killed_by": [
+   "house_power_sensor_fails_open_after_link_timeout",
+   "house_power_sensor_fails_open_after_2_5_heartbeats"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  return hb > ms ? hb : ms;",
+    "replace": "  return hb < ms ? hb : ms;"
+   }
+  ]
+ },
+ {
+  "name": "house_power_k3_k2_copies_k1_s",
+  "invariant": "sensor-closed-only-known",
+  "why": "K3: K2 copies K1's travel hold, so the contact sensor stays closed while the gate travels away from the closed limit.",
+  "killed_by": [
+   "house_power_sensor_closed_exactly_while_reported_closed",
+   "house_power_cut_lipo_in_gate_open",
+   "house_power_cut_lipo_out_gate_open",
+   "house_power_dips_lipo_in_gate_open",
+   "house_power_dip_600ms_lipo_in_relay_drops_opto_misses_it",
+   "house_power_dip_300ms_lipo_out_board_reboots",
+   "house_power_opto_only_cut_gate_open_discards_close",
+   "house_power_opto_only_dip_600ms_gate_open",
+   "house_power_close_waits_confirm_open_goes_at_once",
+   "house_power_close_discarded_by_power_loss_inside_confirm",
+   "house_power_close_sent_when_power_lost_after_confirm",
+   "house_power_sensing_off_edges_are_commands",
+   "house_power_settle_user_edge_just_inside_window_ignored",
+   "house_power_settle_user_edge_just_after_window_commands",
+   "house_power_settle_matching_edge_after_settle_until_ends_window",
+   "house_power_settle_matching_edge_1ms_before_settle_until_holds_window",
+   "house_power_settle_matching_edge_at_settle_until_ends_window",
+   "house_power_boot_settle_window_holds_through_k1_sync_and_chatter",
+   "house_power_settle_window_not_shortened_by_k1_change",
+   "house_power_settle_window_extended_by_late_k1_change",
+   "house_power_gate_no_power_from_open_keeps_not_closed",
+   "house_power_gate_fault_shows_not_closed"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  bool closed = gateState == GS_CLOSED;",
+    "replace": "  bool closed = gateState == GS_CLOSED || (holdingTravel(now) && lastEnd == GS_CLOSED);"
+   }
+  ]
+ },
+ {
+  "name": "house_power_k4_house_starts_out_assuming",
+  "invariant": "sensor-closed-only-known",
+  "why": "K4: the house starts out assuming the gate is closed (gateState initialised to GS_CLOSED instead of GS_UNKNOWN). The direct kill is the linkloss_open 0 reboot test: the sensor is closed before any STATUS. The kill is also broad by side effect: the first closed STATUS is no longer a state change, so `gate_state` is never logged and the world monitor sees the sensor closed while the house's logged view is unknown, which fails every test.",
+  "killed_by": [
+   "house_power_sensor_linkloss_open_0_unknown_after_boot_stays_open",
+   "house_power_sensor_open_until_first_status_after_boot",
+   "house_power_cut_lipo_out_gate_closed",
+   "house_power_sensor_closed_exactly_while_reported_closed"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "static uint8_t gateState = GS_UNKNOWN;",
+    "replace": "static uint8_t gateState = GS_CLOSED;"
+   }
+  ]
+ },
+ {
+  "name": "house_power_k5_link_loss_fail_open",
+  "invariant": "sensor-closed-only-known",
+  "why": "K5: the link-loss fail-open ignores linkloss_open (the setting check is dropped), so the sensor always fails open on link loss and never keeps the last state.",
+  "killed_by": [
+   "house_power_sensor_linkloss_open_0_keeps_last_state"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (!linkUp && cfg.linkloss_open) closed = false;",
+    "replace": "  if (!linkUp) closed = false;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m1_k1target_lists_moving_states",
+  "invariant": "k1-mirror",
+  "why": "k1Target lists the moving states, so fault and no_power read as closed (K1 off). Fails at line 235: K1 stays off on fault.",
+  "killed_by": [
+   "house_sync_k1_energized_whenever_the_gate_is_not_closed"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  return gateState != GS_CLOSED;\n}",
+    "replace": "  return gateState == GS_OPEN || gateState == GS_BETWEEN;\n}"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m2_applyoutputs_drives_k1_only",
+  "invariant": "k1-mirror",
+  "why": "applyOutputs drives K1 only for moves that another controller did not cause (cause external is skipped).",
+  "killed_by": [
+   "house_sync_k1_mirrors_moves_by_other_controllers",
+   "house_sync_k1_energized_whenever_the_gate_is_not_closed",
+   "house_sync_travel_hold_keeps_the_limit_it_left_until_the_far_one",
+   "house_sync_travel_hold_lasts_the_gates_travel_timeout_not_the_houses",
+   "house_sync_house_back_mid_travel_shows_not_closed_at_once",
+   "house_sync_window_starts_on_the_pass_k1_changes",
+   "house_sync_window_ends_on_the_matching_edge_only",
+   "house_sync_house_restart_never_moves_the_gate",
+   "house_sync_check_soon_after_controller_power_returns"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (cfg.ctrl_sync && haveStatus && !resyncing && !k1.pulsing()) {",
+    "replace": "  if (cfg.ctrl_sync && haveStatus && !resyncing && !k1.pulsing() && gateCause != CAUSE_EXTERNAL) {"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m3_drivek1_skips_change_when",
+  "invariant": "k1-mirror",
+  "why": "driveK1 skips the change when the Shelly already shows that level (it compares shellyLevel, not K1), so K1 stays off at open after a user OPEN. This also XPASSes the xfail house_sync_edge_on_arming_is_not_reverted_by_the_boot_check_soon.",
+  "killed_by": [
+   "house_sync_no_resync_while_holding_through_a_travel",
+   "house_sync_mismatch_counts_from_the_end_of_the_hold",
+   "house_sync_toggle_controller_never_turns_sync_into_commands",
+   "house_sync_window_boundary_inside_is_sync_outside_is_a_command",
+   "house_sync_window_starts_on_the_pass_k1_changes",
+   "house_sync_window_ends_on_the_matching_edge_only",
+   "house_sync_result_timeout_resyncs_at_once",
+   "house_sync_no_power_refusal_resyncs_at_once",
+   "house_sync_house_restart_never_moves_the_gate",
+   "house_sync_edge_before_arming_is_not_a_command",
+   "house_sync_edge_on_arming_is_a_command",
+   "house_sync_check_soon_after_boot_resyncs_when_the_settle_window_closes",
+   "house_sync_check_soon_after_controller_power_returns"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (k1.on() == level) return;",
+    "replace": "  if (shellyLevel == level) return;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m4_plausible_redundant_line_removal",
+  "invariant": "k1-mirror",
+  "why": "SURVIVED. A plausible 'redundant line' removal: lastEnd is no longer forgotten on fault/no_power. When the gate comes back between after no_power (moved by hand while dead) or after fault, the house 'holds' the old closed limit. K1 drops to closed and the Shelly shows closed for up to travel_timeout_s while the gate is not closed. No test in the group or in test_system.cpp covers no_power->between or fault->between, and no world monitor checks it. Scratch probes (scratchpad/mut-house_sync/probe-native/probe_house_sync.cpp: probe_between_after_no_power_shows_not_closed and probe_between_after_fault_shows_not_closed) pass on pristine and fail on this mutant: K1 drops about 2.3 s and 0.9 s after between.",
+  "killed_by": [
+   "house_sync_between_after_no_power_or_fault_holds_no_limit"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  else if (gateState != GS_BETWEEN) lastEnd = GS_UNKNOWN;  // fault/no power (no AC, no limit): show not-closed\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m5_travel_hold_uses_house",
+  "invariant": "travel-hold",
+  "why": "The travel hold uses the house's own travel_timeout_s and ignores the gate's value from STATUS.",
+  "killed_by": [
+   "house_sync_travel_hold_lasts_the_gates_travel_timeout_not_the_houses",
+   "house_sync_no_resync_while_holding_through_a_travel",
+   "house_sync_mismatch_counts_from_the_end_of_the_hold"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  return (uint32_t)(gateTravel ? gateTravel : cfg.travel_timeout_s) * 1000;",
+    "replace": "  return (uint32_t)cfg.travel_timeout_s * 1000;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m6_betweensince_restamped_every_between",
+  "invariant": "travel-hold",
+  "why": "betweenSince is restamped on every BETWEEN STATUS instead of only on entering between, so each report (for example the gate's travel-timeout STATUS) restarts the hold.",
+  "killed_by": [
+   "house_sync_no_resync_while_holding_through_a_travel",
+   "house_sync_mismatch_counts_from_the_end_of_the_hold"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (gateState == GS_BETWEEN && prevState != GS_BETWEEN) betweenSince = now;",
+    "replace": "  if (gateState == GS_BETWEEN) betweenSince = now;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m7_mismatch_resync_longer_paused",
+  "invariant": "travel-hold",
+  "why": "Mismatch/resync is no longer paused during the travel hold. This also XPASSes the xfail house_sync_siren_override_mid_travel_resyncs_at_once, a side effect that is not counted as a kill.",
+  "killed_by": [
+   "house_sync_no_resync_while_holding_through_a_travel",
+   "house_sync_mismatch_counts_from_the_end_of_the_hold"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    if (shellyLevel == t || holdingTravel(now)) {",
+    "replace": "    if (shellyLevel == t) {"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m8_lastend_cleared_every_non",
+  "invariant": "travel-hold",
+  "why": "lastEnd is cleared for every non-limit state, BETWEEN included, so there is never a limit to hold and K1 shows not-closed as soon as the gate leaves closed. This also XPASSes house_sync_siren_override_mid_travel_resyncs_at_once (not counted).",
+  "killed_by": [
+   "house_sync_k1_mirrors_moves_by_other_controllers",
+   "house_sync_travel_hold_keeps_the_limit_it_left_until_the_far_one",
+   "house_sync_travel_hold_lasts_the_gates_travel_timeout_not_the_houses",
+   "house_sync_no_resync_while_holding_through_a_travel",
+   "house_sync_mismatch_counts_from_the_end_of_the_hold",
+   "house_sync_house_back_mid_travel_shows_not_closed_at_once",
+   "house_sync_toggle_controller_never_turns_sync_into_commands",
+   "house_sync_window_boundary_inside_is_sync_outside_is_a_command",
+   "house_sync_window_ends_on_the_matching_edge_only"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  else if (gateState != GS_BETWEEN) lastEnd = GS_UNKNOWN;",
+    "replace": "  else lastEnd = GS_UNKNOWN;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m9_drivek1_opens_sync_window",
+  "invariant": "sync-window",
+  "why": "driveK1 opens the sync window only when the Shelly is expected to move (it shows the other level). This is the optimisation the invariant forbids: a TOGGLE Shelly's flip becomes a command.",
+  "killed_by": [
+   "house_sync_toggle_controller_never_turns_sync_into_commands",
+   "house_sync_window_boundary_inside_is_sync_outside_is_a_command",
+   "house_sync_window_ends_on_the_matching_edge_only"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  k1.set(level);\n  openSyncWindow(now, level, 0);",
+    "replace": "  k1.set(level);\n  if (shellyLevel != level) openSyncWindow(now, level, 0);"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m10_off_every_sync_window",
+  "invariant": "sync-window",
+  "why": "Off-by-one: every sync window (including settle and resync windows) ends 1 ms early.",
+  "killed_by": [
+   "house_sync_window_boundary_inside_is_sync_outside_is_a_command",
+   "house_sync_check_soon_after_boot_resyncs_when_the_settle_window_closes"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  uint32_t until = now + extraMs + cfg.sync_window_ms;",
+    "replace": "  uint32_t until = now + extraMs + cfg.sync_window_ms - 1;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m11_any_in1_edge_inside",
+  "invariant": "sync-window",
+  "why": "Any IN1 edge inside the window ends it, not only one that matches the K1 level, so a TOGGLE Shelly's wrong-way flip closes the window early.",
+  "killed_by": [
+   "house_sync_window_ends_on_the_matching_edge_only"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncActive = false;",
+    "replace": "      if (elapsed(now, settleUntil, 0)) syncActive = false;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m12_only_edge_matches_k1",
+  "invariant": "sync-window",
+  "why": "Only an edge that matches K1 counts as a sync. A non-matching edge inside the window (Shelly that shouldn't have moved, chatter) falls through to the command path.",
+  "killed_by": [
+   "house_sync_toggle_controller_never_turns_sync_into_commands",
+   "house_sync_window_boundary_inside_is_sync_outside_is_a_command",
+   "house_sync_window_ends_on_the_matching_edge_only",
+   "house_sync_check_soon_after_controller_power_returns"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    if (syncActive) {\n      if (shellyLevel == syncExpect",
+    "replace": "    if (syncActive && shellyLevel == syncExpect) {\n      if (shellyLevel == syncExpect"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m13_result_timeout_overridden_command",
+  "invariant": "resync",
+  "why": "A result timeout (overridden command) restarts the mismatch count instead of fast-forwarding it, so the resync waits mismatch_timeout_s.",
+  "killed_by": [
+   "house_sync_result_timeout_resyncs_at_once"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT && mismatchSince) {\n    mismatchSince = (now - (uint32_t)cfg.mismatch_timeout_s * 1000) | 1;",
+    "replace": "  if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT && mismatchSince) {\n    mismatchSince = now | 1;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m14_res_power_check_inverted",
+  "invariant": "resync",
+  "why": "The RES_NO_POWER check is inverted (it fires only on give-up), so a refusal waits mismatch_timeout_s instead of resyncing at once.",
+  "killed_by": [
+   "house_sync_no_power_refusal_resyncs_at_once"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    if (acked && result == RES_NO_POWER) checkSoon = true;",
+    "replace": "    if (!acked && result == RES_NO_POWER) checkSoon = true;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m15_mismatch_resync_path_also",
+  "invariant": "resync",
+  "why": "The mismatch/resync path also runs while the link is down, on a stale gate state.",
+  "killed_by": [
+   "house_sync_command_lost_while_the_link_was_down_resynced_after_it_returns"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  } else if (cfg.ctrl_sync && armed && linkUp && haveStatus && !linkPending(SLOT_CMD)) {",
+    "replace": "  } else if (cfg.ctrl_sync && armed && haveStatus && !linkPending(SLOT_CMD)) {"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m16_mismatch_resync_path_also",
+  "invariant": "resync",
+  "why": "The mismatch/resync path also runs while a command is still on its way, so it counts from the user's edge rather than from the give-up.",
+  "killed_by": [
+   "house_sync_lost_command_resynced_after_mismatch_timeout"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  } else if (cfg.ctrl_sync && armed && linkUp && haveStatus && !linkPending(SLOT_CMD)) {",
+    "replace": "  } else if (cfg.ctrl_sync && armed && linkUp && haveStatus) {"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m17_house_arms_first_status",
+  "invariant": "armed-after-status",
+  "why": "The house arms on the first STATUS itself instead of waiting out a sync window after it.",
+  "killed_by": [
+   "house_sync_edge_before_arming_is_not_a_command",
+   "house_sync_edge_on_arming_is_a_command"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (first) armAt = (now + cfg.sync_window_ms) | 1;",
+    "replace": "  if (first) armAt = now | 1;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m18_arming_check_drops_armat",
+  "invariant": "armed-after-status",
+  "why": "The arming check drops the 'armAt scheduled' guard. armAt is 0 at boot, so the house arms immediately, with no STATUS.",
+  "killed_by": [
+   "house_sync_edge_before_arming_is_not_a_command",
+   "house_sync_edge_on_arming_is_a_command"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (!armed && armAt && elapsed(now, armAt, 0)) armed = true;",
+    "replace": "  if (!armed && elapsed(now, armAt, 0)) armed = true;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m19_k1_relay_test_only",
+  "invariant": "armed-after-status",
+  "why": "A K1 relay test only reschedules arming and doesn't disarm, so the Shelly's ON edge from the test pulse becomes a command.",
+  "killed_by": [
+   "house_sync_k1_relay_test_never_becomes_a_command"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    armed = false;\n    armAt = (now + ms + cfg.sync_window_ms) | 1;",
+    "replace": "    armAt = (now + ms + cfg.sync_window_ms) | 1;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m20_dropping_havestatus_guard_houserelaytest",
+  "invariant": "armed-after-status",
+  "why": "SURVIVED. Dropping the haveStatus guard in houseRelayTest means a K1 relay test before the first STATUS schedules arming. The house arms 'pulse + sync_window_ms' later with no STATUS at all (gate state unknown), and from then on user edges take the command path. By code inspection only: the probe stops at the armed check before any user edge, so no command was observed. No test runs relay.test before the first STATUS (relay_test_never_becomes_a_command runs after commissioning), and test_system.cpp doesn't either. A scratch probe (probe_relay_test_before_first_status_does_not_arm: house restart with the gate's STATUS blocked, relay.test k=1 ms=500, then check armed) passes on pristine and fails on this mutant: armed == true with no STATUS yet.",
+  "killed_by": [
+   "house_sync_k1_relay_test_before_the_first_status_does_not_arm"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (k == 1 && haveStatus) {",
+    "replace": "  if (k == 1) {"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m21_housebegin_doesn_t_set",
+  "invariant": "check-soon",
+  "why": "houseBegin doesn't set checkSoon, so a Shelly out of step after boot waits mismatch_timeout_s. This also XPASSes house_sync_edge_on_arming_is_not_reverted_by_the_boot_check_soon (not counted).",
+  "killed_by": [
+   "house_sync_house_restart_never_moves_the_gate",
+   "house_sync_edge_before_arming_is_not_a_command",
+   "house_sync_check_soon_after_boot_resyncs_when_the_settle_window_closes"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  checkSoon = true;\n  uint32_t now = millis();",
+    "replace": "  uint32_t now = millis();"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m22_when_controller_power_returns",
+  "invariant": "check-soon",
+  "why": "When controller power returns, the house opens the settle window but doesn't set checkSoon.",
+  "killed_by": [
+   "house_sync_check_soon_after_controller_power_returns"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    openSettleWindow(now);\n    checkSoon = true;\n  }",
+    "replace": "    openSettleWindow(now);\n  }"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m23_moment_step_clears_checksoon",
+  "invariant": "check-soon",
+  "why": "A moment in step clears checkSoon even inside the settle window. A Shelly that restores ON and then chatters OFF waits mismatch_timeout_s.",
+  "killed_by": [
+   "house_sync_check_soon_after_controller_power_returns"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "      if (!syncActive) checkSoon = false;",
+    "replace": "      checkSoon = false;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m24_check_soon_resync_doesn",
+  "invariant": "check-soon",
+  "why": "The check-soon resync doesn't wait for the settle/sync window to close.",
+  "killed_by": [
+   "house_sync_check_soon_after_boot_resyncs_when_the_settle_window_closes",
+   "house_sync_check_soon_after_controller_power_returns"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    } else if (checkSoon && !syncActive && !pendingAction) {",
+    "replace": "    } else if (checkSoon && !pendingAction) {"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m1_relay_pulse_end_uses",
+  "invariant": "wrap-safe",
+  "why": "M1: the relay pulse end uses an unsigned compare instead of the signed age, so a pulse started just before the 2^32 wrap ends at once.",
+  "killed_by": [
+   "robustness_wrap_2_32_command_pulse_and_travel"
+  ],
+  "edits": [
+   {
+    "file": "io.cpp",
+    "find": "  if (_pulseUntil && !_startAt && (int32_t)(now - _pulseUntil) >= 0) set(false);",
+    "replace": "  if (_pulseUntil && !_startAt && now >= _pulseUntil) set(false);"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m2_house_travel_hold_holdingtravel",
+  "invariant": "wrap-safe",
+  "why": "M2: the house travel hold (holdingTravel) uses a signed absolute compare instead of elapsed(), which breaks at the 2^31 flip.",
+  "killed_by": [
+   "robustness_quiet_26_days_jammed_between_keeps_showing_not_closed",
+   "robustness_wrap_2_31_k1_sync_window_and_mismatch",
+   "robustness_wrap_2_31_travel_hold_expiry"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  return gateState == GS_BETWEEN && lastEnd != GS_UNKNOWN && !elapsed(now, betweenSince, travelTimeoutMs());",
+    "replace": "  return gateState == GS_BETWEEN && lastEnd != GS_UNKNOWN && (int32_t)now < (int32_t)(betweenSince + travelTimeoutMs());"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m3_cap_link_s_lastrxat",
+  "invariant": "wrap-safe",
+  "why": "M3: the cap on the link's lastRxAt age is removed, so after 2^31 ms of silence the link reads as fresh and up again.",
+  "killed_by": [
+   "robustness_quiet_26_days_link_down_stays_down_and_stamps_stay_old",
+   "robustness_quiet_26_days_mismatch_resynced_as_soon_as_the_link_returns"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "  if (stats.lastRxAt && elapsed(now, stats.lastRxAt, RX_AGE_CAP_MS)) {\n    stats.lastRxAt = now - RX_AGE_CAP_MS;\n    if (!stats.lastRxAt) stats.lastRxAt = 1;  // 0 means never\n  }\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "robustness_m4_capstamps_longer_pins_past",
+  "invariant": "wrap-safe",
+  "why": "M4: capStamps no longer pins a past settleUntil to now, so after about 25 days a stale settle stamp reads as in the future and holds sync windows open.",
+  "killed_by": [
+   "robustness_quiet_26_days_link_down_stays_down_and_stamps_stay_old"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (elapsed(now, settleUntil, 0)) settleUntil = now;  // passed: no longer holds a sync window open\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "robustness_m5_sync_window_expiry_uses",
+  "invariant": "wrap-safe",
+  "why": "M5: the sync window expiry uses an unsigned compare, so a window opened just before the 2^32 wrap closes at once.",
+  "killed_by": [
+   "robustness_wrap_2_32_boot_link_and_settle_window",
+   "robustness_wrap_2_32_controller_power_cut_and_settle_window",
+   "robustness_wrap_2_32_k1_sync_window_and_mismatch"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (syncActive && elapsed(now, syncUntil, 0)) syncActive = false;",
+    "replace": "  if (syncActive && now >= syncUntil) syncActive = false;"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m6_reliable_slot_s_ttl",
+  "invariant": "wrap-safe",
+  "why": "M6: the reliable slot's TTL expiry uses an unsigned compare, so slots near the wrap give up immediately.",
+  "killed_by": [
+   "robustness_wrap_2_32_boot_link_and_settle_window",
+   "robustness_wrap_2_32_command_pulse_and_travel"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "    if ((int32_t)(now - s.expiresAt) >= 0) {",
+    "replace": "    if (now >= s.expiresAt) {"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m19_input_debounce_written_now",
+  "invariant": "wrap-safe",
+  "why": "M19: input debounce written as now >= _since + debounceMs. This differs only for an edge within debounce_ms (50 ms) before the 2^32 wrap: the sum overflows and a glitch shorter than 50 ms is accepted. SURVIVED: no test puts an input edge in that 50 ms window. Also not killed by test_system.cpp.",
+  "killed_by": [
+   "robustness_wrap_2_32_input_glitches_shorter_than_debounce_ignored",
+   "robustness_wrap_2_31_input_glitches_shorter_than_debounce_ignored"
+  ],
+  "edits": [
+   {
+    "file": "io.cpp",
+    "find": "  if (_candidate != _state && now - _since >= debounceMs) {",
+    "replace": "  if (_candidate != _state && now >= _since + debounceMs) {"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m20_gate_heartbeat_uses_unsigned",
+  "invariant": "wrap-safe",
+  "why": "M20: the gate heartbeat uses an unsigned sum compare, so heartbeats around the wrap go out every loop instead of every 30 s.",
+  "killed_by": [
+   "robustness_wrap_2_32_command_pulse_and_travel",
+   "robustness_wrap_2_32_link_loss_heartbeats_and_recovery"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (elapsed(now, lastStatusAt, (uint32_t)cfg.heartbeat_s * 1000) || cfg.heartbeat_s != reportedHeartbeat) {",
+    "replace": "  if (now >= lastStatusAt + (uint32_t)cfg.heartbeat_s * 1000 || cfg.heartbeat_s != reportedHeartbeat) {"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m21_mismatchsince_cap_removed_mismatch",
+  "invariant": "wrap-safe",
+  "why": "M21: the mismatchSince cap is removed, so a mismatch left over 25 days (link down) reads as new and the resync waits again.",
+  "killed_by": [
+   "robustness_quiet_26_days_mismatch_resynced_as_soon_as_the_link_returns"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (mismatchSince && elapsed(now, mismatchSince, STAMP_CAP_MS)) mismatchSince = (now - STAMP_CAP_MS) | 1;\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "robustness_m22_gate_s_between_hold",
+  "invariant": "wrap-safe",
+  "why": "M22: the gate's between hold is written as now < betweenAt + hold. This is skipped only when the gate leaves a limit within BETWEEN_HOLD_MS (500 ms), or 3 s out of no_power, before the 2^32 wrap. A failing input supply there reads as a move, not no_power. SURVIVED: no wrap test cuts the gate's input supply in that window. Also not killed by test_system.cpp.",
+  "killed_by": [
+   "robustness_wrap_2_32_input_supply_failing_reads_no_power_not_a_move",
+   "robustness_wrap_2_31_input_supply_failing_reads_no_power_not_a_move",
+   "robustness_wrap_2_32_input_supply_returning_reads_closed_not_a_move",
+   "robustness_wrap_2_31_input_supply_returning_reads_closed_not_a_move"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "                     && !elapsed(now, betweenAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);",
+    "replace": "                     && now < betweenAt + (state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m7_inputs_are_configured_plain",
+  "invariant": "pull-down",
+  "why": "M7: inputs are configured as plain INPUT (floating) instead of INPUT_PULLDOWN.",
+  "killed_by": [
+   "robustness_pulldown_every_input_pulled_down_and_never_inverted"
+  ],
+  "edits": [
+   {
+    "file": "io.cpp",
+    "find": "  pinMode(_pin, INPUT_PULLDOWN);",
+    "replace": "  pinMode(_pin, INPUT);"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m8_in1_invert_becomes_remote",
+  "invariant": "pull-down",
+  "why": "M8: in1_invert becomes remote-writable over LoRa (P_REMOTE), so polarity could be 'fixed' with invert from the house.",
+  "killed_by": [
+   "robustness_pulldown_every_input_pulled_down_and_never_inverted"
+  ],
+  "edits": [
+   {
+    "file": "config.cpp",
+    "find": "  { 14, \"in1_invert\", &Config::in1_invert, 0, 1, 0 },",
+    "replace": "  { 14, \"in1_invert\", &Config::in1_invert, 0, 1, P_REMOTE },"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m9_acpower_also_counts_reading",
+  "invariant": "pull-down",
+  "why": "M9: acPower() also counts a reading limit as AC present, so a dead IN3 opto no longer refuses commands while a limit reads.",
+  "killed_by": [
+   "robustness_pulldown_dead_ac_sense_opto_refuses_commands",
+   "robustness_chaos_seed_1",
+   "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
+   "robustness_chaos_seed_3",
+   "robustness_chaos_toggling_controller_seed_4"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  return !cfg.power_sense || in3.active();",
+    "replace": "  return !cfg.power_sense || in3.active() || in1.active() || in2.active();"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m10_house_contact_sensor_reads",
+  "invariant": "pull-down",
+  "why": "M10: the house contact sensor reads closed while the gate is between after leaving closed (holdingTravel), not only with the closed limit reading.",
+  "killed_by": [
+   "robustness_pulldown_dead_closed_limit_opto_never_reads_closed",
+   "robustness_pulldown_dead_open_limit_opto_never_reads_open",
+   "robustness_quiet_2_hours_gate_open_nothing_moves",
+   "robustness_quiet_26_days_jammed_between_keeps_showing_not_closed",
+   "robustness_quiet_26_days_link_down_stays_down_and_stamps_stay_old",
+   "robustness_quiet_26_days_mismatch_resynced_as_soon_as_the_link_returns",
+   "robustness_restart_both_boards_reboot_together",
+   "robustness_restart_gate_power_cut_after_pulse_ack_lost_never_pulses_again",
+   "robustness_restart_gate_radio_fails_to_initialise_then_recovers",
+   "robustness_restart_gate_warm_reset_after_pulse_before_its_ack_never_pulses_again",
+   "robustness_restart_house_resets_and_power_cycles_keep_the_gate_where_it_is",
+   "robustness_wrap_2_31_boot_link_and_settle_window",
+   "robustness_wrap_2_31_close_confirm_wait",
+   "robustness_wrap_2_31_command_pulse_and_travel",
+   "robustness_wrap_2_31_controller_power_cut_and_settle_window",
+   "robustness_wrap_2_31_k1_sync_window_and_mismatch",
+   "robustness_wrap_2_31_travel_hold_expiry",
+   "robustness_wrap_2_32_boot_link_and_settle_window",
+   "robustness_wrap_2_32_close_confirm_wait",
+   "robustness_wrap_2_32_command_pulse_and_travel",
+   "robustness_wrap_2_32_controller_power_cut_and_settle_window",
+   "robustness_wrap_2_32_k1_sync_window_and_mismatch",
+   "robustness_wrap_2_32_travel_hold_expiry",
+   "robustness_chaos_seed_1",
+   "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
+   "robustness_chaos_seed_3",
+   "robustness_chaos_toggling_controller_seed_4"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  bool closed = gateState == GS_CLOSED;",
+    "replace": "  bool closed = gateState == GS_CLOSED || (holdingTravel(now) && lastEnd == GS_CLOSED);"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m16_gate_refuses_commands_lost",
+  "invariant": "pull-down",
+  "why": "M16: the gate refuses commands for lost AC only while its state is no_power. With a dead AC opto and a limit reading, it pulses.",
+  "killed_by": [
+   "robustness_pulldown_dead_ac_sense_opto_refuses_commands",
+   "robustness_chaos_seed_1",
+   "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
+   "robustness_chaos_seed_3",
+   "robustness_chaos_toggling_controller_seed_4"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (!acPower()) {",
+    "replace": "  if (!acPower() && state == GS_NO_POWER) {"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m11_house_longer_holds_pending",
+  "invariant": "restarts",
+  "why": "M11: the house no longer holds its pending CMD (cmdHeld) when a new gate session HELLOs, so it resends after a gate restart that already pulsed.",
+  "killed_by": [
+   "robustness_restart_gate_power_cut_after_pulse_ack_lost_never_pulses_again",
+   "robustness_restart_gate_warm_reset_after_pulse_before_its_ack_never_pulses_again"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "    if (peerSession != 0 && !known && slots[SLOT_CMD].active && !cmdHeld) {\n      cmdHeld = true;\n      logEvent(EV_CMD_HOLD, 1, (int32_t)session);\n    }\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "robustness_m12_when_restarted_peer_s",
+  "invariant": "restarts",
+  "why": "M12: when the restarted peer's new session verifies, the held CMD is released and resent instead of dropped.",
+  "killed_by": [
+   "robustness_restart_gate_power_cut_after_pulse_ack_lost_never_pulses_again",
+   "robustness_restart_gate_warm_reset_after_pulse_before_its_ack_never_pulses_again"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "    if (cmdHeld && slots[SLOT_CMD].active) {\n      slots[SLOT_CMD].active = false;\n      logEvent(EV_CMD_HOLD, 2, (int32_t)session);\n      if (ackHandler) ackHandler(SLOT_CMD, slots[SLOT_CMD].type, false, 0);\n    }",
+    "replace": "    releaseCmd();  // resend it to the restarted peer"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m13_house_opens_settle_window",
+  "invariant": "restarts",
+  "why": "M13: the house opens no settle window at boot.",
+  "killed_by": [
+   "robustness_restart_house_reset_before_the_users_edge_never_commands_from_the_boot_level",
+   "robustness_wrap_2_31_boot_link_and_settle_window",
+   "robustness_wrap_2_32_boot_link_and_settle_window"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  settleUntil = now;\n  openSettleWindow(now);\n",
+    "replace": "  settleUntil = now;\n"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m14_session_drawn_while_radio",
+  "invariant": "restarts",
+  "why": "M14: a session drawn while the radio was down (sessionWeak) is never redrawn once the radio answers, so a board whose radio failed at init never transmits and never links.",
+  "killed_by": [
+   "robustness_restart_gate_radio_fails_to_initialise_then_recovers",
+   "robustness_restart_house_radio_fails_on_restart_command_given_up_then_recovers"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "  if (sessionWeak && radioOk()) {\n    // Nothing has been sent with the weak session (transmit() refuses): draw it again and renumber what waits.\n    drawSession();\n    reframePending(now);\n  }\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "robustness_m23_gate_longer_sends_status",
+  "invariant": "restarts",
+  "why": "M23: the gate no longer sends a STATUS at once when a new house session appears, so a rebooted house waits for the next heartbeat.",
+  "killed_by": [
+   "robustness_restart_house_reset_before_the_users_edge_never_commands_from_the_boot_level"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    haveCmd = false;\n    sendStatus(now);\n",
+    "replace": "    haveCmd = false;\n"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m24_house_arms_first_status",
+  "invariant": "restarts",
+  "why": "M24: the house arms at the first STATUS instead of first STATUS + sync_window_ms. SURVIVED: masked by the 10 s boot settle window (ctrl_settle_ms) and by driveK1's window. In every restart test the first STATUS arrives within the settle window. Also not killed by test_system.cpp.",
+  "killed_by": [
+   "robustness_restart_house_reboot_with_rf_down_arms_only_a_sync_window_after_the_first_status"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (first) armAt = (now + cfg.sync_window_ms) | 1;",
+    "replace": "  if (first) armed = true;"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m25_housebegin_forgets_checksoon_after",
+  "invariant": "restarts",
+  "why": "M25: houseBegin forgets checkSoon, so after a house reboot an out-of-step controller is resynced only after mismatch_timeout_s, not as soon as the settle window closes.",
+  "killed_by": [
+   "robustness_restart_house_reset_before_the_users_edge_never_commands_from_the_boot_level",
+   "robustness_restart_both_boards_reboot_together"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  ctrlPower = ctrlPowered();\n  checkSoon = true;\n",
+    "replace": "  ctrlPower = ctrlPowered();\n"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m26_gate_reports_first_status",
+  "invariant": "restarts",
+  "why": "M26: the gate reports its first STATUS at once after boot instead of waiting for its inputs to settle (BOOT_SETTLE_MS). SURVIVED: no robustness test powers the opener down and up with the gate board (w.setGateRail). Gate restarts are board-only (gate.cut or reset), so the limits are always steady at boot. Also not killed by test_system.cpp.",
+  "killed_by": [
+   "robustness_restart_gate_board_restarting_with_the_opener_first_report_waits_for_the_limits"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  settling = true;\n  bootAt",
+    "replace": "  settling = false;\n  bootAt"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m15_ctrlpowered_ignores_board_s",
+  "invariant": "chaos",
+  "why": "M15: ctrlPowered() ignores the board's VIN power good (ctrl_power_pmic). The controller relay dropping in a 12 V cut is then taken as the user's OFF.",
+  "killed_by": [
+   "robustness_chaos_seed_1",
+   "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
+   "robustness_chaos_seed_3",
+   "robustness_chaos_toggling_controller_seed_4",
+   "robustness_wrap_2_31_controller_power_cut_and_settle_window",
+   "robustness_wrap_2_32_controller_power_cut_and_settle_window"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  return (!cfg.ctrl_power_sense || in2.active()) && (!cfg.ctrl_power_pmic || supplyGood());",
+    "replace": "  return !cfg.ctrl_power_sense || in2.active();"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m17_applyoutputs_drives_k1_target",
+  "invariant": "chaos",
+  "why": "M17: applyOutputs drives K1 to its target even during a resync, which cuts the resync pulse short. It also makes the two resync XFAILs pass (counted as XPASS failures).",
+  "killed_by": [
+   "robustness_chaos_seed_8",
+   "robustness_resync_window_ended_by_a_matching_edge_lets_the_resync_command_the_gate"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (cfg.ctrl_sync && haveStatus && !resyncing && !k1.pulsing()) {",
+    "replace": "  if (cfg.ctrl_sync && haveStatus && !k1.pulsing()) {"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m18_link_loss_contact_sensor",
+  "invariant": "chaos",
+  "why": "M18: on link loss the contact sensor no longer fails open (the linkloss_open check is dropped).",
+  "killed_by": [
+   "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
+   "robustness_chaos_seed_3",
+   "robustness_quiet_20_days_then_gate_reboot_relinks",
+   "robustness_quiet_20_days_then_house_reboot_relinks",
+   "robustness_quiet_26_days_link_down_stays_down_and_stamps_stay_old",
+   "robustness_restart_gate_radio_fails_to_initialise_then_recovers",
+   "robustness_restart_house_radio_fails_on_restart_command_given_up_then_recovers",
+   "robustness_wrap_2_31_link_loss_heartbeats_and_recovery",
+   "robustness_wrap_2_32_link_loss_heartbeats_and_recovery"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (!linkUp && cfg.linkloss_open) closed = false;\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "robustness_m27_when_controller_power_returns",
+  "invariant": "chaos",
+  "why": "M27: when controller power returns, the house opens a plain sync window instead of the ctrl_settle_ms settle window. (A first try that just deleted openSettleWindow failed the -Werror build with an unused parameter, so it doesn't count.) The chaos seeds did not catch it; the targeted tests did.",
+  "killed_by": [
+   "robustness_wrap_2_32_controller_power_cut_and_settle_window",
+   "robustness_wrap_2_31_controller_power_cut_and_settle_window",
+   "robustness_pulldown_dead_controller_power_opto_blocks_commands"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    openSettleWindow(now);\n    checkSoon = true;",
+    "replace": "    openSyncWindow(now, k1.on(), 0);\n    checkSoon = true;"
+   }
+  ]
+ },
+ {
+  "name": "robustness_m28_opensyncwindow_may_now_shorten",
+  "invariant": "chaos",
+  "why": "M28: openSyncWindow may now shorten an open window, so a K1 change cuts the 10 s settle window to 3 s. SURVIVED: the simulated controller restores its level once at bootMs 1.5 s and never chatters. A restored level that matches the gate is suppressed, so nothing lands in the shortened part. Also not killed by test_system.cpp.",
+  "killed_by": [
+   "robustness_controller_slow_boot_after_a_k1_change_inside_its_settle_window_is_a_sync"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (!syncActive || (int32_t)(until - syncUntil) > 0) syncUntil = until;",
+    "replace": "  syncUntil = until;"
+   }
+  ]
+ }
+]

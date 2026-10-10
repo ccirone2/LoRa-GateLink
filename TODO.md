@@ -39,7 +39,7 @@ once its fix is merged and record it in the pull request.
 - [ ] **USB serial ports hang after uploads.** On 2026-10-05, twice after an upload every USB serial port on the
   bench (both boards and the FTDI adapter) stopped opening until the USB hub was replugged. Uploading one board at
   a time, and checking the ports between, avoided it since. Try another hub port or the PC's own ports to find the
-  cause. Opening a port now gives up after 8 s (`open_serial` in `tests/e2e/gatelink/board.py`), so `ports`,
+  cause. Opening a port now gives up after 8 s (`open_serial` in `tools/gatelink_client/board.py`), so `ports`,
   `snapshot` and the suite report a stuck port instead of hanging. It also happens after power cuts: on
   2026-10-06 both boards came back cleanly (seen on their UART adapters) but Windows lost their USB ports until
   the hub was replugged. The trigger seems to be a board's USB vanishing abruptly (upload resets, power cuts)

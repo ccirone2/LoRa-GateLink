@@ -3,7 +3,8 @@ import time
 
 import pytest
 
-from gatelink.bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, PROFILE_COMMON, RES_NO_POWER, SIM_TRAVEL_S
+from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink_client.wire import ACT_CLOSE, ACT_OPEN, CAUSE, GS, RES_NO_POWER
 
 TRAVEL_TIMEOUT_S = PROFILE_COMMON["travel_timeout_s"]
 

@@ -11,8 +11,9 @@ import time
 
 import pytest
 
-from gatelink.bench import ACT_OPEN, SIM_TRAVEL_S
+from gatelink.bench import SIM_TRAVEL_S
 from gatelink.flows import open_via_ctrl
+from gatelink_client.wire import ACT_OPEN
 
 
 @pytest.fixture

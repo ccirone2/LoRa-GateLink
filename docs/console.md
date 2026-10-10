@@ -1,8 +1,8 @@
 # USB console reference
 
-Each board speaks newline-delimited JSON over USB serial (115200 baud). The web console, the end-to-end suite
-(`tests/e2e/gatelink/board.py`) and `tools/gatelink.py` all use this contract. It is implemented in
-`firmware/GateLink/console.cpp`; change it together with `web/app.js` and `tests/e2e/gatelink/`.
+Each board speaks newline-delimited JSON over USB serial (115200 baud). The web console, the end-to-end suite and
+`tools/gatelink.py` all use this contract (the Python side through `tools/gatelink_client/`). It is implemented in
+`firmware/GateLink/console.cpp`; change it together with `web/app.js`, `tools/gatelink_client/` and `tests/e2e/`.
 
 Only one program can hold the port: disconnect the web console before scripting. The firmware writes only while
 DTR is asserted (pyserial does that by default).

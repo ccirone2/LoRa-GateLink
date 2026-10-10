@@ -3,8 +3,9 @@ import time
 
 import pytest
 
-from gatelink.bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, SIM_TRAVEL_S
+from gatelink.bench import SIM_TRAVEL_S
 from gatelink.flows import close_via_ctrl, open_via_ctrl
+from gatelink_client.wire import ACT_CLOSE, ACT_OPEN, CAUSE, GS
 
 
 def test_open_via_controller(rig):

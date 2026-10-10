@@ -14,11 +14,11 @@ from pathlib import Path
 import pytest
 import serial
 
-from gatelink.board import Board, BoardError, UartTap, find_boards, find_uarts
 from gatelink.bench import Bench
 from gatelink.controller import Controller, ControllerError
 from gatelink.gatesim import GateSim, GateSimError
-from gatelink.timeline import Timeline
+from gatelink_client.board import BoardError, UartTap, find_boards, find_uarts, open_board
+from gatelink_client.timeline import Timeline
 
 RESULTS = Path(__file__).parent / "results"
 
@@ -63,21 +63,10 @@ def _restore_key(boards):
     print("\n--restore-key: GATELINK_KEY applied to both boards, link verified")
 
 
-def _open_board(port, timeline):
-    b = Board(port, timeline)
-    b.open()
-    try:
-        b.name = b.info()["role"]
-    except BaseException:
-        b.close()
-        raise
-    return b
-
-
 def _tap_uarts(cfg, boards, tl, opened, sim_port):
     """Listen on each board's UART console, if it has an adapter: its events reach the timeline even while the
     board is unpowered or rebooting and USB is gone (`boot` the moment power returns). Requests stay on USB (see
-    gatelink.board). Returns a summary for the report."""
+    gatelink_client.board). Returns a summary for the report."""
     uarts = {} if cfg.getoption("--no-uart") else find_uarts(tl, exclude={sim_port})
     for role in ("house", "gate"):
         if cfg.getoption(f"--{role}-uart"):
@@ -111,7 +100,7 @@ def bench(request):
             boards = {}
             for opt in ("--house-port", "--gate-port"):
                 if cfg.getoption(opt):
-                    b = _open_board(cfg.getoption(opt), tl)
+                    b = open_board(cfg.getoption(opt), tl)
                     opened.append(b)
                     boards[b.name] = b
         else:

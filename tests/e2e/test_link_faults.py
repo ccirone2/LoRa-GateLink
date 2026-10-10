@@ -5,8 +5,9 @@ import time
 
 import pytest
 
-from gatelink.bench import ACT_OPEN, GS, PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S
 from gatelink.flows import outage
+from gatelink_client.wire import ACT_OPEN, GS
 
 LINK_TIMEOUT_S = PROFILE_COMMON["link_timeout_s"]
 HEARTBEAT_S = PROFILE_COMMON["heartbeat_s"]

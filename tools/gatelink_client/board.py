@@ -475,24 +475,38 @@ def find_uarts(timeline, exclude=()):
     return found
 
 
+def board_ports(exclude=()):
+    """The Arduino-VID serial ports (GateLink boards, or another Arduino) not in `exclude`, sorted."""
+    return sorted(p.device for p in serial.tools.list_ports.comports()
+                  if p.vid == ARDUINO_VID and p.device not in exclude)
+
+
+def open_board(port, timeline, timeout=3.0):
+    """Open the board on `port` and name it by the role it reports. Raises serial.SerialException or BoardError
+    (closed again) if the port won't open or nothing answers `info`."""
+    b = Board(port, timeline)
+    b.open()
+    try:
+        b.name = b.request("info", timeout=timeout)["role"]
+    except BaseException:
+        b.close()
+        raise
+    return b
+
+
 def find_boards(timeline, exclude=()):
-    """Open every Arduino-VID port not in `exclude` and ask its role. Returns {role: Board}."""
+    """Open every Arduino port not in `exclude` and ask its role; ports that don't answer are skipped. Returns
+    {role: Board}; raises BoardError (all closed) if two boards report the same role."""
     found = {}
-    for p in serial.tools.list_ports.comports():
-        if p.vid != ARDUINO_VID or p.device in exclude:
-            continue
-        b = Board(p.device, timeline)
+    for port in board_ports(exclude):
         try:
-            b.open()
-            role = b.request("info", timeout=2)["role"]
+            b = open_board(port, timeline, timeout=2)
         except (serial.SerialException, BoardError):
-            b.close()
             continue
-        if role in found:
+        if b.name in found:
             b.close()
             for other in found.values():
                 other.close()
-            raise BoardError(f"two boards report role {role!r} ({found[role].port}, {p.device})")
-        b.name = role
-        found[role] = b
+            raise BoardError(f"two boards report role {b.name!r} ({found[b.name].port}, {port})")
+        found[b.name] = b
     return found

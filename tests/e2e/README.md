@@ -122,5 +122,7 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
 
 ## Changing the suite
 
-The suite parses console replies, log event names/values and status fields (`gatelink/`), so change it together
-with `console.cpp`, `log.cpp` and `roles.h`. Scenario timings assume the test profile in `gatelink/bench.py`.
+The suite parses console replies, log event names/values and status fields (`gatelink/`, and the console client
+`tools/gatelink_client/` it shares with `tools/gatelink.py`: `board.py`, `timeline.py`, and the firmware's enum values
+in `wire.py`), so change it together with `console.cpp`, `log.cpp` and `roles.h`. `pytest.ini` puts `tools/` on the
+import path. Scenario timings assume the test profile in `gatelink/bench.py`.

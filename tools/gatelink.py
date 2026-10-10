@@ -17,7 +17,7 @@ from ~/.gatelink_key and reboots. Take the snapshot from boards in their normal 
 interrupted e2e run can leave its unsaved test profile running. Close the web console first; only one program
 can hold a port.
 
-Uses the e2e suite's console client (tests/e2e/gatelink/board.py), so needs pyserial.
+Uses the console client shared with the e2e suite (tools/gatelink_client), so needs pyserial.
 """
 import argparse
 import csv
@@ -27,19 +27,14 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tests" / "e2e"))
-from gatelink.board import ARDUINO_VID, Board, BoardError  # noqa: E402
-from gatelink.timeline import Timeline  # noqa: E402
+import serial
+import serial.tools.list_ports
 
-import serial  # noqa: E402
-import serial.tools.list_ports  # noqa: E402
+from gatelink_client.board import ARDUINO_VID, Board, BoardError, board_ports, find_boards, open_board
+from gatelink_client.timeline import Timeline
 
 DEFAULT_SNAPSHOT = os.path.expanduser("~/.gatelink_config.json")
 DEFAULT_KEY_FILE = os.path.expanduser("~/.gatelink_key")
-
-
-def board_ports():
-    return sorted(p.device for p in serial.tools.list_ports.comports() if p.vid == ARDUINO_VID)
 
 
 def port_serials():
@@ -49,30 +44,21 @@ def port_serials():
             if p.vid == ARDUINO_VID and p.serial_number}
 
 
-def open_board(port):
-    b = Board(port, Timeline())
-    b.open()
-    try:
-        b.name = b.info()["role"]
-    except BaseException:
-        b.close()
-        raise
-    return b
-
-
 def open_target(target):
     """A port name, or a role (house/gate) found among the Arduino ports."""
-    if target.lower() not in ("house", "gate"):
-        return open_board(target)
-    for port in board_ports():
-        try:
-            b = open_board(port)
-        except (serial.SerialException, BoardError):
-            continue
-        if b.name == target.lower():
-            return b
-        b.close()
-    sys.exit(f"no {target} board found (is the web console still connected?)")
+    role = target.lower()
+    if role not in ("house", "gate"):
+        return open_board(target, Timeline())
+    try:
+        boards = find_boards(Timeline())
+    except BoardError as e:
+        sys.exit(str(e))
+    b = boards.pop(role, None)
+    for other in boards.values():
+        other.close()
+    if b is None:
+        sys.exit(f"no {target} board found (is the web console still connected?)")
+    return b
 
 
 def parse_args(pairs):
@@ -94,7 +80,7 @@ def cmd_ports(_):
         print("no Arduino boards found")
     for port in ports:
         try:
-            b = open_board(port)
+            b = open_board(port, Timeline())
         except (serial.SerialException, BoardError) as e:
             print(f"{port:6} not a GateLink board, or busy ({e})")
             continue
@@ -150,7 +136,7 @@ def cmd_snapshot(args):
     serials = port_serials()
     for port in board_ports():
         try:
-            b = open_board(port)
+            b = open_board(port, Timeline())
         except (serial.SerialException, BoardError) as e:
             print(f"{port}: skipped ({e})")
             continue
@@ -240,21 +226,18 @@ def cmd_rftest(args):
     A board's `crc_err` counts frames it received with a bad CRC, so it points at that board's receiver; lost
     pongs can't be split between the ping and the pong, so loss is judged on both directions together.
     """
-    boards, serials = [], {}
+    tl = Timeline()
     try:
-        for p in serial.tools.list_ports.comports():
-            if p.vid != ARDUINO_VID:
-                continue
-            try:
-                b = open_board(p.device)
-            except (serial.SerialException, BoardError) as e:
-                print(f"{p.device}: skipped ({e})")
-                continue
-            boards.append(b)
-            serials[b.name] = (p.device, p.serial_number or "?")
-        if sorted(b.name for b in boards) != ["gate", "house"]:
-            sys.exit("rftest needs one house and one gate board on USB, both with the key set")
-        tl = boards[0].timeline = boards[1].timeline = Timeline()
+        found = find_boards(tl)
+    except BoardError as e:
+        sys.exit(str(e))
+    boards = list(found.values())
+    usb = port_serials()
+    serials = {b.name: (b.port, usb.get(b.port) or "?") for b in boards}
+    try:
+        if sorted(found) != ["gate", "house"]:
+            sys.exit("rftest needs one house and one gate board on USB, both with the key set "
+                     f"(found: {sorted(found) or 'none'}; is the web console still connected?)")
         start = {}
         for b in boards:
             s = b.status()

@@ -68,6 +68,12 @@ void houseRemoteSet(uint8_t id, int32_t value);
 uint32_t houseLinkTimeoutMs();
 uint32_t houseStatusAt();  // millis() when the last STATUS was taken (0 = none yet): the link's liveness (appLinkUp)
 void houseLinkRestarted();  // our link started over (a key or radio setting): down until the gate's next STATUS
+// For health.cpp, which reads these and is read by nothing here: armed at least once since boot (the first STATUS
+// plus its sync window; a K1 relay test disarming it for a while doesn't count), the gate's state as last reported
+// (GS_UNKNOWN before its first STATUS), and whether that STATUS said AC lost.
+bool houseDecided();
+uint8_t houseGateState();
+bool houseGateAcLost();
 
 void gateBegin();
 void gateLoop(uint32_t now);
@@ -76,3 +82,9 @@ void gateOnAck(Slot slot, uint8_t type, bool acked, uint8_t result);
 void gateStatus(JsonObject o);
 bool gateRelayTest(uint8_t k, uint32_t ms);  // false: that relay is pulsing already (busy)
 void gateDebugRebootAfterCmd();  // bench: the next pulsed command resets the gate before its ACK
+uint32_t gateLinkTimeoutMs();  // nothing heard from the house for this long: the link is down (appLinkUp)
+// For health.cpp (as above): the inputs have settled since boot and the first STATUS has gone out (not `settling`),
+// the state as reported, and AC power (IN3, or true with power_sense off).
+bool gateDecided();
+uint8_t gateCurrentState();
+bool gateAcPresent();

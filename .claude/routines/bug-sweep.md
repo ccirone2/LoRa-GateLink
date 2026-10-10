@@ -11,8 +11,8 @@ description: Look for bugs and simplifications in one area a night; fix one, pro
    1. `role_gate.cpp` (relays, limits, AC power, STATUS, remote config)
    2. `role_house.cpp` (K1 sync, controller power, K2, link loss)
    3. `console.cpp` and `console_io.cpp`
-   4. `config.cpp` and `extflash.cpp`
-   5. `radio.cpp`, `supply.cpp`, `history.cpp`, `app.cpp`
+   4. `config.cpp`, `histlog.cpp` and `extflash.cpp` (the SPI flash)
+   5. `radio.cpp`, `supply.cpp`, `history.cpp`, `health.cpp`, `app.cpp`
    6. `web/js/serial.js`, `samba.js`, `firmware.js`
    7. `web/js/status.js`, `config.js`, `history.js`, `settings.js`
    8. `tools/gatelink.py`, `tools/gatelink_client/`, `tools/release_evidence.py`

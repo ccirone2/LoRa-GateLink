@@ -239,9 +239,12 @@ static void handle(JsonDocument &req, ConsolePort &from) {
   } else if (!strcmp(cmd, "hist.get")) {
     histGet(res.as<JsonObject>(), req["from"] | -1, req["n"] | HIST_PAGE);
   } else if (!strcmp(cmd, "hist.clear")) {
-    if (!histClear(req["period_s"] | histPeriod())) {
+    HistClear r = histClear(req["period_s"] | histPeriod());
+    if (r == HIST_BAD_PERIOD) {
       res["ok"] = false;
       res["error"] = "period_s must be 60..3600";
+    } else if (r == HIST_NOT_SAVED) {
+      saveFailed(res);
     }
   } else if (!strcmp(cmd, "reboot")) {
     send(res, &from);
@@ -322,10 +325,11 @@ static int checkCrc(const char *line, size_t len) {
 
 // Requests that save to flash or restart the radio, which blocks the loop for up to ~1 s: while a relay pulses they
 // wait (appRelaysPulsing), or the pulse would be held that much longer. config.set restarts the radio for a radio
-// param; it waits whatever it sets, which costs at most one pulse. reboot waits 100 ms after its reply before the
-// reset drops the relays.
+// param; it waits whatever it sets, which costs at most one pulse. hist.clear clears the history in the flash too.
+// reboot waits 100 ms after its reply before the reset drops the relays.
 static bool blocksLoop(const char *cmd) {
   return !strcmp(cmd, "config.set") || !strcmp(cmd, "config.save") || !strcmp(cmd, "config.reset")
+         || !strcmp(cmd, "hist.clear")
          || !strcmp(cmd, "key.set") || !strcmp(cmd, "reboot");
 }
 

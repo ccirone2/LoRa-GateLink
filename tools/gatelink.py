@@ -127,7 +127,8 @@ def cmd_request(args):
 
 
 def cmd_hist(args):
-    """Every history bucket as CSV, with each bucket's start in local time (the board counts from its boot)."""
+    """Every history bucket as CSV, with each bucket's start in local time (counted back from now as if without a
+    break: one recorded before a reset, a lower `boot`, started earlier than its time says)."""
     b = open_target(args.target)
     try:
         buckets, head = b.history()

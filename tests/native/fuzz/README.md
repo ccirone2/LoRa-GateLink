@@ -1,8 +1,9 @@
 # Fuzzing the firmware's parsers
 
 libFuzzer targets for everything the board reads from outside: radio frames (`link.cpp` and the roles' handlers),
-the JSON console (`console.cpp`) and the config record in the SPI flash (`config.cpp`). Each target builds the real
-firmware (`app link role_gate role_house io log history console config`, plus Crypto) with AddressSanitizer and
+the JSON console (`console.cpp`) and what the SPI flash holds (the config record, `config.cpp`; the link history log,
+`histlog.cpp`). Each target builds the real firmware (`app link role_gate role_house io log history histlog health
+console config`, plus Crypto) with AddressSanitizer and
 UBSan, runs it on a fake board ([hal.cpp](hal.cpp)), and checks behavioural invariants as it goes, so a
 memory-safety bug or a breach under hostile input crashes with a reproducer.
 
@@ -15,7 +16,7 @@ needed.
 |---|---|---|
 | `fuzz_frames` | Byte 0 picks the board (house or gate; warm or cold boot; clock near the `millis()` wrap), then records: authenticated frames of any type and content, raw bytes, replays, peer restarts, input changes, console commands, radio faults, time (format at the top of [fuzz_frames.cpp](fuzz_frames.cpp)) | `handleFrame` and the replay window, HELLO/HELLO_ACK and the held command, `handleStatus`, `handleCmd`, `handleCfgSet`, DIAG, PING/PONG, ACKs, the house's controller sync |
 | `fuzz_console` | Byte 0 picks the board (house, gate, blank, gate near the wrap) and port (USB, or the UART, where requests need a CRC; or the harness signs each line), then bytes, a line at a time ([fuzz_console.cpp](fuzz_console.cpp)) | Every console command, the CRC check, line limits, held requests |
-| `fuzz_config` | The SPI flash, sectors 0–3 from address 0 (padded with erased bytes, cut at 16 KB) ([fuzz_config.cpp](fuzz_config.cpp)) | `configLoad` (record decoder), `configCountBoot`, `configSave`, `configSaveParam`, `configSaveKey`, `configFactoryReset` |
+| `fuzz_config` | The SPI flash, sectors 0–19 from address 0 (padded with erased bytes, cut at 80 KB) ([fuzz_config.cpp](fuzz_config.cpp)) | `configLoad` (record decoder), `configCountBoot`, `configSave`, `configSaveParam`, `configSaveKey`, `configFactoryReset`; the history log: `histBegin` and `hist.get`'s reply, `histLogBegin` (finding the newest record, the run it loads), `histLogAppend`, `histLogClear` |
 
 The board starts provisioned: the harness runs the real firmware once (role set, the key `FUZZ_KEY`,
 `configSave`) and keeps that flash image. In `fuzz_frames` the harness plays the other board with a session of its
@@ -25,8 +26,9 @@ is up, verified, settled (the gate has sent its first STATUS, ACKed; the house h
 "cold" one has only just booted.
 
 Checksums the fuzzer can't find by mutation are fixed up by the harness: frame MACs (always), the console CRC
-(`fuzz_frames` templates with the crc flag, `fuzz_console` byte 0 bit 3) and config record CRCs (`fuzz_config`,
-unless flash byte 256, which the firmware never reads, is even).
+(`fuzz_frames` templates with the crc flag, `fuzz_console` byte 0 bit 3), config record CRCs (`fuzz_config`,
+unless flash byte 256, which the firmware never reads, is even) and history log record CRCs (`fuzz_config`: each
+128-byte slot starting with the log's magic, unless its byte 100, past the record, is even).
 
 ## Invariants checked
 
@@ -51,7 +53,13 @@ On every loop pass and at every relay edge (hal.cpp), whatever the input:
   has run out; or one reading 0, which no slot is ever written: a garbled read) and then writes nothing; save then
   load gives the same config; `configSaveParam` writes one setting and leaves an unsaved edit unsaved;
   `configSaveKey` keeps the settings and leaves the old key in neither record (unless it was all 0x00 or 0xFF, which
-  hides nothing); nothing loads after `configFactoryReset`; none of the saves fails on a healthy chip.
+  hides nothing); nothing loads after `configFactoryReset`; none of the saves fails on a healthy chip, nor touches
+  the history log's sectors. The history: `hist.get` after `histBegin` reports a period `hist.clear` can set and
+  consecutive buckets from `oldest` to `current`; `histLogBegin` hands over at most `HIST_DEPTH` buckets, newest
+  first, numbered consecutively up to the next one, and leaves period and next alone when it finds nothing; if the
+  log can write (no read garbled, lseq not run out), the first bucket appended after the load lands and loads back
+  first, intact, and a CLEARED record written after it loads as an empty history of its period; if it can't, appending
+  and clearing write nothing.
 
 Plus everything ASan and UBSan catch (`-fno-sanitize-recover`).
 
@@ -98,7 +106,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --security-opt seccomp=unconfined -v "$(pwd -
 
 A single binary takes the usual libFuzzer flags, e.g. `$(BUILD)/fuzz/fuzz_frames -max_total_time=600 -max_len=4096
 work/ fuzz/corpus/fuzz_frames`. Use `-max_len` 4096 (frames), 8192 (console, with `-dict=fuzz/console.dict`) and
-16384 (config, with `-dict=fuzz/config.dict`), as `fuzz-smoke` does.
+81920 (config, with `-dict=fuzz/config.dict`), as `fuzz-smoke` does.
 
 **CI.** `make -C tests/native` in the CI workflow replays the corpus and the known crashes. The fuzz workflow
 (`.github/workflows/fuzz.yml`) runs `fuzz-smoke` for 60 s per target on pull requests that touch the firmware or
@@ -130,7 +138,10 @@ reads once the first has written that slot). Reproducers of fixed firmware bugs 
 restarted the radio at once and kept K1 on 656 ms, fixed in 0.13.9 by restarting it only once no relay pulses;
 `gate-cmd-same-direction-twice`: two OPENs 277 ms apart kept K1 on 777 ms, until 0.13.9 made the second the same
 press; `corpus/fuzz_config/boot-counter-wraps-to-1`: a boot counter slot reading 0xFFFFFFFD, as a program cut short can
-leave it, wrapped the count to 1 for good, until 0.13.9 wrote slots in two steps and skipped torn ones).
+leave it, wrapped the count to 1 for good, until 0.13.9 wrote slots in two steps and skipped torn ones;
+`corpus/fuzz_config/history-records-past-erased-first-slots`: during 0.14.0's development the history log took the
+newest record from each sector's first slot, missed records after an erased one and numbered new records below them,
+so a bucket appended after the boot didn't load back first; it now reads every slot's header).
 
 ## Reproducing a crash
 

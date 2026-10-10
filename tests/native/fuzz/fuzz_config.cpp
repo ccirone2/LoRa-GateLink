@@ -1,5 +1,6 @@
 // fuzz_config: the SPI flash holds whatever the input says (sectors 0..3: the two config records and the boot
-// counter), and the board loads it as at boot (configLoad, configCountBoot). Then what must hold whatever was there:
+// counter; 4..19: the link history log), and the board loads it as at boot (configLoad, configCountBoot, the history).
+// Then what must hold whatever was there:
 //   - every setting loaded is in range (paramValid), the key flag 0 or 1
 //   - the boot counter counts: two boots in a row get two counts, the second higher (session ids are drawn from it,
 //     and must never repeat under one key), until it runs out (a committed slot at BOOT_COUNT_MAX) and returns 0;
@@ -8,18 +9,31 @@
 //   - configSaveParam writes one setting on top of what's saved and leaves another unsaved edit unsaved
 //   - configSaveKey keeps the settings and leaves the old key in neither record
 //   - configFactoryReset leaves nothing to load
+//   - none of that touches the history log's sectors
+//   - the history (history.cpp) takes from the log only what makes sense: hist.get reports a period hist.clear can
+//     set, and pages of consecutive buckets from `oldest` to `current`
+//   - the log (histlog.cpp) hands over at most HIST_DEPTH buckets, newest first, numbered consecutively up to the next
+//     one; with nothing to go on from it leaves period and next alone
+//   - if it can write (histLogOn: no read garbled, lseq not run out), the first bucket appended after the load always
+//     lands, and loading again hands it back first, intact, with the history going on after it; a CLEARED record
+//     appended after that, if written, loads as an empty history of its period; if it can't write, appending and
+//     clearing write nothing
 //
 // Input: the flash image from address 0 (sector 0 holds one record at its start, sector 1 the other, sectors 2-3
-// the boot counter's 4-byte slots); past the input the flash reads erased (0xFF), and beyond 16 KB it is ignored.
-// The last byte also picks which setting configSaveParam writes. A record's CRC-32 is something the fuzzer can't
-// find by mutation, so unless flash byte 256 (sector 0's second page, which the firmware never reads) is even, the
-// harness first rewrites each record's CRC to match what the record declares (magic and count as they are): the
-// settings inside then reach the decoder. Short inputs leave it erased (odd): fixed up.
+// the boot counter's 4-byte slots, sectors 4-19 the history log's 128-byte slots); past the input the flash reads
+// erased (0xFF), and beyond 80 KB it is ignored. The last byte also picks which setting configSaveParam writes. A
+// record's CRC-32 is something the fuzzer can't find by mutation, so unless flash byte 256 (sector 0's second page,
+// which the firmware never reads) is even, the harness first rewrites each record's CRC to match what the record
+// declares (magic and count as they are): the settings inside then reach the decoder. Likewise each history slot that
+// starts with the log's magic gets its CRC fixed unless its byte 100 (past the record, never read) is even. Short
+// inputs leave both erased (odd): fixed up.
 #include <stdio.h>
 #include <vector>
 #include "harness.h"
 #include "config.h"
 #include "crc32.h"
+#include "history.h"
+#include "histlog.h"
 
 struct Saved {
   std::vector<int32_t> v;
@@ -91,10 +105,104 @@ static bool bootSlotInTheWay(bool pastFree) {
   return false;
 }
 
+// History log (histlog.h): 128-byte slots from sector 4; a record is 88 bytes, its CRC in the last 4, over the rest.
+#define HLOG_BASE (HLOG_SECTOR0 * 4096u)
+#define HLOG_END (HLOG_BASE + HLOG_SECTORS * 4096u)
+#define HLOG_REC 88
+
+static void fixHistCrcs() {
+  for (uint32_t a = HLOG_BASE; a < HLOG_END; a += HLOG_SLOT) {
+    uint8_t *r = hal.flash.data() + a;
+    if (r[0] != 0x48 || r[1] != 0x4C || !(r[100] & 1)) continue;
+    uint32_t c = crc32(r, HLOG_REC - 4);
+    for (int i = 0; i < 4; i++) r[HLOG_REC - 4 + i] = (uint8_t)(c >> (8 * i));
+  }
+}
+
+static std::vector<std::pair<uint32_t, Bytes>> taken;
+
+static void takeOne(uint32_t idx, const uint8_t *d) {
+  taken.push_back({ idx, Bytes(d, d + HLOG_DATA) });
+}
+
+// Loads the log and checks what it handed over. Returns whether it had history (period, next set).
+static bool loadLog(const char *when, uint16_t &period, uint32_t &next) {
+  taken.clear();
+  const uint16_t P0 = 0xBEEF;
+  const uint32_t N0 = 0xDEADBEEF;
+  period = P0;
+  next = N0;
+  bool had = histLogBegin(HIST_DEPTH, takeOne, period, next);
+  if (!had && (period != P0 || next != N0)) halTrap("%s: histLogBegin found nothing but set period/next", when);
+  if (!had && !taken.empty()) halTrap("%s: histLogBegin found nothing but handed over %zu buckets", when, taken.size());
+  if (taken.size() > HIST_DEPTH) halTrap("%s: %zu buckets handed over, more than HIST_DEPTH", when, taken.size());
+  for (size_t i = 0; i < taken.size(); i++)
+    if (taken[i].first != next - 1 - i)
+      halTrap("%s: bucket %zu handed over is number %u, expected %u", when, i, (unsigned)taken[i].first,
+              (unsigned)(next - 1 - i));
+  return had;
+}
+
+static uint64_t histRegionHash() {
+  uint64_t h = 1469598103934665603ULL;
+  for (uint32_t a = HLOG_BASE; a < HLOG_END; a++) h = (h ^ hal.flash[a]) * 1099511628211ULL;
+  return h;
+}
+
+// What history.cpp makes of the log at boot, through hist.get.
+static void checkHistory() {
+  histBegin(7);
+  JsonDocument d;
+  JsonObject res = d.to<JsonObject>();
+  histGet(res, -1, HIST_PAGE);
+  uint32_t period = res["period_s"], oldest = res["oldest"], current = res["current"];
+  if (period < 60 || period > 3600) halTrap("hist.get: period_s %u", (unsigned)period);
+  if (oldest > current || current - oldest > HIST_DEPTH)
+    halTrap("hist.get: oldest %u, current %u", (unsigned)oldest, (unsigned)current);
+  JsonArray rows = res["rows"];
+  if (rows.size() == 0 || rows.size() > HIST_PAGE) halTrap("hist.get: %zu rows", rows.size());
+  for (size_t i = 0; i < rows.size(); i++)
+    if (rows[i][0].as<uint32_t>() != oldest + i) halTrap("hist.get: row %zu is bucket %u", i, rows[i][0].as<unsigned>());
+  if (current - oldest < HIST_PAGE && rows[rows.size() - 1][0].as<uint32_t>() != current)
+    halTrap("hist.get: the last row isn't the bucket in progress");
+}
+
+static void checkLog(const uint8_t *data, size_t size) {
+  uint16_t period;
+  uint32_t next;
+  bool had = loadLog("load", period, next);
+  if (!histLogOn()) {
+    Bytes before = hal.flash;
+    uint8_t z[HLOG_DATA] = {};
+    if (histLogAppend(0, 3600, z) || histLogClear(60)) halTrap("the log wrote although it can't");
+    if (hal.flash != before) halTrap("the log changed the flash although it can't write");
+    return;
+  }
+  // A bucket appended after the load lands, and comes back first, as written.
+  uint32_t idx = had ? next : 0;
+  uint16_t p = had ? period : 3600;
+  uint8_t d[HLOG_DATA];
+  for (size_t i = 0; i < HLOG_DATA; i++) d[i] = size ? (uint8_t)(data[i % size] + i) : (uint8_t)i;
+  if (!histLogAppend(idx, p, d)) halTrap("the first bucket appended after a load failed (bucket %u)", (unsigned)idx);
+  uint16_t p2;
+  uint32_t n2;
+  if (!loadLog("reload", p2, n2)) halTrap("nothing loaded after appending bucket %u", (unsigned)idx);
+  if (p2 != p || n2 != idx + 1 || taken.empty() || taken[0].first != idx || memcmp(taken[0].second.data(), d, HLOG_DATA))
+    halTrap("reload: period %u, next %u, %zu buckets: not bucket %u as appended", (unsigned)p2, (unsigned)n2,
+            taken.size(), (unsigned)idx);
+  // Cleared: an empty history of its period (if written: the slot after the head may hold anything here).
+  if (histLogOn() && histLogClear(120)) {
+    if (!loadLog("after clear", p2, n2) || p2 != 120 || n2 != 0 || !taken.empty())
+      halTrap("after a clear: period %u, next %u, %zu buckets", (unsigned)p2, (unsigned)n2, taken.size());
+  }
+}
+
 static int runInput(const uint8_t *data, size_t size) {
   startBlank(1000);
   if (size) memcpy(hal.flash.data(), data, size < HAL_FLASH_BYTES ? size : HAL_FLASH_BYTES);
   if (hal.flash[256] & 1) fixCrcs();
+  fixHistCrcs();
+  uint64_t histBefore = histRegionHash();
 
   bool loaded = configLoad();
   checkLoaded("load");
@@ -150,6 +258,10 @@ static int runInput(const uint8_t *data, size_t size) {
   if (!configFactoryReset()) halTrap("configFactoryReset failed on a healthy chip");
   if (configLoad()) halTrap("a record survived configFactoryReset");
   checkLoaded("after reset");
+  if (histRegionHash() != histBefore) halTrap("the config writes changed the history log's sectors");
+
+  checkHistory();
+  checkLog(data, size);
 
   halHash(&cfg, sizeof(cfg));
   halHash(hal.flash.data(), hal.flash.size());

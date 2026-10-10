@@ -41,7 +41,7 @@ tab). **What it does** is the Config tab's help text.
 |---|---|---|---|---|---|
 | `retries` | 9 | 0–10 | 8 | at once, remote | Resends of an unacknowledged message, spread over its lifetime. Raise it on a lossy link; lower it to keep the channel quieter. |
 | `heartbeat_s` | 10 | 5–3600 | 30 | at once, remote | Gate: how often it reports status when nothing changes. Shorter spots a dead link sooner but uses more airtime. The house waits at least 2.5 heartbeats before calling the link lost. |
-| `link_timeout_s` | 11 | 15–10800 | 100 | at once, remote | House: no status report from the gate this long = link lost (the contact sensor then reads open). Raise it if short dropouts cause false alarms; it is never shorter than 2.5 gate heartbeats. |
+| `link_timeout_s` | 11 | 15–10800 | 100 | at once, remote | House: no status report from the gate this long = link lost (the contact sensor then reads open). Raise it if short dropouts cause false alarms; it is never shorter than 2.5 gate heartbeats. Gate: nothing heard from the house this long (at least 2.5 of its own heartbeats) = link down, for its LED and fault output. |
 | `cmd_ttl_s` | 12 | 2–120 | 10 | at once | House: how long a gate command keeps being retried before it is dropped (never fired late). Raise it if commands give up during short dropouts; lower it so a stale command isn’t delivered seconds later. |
 
 ## Inputs
@@ -76,6 +76,13 @@ tab). **What it does** is the Config tab's help text.
 | `ctrl_power_pmic` | 31 | 0–1 | 1 (on) | at once | House: the board’s own supply counts as controller power too, since both run off the same supply (the board through its 5 V converter). It notices a cut or a short dip within milliseconds, before the controller’s relay drops, where the IN2 opto lags ~1.7 s and can miss short dips. Turn off if the board has its own supply, or while it runs on a USB cable that carries power. |
 | `ctrl_confirm_ms` | 28 | 0–5000 (0–5 s) | 500 (0.5 s) | at once | House: a controller switch-OFF waits this long before it becomes a CLOSE, so one caused by the controller losing power (its relay drops before the power sense notices) can be discarded. Switch-ON (OPEN) goes at once: a power loss can’t cause it. With `ctrl_power_pmic` the board’s supply drops first, so 0.5 s is plenty; with IN2 alone keep it above the opto’s lag (~1.7 s on the bench, so 3000). |
 | `ctrl_settle_ms` | 29 | 0–60000 (0–60 s) | 10000 (10 s) | at once | House: after the controller powers up (or the house boots), its changes count as sync for at least this long. Raise it if the controller takes longer to settle after power returns. |
+
+## Fault output
+
+| Setting | Id | Range | Default | Applies | What it does |
+|---|---|---|---|---|---|
+| `fault_out` | 32 | 0–1 | 0 (off) | at once | Use D5 as a “needs attention” output for the alarm system: high while this board is healthy (radio working, link up and, as the gate sees or reports it, AC power present and no limit fault), low otherwise, and low after a restart until the board has started up. A dead board or a cut wire reads as a fault too. 3.3 V, a few mA: wire it to an opto or a relay module input, never a relay coil. Off: D5 stays an unused input. Takes effect at once; set it on each board that has D5 wired. |
+| `fault_hold_s` | 33 | 0–600 | 10 | at once, remote | How long a problem must last before D5 goes low, so a short dropout or blip doesn’t trip the alarm. Recovery raises D5 at once. 0 = low as soon as a problem appears. |
 
 ## Board
 

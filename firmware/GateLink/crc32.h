@@ -3,7 +3,8 @@
 #include <stdint.h>
 
 // CRC-32 (IEEE 802.3, as zlib's crc32), four bits at a time. Chain it by passing the previous result as crc. Used
-// by the config record (config.cpp) and the console's request check (console.cpp).
+// by the config record (config.cpp), the history log's records (histlog.cpp) and the console's request check
+// (console.cpp).
 inline uint32_t crc32(const void *data, size_t n, uint32_t crc = 0) {
   static const uint32_t T[16] = {
     0x00000000, 0x1DB71064, 0x3B6E20C8, 0x26D930AC, 0x76DC4190, 0x6B6B51F4, 0x4DB26158, 0x5005713C,

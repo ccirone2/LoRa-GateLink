@@ -1,5 +1,6 @@
 # libFuzzer dictionary for fuzz_config: the record's magic and format (config.cpp REC_MAGIC "GLC1", REC_FMT 1), erased
-# and programmed words, and boot counter values near the top of the range.
+# and programmed words, boot counter values near the top of the range, and the history log's record starts (histlog.cpp:
+# magic "HL", fmt 1, kind 1 bucket / 2 cleared) and periods (3600, 60).
 "GLC1"
 "GLC1\x01"
 "\xff\xff\xff\xff"
@@ -12,3 +13,7 @@
 "\x04\x09\x00\x00\x00"
 "\x05\x20\xa1\x07\x00"
 "\x01\x02\x00\x00\x00"
+"HL\x01\x01"
+"HL\x01\x02"
+"\x10\x0e"
+"<\x00"

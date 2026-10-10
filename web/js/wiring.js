@@ -16,6 +16,10 @@ const V33 = '3.3 V (VCC)';
 const SPARE_INPUTS = { name: 'Spare inputs (optional)', hint: 'Spare · e.g. beam break, alarm status', kind: 'in',
   rows: [['IN3 (A3)', 'Contact'], ['IN4 (A4)', 'Contact'], [V33, 'Common']] };
 const SPARE_NOTE = 'IN3 (A3) and IN4 (A4) are spare inputs (contact to 3.3 V, internal pull-down), reserved for future use such as a beam-break sensor or alarm status. They are shown and logged but don’t affect behaviour yet. Leave spare inputs unwired if you don’t need them; they read “off”.';
+// D5, the "needs attention" output (fault_out), on either board: a logic output (kind out), not a relay contact.
+const FAULT_OUTPUT = { name: 'Fault output (optional)', hint: 'D5 high = healthy · needs fault_out on', kind: 'out',
+  rows: [['FAULT (D5)', 'Relay module IN (active high)'], ['VIN (5 V)', 'Relay module VCC'], ['GND', 'Relay module GND']] };
+const FAULT_NOTE = 'D5 is an optional “needs attention” output for the alarm system (<code>fault_out</code>, off by default): high while the board is healthy, low once a problem has lasted <code>fault_hold_s</code>, and low after a restart until the board has started up. It is a 3.3 V logic output good for a few mA: drive a relay module with an active-high input that switches at 3.3 V (or an opto), never a relay coil directly. Wire the module’s NO and COM contacts to a second contact sensor’s terminals (or a hardwired zone) as a normally-closed loop: closed while healthy, open on a problem, a dead board or a cut wire. With <code>fault_out</code> off, D5 stays an input; leave it unwired.';
 export const WIRING = {
   house: {
     groups: [
@@ -28,6 +32,7 @@ export const WIRING = {
       { name: 'Contact sensor', hint: 'K2 closed = gate closed', kind: 'out',
         rows: [['K2 COM', 'Terminal'], ['K2 NO', 'Terminal']] },
       SPARE_INPUTS,
+      FAULT_OUTPUT,
       { name: '5 V supply', hint: 'Or USB', kind: 'pwr',
         rows: [['VIN (5 V)', '+5 V'], ['GND', '0 V']] },
     ],
@@ -38,6 +43,7 @@ export const WIRING = {
       'The contact sensor needs an external terminal input. K2 closes when the gate is closed and opens if the link is lost (<code>linkloss_open</code>). <code>sensor_invert</code> flips it.',
       'VIN is 5 V max. Feed it from the controller’s supply through a 5 V converter, so the board’s supply sense (<code>ctrl_power_pmic</code>) sees the controller’s power. USB power is fine for setup, but a USB cable that carries power keeps that sense reading ok.',
       SPARE_NOTE,
+      FAULT_NOTE,
     ],
   },
   gate: {
@@ -49,6 +55,7 @@ export const WIRING = {
       { name: 'Opto board outputs (PNP)', hint: 'Output side powered from 3.3 V only', kind: 'in',
         rows: [['IN1 (A1)', 'OUT1 · open limit'], ['IN2 (A2)', 'OUT2 · closed limit'], ['IN3 (A3)', 'OUT3 · AC 24 V supply'],
           ['IN4 (A4)', 'OUT4 · spare'], [V33, 'VCC (output side)'], ['GND', 'GND (output side)']] },
+      FAULT_OUTPUT,
       { name: '24 V → 5 V buck', hint: 'Fed from the opener’s 24 V accessory output or the AC 24 V supply', kind: 'pwr',
         rows: [['VIN (5 V)', '+5 V out'], ['GND', '0 V out']] },
     ],
@@ -61,6 +68,7 @@ export const WIRING = {
       'Use the relays’ NO/COM contacts only. Add TVS or RC suppression on long field runs.',
       'Keep the antenna vertical and outside any metal enclosure.',
       'IN4 (A4) is spare, reserved for future use. It is shown and logged but doesn’t affect behaviour yet.',
+      FAULT_NOTE,
     ],
   },
 };

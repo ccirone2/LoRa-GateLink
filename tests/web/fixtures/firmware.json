@@ -31,19 +31,22 @@
     { "name": "ctrl_confirm_ms", "id": 28, "min": 0, "max": 5000, "radio": false, "remote": false, "reboot": false },
     { "name": "ctrl_settle_ms", "id": 29, "min": 0, "max": 60000, "radio": false, "remote": false, "reboot": false },
     { "name": "ctrl_power_pmic", "id": 31, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
-    { "name": "uart_console", "id": 30, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false }
+    { "name": "uart_console", "id": 30, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "fault_out", "id": 32, "min": 0, "max": 1, "radio": false, "remote": false, "reboot": false },
+    { "name": "fault_hold_s", "id": 33, "min": 0, "max": 600, "radio": false, "remote": true, "reboot": false }
   ],
   "params": {
     "role": 0, "net_id": 66, "freq_hz": 915000000, "sf": 9, "bw_hz": 500000, "cr": 5, "tx_power": 17, "sync_word": 18,
     "retries": 8, "heartbeat_s": 30, "link_timeout_s": 100, "cmd_ttl_s": 10, "debounce_ms": 50, "in1_invert": 0,
     "in2_invert": 0, "pulse_ms": 500, "travel_timeout_s": 60, "ctrl_sync": 1, "sync_window_ms": 3000, "resync_ms": 1000,
     "mismatch_timeout_s": 75, "sensor_invert": 0, "linkloss_open": 1, "in3_invert": 0, "in4_invert": 0, "power_sense": 1,
-    "ctrl_power_sense": 1, "ctrl_confirm_ms": 500, "ctrl_settle_ms": 10000, "ctrl_power_pmic": 1, "uart_console": 0
+    "ctrl_power_sense": 1, "ctrl_confirm_ms": 500, "ctrl_settle_ms": 10000, "ctrl_power_pmic": 1, "uart_console": 0,
+    "fault_out": 0, "fault_hold_s": 10
   },
   "status_common": {
     "fw": "0.13.8", "reboot_pending": false, "uptime_ms": 3723000, "radio_ok": true, "radio_faults": 0,
     "reset_cause": "power_on", "supply": true, "cfg_loaded": true, "cfg_store": "spi", "key_set": true, "free_ram": 9120,
-    "usb_cut": 0, "loop_max_us": 1350,
+    "usb_cut": 0, "loop_max_us": 1350, "fault_out": null, "health": [],
     "link": { "verified": true, "age_ms": 1200, "rssi": -61, "snr": 9.5, "fei": -1450, "tx": 140, "rx": 152, "retries": 1,
       "giveups": 0, "mac_fail": 0, "replay": 0, "sessions": 1, "lbt_defers": 2, "lbt_forced": 0, "crc_err": 0, "noise": -118 }
   },
@@ -76,5 +79,5 @@
   "hist_fields": ["idx", "tx", "rx", "retries", "giveups", "crc_err", "mac_fail", "lbt_defers", "lbt_forced", "sessions",
     "radio_faults", "down_s", "rssi_min", "rssi_avg", "snr_min", "snr_avg", "noise_avg", "noise_max", "peer_n",
     "peer_rssi_min", "peer_rssi_avg", "peer_snr_min", "peer_snr_avg", "peer_noise_avg", "peer_noise_max",
-    "peer_retries", "peer_giveups", "peer_crc_err"]
+    "peer_retries", "peer_giveups", "peer_crc_err", "boot"]
 }

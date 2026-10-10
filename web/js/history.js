@@ -6,9 +6,11 @@ import { S } from './state.js';
 import { request } from './serial.js';
 
 // The board's hourly link record (hist.get, docs/console.md#link-history), fetched page by page. Buckets count
-// from the board's boot: bucket i started now_s − i × period_s seconds before the reply.
+// from the last hist.clear as if without a break: bucket i started now_s − i × period_s seconds before the reply,
+// unless the board reset after it (firmware 0.14.0 keeps the history across resets; `boot` changes where one came):
+// then it started earlier, by however long the reset took.
 const SNR_FLOOR = { 7: -7.5, 8: -10, 9: -12.5, 10: -15, 11: -17.5, 12: -20 }; // SX127x demodulation limit, dB
-let hist = null; // { buckets, period, nowS, current, fetchedAt, peer, sf, role }
+let hist = null; // { buckets, period, nowS, current, fetchedAt, peer, sf, role, persist, lastReset }
 let histAt = -1; // bucket (index into hist.buckets) under the crosshair, -1 = none
 let histLayout = null;
 let histNote = null; // the card's text before any history is loaded
@@ -34,7 +36,8 @@ export async function loadHistory() {
   }
   hist = {
     buckets, period: res.period_s, nowS: res.now_s, current: res.current, fetchedAt: Date.now(),
-    peer: S.role === 'house', sf: S.params.sf, role: S.role,
+    peer: S.role === 'house', sf: S.params.sf, role: S.role, persist: res.persist === true,
+    lastReset: lastReset(buckets),
   };
   histAt = -1;
   renderHistory();
@@ -50,6 +53,12 @@ export function clearHistoryView() {
   if (histNote !== null) $('histNote').textContent = histNote;
 }
 
+// Indexes i where the board reset between bucket i - 1 and bucket i (their `boot` differs; older firmware has none).
+const resetsBetween = (B) => B.flatMap((b, i) => (i > 0 && b.boot !== undefined && B[i - 1].boot !== undefined
+  && b.boot !== B[i - 1].boot ? [i] : []));
+// The first bucket after the last reset (0: none in view). Buckets before it started earlier than histStart says.
+const lastReset = (B) => resetsBetween(B).pop() ?? 0;
+const beforeReset = (i) => i < hist.lastReset;
 const histStart = (b) => hist.fetchedAt - (hist.nowS - b.idx * hist.period) * 1000;
 // Seconds the bucket covers: all of its period, or up to now for the one in progress.
 const histSpan = (b) => (b.idx < hist.current ? hist.period : Math.max(1, hist.nowS - b.idx * hist.period));
@@ -66,7 +75,7 @@ function renderHistory() {
   $('btnHistCsv').disabled = !B.length;
   const first = B.length ? histStart(B[0]) : hist.fetchedAt;
   $('histNote').textContent = B.length
-    ? `${histBuckets(B.length)}${hist.period === 3600 ? '' : ` of ${histPeriodText()}`} from ${fmtDay(first)} ${fmtClock(first)} to now (the ${hist.role} board’s record since it booted; up to four days, lost on reset). Loaded ${fmtClock(hist.fetchedAt)}.`
+    ? `${histBuckets(B.length)}${hist.period === 3600 ? '' : ` of ${histPeriodText()}`} from ${hist.lastReset ? 'before ' : ''}${fmtDay(first)} ${fmtClock(first)} to now (the ${hist.role} board’s record; up to four days, ${hist.persist ? 'kept across resets: a dashed line marks each, and buckets before one started earlier than shown' : 'lost on reset'}). Loaded ${fmtClock(hist.fetchedAt)}.`
     : 'No history yet.';
   if (!B.length) return;
   renderHistTiles();
@@ -75,7 +84,8 @@ function renderHistory() {
     ? `<span><span class="sw line here"></span> here (${esc(hist.role)})</span><span><span class="sw line peer"></span> ${peerName}</span>`
     : '')
     + '<span><span class="sw band"></span> range to the worst value</span>'
-    + '<span><span class="sw heat"></span> more problems = darker</span>';
+    + '<span><span class="sw heat"></span> more problems = darker</span>'
+    + (resetsBetween(B).length ? '<span><span class="sw reset"></span> board reset</span>' : '');
   drawHistory();
   renderHistTable();
 }
@@ -198,6 +208,13 @@ function drawHistory() {
   });
   y = rowTop + HIST_ROWS.length * (RH + 3) + 4;
 
+  // Resets between buckets: a dashed line at the boundary. The buckets before one are drawn closer to now than they
+  // were (the time the board was down isn't known).
+  for (const i of resetsBetween(B)) {
+    const x = (x0 + i * bw).toFixed(1);
+    out += `<line class="reset" x1="${x}" x2="${x}" y1="18" y2="${y}"/>`;
+  }
+
   // Time axis: bucket start times, spaced so labels don't touch, counted back from the newest.
   const k = [1, 2, 3, 4, 6, 8, 12, 24, 48, 96].find((s) => s * bw >= 100) || n; // room for "Mon 08:43 PM"
   let lastDay = '';
@@ -266,6 +283,7 @@ function renderHistTip(b) {
   };
   const t = histStart(b), end = t + histSpan(b) * 1000;
   add('tt', `${fmtDay(t)} ${fmtClock(t)}–${fmtClock(end)}${b.idx === hist.current ? ' (so far)' : ''}`);
+  if (beforeReset(hist.buckets.indexOf(b))) add('note', 'Before a reset: it was earlier than this');
   const floor = SNR_FLOOR[hist.sf];
   const peerName = hist.role === 'house' ? 'at gate' : 'at house';
   const sides = [['here', '', 'here'], ...(hist.peer ? [['peer', 'peer_', peerName]] : [])];
@@ -314,7 +332,7 @@ function histKey(e) {
 function renderHistTable() {
   const peer = hist.peer, peerName = hist.role === 'house' ? 'gate' : 'house';
   const cols = [
-    ['Start', (b) => `${fmtDay(histStart(b))} ${fmtClock(histStart(b))}`],
+    ['Start', (b, i) => `${beforeReset(i) ? 'before ' : ''}${fmtDay(histStart(b))} ${fmtClock(histStart(b))}`],
     ['RSSI avg / worst (dBm)', (b) => `${fmtNum(b.rssi_avg)} / ${fmtNum(b.rssi_min)}`],
     ['SNR avg / worst (dB)', (b) => `${fmtNum(b.snr_avg)} / ${fmtNum(b.snr_min)}`],
     ['Noise avg / peak (dBm)', (b) => `${fmtNum(b.noise_avg)} / ${fmtNum(b.noise_max)}`],
@@ -329,9 +347,10 @@ function renderHistTable() {
     ['CRC errors', (b) => (peer ? `${b.crc_err} + ${b.peer_crc_err}` : b.crc_err)],
     ['Down', (b) => (b.down_s ? fmtDur(b.down_s * 1000) : '0')],
   ];
-  const rows = [...hist.buckets].reverse();
+  const rows = hist.buckets.map((b, i) => [b, i]).reverse();
+  const resets = resetsBetween(hist.buckets); // newest first: a dashed line under the first bucket after each reset
   $('histTable').innerHTML = `<thead><tr>${cols.map(([h]) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>`
-    + rows.map((b) => `<tr>${cols.map(([, f]) => `<td>${esc(f(b))}</td>`).join('')}</tr>`).join('')
+    + rows.map(([b, i]) => `<tr${resets.includes(i) ? ' class="reset"' : ''}>${cols.map(([, f]) => `<td>${esc(f(b, i))}</td>`).join('')}</tr>`).join('')
     + `</tbody>${peer ? `<caption class="muted small" style="caption-side: bottom; text-align: left">Pairs “a + b”: here + ${peerName}.</caption>` : ''}`;
 }
 

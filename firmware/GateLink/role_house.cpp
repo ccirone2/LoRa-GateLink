@@ -42,6 +42,7 @@ static uint32_t betweenSince = 0;
 static bool linkUp = false;
 static bool armed = false;      // user commands accepted
 static uint32_t armAt = 0;      // arm once this time passes (0 = not scheduled)
+static bool everArmed = false;  // armed at least once since boot (houseDecided; read by health.cpp only)
 static bool shellyLevel = false;
 static bool syncActive = false;
 static uint32_t syncUntil = 0;
@@ -86,6 +87,18 @@ uint32_t houseStatusAt() {
 
 void houseLinkRestarted() {
   statusAt = 0;  // nothing heard on this link yet; the gate reports as soon as it has verified our new session
+}
+
+bool houseDecided() {
+  return everArmed;
+}
+
+uint8_t houseGateState() {
+  return haveStatus ? gateState : (uint8_t)GS_UNKNOWN;
+}
+
+bool houseGateAcLost() {
+  return haveStatus && (gateInputs & STI_AC_LOST);
 }
 
 static bool k1Target(uint32_t now) {
@@ -205,6 +218,7 @@ void houseLoop(uint32_t now) {
   }
 
   if (!armed && armAt && elapsed(now, armAt, 0)) armed = true;
+  if (armed) everArmed = true;
   // The end of a K1 test pulse moves the Shelly too (the pulse may outlast arming): cover it with a window.
   bool k1Pulsing = k1.pulsing();
   if (k1WasPulsing && !k1Pulsing) openSyncWindow(now, k1.on(), 0);

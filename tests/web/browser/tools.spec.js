@@ -76,4 +76,22 @@ test('link history loads every page and draws the chart, tiles and table', async
   const csv = Buffer.concat(await (await download.createReadStream()).toArray()).toString().trim().split('\n');
   expect(csv).toHaveLength(31);
   expect(csv[0]).toMatch(/^start,idx,tx,rx,/);
+  await expect(page.locator('#histChart line.reset')).toHaveCount(0);
+  await expect(page.locator('#histNote')).toContainText('kept across resets');
+});
+
+test('link history marks where the board reset, and the times before it as earlier', async ({ page }) => {
+  await openConsole(page, [{ role: 'gate', histBuckets: 20, histResetAt: 15 }]);
+  await connect(page, 'gate');
+  await page.locator('#tabbtn-tools').click();
+  await page.locator('#btnHistLoad').click();
+  await expect(page.locator('#histChart line.reset')).toHaveCount(1);
+  await expect(page.locator('#histLegend')).toContainText('board reset');
+  await expect(page.locator('#histNote')).toContainText('from before');
+  // The table lists the newest first: buckets 19..15 after the reset, then 14..0 before it.
+  const starts = await page.locator('#histTable tbody tr td:first-child').allTextContents();
+  expect(starts.slice(0, 5).every((s) => !s.startsWith('before'))).toBe(true);
+  expect(starts.slice(5).every((s) => s.startsWith('before '))).toBe(true);
+  await expect(page.locator('#histTable tbody tr.reset')).toHaveCount(1);
+  await expect(page.locator('#histTable tbody tr').nth(4)).toHaveClass(/reset/); // bucket 15: the line under it
 });

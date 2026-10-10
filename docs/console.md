@@ -45,7 +45,7 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 
 | Command | Arguments | Reply / effect |
 |---|---|---|
-| `info` | | `fw`, `board`, `role` (running), `saved_role`, `key_set`, `key_id` (see below), `cfg_store`, `flash_id` (SPI flash JEDEC id, hex; `000000` if it doesn't answer), `boot_count` (boots counted in the SPI flash; session ids are drawn from it; 0 if the chip didn't answer, its read was garbled, or should the count ever run out) |
+| `info` | | `fw`, `board`, `role` (running), `saved_role`, `key_set`, `key_id` (see below), `cfg_store`, `flash_id` (SPI flash JEDEC id, hex; `000000` if it doesn't answer), `boot_count` (boots counted in the SPI flash; session ids are drawn from it, and each link history bucket carries it; 0 if the chip didn't answer, its read was garbled, or should the count ever run out) |
 | `status` | | `status` object (below) |
 | `config.get` | | `params` (name → value), `meta` (per param: `name`, `id`, `min`, `max`, `radio`, `remote`, `reboot`), `key_set`, `key_id` |
 | `config.set` | `params`: {name: int} | Applies (doesn't save). `applied`, `errors` (names rejected: unknown, not an integer or out of range; `ok` is false if any), `reboot_required`. Unchanged values are skipped. Radio params restart the radio. Send at most ~8 params per request |
@@ -57,8 +57,8 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 | `remote.diag` | | House only. Requests the gate's diagnostics; a `remote_diag` event follows |
 | `remote.set` | `name`, `value` (int) | House only, remote-writable params only. `busy` while one is pending; a `remote_set` event follows |
 | `log.get` | | `log`: the ring buffer (64 entries: `t`, `ev`, `a`, `b`), `now` (board millis) |
-| `hist.get` | `from` (bucket number, default the oldest), `n` (1–12, default 12) | One page of the link history (below): `period_s`, `now_s`, `oldest`, `current`, `fields`, `rows` |
-| `hist.clear` | `period_s` (60–3600, default unchanged) | Empties the history and restarts it at bucket 0. The period lasts until the next boot (then 3600) |
+| `hist.get` | `from` (bucket number, default the oldest), `n` (1–12, default 12) | One page of the link history (below): `period_s`, `now_s`, `oldest`, `current`, `persist`, `fields`, `rows` |
+| `hist.clear` | `period_s` (60–3600, default unchanged) | Empties the history, in RAM and in the SPI flash, and restarts it at bucket 0. The period is kept with the history, across resets, until the next `hist.clear` (3600 on a board that has none). Held while a relay pulses, and fails as a save does if the flash wasn't cleared (below; a reset would then bring the old history back) |
 | `reboot` | | Replies, then resets the board 100 ms later (USB re-enumerates). Held while a relay pulses, like a save (below) |
 | `identify` | `ms` (default 6000, max 60000) | Strobes the LED |
 | `debug.replay` | `hello` (bool, default false) | Re-sends the last frame as-is, to test the peer's replay protection. With `hello`, re-sends this board's first HELLO since boot instead (an old session's once the link has restarted, e.g. after a radio param change). Sent as-is, without listening first; `sent` is false if there was nothing to replay or the radio was busy |
@@ -88,7 +88,7 @@ or reads older than the newest this boot has written or loaded; `config.save` wr
 clears that.
 Each save re-initialises the radio (the flash chip shares its bus): about 0.5 s off the air, which the link's
 retries cover. Saving, and restarting the radio, stops the loop for up to ~1 s, so while a relay pulse runs (or
-waits for its interlock start) `config.set`, `config.save`, `config.reset`, `key.set` and `reboot` wait in the port's
+waits for its interlock start) `config.set`, `config.save`, `config.reset`, `hist.clear`, `key.set` and `reboot` wait in the port's
 buffer and are answered after it (at most the pulse's length, 5 s for a `relay.test`); a held relay would
 otherwise stay on until the save was done (or, for `reboot`, until the reset 100 ms after its reply). A radio that
 faulted (`radio_fail` 1 or 2) stays down until the pulse is over too, and is restarted then.
@@ -104,8 +104,11 @@ LiPo; null if the chip didn't answer), `key_set`, `io` (`in1`–`in4`, `k1`,
 `sessions`, `lbt_defers`, `lbt_forced`, `crc_err` (frames received with a bad CRC), `noise` (smoothed noise floor,
 dBm; null before the first sample), `fei` (frequency error of the last good frame, Hz: the peer's carrier against
 ours, i.e. the two boards' crystal offset)), `free_ram` (bytes between the heap's high-water mark and the stack),
-`usb_cut` (console lines lost on USB since boot, see above) and `loop_max_us` (the longest loop pass since boot, µs:
-how close the loop has come to the 8 s watchdog; a flash save or radio restart takes up to ~1 s).
+`usb_cut` (console lines lost on USB since boot, see above), `loop_max_us` (the longest loop pass since boot, µs:
+how close the loop has come to the 8 s watchdog; a flash save or radio restart takes up to ~1 s), `fault_out` (the
+fault output D5 as driven: true HIGH, false LOW, null while the setting is off; see Fault output, below) and `health`
+(`starting`, `radio`, `link`, `ac`, `no_power`, `fault`: the problems this board counts right now, whether D5 is
+used or not; an empty list when healthy). Both from 0.14.0.
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,
@@ -120,13 +123,48 @@ how close the loop has come to the 8 s watchdog; a flash save or radio restart t
   and `noise` (its average since the previous STATUS; null if it had no sample); from gate firmware 0.13.0 also its
   `travel_timeout_s`, which the house then uses for its travel hold).
 
+## Fault output
+
+From 0.14.0 either board can drive D5 as a "needs attention" output for the alarm system (`fault_out`, off by
+default; wiring in [hardware.md](hardware.md#fault-output-d5)): HIGH while the board is healthy, LOW otherwise, so a
+dead board, a cut wire or a reset reads as a fault too. A problem must last `fault_hold_s` (default 10 s) before D5
+drops, so a short dropout doesn't trip the alarm; recovery raises it at once, and `fault_hold_s` 0 drops it as soon as
+a problem shows. After a reset D5 stays LOW until the board has started up (the house armed: its first STATUS from the
+gate plus `sync_window_ms`; the gate: its inputs settled and its first STATUS sent), so a reboot reads as a short fault.
+With `fault_out` off D5 is an input with its pull-down, as before. D5 is not K1 or K2: it commands nothing, and nothing
+the boards decide depends on it. Status `health` lists the problems either way, and log `health` records each change
+of D5 with the problems then as bits:
+
+| Bit | Problem | House | Gate |
+|---|---|---|---|
+| 1 | `starting` | not armed yet since boot | inputs still settling after boot |
+| 2 | `radio` | the radio isn't working (`radio_ok` false) | same |
+| 4 | `link` | no STATUS within `link_timeout_eff_s` (`link_up` false) | nothing heard from the house within `link_timeout_s`, at least 2.5 × its own `heartbeat_s` (the house answers each STATUS) |
+| 8 | `ac` | the gate's STATUS says AC lost | IN3 off (with `power_sense`) |
+| 16 | `no_power` | the gate reports `no_power` | the gate reads `no_power` |
+| 32 | `fault` | the gate reports `fault` | the gate reads `fault` (both limits) |
+
+With no role set, `starting`, `radio` and `link` stay listed.
+
 ## Link history
 
 Each board keeps a RAM ring of buckets: by default an hour each, the last 96 plus the one in progress (four
-days). Buckets are numbered from boot (or `hist.clear`), so bucket `i` started `now_s − i × period_s` seconds
-before the reply. Everything is lost on a reset; the reboot is in the log. It is for diagnostics only and never
-affects the gate or the outputs. The web console charts it (Tools → Link history), and
-`tools/gatelink.py <board> hist [--csv FILE]` fetches every page as CSV.
+days). It is for diagnostics only and never affects the gate or the outputs. The web console charts it (Tools → Link
+history), and `tools/gatelink.py <board> hist [--csv FILE]` fetches every page as CSV.
+
+Since firmware 0.14.0 each bucket is also written to the SPI flash as it completes (the reply's `persist` is true), so
+a reset loses only the bucket in progress: at boot the newest buckets are loaded back, as they were, and the numbering
+goes on from the newest one. Buckets are numbered from the last `hist.clear`, as if the history had run without a
+break: bucket `i` started `now_s − i × period_s` seconds before the reply if no reset came after it (its `boot` is the
+newest row's); one recorded before a reset (a lower `boot`) started earlier than that, by however long the board was
+down plus the part of a bucket the reset lost. Each write stops the loop and takes the radio off the air for about
+0.5 s, as a save does, once per bucket and never while a relay pulses (it waits for the pulse). A write cut short by a
+power cut is skipped at the next boot and loses nothing else; one that failed (it didn't read back intact) ends what
+the next boot loads, which is then only the buckets after it. `persist` is false without the flash chip (`cfg_store`
+`internal`), or after a boot whose read of the log came back garbled twice (until the next boot): the history is then
+kept in RAM only and lost on a reset, as before 0.14.0. The log takes sectors 4–19 of the chip: a lap
+of 512 buckets (three weeks of hours), of which a boot loads the newest 96; the oldest sector is erased as it wraps
+(see [protocol.md](protocol.md#spi-flash)).
 
 Each row lists the values in `fields` order. Counters are what happened during the bucket:
 
@@ -138,13 +176,14 @@ Each row lists the values in `fields` order. Counters are what happened during t
 | `crc_err`, `mac_fail` | Frames received with a bad CRC; frames failing authentication |
 | `lbt_defers`, `lbt_forced` | Frames held for a busy channel; sent anyway after the cap (a channel that stayed busy, or frames heard so often that the gaps never opened) |
 | `sessions`, `radio_faults` | Peer sessions verified; radio faults |
-| `down_s` | Seconds with the link down (house: `link_up` false; gate: nothing heard for `link_timeout_s`) |
+| `down_s` | Seconds with the link down (house: `link_up` false; gate: nothing heard for `link_timeout_s`, at least 2.5 × its `heartbeat_s`) |
 | `rssi_min`, `rssi_avg`, `snr_min`, `snr_avg` | Levels of the frames received (dBm, dB; null if none) |
 | `noise_avg`, `noise_max` | In-channel noise floor (dBm), read 4× a second while no LoRa frame is on the air. A reading followed by a frame is dropped, as it may be that frame's start, so busy periods have fewer readings. Non-LoRa signals (e.g. Z-Wave) count as noise |
 | `peer_n` | House: STATUS frames from the gate that carried its RSSI (the `peer_` levels average over them) |
 | `peer_rssi_min`, `peer_rssi_avg`, `peer_snr_min`, `peer_snr_avg` | House: levels at the gate of the house's frames |
 | `peer_noise_avg`, `peer_noise_max` | House: the gate's noise floor |
 | `peer_retries`, `peer_giveups`, `peer_crc_err` | House: the gate's counters, from its STATUS (its retries are lost STATUS frames or their ACKs) |
+| `boot` | The boot the bucket was recorded in (`info`'s `boot_count`; 0 if the chip didn't give one): where it changes from one bucket to the next, the board reset between them |
 
 Averages are rounded to 0.25 dB. On the gate the `peer_` levels stay null and its `peer_` counts 0.
 
@@ -192,6 +231,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `cfg` | at boot, config source: 0 defaults, 1 SPI flash, 2 program flash | saved settings dropped (unknown id or out of range) |
 | `supply` | board supply (VIN) power good: 1 good, 0 lost (on the LiPo); at boot −1 if the charger didn't answer | charger status register (REG08) |
 | `cmd_hold` | pending command: 1 held (a HELLO came from an unverified session), 0 sent after all (the verified session answered), 2 dropped (the new session verified: the gate restarted) | that session id |
+| `health` | fault output D5 changed (`fault_out`, see Fault output): 1 HIGH (healthy), 0 LOW (needs attention), −1 released (`fault_out` turned off: an input again) | the problems then, as bits: 1 starting, 2 radio, 4 link, 8 ac, 16 no_power, 32 fault (0 = none) |
 
 ## Example
 

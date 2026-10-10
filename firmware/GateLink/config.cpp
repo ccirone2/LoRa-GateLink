@@ -1,6 +1,7 @@
 #include "config.h"
 #include "crc32.h"
 #include "extflash.h"
+#include "histlog.h"
 #include "radio.h"
 #include <FlashStorage.h>
 #include <SHA256.h>
@@ -12,7 +13,7 @@
 // program flash (FlashStorage, a struct image checked against CFG_VERSION), which every upload erases.
 
 #define CFG_MAGIC 0x47544C4Bu  // "GTLK"
-#define CFG_VERSION 6
+#define CFG_VERSION 7
 
 const char FW_MARKER[] = FW_MARKER_PREFIX FW_VERSION;
 Config cfg;
@@ -54,6 +55,9 @@ const ParamDef PARAMS[] = {
   { 29, "ctrl_settle_ms", &Config::ctrl_settle_ms, 0, 60000, 0 },
   { 31, "ctrl_power_pmic", &Config::ctrl_power_pmic, 0, 1, 0 },
   { 30, "uart_console", &Config::uart_console, 0, 1, 0 },
+  // Not remote: whether D5 drives anything is a decision about the install's wiring.
+  { 32, "fault_out", &Config::fault_out, 0, 1, 0 },
+  { 33, "fault_hold_s", &Config::fault_hold_s, 0, 600, P_REMOTE },
 };
 const size_t PARAM_COUNT = sizeof(PARAMS) / sizeof(PARAMS[0]);
 
@@ -67,15 +71,14 @@ const size_t PARAM_COUNT = sizeof(PARAMS) / sizeof(PARAMS[0]);
 #define REC_SECTORS 2
 static_assert(sizeof(PARAMS) / sizeof(PARAMS[0]) <= REC_MAX_PARAMS, "config record outgrew one flash page");
 // Flash access holds the radio module in reset, which resets the radio: it's re-initialised afterwards (about
-// 0.5 s off the air, in LoRa.begin()'s reset delays). Saves are rare (console, remote writes).
-struct FlashAccess {
-  FlashAccess() {
-    if (extFlashPresent()) extFlashHoldModem();
-  }
-  ~FlashAccess() {
-    if (extFlashPresent()) radioRestart();
-  }
-};
+// 0.5 s off the air, in LoRa.begin()'s reset delays). Saves are rare (console, remote writes, a history bucket).
+FlashAccess::FlashAccess() {
+  if (extFlashPresent()) extFlashHoldModem();
+}
+
+FlashAccess::~FlashAccess() {
+  if (extFlashPresent()) radioRestart();
+}
 // Settings in the record that this firmware doesn't know (saved by a newer one, before a downgrade). Every save
 // writes them back, so going back to the newer firmware finds them again, as many as fit the page after its own.
 #define EXTRAS_MAX (REC_MAX_PARAMS - sizeof(PARAMS) / sizeof(PARAMS[0]))
@@ -252,6 +255,8 @@ void configDefaults(Config &c) {
   c.ctrl_settle_ms = 10000;
   c.ctrl_power_pmic = 1;
   c.uart_console = 0;
+  c.fault_out = 0;
+  c.fault_hold_s = 10;
   c.key_set = 0;
 }
 
@@ -353,6 +358,7 @@ bool configSaveKey() {
 // BOOT_COUNT_MAX (2^31 boots, or an old torn slot that cleared bit 31 and read high) the counter has run out and
 // returns 0, as without the chip, rather than repeat a count. So does a scan that reads a slot as 0 (garbled).
 #define BOOT_SECTOR0 REC_SECTORS
+static_assert(BOOT_SECTOR0 + 2 <= HLOG_SECTOR0, "the boot counter's sectors overlap the history log");
 #define BOOT_UNCOMMITTED 0x80000000u
 #define BOOT_COUNT_MAX 0x7FFFFFFEu  // uncommitted, 0x7FFFFFFF would read as an unwritten slot
 
@@ -461,8 +467,8 @@ const ParamDef *paramById(uint8_t id) {
 bool paramValid(const ParamDef *p, int32_t value) {
   if (!p || value < p->minV || value > p->maxV) return false;
   if (p->field == &Config::bw_hz && value != 125000 && value != 250000 && value != 500000) return false;
-  // No heartbeat_s vs link_timeout_s check here: only the gate uses heartbeat_s and only the house
-  // link_timeout_s, and the house stretches its timeout to the gate's heartbeat (see houseLinkTimeoutMs).
+  // No heartbeat_s vs link_timeout_s check here: only the gate uses heartbeat_s, and both boards stretch their link
+  // timeout to 2.5 of the gate's heartbeats (houseLinkTimeoutMs, gateLinkTimeoutMs).
   return true;
 }
 

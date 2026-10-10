@@ -9,7 +9,7 @@ static const char *const NAMES[] = {
   "boot", "radio_fail", "link_up", "link_down", "session", "mac_fail", "replay",
   "tx_giveup", "cmd_sent", "cmd_suppressed", "cmd_dropped", "cmd_rx", "cmd_dup",
   "pulse", "gate_state", "travel_timeout", "ctrl", "sync", "resync", "cfg_remote", "input", "cmd_refused", "ctrl_power", "lbt_forced", "cfg", "supply",
-  "cmd_hold",
+  "cmd_hold", "health",
 };
 static_assert(sizeof(NAMES) / sizeof(NAMES[0]) == EV_COUNT, "one name per LogCode");
 

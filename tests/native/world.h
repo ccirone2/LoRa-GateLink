@@ -21,7 +21,9 @@
 typedef std::vector<uint8_t> Bytes;
 
 // Pins (pins.h; A1..A4 as in stubs/Arduino.h)
-enum : uint8_t { P_K1 = 1, P_K2 = 2, P_LED = 6, P_IN1 = 16, P_IN2 = 17, P_IN3 = 18, P_IN4 = 19, P_COUNT = 32 };
+enum : uint8_t { P_K1 = 1, P_K2 = 2, P_D5 = 5, P_LED = 6, P_IN1 = 16, P_IN2 = 17, P_IN3 = 18, P_IN4 = 19, P_COUNT = 32 };
+// pinMode() modes (stubs/Arduino.h)
+enum : uint8_t { PM_INPUT = 0, PM_OUTPUT = 1, PM_INPUT_PULLUP = 2, PM_INPUT_PULLDOWN = 3 };
 
 // GateState / Cause / Action numbers (roles.h)
 enum : int { GS_UNKNOWN_ = 0, GS_CLOSED_, GS_OPEN_, GS_BETWEEN_, GS_FAULT_, GS_NO_POWER_ };
@@ -104,12 +106,20 @@ struct Board {
   int16_t rssi = -60, noise = -118;
   float snr = 9.0f;
 
-  // SPI flash (sectors 0..15)
+  // SPI flash (sectors 0..19: config records, boot counter, history log; config.h's flash map)
   bool flashPresent = true;
   std::vector<uint8_t> flash;
   uint32_t eraseMs = 45;  // datasheet typical (max 400)
   int flashErases = 0, flashPrograms = 0;
-  bool cutNextProgram = false;
+  bool cutNextProgram = false;  // the next program writes half the bytes and fails (a power cut mid-write)
+  int failPrograms = 0;         // the next N programs write nothing and fail (a chip that stopped programming)
+  struct FlashOp {
+    uint32_t at;  // world time
+    char op;      // 'E' erase, 'P' program
+    uint32_t addr;
+    bool ok;
+  };
+  std::vector<FlashOp> flashOps;  // every erase and program, in order
 
   // Console: what we send it (per port), what it printed
   bool usbHost = true;      // a program has the USB port open (DTR)
@@ -138,6 +148,9 @@ struct Board {
 
   // Outputs as the hardware has them (a board that's off or in its bootloader drives nothing)
   bool coil(int k) const { return state == RUN && mode[k == 1 ? P_K1 : P_K2] == 1 && out[k == 1 ? P_K1 : P_K2]; }
+  // D5, the fault output (fault_out): 1 driven HIGH (healthy), 0 driven LOW, -1 not driven (an input, or the board
+  // isn't running). What the alarm's relay module or opto sees: anything but 1 is a fault.
+  int faultOut() const { return state == RUN && mode[P_D5] == PM_OUTPUT ? out[P_D5] : -1; }
 
   // Test access
   JsonDocument status();       // appFillStatus, straight from the firmware
@@ -283,6 +296,7 @@ struct World {
     bool provenance = true;           // every command traced to a user action
     bool sensorTruth = true;
     bool notClosedDisplay = true;
+    bool faultOut = true;             // D5: never HIGH before the board has decided, nor past a fault's hold
   } limits;
   std::vector<std::string> violations;
   void violate(const std::string &what);
@@ -305,6 +319,16 @@ struct World {
   std::map<int32_t, int> pulsesPerCmd;
   int32_t lastGateCmdRx = -1;
   uint32_t lastGateCmdRxAt = 0;
+  // D5 (fault_out) per board
+  struct FaultTrack {
+    uint32_t badSince = 0;      // world time a fault this monitor can see began (0 = none now)
+    uint32_t offDriven = 0;     // world time D5 was first seen driven with fault_out 0 (0 = not)
+    uint32_t bootT = 0;         // board clock at its last boot (its `boot` log)
+    bool upSinceBoot = false;   // house: link_up since that boot
+    uint32_t upT = 0;           // board clock of that link_up
+    bool reported = false;
+  } ft[2];
+  void monitorFaultOut(int i);
   void monitor();
   void onLog(Board &b, const LogEv &e);
 };

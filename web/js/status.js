@@ -5,6 +5,18 @@ import { call } from './serial.js';
 import { IO_LABELS, WIRING, renderWiring } from './wiring.js';
 import { updateFwCard, reportFlash } from './firmware.js';
 import { showBoardKey } from './security.js';
+import { PROBLEMS } from './logdecode.js';
+
+// Status `health` (the problems now) and `fault_out` (D5: true high, false low, null off) as HTML; firmware before
+// 0.14.0 reports neither.
+export function healthHtml(s) {
+  if (!Array.isArray(s.health)) return '—';
+  const probs = s.health.map((p) => PROBLEMS[p] ?? p);
+  const now = probs.length ? `<span class="bad">${esc(probs.join(', '))}</span>` : '<span class="good">ok</span>';
+  const d5 = s.fault_out === true ? '<span class="good">D5 high</span>'
+    : s.fault_out === false ? '<span class="bad">D5 low</span>' : 'D5 off';
+  return `${now} · ${d5}`;
+}
 
 // Tab title: the gate state first, so a background tab still shows it.
 export function updateTitle(gate) {
@@ -127,6 +139,7 @@ export function renderStatus(s) {
   const nf = Number(s.radio_faults) || 0;
   const faults = nf ? ` <span class="bad">· ${nf} TX fault${nf === 1 ? '' : 's'}</span>` : '';
   $('bRadio').innerHTML = (s.radio_ok ? '<span class="good">ok</span>' : '<span class="bad">not initialised</span>') + faults;
+  $('bHealth').innerHTML = healthHtml(s);
   $('keyWarn').hidden = s.key_set;
   $('bSettling').textContent = 'settling' in s ? (s.settling ? 'yes · first report waits' : 'no') : '—';
   const store = { spi: 'flash chip', internal: 'program flash' }[s.cfg_store] ?? s.cfg_store;

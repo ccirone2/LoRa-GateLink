@@ -13,6 +13,8 @@ HOUSE board
           mirrors the real gate state
   K2  ──> 2GIG contact sensor
           closed = gate closed
+  D5  ──> optional: relay module → 2nd 2GIG sensor
+          closed = healthy ("needs attention" when open)
    │
    │  LoRa 915 MHz, HMAC-signed
    │
@@ -79,6 +81,7 @@ siren sensor.
 | AC power lost (gate IN3 off) | The opener runs on its battery, so a limit that still reads is trusted and the house shows the real state. Commands are refused (gate log `cmd_refused`; house shows *refused: no AC power*) and the Shelly is resynced to the gate at once. With no limit reading (moving, or the opener's battery dead too) the gate reports `no_power` instead of `between`: its position can't be verified, so the house shows not-closed (contact sensor open, K1 energized, the Shelly on). When AC returns everything follows the limits again |
 | Shelly loses power (house IN2 off) | Its relay drops, but that edge is never sent as a command (house log `ctrl_power 0`, then `ctrl` with b=1); the house board's own supply (`ctrl_power_pmic`, the same 12 V through its buck) drops ~0.2 s before the relay, where the IN2 opto lags it by ~1.7 s and misses short dips; a switch-OFF still waits `ctrl_confirm_ms` (0.5 s) before it becomes a CLOSE, and is discarded if power drops meanwhile; a switch-ON (OPEN) is sent at once, since a power loss can't cause it. When power returns the Shelly comes back at the K1 level and that edge is logged `sync` |
 | House board reboots | Never commands the gate from the Shelly's level at power-up; waits for gate status first |
+| Something needs attention (link lost, no AC or `no_power`/`fault` at the gate, a radio down) | With `fault_out` on, D5 drops once the problem has lasted `fault_hold_s` (default 10 s), so a second sensor tells Alarm.com "gate needs attention" apart from "open"; it comes back as soon as the problem clears. A dead or rebooting board reads as a fault too. Off by default ([docs/hardware.md](docs/hardware.md#fault-output-d5)) |
 
 Gate relays are **only ever pulsed** (default 500 ms), never held, so the other devices on the
 opener's inputs keep working. Gate state always comes from the opener's limit outputs (and its power sense),
@@ -100,6 +103,7 @@ Per install (one house end, one gate end); wiring and settings for each part are
 | 3.7 V LiPo (JST-PH) | 0–2 | optional | Rides through supply cuts; the house needs one for `ctrl_power_pmic` to see its supply drop |
 | Shelly Wave 1 on a 12 V DC supply | 1 | house | The Z-Wave "controller" Alarm.com switches |
 | 2GIG-compatible contact sensor with terminal input | 1 | house | Driven by K2: closed = gate closed |
+| Relay module (active-high input, switches at 3.3 V) + a second 2GIG contact sensor | 0–1 | optional, house | The fault output (D5, `fault_out`): "gate needs attention" |
 | LiftMaster CSW24UL (AUX relays set to open / closed limit) | 1 | gate | The opener; its OPEN/CLOSE inputs may be shared with other controllers |
 
 ## Build and flash
@@ -151,8 +155,8 @@ twice; the LED fades in and out), for example after an interrupted update, can b
 first. The page refuses files that aren't GateLink firmware for this board; files from before 0.5.1 (no version
 marker) need a confirm.
 
-**Tools → Link history** charts the board's hourly link record (firmware 0.4.0+, up to four days since its
-boot):
+**Tools → Link history** charts the board's hourly link record (firmware 0.4.0+, up to four days; kept across
+resets from 0.14.0, a dashed line marking each):
 - received signal and SNR margin above the spreading factor's limit, with the house board also showing what the
   gate received;
 - the noise floor;
@@ -194,7 +198,7 @@ table and notes for each board; works without a board connected).
 |---|---|
 | Solid, full brightness | No role set |
 | Dim breathing (2.5 s) | Link up |
-| Very dim, fast lub-dub heartbeat | No link (nothing heard for `link_timeout_s`; on the house, no status report from the gate for that long, at least 2.5 gate heartbeats) |
+| Very dim, fast lub-dub heartbeat | No link (nothing heard for `link_timeout_s`, at least 2.5 gate heartbeats; on the house, no status report from the gate for that long) |
 | Fast bright strobe (6 s) | **Identify** requested from the web console |
 
 The breathing and heartbeat patterns never go fully dark between pulses.

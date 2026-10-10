@@ -990,6 +990,7 @@ TEST(gate_relays_console_flash_and_radio_requests_wait_for_the_pulse) {
     { "config.set", "\"params\":{\"debounce_ms\":60}", 0 },
     { "config.set", "\"params\":{\"tx_power\":5}", 0 },  // a radio param: restarts the radio
     { "key.set", "\"key\":\"" + keyHex() + "\"", 1 },    // saves and restarts the radio
+    { "hist.clear", "", 1 },                             // the history log's first record: its sector erased first
     { "config.reset", "", 2 },                           // two sector erases
   };
   int k = 1;

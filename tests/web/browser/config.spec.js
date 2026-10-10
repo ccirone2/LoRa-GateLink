@@ -10,10 +10,13 @@ async function openConfig(page, boards, options) {
 test('the form shows every setting in its group, with on/off ones as toggles', async ({ page }) => {
   await openConfig(page);
   await expect(page.locator('#cfgForm .card .label')).toHaveText(['General', 'Radio', 'Link', 'Inputs', 'Gate node',
-    'House node', 'Board']);
+    'House node', 'Fault output', 'Board']);
   await expect(page.locator('#p_heartbeat_s')).toHaveValue('30');
   await expect(page.locator('#p_power_sense')).toHaveAttribute('type', 'checkbox');
   await expect(page.locator('#p_power_sense')).toBeChecked();
+  await expect(page.locator('#p_fault_out')).toHaveAttribute('type', 'checkbox');
+  await expect(page.locator('#p_fault_out')).not.toBeChecked();
+  await expect(page.locator('#p_fault_hold_s')).toHaveValue('10');
   await expect(page.locator('#p_bw_hz')).toHaveValue('500000');
   for (const m of fixture.meta) await expect(page.locator(`#p_${m.name}`), `a field for ${m.name}`).toHaveCount(1);
 });

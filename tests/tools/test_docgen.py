@@ -398,6 +398,29 @@ def test_status_found_when_app_fill_status_moves_to_app_cpp(tmp_path):
                      "describe it there"]
 
 
+def test_status_health_problem_names_checked_like_an_enumerated_field(tmp_path):
+    """The `health` list's names (health.cpp healthName) are checked against the doc as an enumerated field's are."""
+    files = dict(BASE)
+    files[f"{FW}/GateLink.ino"] = files[f"{FW}/GateLink.ino"].replace(
+        '  l["rssi"] = st.lastRssi;',
+        '  l["rssi"] = st.lastRssi;\n          JsonArray health = o["health"].to<JsonArray>();\n'
+        '          health.add(healthName(0));')
+    files[f"{FW}/health.cpp"] = """
+        const char *healthName(uint8_t bit) {
+          static const char *const n[] = { "starting", "radio", "link" };
+          static_assert(sizeof(n) / sizeof(n[0]) == PROBLEM_COUNT, "a name per Problem");
+          return bit < PROBLEM_COUNT ? n[bit] : "?";
+        }
+    """
+    doc = STATUS_DOC.replace("`link` (`rssi`).", "`link` (`rssi`) and `health` (`starting`, `radio`, `link`).")
+    assert docgen.check_status(make(tmp_path / "a", {**files, "docs/console.md": doc})) == []
+    drift = doc.replace("`radio`, `link`)", "`radio`, `ac`)")
+    probs = docgen.check_status(make(tmp_path / "b", {**files, "docs/console.md": drift}))
+    assert has(probs, "`health` can be `link`, which isn't listed with it")
+    assert has(probs, "`health` lists `ac`, which the firmware never reports")
+    assert len(probs) == 2, probs
+
+
 EVENTS_DOC = """
     | Event | Fields | When |
     |---|---|---|

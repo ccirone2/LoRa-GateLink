@@ -1090,6 +1090,9 @@ TEST(robustness_quiet_26_days_link_down_stays_down_and_stamps_stay_old) {
   CHECK_EQ(countSince(w.house, "link_down", h0), 1);
   CHECK_EQ(countSince(w.house, "link_up", h0), 0);
   CHECK_EQ(r.ons(HK2, k2), 0);
+  // Each hop closes a history bucket, and its write to the flash stops the loop ~0.5 s (a status read meanwhile would
+  // see the board's clock past its last loop pass): let the last one end.
+  r.run(1000);
   JsonDocument h = w.house.status(), gs = w.gate.status();
   CHECK(h["link_up"] == false);
   CHECK_IN(h["link"]["age_ms"] | -1, AGE_CAP, AGE_CAP + 5);  // held at the cap, not wrapped

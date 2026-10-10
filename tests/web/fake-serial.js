@@ -40,10 +40,12 @@
   const listeners = { connect: [], disconnect: [] };
   const fire = (type, port) => listeners[type].forEach((f) => f({ type, target: port }));
 
-  function histRows(n) {
+  // resetAt: the bucket the board reset before (firmware 0.14.0 keeps the history across resets), or -1.
+  function histRows(n, resetAt = -1) {
     const rows = [];
     for (let i = 0; i < n; i++) {
       const row = {
+        boot: i < resetAt ? 41 : 42,
         idx: i, tx: 120 + i, rx: 130 + i, retries: i % 7 === 3 ? 2 : 0, giveups: i === n - 4 ? 1 : 0, crc_err: i % 11 === 5 ? 1 : 0,
         mac_fail: 0, lbt_defers: 1, lbt_forced: 0, sessions: i === 0 ? 1 : 0, radio_faults: 0, down_s: i === n - 4 ? 90 : 0,
         rssi_min: -66, rssi_avg: -61.25, snr_min: 7.5, snr_avg: 9.25, noise_avg: -118, noise_max: -112, peer_n: 120,
@@ -72,6 +74,7 @@
       this.hasKeyId = verAtLeast(this.fw, fx.key.since_fw); // older firmware reports no key_id
       this.log = spec.log || [];
       this.histN = spec.histBuckets ?? 30;
+      this.histResetAt = spec.histResetAt ?? -1;
       this.requests = [];
       this.replyDelayMs = spec.replyDelayMs ?? 5;
       this.silent = false; // stops answering (a hung board)
@@ -96,8 +99,12 @@
     // The status reply, from the board's state as appFillStatus builds it.
     statusNow() {
       this.uptimeMs += 2000;
-      return { ...clone(this.status), fw: this.fw, role: this.role, uptime_ms: this.uptimeMs, key_set: this.keySet,
+      const s = { ...clone(this.status), fw: this.fw, role: this.role, uptime_ms: this.uptimeMs, key_set: this.keySet,
         cfg_store: this.spec.cfgStore || 'spi', reboot_pending: this.params.role !== ROLE_NUM[this.role] };
+      // D5 follows fault_out at once (health.cpp): null while it's off, else high unless a test gave a level. The
+      // hold isn't modelled: a test that wants D5 low with problems listed sets both.
+      if ('fault_out' in s) s.fault_out = !this.params.fault_out ? null : s.fault_out ?? (s.health ?? []).length === 0;
+      return s;
     }
 
     // A reset: the saved config comes back and its role takes effect.
@@ -177,15 +184,16 @@
         }
         case 'log.get': return ok({ log: clone(this.log), now: this.uptimeMs });
         case 'hist.get': {
-          const rows = histRows(this.histN);
+          const rows = histRows(this.histN, this.histResetAt);
           const current = this.histN - 1;
           const from = req.from ?? 0;
           const n = Math.min(req.n ?? 12, 12);
-          return ok({ period_s: 3600, now_s: current * 3600 + 1800, oldest: 0, current, fields: fx.hist_fields,
+          return ok({ period_s: 3600, now_s: current * 3600 + 1800, oldest: 0, current, persist: true, fields: fx.hist_fields,
             rows: rows.slice(from, from + n) });
         }
         case 'hist.clear':
           this.histN = 1;
+          this.histResetAt = -1;
           return ok();
         case 'reboot':
           setTimeout(() => {

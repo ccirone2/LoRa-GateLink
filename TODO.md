@@ -46,6 +46,21 @@ once its fix is merged and record it in the pull request.
   behind a power-blocked cable. Since 0.12.0 the suite sends every request over the UART while USB is down (CRC
   checked), so the power tests don't depend on USB coming back.
 
+- [ ] **Link history kept in the SPI flash (0.14.0).** Host-tested only (`tests/native`, tag `history-kept`). On
+  the bench: `test_history.py::test_history_kept_across_a_reboot`; a power cut of each board with buckets completed
+  (`tools/gatelink.py <board> hist` before and after: the completed ones come back as they were, `boot` changes);
+  `free_ram` with the 68-byte buckets and the longer `hist.get` rows; the boot time with a full log (512 records: the
+  firmware reads every slot's header and ~100 records in full, timed from the UART `boot` event); and that the hourly write (~0.5 s off the
+  air) costs nothing worse than a retry in a `-m longsoak` (house `retries`/`peer_retries` around each hour). And
+  what a sector erase cut short by a power cut leaves (the log takes zeros as data while the chip's id reads back,
+  and a garbled bus only when it doesn't): cut a board's power during a `hist.clear` that enters a new sector, then
+  check `persist` and the history after the boot.
+- [ ] **Fault output D5 (0.14.0).** Host-tested only (`tests/native`, tag `fault-out`); the suite has no D5 check (it
+  needs a wire from D5 to something it reads, e.g. a GateSim input). On the bench: D5 low or floating through a reset
+  and the bootloader, no glitch when it becomes an output, and the pull-down when `fault_out` is off; a relay module
+  or opto switching reliably from 3.3 V at a few mA; the 2GIG sensor loop and how Alarm.com reports it (trouble vs
+  intrusion); D5 dropping `fault_hold_s` after a link loss, AC loss and a radio fault, and rising at once after; and
+  `free_ram` with the longer status reply and the two new settings in `config.get`.
 - [ ] **SPI flash on both boards.** 0.5.0 keeps config in the on-board SPI flash. Check `info` `flash_id` and
   `cfg_store` `spi` on both bench boards and on any replacement board (an unexpected chip falls back to
   program flash, which uploads erase).

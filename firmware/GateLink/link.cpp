@@ -20,6 +20,13 @@
 // peer's own retries are further apart (HELLO_INTERVAL_MS plus a few frames), so only replays are dropped.
 #define HELLO_ANSWER_GAP_MS 1000
 
+// Listen-before-talk state of one frame waiting to go (clearToSend).
+struct Lbt {
+  uint32_t busySince;  // channel busy since (0 = not waiting on it)
+  uint32_t backoff;    // this frame's gap after the last air activity (0 = not drawn yet)
+  uint32_t waitSince;  // first held back (0 = not waiting): past waitCapMs() the gaps no longer hold it
+};
+
 struct PendingSlot {
   bool active;
   uint8_t type;
@@ -32,8 +39,7 @@ struct PendingSlot {
   uint32_t nextAt;
   uint32_t ttl;
   uint32_t expiresAt;
-  uint32_t busySince;  // listen-before-talk: channel busy since (0 = not waiting)
-  uint32_t backoff;    // this frame's gap after the last air activity (0 = not drawn yet)
+  Lbt lbt;
 };
 
 struct QueuedFrame {
@@ -79,7 +85,7 @@ static uint8_t ackNext;
 
 static QueuedFrame txq[TXQ_LEN];
 static uint8_t txqHead, txqCount;
-static uint32_t txqBusySince, txqBackoff;
+static Lbt txqLbt;  // the queue's head
 
 static uint8_t lastFrame[MAX_FRAME];
 static uint8_t lastFrameLen;
@@ -151,38 +157,56 @@ static bool isResponse(uint8_t type) {
 // other side's new frame is detectable. On a quiet channel neither waits.
 // Then hold a frame while the peer's frame is on the air (or one waits unread). A channel that never
 // clears (noise read as a signal) must not mute the board: after twice the longest frame it is sent anyway.
-static bool clearToSend(uint32_t &busySince, uint32_t &backoff, uint8_t type) {
-  if (!txIdle()) return false;
-  uint32_t now = millis();
-  if ((int32_t)(now - lastAirAt) < TURNAROUND_MS) return false;  // let the peer get back into RX
-  if (!isResponse(type)) {
-    if (!backoff) {
-      uint32_t symUs = (1000000UL << cfg.sf) / (uint32_t)cfg.bw_hz;
-      backoff = TURNAROUND_MS + RESPONSE_SLACK_MS + 8 * symUs / 1000 + random(0, 32 * symUs / 1000 + 1);
-    }
-    if ((int32_t)(now - lastAirAt) < (int32_t)backoff) return false;
+// The gaps count from the last frame heard, any frame: frames arriving more often than the backoff (a neighbour's
+// LoRa on our channel and sync word, or someone replaying ours) would hold new frames off for good. So a frame held
+// back longer than waitCapMs() stops waiting for the gaps: it goes as soon as a frame heard ends (the gap after it
+// is the longest there will be; mid-gap it would run into the next one), or once the channel has been quiet for its
+// backoff after all. A channel that reads busy still holds it (with its own cap).
+#define CAPPED_SLOT_MS 3  // "as soon as a frame heard ends": within this of its end
+static uint32_t waitCapMs() {
+  uint32_t symUs = (1000000UL << cfg.sf) / (uint32_t)cfg.bw_hz;
+  return 2 * radioAirtimeMs(MAX_FRAME) + TURNAROUND_MS + RESPONSE_SLACK_MS + 40 * symUs / 1000;  // + the longest backoff
+}
+
+static bool lbtCapped(const Lbt &l, uint32_t now) {
+  return l.waitSince && elapsed(now, l.waitSince, waitCapMs());
+}
+
+static bool sendNow(Lbt &l, uint8_t type, bool forced, uint32_t waited) {
+  if (forced) {
+    stats.lbtForced++;
+    logEvent(EV_LBT_FORCED, type, waited);
   }
-  if (!radioChannelBusy()) {
-    busySince = 0;
-    backoff = 0;
-    return true;
-  }
-  if (!busySince) {
-    busySince = now | 1;
-    stats.lbtDefers++;
-    return false;
-  }
-  uint32_t waited = now - busySince;
-  if ((int32_t)waited < (int32_t)(2 * radioAirtimeMs(MAX_FRAME))) return false;
-  busySince = 0;
-  backoff = 0;
-  stats.lbtForced++;
-  logEvent(EV_LBT_FORCED, type, waited);
+  l = {};
   return true;
 }
 
+static bool clearToSend(Lbt &l, uint8_t type) {
+  if (!txIdle()) return false;
+  uint32_t now = millis();
+  if (!l.waitSince) l.waitSince = now | 1;
+  bool capped = lbtCapped(l, now);
+  int32_t quiet = (int32_t)(now - lastAirAt);
+  if (!isResponse(type) && !l.backoff) {
+    uint32_t symUs = (1000000UL << cfg.sf) / (uint32_t)cfg.bw_hz;
+    l.backoff = TURNAROUND_MS + RESPONSE_SLACK_MS + 8 * symUs / 1000 + random(0, 32 * symUs / 1000 + 1);
+  }
+  int32_t gap = isResponse(type) ? TURNAROUND_MS : (int32_t)l.backoff;  // let the peer get back into RX, or answer
+  bool early = quiet < gap;  // only the cap lets it go now
+  if (early && !(capped && quiet <= CAPPED_SLOT_MS)) return false;
+  if (!radioChannelBusy()) return sendNow(l, type, early, now - l.waitSince);
+  if (!l.busySince) {
+    l.busySince = now | 1;
+    stats.lbtDefers++;
+    return false;
+  }
+  uint32_t waited = now - l.busySince;
+  if ((int32_t)waited < (int32_t)(2 * radioAirtimeMs(MAX_FRAME))) return false;
+  return sendNow(l, type, true, waited);
+}
+
 static void drainQueue() {
-  if (txqCount && clearToSend(txqBusySince, txqBackoff, txq[txqHead].frame[1])) {
+  if (txqCount && clearToSend(txqLbt, txq[txqHead].frame[1])) {
     transmit(txq[txqHead].frame, txq[txqHead].len);  // unreliable: dropped if the radio is down
     txqHead = (txqHead + 1) % TXQ_LEN;
     txqCount--;
@@ -197,7 +221,7 @@ void linkSend(uint8_t type, const uint8_t *payload, uint8_t len) {
     memcpy(bootHello, frame, n);
     bootHelloLen = n;
   }
-  if (!txqCount && clearToSend(txqBusySince, txqBackoff, type)) {
+  if (!txqCount && clearToSend(txqLbt, type)) {
     transmit(frame, n);  // the usual case: nothing queued, channel clear
     return;
   }
@@ -209,7 +233,7 @@ void linkSend(uint8_t type, const uint8_t *payload, uint8_t len) {
   if (isResponse(type)) {  // ahead of any new frame waiting out its backoff
     txqHead = (txqHead + TXQ_LEN - 1) % TXQ_LEN;
     slot = txqHead;
-    txqBusySince = txqBackoff = 0;
+    txqLbt = {};
   } else {
     slot = (txqHead + txqCount) % TXQ_LEN;
   }
@@ -239,13 +263,20 @@ static bool sendHello(uint32_t now, bool force) {
   return true;
 }
 
-// The TTL governs, not the retry count: the gaps double and the `retries` resends spread over the whole
-// TTL (cmd_ttl_s 10, retries 5: about 0.3, 0.9, 2.2, 4.7 and 9.7 s), so a lost frame is retried quickly
-// and an outage of nearly the TTL is still covered. The slot gives up when the TTL runs out.
-static uint32_t retryDelay(const PendingSlot &s) {
+// The TTL governs, not the retry count: the `retries` resends spread over the whole TTL. The gaps double from
+// TTL/32, so a lost frame is retried quickly, but never beyond an even share of what's left until the last
+// resend's deadline (TTL - TTL/32), so the later resends come evenly and an outage anywhere in the TTL still leaves
+// several (cmd_ttl_s 10, retries 8: about 0.3, 0.9, 2.2, then every ~1.5 s to 9.7 s; with retries 5 the same as
+// doubling alone: 0.3, 0.9, 2.2, 4.7, 9.7). Re-planned from the actual time at each resend, so backoffs don't add
+// up. The slot gives up when the TTL runs out.
+static uint32_t retryDelay(const PendingSlot &s, uint32_t now) {
   uint32_t minGap = radioAirtimeMs(s.frameLen) + radioAirtimeMs(HDR_LEN + 5 + TAG_LEN) + 100;
-  uint32_t n = s.attempts - 1;  // gaps so far; the gap after the last resend is the whole TTL (clamped)
-  uint32_t gap = n >= (uint32_t)cfg.retries ? s.ttl : s.ttl >> (cfg.retries - n);
+  uint32_t n = s.attempts - 1;  // gaps so far; after the last resend the slot just waits for the TTL (clamped)
+  uint32_t g0 = s.ttl / 32;
+  if (n >= (uint32_t)cfg.retries) return s.ttl;
+  int32_t left = (int32_t)(s.expiresAt - g0 - now);  // to the last resend's deadline
+  uint32_t even = left > 0 ? (uint32_t)left / (cfg.retries - n) : 0;
+  uint32_t gap = n < 31 && (g0 << n) >> n == g0 && (g0 << n) < even ? g0 << n : even;
   gap -= random(0, gap / 8 + 1);  // jitter, so two boards retrying at once drift apart; never past the TTL
   return gap < minGap ? minGap : gap;
 }
@@ -297,7 +328,7 @@ void linkBegin(RxHandler rx, AckHandler ack) {
   memset(slots, 0, sizeof(slots));
   memset(acks, 0, sizeof(acks));
   txqCount = 0;
-  txqBusySince = txqBackoff = 0;
+  txqLbt = {};
   txOnAir = false;  // radioBegin() abandoned any TX
   lastAirAt = millis();
   rxDoneSeen = radioRxDoneCount();
@@ -325,7 +356,7 @@ void linkSendReliable(Slot slot, uint8_t type, const uint8_t *payload, uint8_t l
   s.attempts = 0;
   uint32_t now = millis();
   s.nextAt = now;
-  s.busySince = s.backoff = 0;
+  s.lbt = {};
   s.ttl = ttlMs;
   s.expiresAt = now + ttlMs;
   // A new command isn't a repeat of one the peer may have run before restarting.
@@ -568,8 +599,10 @@ void linkPoll(uint32_t now) {
     // Its ACK would be dropped until the peer is verified, so sending now only takes airtime from the
     // handshake (at SF12 the retries crowded out the HELLO_ACK for good). Hold it; the TTL keeps running.
     if (!peerOk) continue;
-    if (!clearToSend(s.busySince, s.backoff, s.type)) {
-      s.nextAt = now + random(10, 60);  // poll again soon; deferring doesn't use up an attempt
+    if (!clearToSend(s.lbt, s.type)) {
+      // Poll again soon; deferring doesn't use up an attempt. Past the wait cap, every pass, so as not to miss the end
+      // of the next frame heard.
+      s.nextAt = now + (lbtCapped(s.lbt, now) ? 1 : random(10, 60));
       continue;
     }
     if (!transmit(s.frame, s.frameLen)) {  // radio down: doesn't use up an attempt
@@ -578,7 +611,8 @@ void linkPoll(uint32_t now) {
     }
     if (s.attempts > 0) stats.retries++;
     s.attempts++;
-    s.nextAt = millis() + radioAirtimeMs(s.frameLen) + retryDelay(s);  // gaps count from the frame's end
+    uint32_t end = millis() + radioAirtimeMs(s.frameLen);  // gaps count from the frame's end
+    s.nextAt = end + retryDelay(s, end);
     if ((int32_t)(s.nextAt - s.expiresAt) > 0) s.nextAt = s.expiresAt;
   }
 }

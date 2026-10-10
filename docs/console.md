@@ -124,7 +124,7 @@ Each row lists the values in `fields` order. Counters are what happened during t
 | `tx`, `rx` | Frames sent; authenticated frames received |
 | `retries`, `giveups` | Reliable-message resends, and messages given up |
 | `crc_err`, `mac_fail` | Frames received with a bad CRC; frames failing authentication |
-| `lbt_defers`, `lbt_forced` | Frames held for a busy channel; sent anyway after the cap |
+| `lbt_defers`, `lbt_forced` | Frames held for a busy channel; sent anyway after the cap (a channel that stayed busy, or frames heard so often that the gaps never opened) |
 | `sessions`, `radio_faults` | Peer sessions verified; radio faults |
 | `down_s` | Seconds with the link down (house: `link_up` false; gate: nothing heard for `link_timeout_s`) |
 | `rssi_min`, `rssi_avg`, `snr_min`, `snr_avg` | Levels of the frames received (dBm, dB; null if none) |
@@ -176,7 +176,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `resync` | target level | |
 | `cfg_remote` | param id | value |
 | `input` | spare input number (house 2/3/4, 2 only with `ctrl_power_sense` off; gate 3/4) | level |
-| `lbt_forced` | message type | ms the channel stayed busy |
+| `lbt_forced` | message type | ms it waited (for a channel that stayed busy, or frames heard so often the gaps never opened) |
 | `cfg` | at boot, config source: 0 defaults, 1 SPI flash, 2 program flash | saved settings dropped (unknown id or out of range) |
 | `supply` | board supply (VIN) power good: 1 good, 0 lost (on the LiPo); at boot −1 if the charger didn't answer | charger status register (REG08) |
 | `cmd_hold` | pending command: 1 held (a HELLO came from an unverified session), 0 sent after all (the verified session answered), 2 dropped (the new session verified: the gate restarted) | that session id |

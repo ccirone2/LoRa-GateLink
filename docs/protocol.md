@@ -43,9 +43,12 @@ power is lost. They can't forge or replay frames.
 ## Reliable delivery
 
 Commands, status and remote config writes are acknowledged and retried: the `retries` resends are spread over
-the message's lifetime with doubling gaps (`cmd_ttl_s` for commands: at 10 s and 5 retries about 0.3, 0.9, 2.2,
-4.7 and 9.7 s; STATUS: `heartbeat_s` capped at 10 s; config writes: 10 s), so a command survives an outage of nearly `cmd_ttl_s` and is dropped, never fired late, after
-it. Duplicate commands are detected by their command id and not re-pulsed. A message still waiting when the peer
+the message's lifetime (`cmd_ttl_s` for commands; STATUS: `heartbeat_s` capped at 10 s; config writes: 10 s). The
+gaps double from a 32nd of the lifetime, so a lost frame is retried quickly, but never beyond an even share of
+what's left, so the later resends come evenly up to just before the end: at 10 s and the default 8 retries about
+0.3, 0.9, 2.2, then every ~1.5 s to 9.7 s (with 5 retries, as before 0.13.7: 0.3, 0.9, 2.2, 4.7 and 9.7 s). A
+command still has four sends after a 5 s outage and two after 8 s, and is dropped, never fired late, after
+`cmd_ttl_s`. Duplicate commands are detected by their command id and not re-pulsed. A message still waiting when the peer
 answers a HELLO is renumbered, and if the peer had already taken it (its ACK lost) the resend is taken as new: every
 reliable message must therefore be safe to repeat, which STATUS and config writes are and commands are by their id. If the gate restarts while a command is still waiting
 for its ACK, the house drops the command instead of sending it again: the gate may already have pulsed for it and
@@ -58,7 +61,10 @@ pulses is taken at once but saved and ACKed only when the pulse is over (a save 
 hold the relay on that much longer); the house's retries meanwhile are dropped quietly, not counted as replays.
 Every transmission listens before talking: responses go
 after a 25 ms turnaround, new frames after the response slot plus a random backoff, both counted from the end of
-the last frame on the air (any frame heard, also one with a bad CRC). Unreliable frames waiting for a clear channel
+the last frame on the air (any frame heard, also one with a bad CRC). Frames heard more often than that (another
+LoRa network on the same channel and sync word, or someone replaying ours) would hold new frames off for good, so a
+frame held back longer than about twice the longest frame plus the longest backoff skips those gaps and waits only
+for a channel that reads busy (counted in `lbt_forced`). Unreliable frames waiting for a clear channel
 are queued four deep with responses first; when the queue is full the newest new frame is dropped, or with only
 responses waiting the oldest response.
 

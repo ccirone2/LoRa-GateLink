@@ -216,7 +216,7 @@ void configDefaults(Config &c) {
   c.cr = 5;
   c.tx_power = 17;
   c.sync_word = 0x12;
-  c.retries = 5;
+  c.retries = 8;
   c.heartbeat_s = 30;
   c.link_timeout_s = 100;
   c.cmd_ttl_s = 10;

@@ -20,7 +20,7 @@ PULSE_TOL_MS = 60  # measured pulse vs requested: relay operate/release and loop
 # The rest are the firmware defaults (config.cpp), pinned because scenarios rely on them: the limit-chatter test
 # needs debounce_ms > the GateSim's 30 ms flicker steps, and the waits assume the default windows.
 PROFILE_COMMON = {"heartbeat_s": 5, "link_timeout_s": 15, "travel_timeout_s": 15, "cmd_ttl_s": 10,
-                  "retries": 5, "debounce_ms": 50}
+                  "retries": 8, "debounce_ms": 50}
 # The controller power senses are off: most scenarios fake IN2 (gatelink/controller.py, CtrlPower), and the board's
 # supply sense (ctrl_power_pmic) can't be faked; ctrl_confirm_ms is the IN2-only value those fakes rely on. The power
 # tests turn the real senses on with REAL_CTRL_POWER.

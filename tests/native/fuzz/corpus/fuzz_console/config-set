@@ -1,0 +1,4 @@
+{"id":4,"cmd":"config.set","params":{"pulse_ms":700,"debounce_ms":30}}
+{"id":4,"cmd":"config.set","params":{"pulse_ms":700,"debounce_ms":30},"crc":"a047d4d3"}
+{"id":5,"cmd":"config.set","params":{"nope":1,"sf":99,"pulse_ms":"x"}}
+{"id":5,"cmd":"config.set","params":{"nope":1,"sf":99,"pulse_ms":"x"},"crc":"30f40e32"}

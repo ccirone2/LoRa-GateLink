@@ -1,0 +1,6 @@
+{"id":11,"cmd":"relay.test","k":1,"ms":600}
+{"id":11,"cmd":"relay.test","k":1,"ms":600,"crc":"cdcce213"}
+{"id":12,"cmd":"relay.test","k":2}
+{"id":12,"cmd":"relay.test","k":2,"crc":"ce9f6793"}
+{"id":13,"cmd":"relay.test","k":257,"ms":4294967796}
+{"id":13,"cmd":"relay.test","k":257,"ms":4294967796,"crc":"3258b563"}

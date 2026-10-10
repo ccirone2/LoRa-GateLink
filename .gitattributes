@@ -1,2 +1,5 @@
 # Shell scripts run under sh/bash on every platform (hooks run in Git Bash on Windows): keep LF.
 *.sh text eol=lf
+# Fuzz inputs are bytes: never convert their line endings.
+tests/native/fuzz/corpus/** -text
+tests/native/fuzz/crashes/** -text

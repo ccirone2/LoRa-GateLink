@@ -18,6 +18,10 @@ make -C tests/native build/tests && tests/native/build/tests retries        # on
 make -C tests/native build/systests build/node.so && tests/native/build/systests travel
 ```
 
+`make` also replays the fuzz corpus (`fuzz/corpus`, and the known-bug reproducers in `fuzz/crashes`, which must
+still crash) with g++. The libFuzzer targets for the frame, console and config parsers need clang; see
+[fuzz/README.md](fuzz/README.md).
+
 The firmware's libraries come from `LIBS` (default `~/Arduino/libraries`, where `arduino-cli` installs them on Linux,
 as in CI): Crypto and ArduinoJson (`CRYPTO=`, `JSON=` override each). On Windows they're in
 `~/Documents/Arduino/libraries`, and with no g++ installed the tests run in Docker, e.g. with the `gatelink-dev` image

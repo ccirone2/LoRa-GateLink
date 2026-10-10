@@ -1,0 +1,61 @@
+name: Fuzz
+
+# libFuzzer targets for the firmware's frame, console and config parsers (tests/native/fuzz/README.md). The committed
+# corpus is also replayed by the CI workflow (make -C tests/native); this one searches for new crashes: a minute per
+# target on pull requests that touch the firmware or the tests, half an hour per target nightly.
+on:
+  pull_request:
+    paths:
+      - 'firmware/GateLink/**'
+      - 'tests/native/**'
+      - '.github/workflows/fuzz.yml'
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: 'Seconds per target'
+        default: '600'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [fuzz_frames, fuzz_console, fuzz_config]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+      # Versions: keep in sync with docs/development.md and ci.yml (pinned actions: see ci.yml).
+      - name: Install libraries
+        run: arduino-cli lib install "Crypto@0.4.0" "ArduinoJson@7.4.3"
+      - name: Install clang and libFuzzer
+        run: sudo apt-get update && sudo apt-get install -y clang-18 llvm-18 libclang-rt-18-dev
+      - name: Fuzz
+        env:
+          SECONDS_PER_TARGET: ${{ github.event_name == 'schedule' && '1800' || github.event_name == 'workflow_dispatch' && inputs.seconds || '60' }}
+        run: |
+          make -C tests/native -f fuzz/Makefile CLANGXX=clang++-18 OBJDUMP=llvm-objdump-18 \
+            TARGETS=${{ matrix.target }} FUZZ_SECONDS="$SECONDS_PER_TARGET" fuzz-smoke
+      - name: Upload the crash
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.target }}-crash
+          path: tests/native/build/fuzz/artifacts/
+      - name: Upload what the run found (merge with make -f fuzz/Makefile corpus-merge)
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.target }}-corpus
+          path: tests/native/build/fuzz/work/${{ matrix.target }}/
+          if-no-files-found: ignore

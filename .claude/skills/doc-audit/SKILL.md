@@ -11,6 +11,7 @@ code lacks is a finding to report, not a reason to change firmware here). Work o
 1. **Mechanical checks first.** Each prints what's wrong:
    ```sh
    python tools/check_contract.py          # enums, log events, console commands: firmware vs suite vs docs/console.md
+   python tools/docgen.py                  # generated tables current; fields, pins, quoted defaults and constants
    python tools/agent/hooks.py paths CLAUDE.md README.md docs/*.md .claude/skills/*/SKILL.md .claude/routines/*.md
    python -m pytest tests/tools -q         # includes the agent tooling checks (skills, routines, hooks, links)
    ```

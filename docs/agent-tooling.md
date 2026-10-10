@@ -41,7 +41,7 @@ of its own is reported and ignored, and without Python the checks are skipped.
 | `*.py` | Compiles; `ruff check` under `tools/` and `tests/` (when ruff is installed) |
 | `*.json` | Parses |
 | `.github/workflows/*.yml` | Parses (when PyYAML is installed) |
-| `*.md` | Relative links resolve |
+| `*.md` | Relative links resolve; `tools/docgen.py` still agrees (the docs against the source) |
 | `.claude/settings.json` | Parses; every hook's script exists |
 | `.claude/skills/*/SKILL.md`, `.claude/routines/*.md` | Front matter; skills used and paths named exist |
 | The console contract (`console.cpp`, `log.cpp`, `log.h`, `roles.h`, `docs/console.md`, `tools/gatelink_client/`, `tests/e2e/gatelink/`) | `tools/check_contract.py` |
@@ -58,6 +58,7 @@ says why the rest doesn't, and the hook doesn't ask the same item again in that 
 | `native-tests` | `link.cpp`/`.h`, `config.cpp`/`.h`, `extflash.cpp` | anything under `tests/native/` |
 | `console-docs` | `console.cpp`, `log.cpp`, `log.h`, `roles.h` | `docs/console.md` |
 | `contract` | a console contract file | `tools/check_contract.py` passing |
+| `docgen` | a doc, or a source `tools/docgen.py` reads (firmware, `web/js/`, `tests/e2e/`, ...) | `tools/docgen.py` passing |
 | `wiring` | `pins.h` | `web/js/wiring.js` and `docs/hardware.md` |
 | `params` | a `PARAMS[]` row in `config.cpp` | `web/js/settings.js` |
 | `web-tests` | `web/` scripts, pages or styles | anything under `tests/web/` |

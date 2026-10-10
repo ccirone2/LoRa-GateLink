@@ -1641,13 +1641,14 @@ def check_macro_quotes(repo):
     return probs
 
 
-# snake_case names the docs may use that aren't a setting, field, argument, event or test (none yet).
-OTHER_NAMES = set()
+# snake_case names the docs may use that aren't in the source: Claude Code tool parameters (the skills).
+OTHER_NAMES = {"run_in_background"}
 
 
 def known_names(repo):
     """Every snake_case name the source gives the docs to use: settings, status/event/history fields, command
-    arguments and reply keys, log events, the names an enumerated field takes, e2e tests and release criteria."""
+    arguments and reply keys, log events, the names an enumerated field takes, e2e tests, release criteria and the
+    tools' own functions."""
     names = {p.name for p in parse_params(repo)} | OTHER_NAMES
     for _, tree in status_trees(repo).values():
         names |= flatten(tree)
@@ -1663,6 +1664,8 @@ def known_names(repo):
         names |= set(re.findall(r"^\s*def (test_\w+)", repo.text(rel), re.M))
     for rel in repo.glob("tools/release_evidence.py"):
         names |= set(re.findall(r'\bCriterion\(\s*"(\w+)"', repo.text(rel)))
+    for rel in repo.glob("tools/**/*.py"):  # docs/agent-tooling.md names the hooks' functions
+        names |= set(re.findall(r"^\s*def (\w+)", repo.text(rel), re.M))
     return names
 
 

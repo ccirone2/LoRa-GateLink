@@ -45,6 +45,7 @@ siren sensor.
 
 - [docs/hardware.md](docs/hardware.md) — wiring and device settings for each board, power and antenna
 - [docs/protocol.md](docs/protocol.md) — radio defaults, framing, sessions and replay protection, wire formats
+- [docs/threat-model.md](docs/threat-model.md) — what GateLink protects, from whom, what it guarantees, and the install security checklist
 - [docs/console.md](docs/console.md) — USB JSON console: commands, status fields, events, log codes
 - [docs/config.md](docs/config.md) — every setting: range, default, when a change applies, what it does
 - [docs/key-management.md](docs/key-management.md) — the link key: generating, encrypted backups, key ids, rotating, wiping

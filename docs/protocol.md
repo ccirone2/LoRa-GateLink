@@ -51,7 +51,10 @@ acted on: it is answered, and pending frames are renumbered. Each board answers 
 verified session and one from all other sessions, so replayed HELLOs can't keep pushing pending messages back.
 
 The frame payloads aren't encrypted: someone listening learns the message types, the gate state and when mains
-power is lost. They can't forge or replay frames.
+power is lost. They can't forge frames, or replay frames that were delivered. Two gaps remain, both on the
+[threat model](threat-model.md)'s open list: a frame **withheld** from its receiver (jammed there and recorded) can
+still be delivered later while inside the replay window, and a library of recorded challenge answers could in time
+re-verify an old session.
 
 ## Reliable delivery
 

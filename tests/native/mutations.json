@@ -1914,7 +1914,7 @@
    {
     "file": "link.cpp",
     "find": "  if (early && !(capped && quiet <= CAPPED_SLOT_MS)) return false;\n",
-    "replace": "  if (early) return false;\n"
+    "replace": "  if (early && !(capped && quiet <= CAPPED_SLOT_MS && false)) return false;\n"
    }
   ]
  }

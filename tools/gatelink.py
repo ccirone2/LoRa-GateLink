@@ -11,6 +11,7 @@
     python tools/gatelink.py key backup FILE            # ~/.gatelink_key as an encrypted backup (GLKB v1)
     python tools/gatelink.py key restore FILE [--out P] # a backup's key, printed or written to P
     python tools/gatelink.py key id                     # the id of the key in ~/.gatelink_key
+    python tools/gatelink.py survey [house|gate|COMx]   # site survey from one board: link margin both ways
 
 From firmware 0.5.0 the config and key live in the board's SPI flash chip and survive uploads (`ports` shows
 `cfg spi`); older firmware, or a board whose chip doesn't answer (`cfg internal`), loses them on every upload.
@@ -35,12 +36,14 @@ import json
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import serial
 import serial.tools.list_ports
 
 from gatelink_client import keybackup as kb
+from gatelink_client import survey
 from gatelink_client.board import ARDUINO_VID, Board, BoardError, board_ports, find_boards, open_board
 from gatelink_client.timeline import Timeline
 
@@ -491,6 +494,123 @@ def cmd_key_set(args):
     return 0
 
 
+# A survey ping unanswered this long counts as lost (the web console's ping card waits as long; SF12 takes seconds).
+SURVEY_PING_TIMEOUT_S = 8.0
+# The noise floors the samples are judged against are re-read from status this often.
+SURVEY_NOISE_EVERY_S = 10.0
+
+
+def run_survey(board, seconds, interval, clock=None, sleep=None, progress=print):
+    """Ping from `board` for `seconds`: one ping outstanding at a time, a new one every `interval` s (or as soon as
+    the last is answered or given up, if that takes longer). The firmware reports a pong only for its latest ping.
+
+    Returns (samples, elapsed_s, stopped): survey.sample_from_pong samples; stopped says why if Ctrl+C ("stopped
+    early") or a board error ("failed: ...") cut the survey short (the ping then in flight isn't counted), else
+    None."""
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    tl = board.timeline
+    samples, noise, noise_at, stopped = [], {}, None, None
+    last_id = None  # the previous ping's ping_id, once a pong has shown the board's numbering
+    t0 = last_progress = clock()
+    try:
+        while clock() - t0 < seconds:
+            start = clock()
+            if noise_at is None or start - noise_at >= SURVEY_NOISE_EVERY_S:
+                noise, noise_at = survey.noise_from_status(board.status()), start
+            seen = len(tl.select(src=board.name, kind="pong"))
+            board.request("radio.ping")
+            deadline, pong = clock() + SURVEY_PING_TIMEOUT_S, None
+            while pong is None:
+                # The previous ping's pong can still land after its 8 s, just before this ping reaches the board.
+                # It isn't this ping's answer, so it is skipped by its id.
+                pong = next((p for p in tl.select(src=board.name, kind="pong")[seen:]
+                             if last_id is None or p.get("ping_id") != last_id), None)
+                if pong is None:
+                    if clock() >= deadline:
+                        break
+                    sleep(0.02)
+            # This ping's id: its pong's, else one past the previous ping's (the board counts every radio.ping).
+            last_id = (pong["ping_id"] if pong and isinstance(pong.get("ping_id"), int)
+                       else None if last_id is None else (last_id + 1) & 0xFFFF)
+            samples.append(survey.sample_from_pong(pong, round(start - t0, 3), noise))
+            if clock() - last_progress >= 10:
+                last_progress = clock()
+                lost = sum(1 for x in samples if x["lost"])
+                progress(f"  {last_progress - t0:4.0f} s  {len(samples)} pings, {lost} unanswered")
+            next_at = start + interval
+            if next_at - t0 >= seconds:
+                break
+            if next_at > clock():
+                sleep(next_at - clock())
+    except KeyboardInterrupt:
+        stopped = "stopped early"
+    except BoardError as e:
+        stopped = f"failed: {e}"
+    return samples, round(clock() - t0, 3), stopped
+
+
+def survey_board(target):
+    """The board to survey from: the one named; else the only board on USB; else the house, which also knows the
+    gate's noise floor."""
+    if target:
+        return open_target(target)
+    try:
+        found = find_boards(Timeline())
+    except BoardError as e:
+        sys.exit(str(e))
+    if not found:
+        sys.exit("no GateLink board found (is the web console still connected?)")
+    b = found.pop("house" if "house" in found else sorted(found)[0])
+    for other in found.values():
+        other.close()
+    return b
+
+
+def cmd_survey(args):
+    """Site survey from one board: pings the other for a while and judges the link margin both ways
+    (gatelink_client/survey.py; docs/install.md). Exit 0 for a good or fair link, 1 for marginal or poor, or if a
+    board error cut the survey short (what it had is still reported)."""
+    b = survey_board(args.target)
+    try:
+        info, status = b.info(), b.status()
+        if not status["link"]["verified"]:
+            sys.exit(f"{info['role']} board on {b.port}: link not verified. The survey needs the other board "
+                     "powered, with the same key and radio settings.")
+        params = b.config_get()
+        settings = {k: params.get(k) for k in ("sf", "bw_hz", "tx_power")}
+        bw = f"{settings['bw_hz'] / 1000:g}" if settings["bw_hz"] else "?"
+        print(f"site survey from the {info['role']} board on {b.port} (SF{settings['sf']}, {bw} kHz, tx_power "
+              f"{settings['tx_power']} dBm): pinging for {args.seconds:g} s, every {args.interval:g} s; "
+              "Ctrl+C stops early")
+        when = datetime.now().astimezone().isoformat(timespec="seconds")
+        samples, elapsed, stopped = run_survey(b, args.seconds, args.interval)
+    except BoardError as e:
+        sys.exit(f"survey failed: {e}")
+    finally:
+        b.close()
+    result = survey.analyze(settings, samples, info["role"])
+    report = {"tool": "gatelink.py survey", "time": when,
+              "board": {"role": info["role"], "fw": info["fw"], "port": b.port,
+                        "usb_serial": port_serials().get(b.port)},
+              "settings": settings, "seconds": args.seconds, "interval_s": args.interval,
+              "ping_timeout_s": SURVEY_PING_TIMEOUT_S, "elapsed_s": elapsed, "stopped": stopped, **result,
+              "samples": samples}
+    print()
+    print(survey.format_text(report), end="")
+    if args.json:
+        Path(args.json).write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+        print(f"\nreport written to {args.json}")
+    return 0 if result["verdict"] in ("good", "fair") and not (stopped or "").startswith("failed") else 1
+
+
+def positive(text):
+    v = float(text)
+    if not v > 0:
+        raise argparse.ArgumentTypeError(f"must be above 0, not {text}")
+    return v
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="GateLink boards over their USB JSON console (docs/console.md); "
                                              "or `gatelink.py <house|gate|COMx> <cmd> [key=value ...]`")
@@ -535,10 +655,17 @@ def main(argv=None):
     p.add_argument("target", help="house, gate or a port (COMx)")
     p.add_argument("--key-file", default=DEFAULT_KEY_FILE)
     p.set_defaults(fn=cmd_key_set)
+    p = sub.add_parser("survey", help="site survey: ping from one board, judge the link margin both ways")
+    p.add_argument("target", nargs="?", help="house, gate or a port (default: the only board, else the house)")
+    p.add_argument("--seconds", type=positive, default=120, help="survey length (default 120)")
+    p.add_argument("--interval", type=positive, default=2, help="seconds between pings (default 2)")
+    p.add_argument("--json", metavar="FILE", help="also write the full report (settings, samples, verdict) here")
+    p.set_defaults(fn=cmd_survey)
 
+    argv = sys.argv[1:] if argv is None else argv
     # Anything else is `<target> <cmd> [key=value ...]`.
     argv = sys.argv[1:] if argv is None else argv
-    if argv and argv[0] not in ("ports", "snapshot", "restore", "rftest", "key", "-h", "--help"):
+    if argv and argv[0] not in ("ports", "snapshot", "restore", "rftest", "survey", "key", "-h", "--help"):
         rp = argparse.ArgumentParser(prog="gatelink.py <target>")
         rp.add_argument("target", help="house, gate or a port (COMx)")
         rp.add_argument("cmd", help="console command, e.g. status, log.get, config.set; or hist (history as CSV)")

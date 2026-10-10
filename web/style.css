@@ -166,6 +166,14 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .sw.here { background: var(--chart-here); }
 .sw.peer { background: var(--chart-peer); }
 
+/* Site survey (Tools tab) */
+.verdict-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin: 6px 0 10px; }
+.verdict { font-size: 22px; font-weight: 700; }
+.verdict.good { color: var(--ok); }
+.verdict.marginal { color: var(--warn); }
+.verdict.poor { color: var(--bad); }
+#surveyTable td, #surveyTable th { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 /* Link history (Tools tab) */
 .card.wide { grid-column: 1 / -1; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 4px 0 10px; }

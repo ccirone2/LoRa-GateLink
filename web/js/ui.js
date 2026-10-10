@@ -2,9 +2,9 @@
 import { $ } from './util.js';
 import { S } from './state.js';
 
-// Controls that work without a board.
+// Controls that work without a board. (The survey's Copy keeps its own state: it works once there is a report.)
 export const OFFLINE_OK = ['logRaw', 'btnLogClear', 'btnLogSave', 'keyInput', 'btnKeyGen', 'btnKeyCopy', 'btnKeyBackup',
-  'keyRestoreFile', 'btnFwLatest', 'fwFile', 'btnBootPort'];
+  'keyRestoreFile', 'btnFwLatest', 'fwFile', 'btnBootPort', 'btnSurveyCopy'];
 
 export const logLines = []; // what Download saves; the view keeps only the last 1000
 const LOG_KEEP = 20000;

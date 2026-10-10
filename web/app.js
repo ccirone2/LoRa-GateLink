@@ -5,6 +5,7 @@
 //   history.js  link history chart                            firmware.js firmware update (samba.js: bootloader)
 //   wiring.js   Install tab (tracks pins.h)                   settings.js setting groups and help text
 //   security.js Security tab (keys.js: key ids, backups)      logdecode.js log events as text
+//   survey.js   site survey verdict (tools.js runs the card; tools/gatelink_client/survey.py is its twin)
 //   ui.js log view, toasts      state.js shared state      util.js helpers
 import { $, fmtDur, download } from './js/util.js';
 import { S } from './js/state.js';
@@ -20,7 +21,8 @@ import {
 import { loadHistory, clearHistoryView, historyCsv, historyRole, historyLoaded, initHistory } from './js/history.js';
 import { updateFwCard, loadLatest, installLatest, flashFile, pickBootPort } from './js/firmware.js';
 import {
-  ping, setAutoPing, resetToolsView, stopTools, relayTest, remoteDiag, remoteSet, replay, onToolsEvent,
+  ping, setAutoPing, resetToolsView, stopTools, relayTest, remoteDiag, remoteSet, replay, onToolsEvent, toggleSurvey,
+  copySurvey,
 } from './js/tools.js';
 import {
   checkKeyInput, showBoardKey, generate, copyKey, keyToWrite, reportKeyWritten, saveBackup, restoreBackup,
@@ -215,6 +217,8 @@ function init() {
   $('btnK2').onclick = guard(() => relayTest(2));
   $('btnPing').onclick = guard(ping);
   $('pingAuto').onchange = (e) => setAutoPing(e.target.checked);
+  $('btnSurvey').onclick = guard(toggleSurvey);
+  $('btnSurveyCopy').onclick = copySurvey;
   $('btnDiag').onclick = guard(remoteDiag);
   $('remParam').onchange = syncRemValue;
   $('remValue').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('btnRemSet').disabled) $('btnRemSet').click(); });

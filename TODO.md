@@ -88,8 +88,12 @@ once its fix is merged and record it in the pull request.
 
 ## Install
 
-- [ ] **Install checklist.** Write the on-site steps (wiring checks per board, Shelly SW mode, CSW24UL AUX relay
-  settings, power sense checks, RF margin, final config export) as a doc once the install hardware is in hand.
+- [ ] **Install checklist.** A draft is in [docs/install.md](docs/install.md): the site survey (web card and
+  `tools/gatelink.py survey`) and a checklist skeleton built from hardware.md and the README (wiring checks per
+  board, Shelly SW mode, CSW24UL AUX relay settings, power sense checks, the survey, config export and key backup).
+  Left, once the install hardware is in hand: walk it on site and correct it, add the Shelly and CSW24UL menu steps
+  as done, the readings at each check and photos, and record the first survey (its numbers also settle the
+  command-retry item under Firmware). Then drop the draft notice.
 
 ## Supply chain
 

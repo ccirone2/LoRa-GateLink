@@ -24,19 +24,18 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
 3. **Compile once, upload to each board.** Clean compile means no warnings in project files:
    ```sh
    arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all --output-dir <scratchpad>/build firmware/GateLink 2>&1 | grep -E "GateLink[\\/].*warning|Sketch uses"
-   arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 --input-dir <scratchpad>/build
-   arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM21 --input-dir <scratchpad>/build
+   python tools/flash.py <scratchpad>/build/GateLink.ino.bin house gate
    ```
-   If `arduino-cli upload` fails with `No device found` (its port discovery sees nothing on the bench PC; `board
-   list` comes back empty too), upload by hand: open the board's port at 1200 baud and close it with DTR off,
-   wait for the bootloader port to appear (USB PID 0x0059, `serial.tools.list_ports`; a new COM number), then
-   `~/AppData/Local/Arduino15/packages/arduino/tools/bossac/1.7.0-arduino3/bossac.exe -i -d --port=<bootloader port> -U true -i -e -w -v <scratchpad>/build/GateLink.ino.bin -R`
-   and look for `Verify successful`.
-   A board in the bootloader can re-enumerate on another COM number (`python -m serial.tools.list_ports -v` shows it). If an
-   upload fails with the port busy, double-tap the board's reset button and retry on the port it shows.
-   Upload one board at a time and check `ports` between. If ports report `no answer within 8 s` (every USB
-   serial port stuck, seen after uploads), ask the user to replug the USB hub; the boards keep running on their
-   bench supplies.
+   `tools/flash.py` does what `arduino-cli upload` does with every wait bounded, one board at a time: the 1200-baud
+   touch, the bootloader's own port (often a new COM number), bossac with a timeout, then the board back by its USB
+   serial number, reporting the firmware in the .bin. Don't use `arduino-cli upload` on this bench: it has hung in
+   bossac and left a board wedged in its bootloader. Never kill a bossac that is writing.
+   - `didn't come back as a bootloader port`: double-tap the board's reset button, then
+     `python tools/flash.py <bin> <the port it shows>` (a bootloader port, USB PID 0x0059, is written directly).
+   - `bossac didn't finish` or `No device found` on a bootloader port: ask the user to replug that board's USB cable
+     (or double-tap reset), then flash its bootloader port as above. The board stays in its bootloader until then.
+   - If ports report `no answer within 8 s` (every USB serial port stuck, seen after uploads), ask the user to
+     replug the USB hub; the boards keep running on their bench supplies.
 4. **Check, then restore if needed.** Run `python tools/gatelink.py ports`. If both boards show their role,
    `key set`, `tx_power` 5 and `cfg spi`, the config survived: skip to the link check below. Otherwise restore
    role, config and key, reboot, and wait for the link:

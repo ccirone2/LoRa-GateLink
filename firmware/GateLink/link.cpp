@@ -609,10 +609,18 @@ void linkPoll(uint32_t now) {
       s.nextAt = s.expiresAt;  // out of resends: wait for a late ACK until the TTL ends
       continue;
     }
-    if (i == SLOT_CMD && cmdHeld) continue;  // the TTL keeps running
+    // A held slot isn't waiting for the channel: its wait (and the cap that lets a frame skip the gaps) starts over
+    // once it may go, or a hold of seconds would send it straight after the frame that ends the hold.
+    if (i == SLOT_CMD && cmdHeld) {  // the TTL keeps running
+      s.lbt = {};
+      continue;
+    }
     // Its ACK would be dropped until the peer is verified, so sending now only takes airtime from the
     // handshake (at SF12 the retries crowded out the HELLO_ACK for good). Hold it; the TTL keeps running.
-    if (!peerOk) continue;
+    if (!peerOk) {
+      s.lbt = {};
+      continue;
+    }
     if (!clearToSend(s.lbt, s.type)) {
       // Poll again soon; deferring doesn't use up an attempt. Past the wait cap, every pass, so as not to miss the end
       // of the next frame heard.

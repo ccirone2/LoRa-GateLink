@@ -132,7 +132,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 
 ## Mutation testing (`mutations.json`, `tools/mutate.py`)
 
-A test that can't fail proves nothing. `mutations.json` lists 112 ways to break the invariants above, each an exact
+A test that can't fail proves nothing. `mutations.json` lists 113 ways to break the invariants above, each an exact
 text edit to the firmware (`find` must occur once) with the invariant it breaks, why, and the tests that killed it
 (`killed_by`). `tools/mutate.py` applies each to a scratch copy of `firmware/GateLink`, rebuilds the host tests
 against it (`make FW=`) and runs its `killed_by` tests, then, if they all pass, the whole suite: a mutation is

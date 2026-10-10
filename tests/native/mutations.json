@@ -1917,5 +1917,20 @@
     "replace": "  if (early && !(capped && quiet <= CAPPED_SLOT_MS && false)) return false;\n"
    }
   ]
+ },
+ {
+  "name": "link_m3_hold_counts_toward_the_wait_cap",
+  "invariant": "busy-channel",
+  "why": "a command held on a replayed HELLO keeps the channel wait it had begun, so once released it counts as held back past waitCapMs() and goes within a few ms of the frame that released it, skipping its backoff, logged lbt_forced (found on the bench, 0.13.7)",
+  "killed_by": [
+   "link_command_held_on_a_replayed_hello_keeps_its_backoff"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "    if (i == SLOT_CMD && cmdHeld) {  // the TTL keeps running\n      s.lbt = {};\n",
+    "replace": "    if (i == SLOT_CMD && cmdHeld) {  // the TTL keeps running\n"
+   }
+  ]
  }
 ]

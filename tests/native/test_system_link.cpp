@@ -98,3 +98,58 @@ TEST(link_command_survives_a_5s_outage_then_a_lossy_channel) {
   CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
   CHECK_EQ(w.house.count("cmd_dropped"), 0);
 }
+
+// [busy-channel] [restarts] A command held on a replayed HELLO (cmd_hold) waits for the verified session to answer
+// the house's challenge, not for the channel, so the hold mustn't count toward the wait cap: released, it takes its
+// backoff after the frame that released it (the HELLO_ACK), not the capped path that goes within a few ms of a
+// frame's end, logged lbt_forced. Found on the bench (0.13.7): a 1.8 s hold logged lbt_forced. A neighbour's frames
+// keep the command's first resend waiting for the channel as the HELLO arrives, so its wait has begun before the hold.
+TEST(link_command_held_on_a_replayed_hello_keeps_its_backoff) {
+  const uint8_t CMD = 4;
+  World w;
+  w.commission();
+  // Restart the gate's link (a radio param change): a new session, and its boot HELLO is now an old session's.
+  int tx = w.gate.get("tx_power");
+  int sessions = w.house.status()["link"]["sessions"];
+  for (int p : { tx - 1, tx })
+    CHECK(w.gate.request("config.set", "\"params\":{\"tx_power\":" + std::to_string(p) + "}")["ok"] == true);
+  CHECK(w.runUntil([&] {
+    return w.house.status()["link"]["sessions"].as<int>() > sessions && w.gate.status()["link"]["verified"] == true;
+  }, 20000));
+  w.run(5000);
+  CHECK(w.gate.request("debug.mute", "\"ms\":3000")["ok"] == true);  // the command goes unheard: it stays pending
+  size_t c0 = w.sent(w.house, CMD).size();
+  int held0 = w.house.count("cmd_hold", 1), released0 = w.house.count("cmd_hold", 0), pulses0 = w.gate.count("pulse");
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.sent(w.house, CMD).size() > c0; }, 3000));
+  uint32_t first = w.sent(w.house, CMD).back()->end;
+  // Neighbour frames 60 ms apart from 200 ms after it (its first resend is due at about a 32nd of the TTL), each
+  // gap shorter than the backoff, for less than the wait cap.
+  for (uint32_t at = first + 200; at <= first + 380; at += 60) {
+    w.run(at - w.now);
+    w.airSend(neighbourFrame());
+  }
+  w.run(45);
+  bool held = false;
+  for (int i = 0; i < 4 && !held; i++) {
+    w.gate.request("debug.replay", "\"hello\":true");
+    held = w.runUntil([&] { return w.house.count("cmd_hold", 1) > held0; }, 200);
+  }
+  CHECK(held);
+  int forced0 = w.house.count("lbt_forced");
+  CHECK(w.runUntil([&] { return w.house.count("cmd_hold", 0) > released0; }, 10000));
+  CHECK(w.runUntil([&] { return w.gate.count("pulse") > pulses0; }, 10000));
+  CHECK_EQ(w.house.count("lbt_forced"), forced0);
+  // The command's first frame after the release started at least the turnaround after the frame before it ended.
+  const AirFrame *after = nullptr;
+  for (const AirFrame *f : w.sent(w.house, CMD))
+    if (f->start >= w.house.last("cmd_hold")->at) { after = f; break; }
+  CHECK(after != nullptr);
+  uint32_t prevEnd = 0;
+  for (const AirFrame &f : w.air)
+    if (f.end <= after->start && f.end > prevEnd) prevEnd = f.end;
+  CHECK(after->start - prevEnd >= 25);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
+  CHECK_EQ(w.gate.count("pulse"), pulses0 + 1);
+  CHECK_EQ(w.house.count("cmd_dropped"), 0);
+}

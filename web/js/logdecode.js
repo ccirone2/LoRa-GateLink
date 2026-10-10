@@ -53,7 +53,7 @@ const DECODE = {
   resync: (a) => `resyncing the controller to ${level(a)}`,
   cfg_remote: (a, b, name) => `remote write: ${name(a)} = ${b}`,
   input: (a, b) => `IN${a} ${level(b)}`,
-  lbt_forced: (a, b) => `${type(a)} sent on a channel busy for ${b} ms`,
+  lbt_forced: (a, b) => `${type(a)} sent anyway after waiting ${b} ms for the channel`,
   cfg: (a, b) => `config loaded from ${CFG_SOURCES[a] ?? a}${b ? `; ${b} saved setting${b === 1 ? '' : 's'} dropped` : ''}`,
   supply: (a) => (a < 0 ? 'charger not answering: board supply unknown' : a ? 'board supply good' : 'board supply lost: running on the LiPo'),
   cmd_hold: (a, b) => `${CMD_HOLD[a] ?? `command hold ${a}`} (session ${hex(b)})`,

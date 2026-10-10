@@ -1,0 +1,126 @@
+{
+ "schema": 1,
+ "run": "20261010-110000",
+ "start": "2026-10-10T11:00:00-05:00",
+ "end": "2026-10-10T11:25:00-05:00",
+ "exitstatus": 0,
+ "command": "pytest tests/e2e -m power",
+ "selection": {
+  "markexpr": "power",
+  "keyword": "",
+  "paths": [
+   "tests/e2e"
+  ],
+  "groups": {
+   "default": {
+    "collected": 5,
+    "selected": 0
+   },
+   "longsoak": {
+    "collected": 1,
+    "selected": 0
+   },
+   "soak": {
+    "collected": 1,
+    "selected": 0
+   },
+   "power": {
+    "collected": 3,
+    "selected": 3
+   },
+   "rf": {
+    "collected": 1,
+    "selected": 0
+   }
+  },
+  "filters": [],
+  "collect_errors": 0
+ },
+ "git": {
+  "commit": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+  "dirty": true,
+  "dirty_paths": [
+   "REVIEW.md"
+  ],
+  "firmware_tree": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1"
+ },
+ "boards": {
+  "house": {
+   "fw": "0.14.0",
+   "usb_serial": "00000000000000000000000000183013",
+   "port": "COM5",
+   "cfg_store": "spi",
+   "flash_id": "c84015"
+  },
+  "gate": {
+   "fw": "0.14.0",
+   "usb_serial": "B86085DB5031344E432E3120FF0C301C",
+   "port": "COM21",
+   "cfg_store": "spi",
+   "flash_id": "c84015"
+  }
+ },
+ "options": {
+  "tx_power": null,
+  "cycles": 20,
+  "soak_minutes": 120,
+  "rf_cycles": 5,
+  "gatelink_key": true,
+  "ha_power_entity": null,
+  "no_uart": false
+ },
+ "counts": {
+  "passed": 2,
+  "skipped": 1
+ },
+ "tests": [
+  {
+   "nodeid": "test_power.py::test_gate_power_cut_at_rest",
+   "name": "test_gate_power_cut_at_rest",
+   "outcome": "passed",
+   "group": "power",
+   "markers": [
+    "power"
+   ],
+   "duration_s": 12.5,
+   "reason": null
+  },
+  {
+   "nodeid": "test_power.py::test_house_power_cut_gate_open",
+   "name": "test_house_power_cut_gate_open",
+   "outcome": "passed",
+   "group": "power",
+   "markers": [
+    "power"
+   ],
+   "duration_s": 12.5,
+   "reason": null
+  },
+  {
+   "nodeid": "test_power.py::test_lipo_in_gate_supply_cut",
+   "name": "test_lipo_in_gate_supply_cut",
+   "outcome": "skipped",
+   "group": "power",
+   "markers": [
+    "power"
+   ],
+   "duration_s": 0.1,
+   "reason": "needs the gate LiPo plugged in"
+  }
+ ],
+ "latencies": [
+  {
+   "name": "controller -> house cmd_sent",
+   "n": 2,
+   "min": 0.327,
+   "median": 0.328,
+   "max": 0.328
+  }
+ ],
+ "facts": {
+  "consoles": "house USB COM5 + UART tap COM17, gate USB COM21 + UART tap COM12",
+  "controller power": "wired (in2_invert fakes a loss)",
+  "LiPos": "gate out, house out"
+ },
+ "anomalies": []
+}

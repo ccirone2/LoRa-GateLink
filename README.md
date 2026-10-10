@@ -51,11 +51,13 @@ siren sensor.
 - [tools/GateSim/README.md](tools/GateSim/README.md) — the opener simulator
 - [tools/bench-wiring/README.md](tools/bench-wiring/README.md) — the bench wiring diagram
 - [docs/development.md](docs/development.md) — toolchain, workflow, versioning and releases
+- [docs/release-criteria.md](docs/release-criteria.md) — what a release must pass on the bench, and its evidence
 
 ## Project tracking
 
 - **[Releases](https://github.com/ccirone2/LoRa-GateLink/releases)** — the firmware changelog, one release per
-  firmware version (from v0.3.5 on with a prebuilt `.bin`)
+  firmware version (from v0.3.5 on with a prebuilt `.bin`; from the release criteria on with its bench evidence,
+  [docs/releases](docs/releases))
 - **[TODO.md](TODO.md)** — open bugs, investigations and bench/field tasks
 - **[ROADMAP.md](ROADMAP.md)** — desired features and ideas
 

@@ -56,12 +56,13 @@ are built from the pull requests since the last tag.
    ruff check tests tools     # pip install ruff==0.16.10 (the version CI pins); rules in ruff.toml
    python tools/check_contract.py   # firmware enums, log events and console commands vs the suite and docs
    make -C tests/native       # host unit tests for link.cpp and config.cpp; see tests/native/README.md
+   python -m pytest tests/tools -q   # unit tests for the tools (release_evidence.py)
    pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI
    compiles the firmware and GateSim (failing on warnings in project files), runs the host unit tests, lints and tests the web console (ESLint, `node --test`, Playwright),
-   byte-compiles and lints the Python (`ruff check tests tools`) and collects the e2e suite (`pytest
-   --collect-only`, which catches import and fixture errors without the bench).
+   byte-compiles and lints the Python (`ruff check tests tools`), runs the tools' unit tests (`tests/tools`) and
+   collects the e2e suite (`pytest --collect-only`, which catches import and fixture errors without the bench).
 6. Merge to `main`. A change under `web/` deploys the web console to GitHub Pages.
 
 ## Versioning
@@ -82,13 +83,21 @@ config exported from the old version may not import cleanly.
 
 After the pull request carrying a new `FW_VERSION` is merged (`/release` in Claude Code walks through this):
 
-1. Tag the merge commit `vX.Y.Z` and publish a GitHub release with notes:
+1. Run the bench on the merged version as [release-criteria.md](release-criteria.md) asks for its kind (PATCH:
+   the full suite and a soak; MINOR adds the power runs with LiPos out and in, a 60-minute long soak and a full
+   suite at 17 dBm; MAJOR adds a 24-hour soak and the install checks).
+2. `python tools/release_evidence.py collect vX.Y.Z` writes the evidence, `docs/releases/vX.Y.Z.md`, from the
+   runs' `summary.json` (exit 1 while a criterion is unmet). Merge it in a pull request with the bench results in
+   its body.
+3. Once CI has passed on that merge commit, `python tools/release_evidence.py check vX.Y.Z --ci`, then tag the
+   merge commit `vX.Y.Z` and publish a GitHub release with notes:
    ```sh
-   gh release create vX.Y.Z --target main --title "vX.Y.Z — <one-line summary>" --notes-file notes.md
+   gh release create vX.Y.Z --target <merge-commit-sha> --title "vX.Y.Z — <one-line summary>" --notes-file notes.md
    ```
-2. The `release` workflow builds the firmware at the tag and attaches `GateLink-vX.Y.Z.bin` and
-   `GateLink-vX.Y.Z.bin.sha256` (from v0.13.0). It never replaces a binary already attached unless run by hand with
-   `replace` ticked. When it succeeds the `pages` workflow checks the `.bin` against that `.sha256` and redeploys the
+4. The `release` workflow checks the evidence (`check --ci`; tags from before the criteria are built without it),
+   builds the firmware at the tag and attaches `GateLink-vX.Y.Z.bin`, `GateLink-vX.Y.Z.bin.sha256` (from v0.13.0)
+   and the evidence as `GateLink-vX.Y.Z-evidence.md`. It never replaces a binary already attached unless run by hand
+   with `replace` ticked. When it succeeds the `pages` workflow checks the `.bin` against that `.sha256` and redeploys the
    web console with it and a `firmware/latest.json` (version, file, sha256, size) bundled in (the page can't fetch release assets from github.com: no CORS), so **Tools →
    Firmware update** offers it. They are never committed (`web/firmware/` is ignored).
 
@@ -113,7 +122,9 @@ Release notes template:
 - ...
 
 ## Bench results
-- Full suite: N passed. <Anything notable.>
+<KIND> release, all criteria met: [evidence](https://github.com/ccirone2/LoRa-GateLink/blob/vX.Y.Z/docs/releases/vX.Y.Z.md).
+- Full suite: N passed. Soak: 20 cycles, <latencies>. <Power, long soak, 17 dBm runs for MINOR.> <Reruns.>
+  <Anything notable.>
 
 PRs: #n
 ```
@@ -123,4 +134,5 @@ PRs: #n
 Project skills live in `.claude/skills/`:
 
 - `/flash` — flash the bench boards (and optionally the GateSim) and restore their config and key.
-- `/release` — tag and publish a firmware release with notes from the merged pull requests.
+- `/release` — run the bench per the release criteria, collect and merge the evidence, then tag and publish the
+  release with notes from the merged pull requests.

@@ -76,6 +76,7 @@ def parse_args(pairs):
 
 def cmd_ports(_):
     ports = board_ports()
+    serials = port_serials()
     if not ports:
         print("no Arduino boards found")
     for port in ports:
@@ -90,7 +91,8 @@ def cmd_ports(_):
             tx_power = b.config_get()["tx_power"]
             print(f"{port:6} {s['role']:5} fw {s['fw']:7} key {'set' if s['key_set'] else 'NOT SET':7} "
                   f"verified {link['verified']!s:5} rssi {link['rssi']:4} tx_power {tx_power:2} "
-                  f"cfg {s.get('cfg_store', 'internal')} last reset {s['reset_cause']}")
+                  f"cfg {s.get('cfg_store', 'internal')} last reset {s['reset_cause']} "
+                  f"usb ...{serials.get(port, '?')[-6:]}")
         finally:
             b.close()
 

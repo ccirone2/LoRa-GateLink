@@ -1,0 +1,41 @@
+# Update proposals for what Dependabot can read: GitHub Actions (pinned by SHA), the web console's npm tooling and
+# the bench suite's Python requirements. Arduino cores and libraries, arduino-cli and the ruff pin in ci.yml are
+# checked by the nightly deps-check routine (.claude/routines/deps-check.md) instead. Weekly, grouped, so a week's
+# updates are one pull request per ecosystem; the cooldown leaves new releases two weeks to settle.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: CI
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      web-tooling:
+        patterns: ['*']
+    commit-message:
+      prefix: Web tooling
+
+  - package-ecosystem: pip
+    directory: /tests/e2e
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      bench-suite:
+        patterns: ['*']
+    commit-message:
+      prefix: Bench suite

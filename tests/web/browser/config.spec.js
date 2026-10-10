@@ -1,6 +1,5 @@
 // The Config tab: the form, Apply (in chunks), Save, must-match settings, import and export.
-import { test, expect } from '@playwright/test';
-import { openConsole, connect, requests } from './helpers.js';
+import { test, expect, openConsole, connect, requests, fixture } from './helpers.js';
 
 async function openConfig(page, boards, options) {
   await openConsole(page, boards, options);
@@ -16,6 +15,29 @@ test('the form shows every setting in its group, with on/off ones as toggles', a
   await expect(page.locator('#p_power_sense')).toHaveAttribute('type', 'checkbox');
   await expect(page.locator('#p_power_sense')).toBeChecked();
   await expect(page.locator('#p_bw_hz')).toHaveValue('500000');
+  for (const m of fixture.meta) await expect(page.locator(`#p_${m.name}`), `a field for ${m.name}`).toHaveCount(1);
+});
+
+test('Reload asks before dropping unapplied edits; factory reset asks first too', async ({ page }) => {
+  await openConfig(page, [{ role: 'house' }], { dismissDialogs: true });
+  await page.locator('#p_pulse_ms').fill('600');
+  await page.locator('#btnCfgLoad').click();
+  await expect.poll(() => page.dialogs.length).toBe(1);
+  expect(page.dialogs[0]).toContain('Discard 1 unapplied edit');
+  await expect(page.locator('#p_pulse_ms')).toHaveValue('600'); // declined: kept
+  await page.locator('#btnCfgReset').click();
+  await expect.poll(() => page.dialogs.length).toBe(2);
+  expect(page.dialogs[1]).toContain('Erase config and key');
+  expect((await requests(page)).some((r) => r.cmd === 'config.reset')).toBe(false); // declined: not sent
+});
+
+test('factory reset erases config and key and reloads the form', async ({ page }) => {
+  await openConfig(page, [{ role: 'house', params: { pulse_ms: 900 } }]);
+  await expect(page.locator('#p_pulse_ms')).toHaveValue('900');
+  await page.locator('#btnCfgReset').click();
+  await expect(page.locator('#toast')).toContainText('Defaults restored');
+  await expect(page.locator('#p_pulse_ms')).toHaveValue('500');
+  await expect(page.locator('#keyWarn')).toBeVisible(); // the key went too
 });
 
 test('Apply sends only the edited settings, and Save is offered afterwards', async ({ page }) => {

@@ -1,7 +1,7 @@
 // Shared setup for the browser tests: load the page with fake boards (fake-serial.js) and connect.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
 
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/firmware.json', import.meta.url), 'utf8'));
 const fakePath = fileURLToPath(new URL('../fake-serial.js', import.meta.url));
@@ -36,4 +36,14 @@ export const requests = (page, i = 0) => page.evaluate((n) => window.__fake.boar
 export const pushEvent = (page, ev, i = 0) => page.evaluate(([e, n]) => window.__fake.ports[n].push(e), [ev, i]);
 export const pushLine = (page, text, i = 0) => page.evaluate(([t, n]) => window.__fake.ports[n].pushLine(t), [text, i]);
 
-export { fixture };
+export { fixture, expect };
+
+// Every test fails on an uncaught error in the page: a module that throws at call time, an import that isn't there.
+export const test = base.extend({
+  page: async ({ page }, use) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await use(page);
+    expect(errors, 'uncaught errors in the page').toEqual([]);
+  },
+});

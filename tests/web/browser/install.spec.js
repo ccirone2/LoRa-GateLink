@@ -1,6 +1,5 @@
 // The Install tab works without a board, per role, and fits a phone.
-import { test, expect } from '@playwright/test';
-import { openConsole } from './helpers.js';
+import { test, expect, openConsole } from './helpers.js';
 
 test('wiring per board, from the WIRING table', async ({ page }) => {
   await openConsole(page, [], { hash: 'install' });

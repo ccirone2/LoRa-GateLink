@@ -16,7 +16,7 @@ Toolchain is `arduino-cli` (not PlatformIO). Run from the repo root:
 arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink
 arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COMx firmware/GateLink
 npm ci && npm test                             # web console: ESLint, unit tests, browser tests (tests/web/README.md)
-python -m http.server 8000 -d web              # serve UI at http://localhost:8000 (Chrome/Edge)
+python -m http.server 8000 -d web              # serve UI at http://localhost:8000 (Chrome/Edge; ES modules: not from file://)
 make -C tests/native                           # host unit tests for link.cpp/config.cpp (g++; Docker recipe in its README)
 GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -v   # bench end-to-end suite (hardware required)
 GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -m power   # real power cuts through the power rig (LiPo in or out; tests chosen per state)

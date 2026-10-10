@@ -63,7 +63,16 @@ export async function installLatest() {
 
 export async function flashFile(file) {
   const fw = parseFirmware(await file.arrayBuffer(), file.name);
-  if (!fw.version && !confirm(`${file.name} has no GateLink version marker (firmware before 0.5.1 has none, other sketches neither). Flash it anyway?`)) return;
+  if (!fw.version) {
+    // No marker: another sketch, or GateLink before 0.5.1. Before 0.5.0 config and key lived in program flash, which
+    // the update erases, so a board that keeps them on its flash chip would come back without them.
+    const loses = S.port && S.boardInfo?.cfg_store === 'spi'
+      ? '\n\nIf it is GateLink older than 0.5.0, the board comes back without its settings and key (that firmware keeps '
+        + 'them in program flash): export the config first and have the key ready.'
+      : '';
+    const ask = `${file.name} has no GateLink version marker (firmware before 0.5.1 has none, other sketches neither). Flash it anyway?`;
+    if (!confirm(ask + loses)) return;
+  }
   await flashFirmware(fw);
 }
 
@@ -103,10 +112,6 @@ async function flashFirmware(fw) {
     const info = S.boardInfo || {};
     let msg = `Flash ${label} to this ${info.role || ''} board (running ${info.fw || '?'})?`;
     if (fw.version && info.fw && cmpVer(fw.version, info.fw) < 0) msg += '\n\nThat is older than the firmware it runs now.';
-    // 0.5.0 moved config and key to the flash chip; older firmware reads program flash, which the update erases.
-    if (fw.version && cmpVer(fw.version, '0.5.0') < 0 && info.cfg_store === 'spi') {
-      msg += '\n\nFirmware before 0.5.0 keeps config and key in program flash: the board comes back without its settings and key. Export the config first and have the key ready.';
-    }
     msg += '\n\nRelays release and the link is down for about a minute.';
     if (info.cfg_store !== 'spi') msg += '\n\nThis board keeps config and key in program flash, which the update erases: export the config (Config tab) and have the key ready.';
     else if (S.appliedUnsaved) msg += '\n\nApplied settings that haven’t been saved to flash will be lost.';

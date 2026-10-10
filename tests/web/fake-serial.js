@@ -41,8 +41,9 @@
       this.index = index;
       this.params = { ...clone(fx.params), role: ROLE_NUM[spec.role ?? 'house'], ...(spec.params || {}) };
       this.saved = clone(this.params);
-      this.role = ROLE_NAME[this.params.role];
+      this.role = ROLE_NAME[this.params.role]; // latched at boot, as activeRole
       this.status = { ...clone(fx.status_common), role: this.role, ...clone(fx[`status_${this.role}`] || {}), ...(spec.status || {}) };
+      this.uptimeMs = this.status.uptime_ms;
       this.keySet = spec.keySet ?? true;
       this.fw = spec.fw || fx.status_common.fw;
       this.log = spec.log || [];
@@ -52,9 +53,24 @@
       this.silent = false; // stops answering (a hung board)
     }
 
+    // info's saved_role is the running config's role (cfg.role), which a reboot makes the active one.
     info() {
-      return { fw: this.fw, board: 'MKR WAN 1310', role: this.role, saved_role: ROLE_NAME[this.saved.role], key_set: this.keySet,
+      return { fw: this.fw, board: 'MKR WAN 1310', role: this.role, saved_role: ROLE_NAME[this.params.role], key_set: this.keySet,
         cfg_store: this.spec.cfgStore || 'spi', flash_id: 'ef4015', boot_count: 7 };
+    }
+
+    // The status reply, from the board's state as appFillStatus builds it.
+    statusNow() {
+      this.uptimeMs += 2000;
+      return { ...clone(this.status), fw: this.fw, role: this.role, uptime_ms: this.uptimeMs, key_set: this.keySet,
+        cfg_store: this.spec.cfgStore || 'spi', reboot_pending: this.params.role !== ROLE_NUM[this.role] };
+    }
+
+    // A reset: the saved config comes back and its role takes effect.
+    restart() {
+      this.params = clone(this.saved);
+      this.role = ROLE_NAME[this.params.role];
+      this.uptimeMs = 0;
     }
 
     emit(obj, delay = 20) {
@@ -69,9 +85,7 @@
       const meta = fx.meta;
       switch (req.cmd) {
         case 'info': return ok(this.info());
-        case 'status':
-          this.status.uptime_ms += 2000;
-          return ok({ status: clone(this.status) });
+        case 'status': return ok({ status: this.statusNow() });
         case 'config.get': return ok({ params: clone(this.params), meta: clone(meta), key_set: this.keySet });
         case 'config.set': {
           const applied = [], errors = [];
@@ -123,7 +137,7 @@
           this.emit({ event: 'remote_set', acked: true, ok: true, applied: true });
           return ok();
         }
-        case 'log.get': return ok({ log: clone(this.log), now: this.status.uptime_ms });
+        case 'log.get': return ok({ log: clone(this.log), now: this.uptimeMs });
         case 'hist.get': {
           const rows = histRows(this.histN);
           const current = this.histN - 1;
@@ -136,7 +150,10 @@
           this.histN = 1;
           return ok();
         case 'reboot':
-          setTimeout(() => this.port.replug(this.spec.rebootMs ?? 300), 30);
+          setTimeout(() => {
+            this.restart();
+            this.port.replug(this.spec.rebootMs ?? 300);
+          }, 30);
           return ok();
         case 'identify': return ok();
         case 'debug.replay': return ok({ sent: true });
@@ -153,13 +170,15 @@
       this.present = true;
       this.granted = board.spec.granted ?? true;
       this.dtr = false;
+      this.opens = []; // baud rate of every open (1200 = the touch that resets into the bootloader)
     }
 
     getInfo() { return { usbVendorId: 0x2341, usbProductId: this.board.spec.bootloader ? 0x0059 : 0x8059 }; }
 
-    async open() {
+    async open(options) {
       if (!this.present) throw new DOMException('The device has been lost.', 'NetworkError');
       if (this.isOpen) throw new DOMException('The port is already open.', 'InvalidStateError');
+      this.opens.push(options?.baudRate);
       this.isOpen = true;
       this.dtr = false;
       this.inbuf = '';
@@ -167,8 +186,10 @@
       this.writable = new WritableStream({ write: (chunk) => this.onBytes(chunk) });
     }
 
+    // As in Chrome: a port whose streams are still locked (a reader or a pipe holding them) can't close.
     async close() {
       if (!this.isOpen) throw new DOMException('The port is already closed.', 'InvalidStateError');
+      if (this.readable?.locked || this.writable?.locked) throw new TypeError('Cannot cancel a locked stream');
       this.isOpen = false;
       try { this.ctrl.close(); } catch { /* already errored or cancelled */ }
     }

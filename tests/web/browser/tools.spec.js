@@ -1,6 +1,5 @@
 // The Log and Tools tabs: decoded log lines, ping, remote diagnostics and writes, relay tests, link history.
-import { test, expect } from '@playwright/test';
-import { openConsole, connect, requests, pushEvent } from './helpers.js';
+import { test, expect, openConsole, connect, requests, pushEvent } from './helpers.js';
 
 test('log events are shown decoded, and the download keeps the board’s own form', async ({ page }) => {
   await openConsole(page);

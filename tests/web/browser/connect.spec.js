@@ -1,6 +1,5 @@
 // Connecting, the board picker, reconnecting after a reboot, and lines the page can't handle.
-import { test, expect } from '@playwright/test';
-import { openConsole, connect, requests, pushLine } from './helpers.js';
+import { test, expect, openConsole, connect, requests, pushLine } from './helpers.js';
 
 test('picker lists both boards by role and connects to the one chosen', async ({ page }) => {
   await openConsole(page, [{ role: 'gate' }, { role: 'house' }]);
@@ -61,4 +60,10 @@ test('a browser without Web Serial shows the banner and keeps Install usable', a
   await expect(page.locator('#unsupported')).toBeVisible();
   await expect(page.locator('#btnConnect')).toBeDisabled();
   await expect(page.locator('#wiringTable')).toContainText('IN1 (A1)');
+});
+
+test('opened from a file the page says how to open it, instead of sitting there dead', async ({ page }) => {
+  await page.goto(new URL('../../../web/index.html', import.meta.url).href);
+  await expect(page.locator('#unsupported')).toBeVisible();
+  await expect(page.locator('#unsupportedMsg')).toContainText('can’t run from a file');
 });

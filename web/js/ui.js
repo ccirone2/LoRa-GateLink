@@ -3,8 +3,8 @@ import { $ } from './util.js';
 import { S } from './state.js';
 
 // Controls that work without a board.
-export const OFFLINE_OK = ['logRaw', 'btnLogClear', 'btnLogSave', 'keyInput', 'btnKeyGen', 'btnKeyCopy', 'btnFwLatest', 'fwFile',
-  'btnBootPort'];
+export const OFFLINE_OK = ['logRaw', 'btnLogClear', 'btnLogSave', 'keyInput', 'btnKeyGen', 'btnKeyCopy', 'btnKeyBackup',
+  'keyRestoreFile', 'btnFwLatest', 'fwFile', 'btnBootPort'];
 
 export const logLines = []; // what Download saves; the view keeps only the last 1000
 const LOG_KEEP = 20000;

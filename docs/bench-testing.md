@@ -15,7 +15,8 @@ it.
   over an older version, a board showing `cfg internal`, or `config.reset` leaves defaults (no role or key,
   `tx_power` 17; `power_sense`, `ctrl_power_sense` and `ctrl_power_pmic` on, `ctrl_confirm_ms` 500). `python tools/gatelink.py snapshot` before flashing
   and `restore` after puts them back; the key is read from `~/.gatelink_key`. Boards can't read the key back,
-  so keep it safe (e.g. a password manager).
+  so keep an encrypted backup (`tools/gatelink.py key backup`, [key-management.md](key-management.md)); `ports`
+  shows each board's key id (0.13.8 on), which should match `tools/gatelink.py key id` for the file.
 - **On USB power, keep `tx_power` at about 5 dBm** on both boards: a full-power transmit while a relay is
   energized crashed the board into watchdog resets (`reset_cause` in Status).
 - Inputs are active when jumpered to **3.3 V** (not GND). With `power_sense` on, keep gate IN3 at 3.3 V (or the

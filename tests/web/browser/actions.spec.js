@@ -65,7 +65,7 @@ test('after the cable drops the page reconnects when the board comes back', asyn
   await connect(page);
   await page.evaluate(() => window.__fake.ports[0].replug(800));
   await expect(page.locator('#devline')).toHaveText('reconnecting…');
-  await expect(page.locator('#devline')).toHaveText('MKR WAN 1310 · fw 0.13.6 · house', { timeout: 10000 });
+  await expect(page.locator('#devline')).toHaveText('MKR WAN 1310 · fw 0.13.8 · house', { timeout: 10000 });
   await page.locator('#tabbtn-log').click();
   await expect(page.locator('#logView')).toContainText('reconnected');
   await expect(page.locator('#logView')).not.toContainText('port close failed');

@@ -8,7 +8,7 @@ test('picker lists both boards by role and connects to the one chosen', async ({
   await expect(items).toHaveText(['LoRa GateLink – House', 'LoRa GateLink – Gate']); // house first, whatever the order
   await page.locator('#pickList .pick-item.ok', { has: page.getByText('LoRa GateLink – Gate', { exact: true }) })
     .locator('.pick-main').click();
-  await expect(page.locator('#devline')).toHaveText('MKR WAN 1310 · fw 0.13.6 · gate');
+  await expect(page.locator('#devline')).toHaveText('MKR WAN 1310 · fw 0.13.8 · gate');
   await expect(page.locator('#btnDisconnect')).toBeVisible();
   await expect(page.locator('#btnConnect')).toBeHidden();
   // The page reads info, config and status on connect.
@@ -38,7 +38,7 @@ test('reboot: the page reconnects to the board when it comes back', async ({ pag
   await page.locator('#tabbtn-config').click();
   await page.locator('#btnReboot').click();
   await expect(page.locator('#devline')).toHaveText(/reconnecting|not connected|MKR/);
-  await expect(page.locator('#devline')).toHaveText('MKR WAN 1310 · fw 0.13.6 · house', { timeout: 10000 });
+  await expect(page.locator('#devline')).toHaveText('MKR WAN 1310 · fw 0.13.8 · house', { timeout: 10000 });
   await page.locator('#tabbtn-log').click();
   await expect(page.locator('#logView')).toContainText('reconnected');
 });

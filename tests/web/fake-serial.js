@@ -15,6 +15,26 @@
   const fx = cfg.fixture;
   const ROLE_NUM = { unset: 0, house: 1, gate: 2 };
   const ROLE_NAME = ['unset', 'house', 'gate'];
+  const verAtLeast = (v, min) => {
+    const a = v.split('.').map(Number), b = min.split('.').map(Number);
+    for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+    return true;
+  };
+  const hexBytes = (hex) => Uint8Array.from(hex.match(/../g), (b) => parseInt(b, 16));
+
+  // The key id as the firmware computes it (config.cpp configKeyId): HMAC-SHA256(key, label), first 4 bytes.
+  async function keyIdOf(hex) {
+    const k = await crypto.subtle.importKey('raw', hexBytes(hex), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const mac = new Uint8Array(await crypto.subtle.sign('HMAC', k, enc.encode(fx.key.label)));
+    return [...mac.slice(0, 4)].map((x) => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  // config.cpp configKeyWeak: all bytes equal, counting up or down by one (mod 256), or 8 or fewer distinct values.
+  function weakKey(hex) {
+    const b = hexBytes(hex);
+    const steps = new Set([...b].slice(1).map((x, i) => (x - b[i] + 256) % 256));
+    return new Set(b).size <= 8 || (steps.size === 1 && (steps.has(1) || steps.has(255)));
+  }
 
   // navigator.serial's connect/disconnect listeners; Chrome's events carry the port as target.
   const listeners = { connect: [], disconnect: [] };
@@ -46,6 +66,10 @@
       this.uptimeMs = this.status.uptime_ms;
       this.keySet = spec.keySet ?? true;
       this.fw = spec.fw || fx.status_common.fw;
+      this.key = this.keySet ? (spec.key ?? fx.key.default) : null; // what key.set wrote (the page can't read it)
+      this.keyId = null;
+      this.keyReady = this.setKey(this.key);
+      this.hasKeyId = verAtLeast(this.fw, fx.key.since_fw); // older firmware reports no key_id
       this.log = spec.log || [];
       this.histN = spec.histBuckets ?? 30;
       this.requests = [];
@@ -53,9 +77,19 @@
       this.silent = false; // stops answering (a hung board)
     }
 
+    async setKey(hex) {
+      this.key = hex;
+      this.keyId = hex ? await keyIdOf(hex) : null;
+    }
+
+    // key_set and, from firmware 0.13.8, key_id (null without a key).
+    keyFields() {
+      return { key_set: this.keySet, ...(this.hasKeyId ? { key_id: this.keySet ? this.keyId : null } : {}) };
+    }
+
     // info's saved_role is the running config's role (cfg.role), which a reboot makes the active one.
     info() {
-      return { fw: this.fw, board: 'MKR WAN 1310', role: this.role, saved_role: ROLE_NAME[this.params.role], key_set: this.keySet,
+      return { fw: this.fw, board: 'MKR WAN 1310', role: this.role, saved_role: ROLE_NAME[this.params.role], ...this.keyFields(),
         cfg_store: this.spec.cfgStore || 'spi', flash_id: 'ef4015', boot_count: 7 };
     }
 
@@ -77,6 +111,7 @@
       setTimeout(() => this.port?.push(obj), delay);
     }
 
+    // The reply, or a promise of it (key ids take WebCrypto), or null for none.
     handle(req) {
       this.requests.push(req);
       if (this.silent) return null;
@@ -84,9 +119,9 @@
       const err = (error, extra = {}) => ({ id: req.id, ok: false, error, ...extra });
       const meta = fx.meta;
       switch (req.cmd) {
-        case 'info': return ok(this.info());
+        case 'info': return this.keyReady.then(() => ok(this.info()));
         case 'status': return ok({ status: this.statusNow() });
-        case 'config.get': return ok({ params: clone(this.params), meta: clone(meta), key_set: this.keySet });
+        case 'config.get': return this.keyReady.then(() => ok({ params: clone(this.params), meta: clone(meta), ...this.keyFields() }));
         case 'config.set': {
           const applied = [], errors = [];
           let reboot = false;
@@ -110,11 +145,14 @@
           this.params = clone(fx.params);
           this.saved = clone(fx.params);
           this.keySet = false;
+          this.keyReady = this.setKey(null);
           return ok({ reboot_required: true });
         case 'key.set':
-          if (!/^[0-9a-f]{32}$/i.test(req.key || '')) return err('key must be 32 hex chars');
+          if (typeof req.key !== 'string' || !/^[0-9a-f]{32}$/i.test(req.key)) return err('key must be 32 hex chars');
+          if (this.hasKeyId && weakKey(req.key)) return err(fx.key.weak_error);
           this.keySet = true;
-          return ok();
+          this.keyReady = this.setKey(req.key.toLowerCase());
+          return this.keyReady.then(() => ok());
         case 'relay.test':
           if (![1, 2].includes(req.k) || !Number.isInteger(req.ms ?? 500) || (req.ms ?? 500) < 50 || (req.ms ?? 500) > 5000) {
             return err('k must be 1|2, ms 50..5000, role set');
@@ -212,8 +250,9 @@
           this.push({ ok: false, error: 'bad json' });
           continue;
         }
-        const res = this.board.handle(req);
-        if (res) setTimeout(() => this.push(res), this.board.replyDelayMs);
+        Promise.resolve(this.board.handle(req)).then((res) => {
+          if (res) setTimeout(() => this.push(res), this.board.replyDelayMs);
+        });
       }
     }
 

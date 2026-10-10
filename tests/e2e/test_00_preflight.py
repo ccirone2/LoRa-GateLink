@@ -7,6 +7,10 @@ def test_boards_and_link(bench):
     assert h["role"] == "house" and g["role"] == "gate"
     assert h["fw"] == g["fw"], f"firmware differs: house {h['fw']}, gate {g['fw']}"
     assert h["key_set"] and g["key_set"], "set the link key on both boards"
+    # From 0.13.8 each board names its key: different ids are different keys, and the link can't come up.
+    if h.get("key_id") and g.get("key_id"):
+        assert h["key_id"] == g["key_id"], f"different keys: house {h['key_id']}, gate {g['key_id']}"
+        bench.facts["key id"] = h["key_id"]
     bench.wait_for(lambda: bench.house.status()["link"]["verified"] and bench.gate.status()["link"]["verified"],
                    30, "peer verified on both boards")
     bench.facts["firmware"] = h["fw"]

@@ -7,6 +7,10 @@
     python tools/gatelink.py restore                    # after flashing: config + key back, reboot, wait for link
     python tools/gatelink.py house hist --csv link.csv  # link quality history (every bucket) as CSV
     python tools/gatelink.py rftest                     # radio preflight for a new board (5 min of pings)
+    python tools/gatelink.py key gen --backup DIR       # new link key: printed once, plus an encrypted backup
+    python tools/gatelink.py key backup FILE            # ~/.gatelink_key as an encrypted backup (GLKB v1)
+    python tools/gatelink.py key restore FILE [--out P] # a backup's key, printed or written to P
+    python tools/gatelink.py key id                     # the id of the key in ~/.gatelink_key
 
 From firmware 0.5.0 the config and key live in the board's SPI flash chip and survive uploads (`ports` shows
 `cfg spi`); older firmware, or a board whose chip doesn't answer (`cfg internal`), loses them on every upload.
@@ -17,10 +21,16 @@ from ~/.gatelink_key and reboots. Take the snapshot from boards in their normal 
 interrupted e2e run can leave its unsaved test profile running. Close the web console first; only one program
 can hold a port.
 
-Uses the console client shared with the e2e suite (tools/gatelink_client), so needs pyserial.
+`key` handles the link key off the board (docs/key-management.md): the key id each board reports (`ports`
+shows it) and encrypted backups in the web console's format. Passphrases are asked for (getpass), never taken from
+the command line; the plaintext key is only printed, or written where --out says.
+
+Uses the console client shared with the e2e suite (tools/gatelink_client), so needs pyserial; key backups also
+need the cryptography package (both in tests/e2e/requirements.txt).
 """
 import argparse
 import csv
+import getpass
 import json
 import os
 import sys
@@ -30,6 +40,7 @@ from pathlib import Path
 import serial
 import serial.tools.list_ports
 
+from gatelink_client import keybackup as kb
 from gatelink_client.board import ARDUINO_VID, Board, BoardError, board_ports, find_boards, open_board
 from gatelink_client.timeline import Timeline
 
@@ -89,12 +100,19 @@ def cmd_ports(_):
             s = b.status()
             link = s["link"]
             tx_power = b.config_get()["tx_power"]
-            print(f"{port:6} {s['role']:5} fw {s['fw']:7} key {'set' if s['key_set'] else 'NOT SET':7} "
+            print(f"{port:6} {s['role']:5} fw {s['fw']:7} key {board_key(b.info()):8} "
                   f"verified {link['verified']!s:5} rssi {link['rssi']:4} tx_power {tx_power:2} "
                   f"cfg {s.get('cfg_store', 'internal')} last reset {s['reset_cause']} "
                   f"usb ...{serials.get(port, '?')[-6:]}")
         finally:
             b.close()
+
+
+def board_key(info):
+    """The key a board holds, as `ports` shows it: its id (firmware 0.13.8 on), `set`, or `NOT SET`."""
+    if not info.get("key_set"):
+        return "NOT SET"
+    return info.get("key_id") or "set"
 
 
 def cmd_request(args):
@@ -145,8 +163,9 @@ def cmd_snapshot(args):
         try:
             info = b.info()
             ser = serials.get(port)
-            entry = {"role": info["role"], "fw": info["fw"], "key_set": info["key_set"], "port": port, "serial": ser,
-                     "params": b.config_get(), "taken": time.strftime("%Y-%m-%d %H:%M:%S")}
+            entry = {"role": info["role"], "fw": info["fw"], "key_set": info["key_set"], "key_id": info.get("key_id"),
+                     "port": port, "serial": ser, "params": b.config_get(),
+                     "taken": time.strftime("%Y-%m-%d %H:%M:%S")}
             snap[f"usb:{ser}" if ser else port] = entry
             print(f"{port}: {info['role']} fw {info['fw']}, {len(entry['params'])} params"
                   + (f" (USB serial {ser})" if ser else " (no USB serial number: keyed by port)"))
@@ -165,7 +184,7 @@ def read_key(path):
         sys.exit(f"can't read the key file: {e}")
     if len(key) != 32 or any(c not in "0123456789abcdefABCDEF" for c in key):
         sys.exit(f"{path} must hold the 32-hex-char link key")
-    return key
+    return key.lower()
 
 
 def cmd_restore(args):
@@ -174,6 +193,7 @@ def cmd_restore(args):
     except OSError as e:
         sys.exit(f"no snapshot: {e} (take one with `snapshot` before flashing)")
     key = read_key(args.key_file)
+    kid = kb.key_id(bytes.fromhex(key))
     by_serial = {s: p for p, s in port_serials().items()}
     boards = []
     try:
@@ -186,6 +206,9 @@ def cmd_restore(args):
                 continue
             if saved.get("port") and port != saved["port"]:
                 print(f"{saved['role']} board was on {saved['port']}, now on {port}")
+            if saved.get("key_id") and saved["key_id"] != kid:
+                print(f"warning: {args.key_file} holds key {kid}, but the {saved['role']} board had key "
+                      f"{saved['key_id']} when the snapshot was taken")
             b = Board(port, Timeline(), name=saved["role"])
             b.open()
             boards.append(b)
@@ -197,12 +220,18 @@ def cmd_restore(args):
             if (not args.force and info["key_set"] and info["role"] == saved["role"]
                     and all(current[k] == v for k, v in params.items())):
                 print(f"{port}: {saved['role']} already matches the snapshot; left alone")
+                if info.get("key_id") not in (None, kid):
+                    print(f"warning: {port} holds key {info['key_id']}, not {args.key_file}'s key {kid} "
+                          "(--force writes the file's key)")
                 continue
             b.config_set(**params)
             b.request("config.save")
             b.request("key.set", key=key)
             b.reboot()
-            print(f"{port}: restored as {b.info()['role']} ({len(params)} params, key set"
+            info = b.info()
+            if info.get("key_id") not in (None, kid):
+                print(f"warning: {port} reports key {info['key_id']} after key.set of key {kid}")
+            print(f"{port}: restored as {info['role']} ({len(params)} params, key {info.get('key_id') or 'set'}"
                   + (f"; not on this firmware: {', '.join(skipped)}" if skipped else "") + ")")
         if not boards:
             print("none of the snapshot's boards is connected")
@@ -297,7 +326,171 @@ def cmd_rftest(args):
     return 0 if ok else 1
 
 
-def main():
+def ask_passphrase(prompt):
+    """getpass; Ctrl-C or the end of input at the prompt ends the command without a traceback."""
+    try:
+        return getpass.getpass(prompt)
+    except (KeyboardInterrupt, EOFError):
+        print(file=sys.stderr)
+        sys.exit("cancelled; nothing written")
+
+
+def ask_new_passphrase():
+    """A backup passphrase, typed twice (never from argv, so it stays out of shell history)."""
+    print(f"The passphrase encrypts the backup: at least {kb.MIN_PASSPHRASE} characters. Nothing can recover it if "
+          "it is lost: store it in a password manager, apart from the backup file.", file=sys.stderr)
+    for _ in range(3):
+        p = ask_passphrase("Backup passphrase: ")
+        if kb.passphrase_length(p) < kb.MIN_PASSPHRASE:
+            print(f"Too short ({kb.passphrase_length(p)} characters).", file=sys.stderr)
+        elif ask_passphrase("Same passphrase again: ") != p:
+            print("The two passphrases differ.", file=sys.stderr)
+        else:
+            return p
+    sys.exit("no passphrase; nothing written")
+
+
+def backup_path(target, kid):
+    """Where a backup of key `kid` goes: `target`, or the standard name inside it if it is a directory. Never
+    overwrites a file."""
+    path = Path(target).expanduser()
+    if path.is_dir():
+        path = path / kb.backup_file_name({"key_id": kid})
+    if path.exists():
+        sys.exit(f"{path} already exists; nothing written (move it away or choose another name)")
+    if not path.parent.is_dir():
+        sys.exit(f"{path.parent} isn't a directory; nothing written")
+    return path
+
+
+def check_out(target, key, force):
+    """Where --out writes the plaintext key: a file may be replaced only if it holds the same key, or with --force."""
+    path = Path(target).expanduser()
+    if path.is_dir():
+        sys.exit(f"{path} is a directory; nothing written (--out names the key file)")
+    if not path.parent.is_dir():
+        sys.exit(f"{path.parent} isn't a directory; nothing written")
+    if path.exists() and not force:
+        try:
+            old = kb.parse_key_hex(path.read_text(errors="replace").strip())
+        except OSError as e:
+            sys.exit(f"can't read {path}: {e}; nothing written")
+        if old != key:
+            held = f"key {kb.key_id(old)}" if old else "something else"
+            sys.exit(f"{path} already holds {held}; nothing written (--force replaces it)")
+    return path
+
+
+def write_secret(path, key):
+    """Writes the plaintext key, readable only by this user where the OS allows it."""
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(key.hex() + "\n")
+    except OSError as e:
+        sys.exit(f"can't write the key to {path}: {e}")
+
+
+def encrypt_new(key, note):
+    """The key's backup, under a passphrase asked for twice."""
+    try:
+        return kb.encrypt_backup(key, ask_new_passphrase(), note=note)
+    except kb.BackupError as e:
+        sys.exit(str(e))
+
+
+def write_backup(path, backup):
+    try:
+        path.write_text(kb.dumps(backup), encoding="utf-8", newline="\n")
+    except OSError as e:
+        sys.exit(f"can't write the backup to {path}: {e}")
+    print(f"encrypted backup of key {backup['key_id']} written to {path}")
+
+
+def cmd_key_gen(args):
+    key = kb.generate_key()
+    kid = kb.key_id(key)
+    # Whatever can fail or be cancelled (the paths, the passphrase) comes before the key is shown or written.
+    path = backup_path(args.backup, kid) if args.backup else None
+    out = check_out(args.out, key, args.force) if args.out else None
+    backup = encrypt_new(key, args.note) if path else None
+    print(f"key    {key.hex()}\nkey id {kid}")
+    if out:
+        write_secret(out, key)
+        print(f"key written to {out}")
+    elif not backup:
+        print("The key is shown only this once: keep it in a password manager, or use --backup.", file=sys.stderr)
+    if backup:
+        write_backup(path, backup)
+    return 0
+
+
+def cmd_key_backup(args):
+    key = bytes.fromhex(read_key(args.key_file))
+    kid = kb.key_id(key)
+    weak = kb.weak_key_reason(key)
+    if weak:
+        print(f"warning: this key is weak ({weak}); boards refuse it from firmware 0.13.8. Generate a new one.",
+              file=sys.stderr)
+    path = backup_path(args.file, kid)
+    print(f"backing up key {kid} from {args.key_file}", file=sys.stderr)
+    write_backup(path, encrypt_new(key, args.note))
+    return 0
+
+
+def cmd_key_restore(args):
+    try:
+        backup = kb.parse_backup(Path(args.file).expanduser().read_bytes())
+    except OSError as e:
+        sys.exit(f"can't read the backup: {e}")
+    except kb.BackupError as e:
+        sys.exit(f"{args.file}: {e}")
+    print(f"{args.file}: key {backup['key_id']}, made {backup.get('created', '?')}"
+          + (f" ({backup['note']})" if backup.get("note") else ""), file=sys.stderr)
+    key = None
+    for tries in range(3):
+        try:
+            key = kb.decrypt_backup(backup, ask_passphrase("Backup passphrase: "))
+            break
+        except kb.BackupError as e:
+            if tries == 2 or "passphrase" not in str(e):
+                sys.exit(str(e))
+            print(f"{e}; try again", file=sys.stderr)
+    if args.out:
+        out = check_out(args.out, key, args.force)
+        write_secret(out, key)
+        print(f"key {kb.key_id(key)} written to {out}")
+    else:
+        print(f"key    {key.hex()}\nkey id {kb.key_id(key)}")
+    return 0
+
+
+def cmd_key_id(args):
+    print(kb.key_id(bytes.fromhex(read_key(args.key_file))))
+    return 0
+
+
+def cmd_key_set(args):
+    """key.set on one board from the key file: the key never goes on a command line."""
+    key = read_key(args.key_file)
+    kid = kb.key_id(bytes.fromhex(key))
+    b = open_target(args.target)
+    try:
+        res = b.request("key.set", check=False, key=key)
+        if not res.get("ok"):
+            print(f"{args.target}: key.set refused: {res.get('error', res)}", file=sys.stderr)
+            return 1
+        reported = b.info().get("key_id")
+    finally:
+        b.close()
+    if reported not in (None, kid):
+        print(f"warning: {args.target} reports key {reported} after key.set of key {kid}", file=sys.stderr)
+        return 1
+    print(f"{args.target}: key {kid} set" + ("" if reported else " (this firmware doesn't report key ids)"))
+    return 0
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser(description="GateLink boards over their USB JSON console (docs/console.md); "
                                              "or `gatelink.py <house|gate|COMx> <cmd> [key=value ...]`")
     sub = ap.add_subparsers(dest="action", required=True)
@@ -316,20 +509,46 @@ def main():
     p.add_argument("--max-loss", type=float, default=1.0, help="pong loss limit in %% (default 1)")
     p.add_argument("--max-crc", type=int, default=0, help="CRC errors allowed per board (default 0)")
     p.set_defaults(fn=cmd_rftest)
+    key = sub.add_parser("key", help="the link key: generate, back up, restore, id, set (docs/key-management.md)")
+    ksub = key.add_subparsers(dest="key_action", required=True)
+    p = ksub.add_parser("gen", help="generate a key; print it once, optionally back it up encrypted")
+    p.add_argument("--backup", metavar="FILE", help="write an encrypted backup (a directory: its standard name there)")
+    p.add_argument("--out", metavar="PATH", help="also write the plaintext key to PATH (e.g. ~/.gatelink_key)")
+    p.add_argument("--note", default="", help="note stored (unencrypted) in the backup")
+    p.add_argument("--force", action="store_true", help="let --out replace a file holding another key")
+    p.set_defaults(fn=cmd_key_gen)
+    p = ksub.add_parser("backup", help="write an encrypted backup of the key in the key file")
+    p.add_argument("file", metavar="FILE", help="the backup to write (a directory: its standard name there)")
+    p.add_argument("--key-file", default=DEFAULT_KEY_FILE)
+    p.add_argument("--note", default="", help="note stored (unencrypted) in the backup")
+    p.set_defaults(fn=cmd_key_backup)
+    p = ksub.add_parser("restore", help="decrypt a backup; print the key, or write it with --out")
+    p.add_argument("file", metavar="FILE")
+    p.add_argument("--out", metavar="PATH", help="write the plaintext key to PATH instead of printing it")
+    p.add_argument("--force", action="store_true", help="let --out replace a file holding another key")
+    p.set_defaults(fn=cmd_key_restore)
+    p = ksub.add_parser("id", help="print the id of the key in the key file")
+    p.add_argument("--key-file", default=DEFAULT_KEY_FILE)
+    p.set_defaults(fn=cmd_key_id)
+    p = ksub.add_parser("set", help="write the key file's key to a board (house, gate or a port) and check its id")
+    p.add_argument("target", help="house, gate or a port (COMx)")
+    p.add_argument("--key-file", default=DEFAULT_KEY_FILE)
+    p.set_defaults(fn=cmd_key_set)
 
     # Anything else is `<target> <cmd> [key=value ...]`.
-    if len(sys.argv) > 1 and sys.argv[1] not in ("ports", "snapshot", "restore", "rftest", "-h", "--help"):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] not in ("ports", "snapshot", "restore", "rftest", "key", "-h", "--help"):
         rp = argparse.ArgumentParser(prog="gatelink.py <target>")
         rp.add_argument("target", help="house, gate or a port (COMx)")
         rp.add_argument("cmd", help="console command, e.g. status, log.get, config.set; or hist (history as CSV)")
         rp.add_argument("args", nargs="*", help="key=value arguments; values are JSON (params={\"sf\":9})")
         rp.add_argument("--timeout", type=float, default=3.0)
         rp.add_argument("--csv", help="with `hist`: write the CSV to this file instead of stdout")
-        args = rp.parse_args()
+        args = rp.parse_args(argv)
         if args.cmd == "hist":
             return cmd_hist(args)
         return cmd_request(args)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     return args.fn(args)
 
 

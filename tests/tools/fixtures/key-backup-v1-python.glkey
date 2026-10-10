@@ -1,0 +1,18 @@
+{
+  "format": "gatelink-key-backup",
+  "version": 1,
+  "key_id": "fa60d1a7",
+  "created": "2026-10-10T07:31:08Z",
+  "note": "test fixture: made by tools/gatelink_client/keybackup.py",
+  "kdf": {
+    "name": "PBKDF2",
+    "hash": "SHA-256",
+    "iterations": 600000,
+    "salt": "QlCcqguoOazF7jU+Nbgjmg=="
+  },
+  "cipher": {
+    "name": "AES-GCM",
+    "iv": "JwR+eIh4U2A/VbNw"
+  },
+  "ciphertext": "HF3upOq3k6oVHOZhZTmM/hmo0ZW+A59Q721+Uhbkhjo="
+}

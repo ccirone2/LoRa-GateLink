@@ -58,7 +58,7 @@ are built from the pull requests since the last tag.
    python tools/check_contract.py   # firmware enums, log events and console commands vs the suite and docs
    python tools/docgen.py     # reference docs vs the source (--write regenerates the generated tables)
    make -C tests/native       # host tests: link/config, and both boards' firmware in a simulated site (tests/native/README.md)
-   python -m pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks)
+   python -m pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks, key backups)
    pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI

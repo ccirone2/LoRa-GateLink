@@ -209,6 +209,54 @@ TEST(config_param_ranges) {
     for (size_t j = i + 1; j < PARAM_COUNT; j++) CHECK(PARAMS[i].id != PARAMS[j].id);
 }
 
+static void keyFromHex(const char *hex, uint8_t key[16]) {
+  for (int i = 0; i < 16; i++) {
+    unsigned v;
+    sscanf(hex + 2 * i, "%2x", &v);
+    key[i] = (uint8_t)v;
+  }
+}
+
+static std::string keyIdOf(const char *hex) {
+  uint8_t key[16];
+  keyFromHex(hex, key);
+  char id[9];
+  memset(id, 'x', sizeof(id));
+  configKeyId(key, id);
+  CHECK_EQ(id[8], 0);
+  return id;
+}
+
+// The same vectors as tests/web/fixtures/firmware.json (key_id) and the Python tests: HMAC-SHA256(key,
+// "GateLink key id v1"), first 4 bytes.
+TEST(key_id_is_the_hmac_of_its_label) {
+  CHECK(keyIdOf("8a3f1c6e9b2d4f70a1c3e5f7092b4d6f") == "e03fddf7");
+  CHECK(keyIdOf("00112233445566778899aabbccddeeff") == "fa60d1a7");
+  CHECK(keyIdOf("0f1e2d3c4b5a69788796a5b4c3d2e1f0") == "2fa26167");
+}
+
+static bool weak(const char *hex) {
+  uint8_t key[16];
+  keyFromHex(hex, key);
+  return configKeyWeak(key);
+}
+
+TEST(weak_keys_are_refused) {
+  CHECK(weak("00000000000000000000000000000000"));
+  CHECK(weak("ffffffffffffffffffffffffffffffff"));
+  CHECK(weak("000102030405060708090a0b0c0d0e0f"));  // counting up
+  CHECK(weak("f8f9fafbfcfdfeff0001020304050607"));  // up, through the wrap
+  CHECK(weak("0f0e0d0c0b0a09080706050403020100"));  // down
+  CHECK(weak("01020304050607080102030405060708"));  // 8 distinct values
+  CHECK(weak("deadbeefdeadbeefdeadbeefdeadbeef"));  // 4
+  CHECK(weak("31323334353637383132333435363738"));  // ASCII "1234567812345678"
+  CHECK(!weak("02030405060708090102030405060708"));  // 9 distinct values
+  CHECK(!weak("8a3f1c6e9b2d4f70a1c3e5f7092b4d6f"));
+  CHECK(!weak("00112233445566778899aabbccddeeff"));  // steps of 0x11: 16 distinct values
+  CHECK(!weak("000102030405060708090a0b0c0d0e10"));  // counts up, but not to the end
+  CHECK(!weak("0100ffcfcbcac9c8c7c6c5c4c3c2c1c0"));  // counts down, but not all the way
+}
+
 TEST(boot_counter_counts_up_across_sector_rollover) {
   // 4-byte slots, 1024 per sector, two sectors: 2500 boots wrap around twice.
   for (uint32_t i = 1; i <= 2500; i++) CHECK_EQ(configCountBoot(), i);

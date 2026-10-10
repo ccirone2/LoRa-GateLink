@@ -36,6 +36,3 @@ _Nothing decided yet. Move items here from Ideas._
     heap (`free_ram` in status).
   - Should the gate's own history be fetchable over LoRa (paged, like DIAG), or are the counters in STATUS
     enough?
-- **Key backup in config export.** The exported config leaves out the key, so restoring a board needs the key
-  from elsewhere. An export option that includes the key encrypted with a passphrase would keep one backup file
-  complete without putting the key in the clear.

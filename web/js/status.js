@@ -4,6 +4,7 @@ import { S } from './state.js';
 import { call } from './serial.js';
 import { IO_LABELS, WIRING, renderWiring } from './wiring.js';
 import { updateFwCard, reportFlash } from './firmware.js';
+import { showBoardKey } from './security.js';
 
 // Tab title: the gate state first, so a background tab still shows it.
 export function updateTitle(gate) {
@@ -38,6 +39,7 @@ export async function refreshInfo() {
   S.keySet = !!info.key_set;
   $('keyWarn').hidden = info.key_set;
   $('secKeySet').textContent = info.key_set ? 'yes' : 'no (link disabled)';
+  showBoardKey();
   // Boards before 0.5.0 don't report it: program flash, erased by uploads.
   const spi = info.cfg_store === 'spi';
   $('secStore').textContent = spi ? 'flash chip (kept across firmware updates)' : 'program flash (erased by firmware updates)';

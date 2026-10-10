@@ -42,7 +42,7 @@ test('remote diagnostics and a remote write report back', async ({ page }) => {
   await connect(page);
   await page.locator('#tabbtn-tools').click();
   await page.locator('#btnDiag').click();
-  await expect(page.locator('#diagOut')).toContainText('fw 0.13.6 · up 1h 0m');
+  await expect(page.locator('#diagOut')).toContainText('fw 0.13.8 · up 1h 0m');
   await page.locator('#remParam').selectOption('pulse_ms');
   await page.locator('#remValue').fill('700');
   await page.locator('#btnRemSet').click();

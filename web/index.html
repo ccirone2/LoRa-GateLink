@@ -114,17 +114,22 @@
     <section id="tab-security" class="tab" role="tabpanel" aria-labelledby="tabbtn-security">
       <div class="card narrow">
         <div class="label">Link key</div>
-        <p>Every frame is authenticated with HMAC-SHA256 using a shared 128-bit key. Both boards must have the same key. The key is write-only; it can't be read back from a board.</p>
+        <p>Every frame is authenticated with HMAC-SHA256 using a shared 128-bit key. Both boards must have the same key. The key is write-only; it can't be read back from a board, but each board reports its <b>key id</b>, which tells keys apart without revealing them: when both boards show the same id, they hold the same key.</p>
         <div class="kv"><span>Key set on this board</span><b id="secKeySet">—</b></div>
+        <div class="kv" title="The first 4 bytes of HMAC-SHA256(key, &quot;GateLink key id v1&quot;): the same on both boards when their keys match"><span>Key id on this board</span><b id="secKeyId" class="mono">—</b></div>
         <div class="kv"><span>Config and key saved in</span><b id="secStore">—</b></div>
         <div class="row">
-          <input id="keyInput" class="mono" aria-label="Link key (32 hex characters)" placeholder="32 hex characters" spellcheck="false" autocomplete="off">
+          <input id="keyInput" class="mono" aria-label="Link key (32 hex characters)" aria-describedby="keyHint" placeholder="32 hex characters" spellcheck="false" autocomplete="off">
           <button id="btnKeyGen">Generate</button>
           <button id="btnKeyCopy" title="Copy the key to the clipboard">Copy</button>
           <button id="btnKeySet" class="primary">Write to board</button>
         </div>
         <p class="muted small" id="keyHint" aria-live="polite"></p>
-        <p class="muted">Generate once, write it to this board, then connect the other board and write the same key. Keep a copy somewhere safe.</p>
+        <div class="row">
+          <button id="btnKeyBackup" title="Download the key in the field, encrypted with a passphrase">Save encrypted backup…</button>
+          <label class="button" title="Open a .glkey backup and put its key in the field">Restore from backup…<input id="keyRestoreFile" type="file" accept=".glkey,application/json" hidden></label>
+        </div>
+        <p class="muted">Generate a key once, save an encrypted backup (keep its passphrase in a password manager), write the key to this board, then connect the other board, restore or paste the same key and write it there: both boards then show the same key id. Generate the install's key from a local copy of this page or with <span class="mono">tools/gatelink.py key gen</span>; see <a href="https://github.com/ccirone2/LoRa-GateLink/blob/main/docs/key-management.md" target="_blank" rel="noopener">key management</a> for when to replace it.</p>
       </div>
     </section>
 
@@ -260,6 +265,32 @@
       <button id="btnPickRefresh">Refresh</button>
       <button id="btnPickCancel">Cancel</button>
     </div>
+  </dialog>
+
+  <dialog id="passDialog" aria-labelledby="passTitle">
+    <form id="passForm" method="dialog">
+      <div class="label" id="passTitle">Passphrase</div>
+      <p id="passIntro"></p>
+      <div class="pass-field">
+        <label for="passOne">Passphrase</label>
+        <input id="passOne" type="password" autocomplete="new-password" spellcheck="false">
+      </div>
+      <div class="pass-field" id="passTwoRow">
+        <label for="passTwo">Same passphrase again</label>
+        <input id="passTwo" type="password" autocomplete="new-password" spellcheck="false">
+      </div>
+      <div class="pass-field" id="passNoteRow">
+        <label for="passNote">Note (optional, stored unencrypted)</label>
+        <input id="passNote" type="text" maxlength="200" autocomplete="off" placeholder="e.g. house + gate, installed 2026">
+      </div>
+      <p class="muted small" id="passWarn"></p>
+      <p class="bad small" id="passError" role="alert"></p>
+      <div class="row">
+        <span class="spacer"></span>
+        <button id="btnPassCancel" type="button">Cancel</button>
+        <button id="btnPassOk" type="submit" class="primary">OK</button>
+      </div>
+    </form>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" title="Click to dismiss"></div>

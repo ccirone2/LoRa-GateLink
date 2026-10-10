@@ -83,6 +83,18 @@ static const char *roleName(int32_t r) {
   return r == ROLE_HOUSE ? "house" : r == ROLE_GATE ? "gate" : "unset";
 }
 
+// key_set, and the key's id (null without a key), which tells keys apart without revealing them.
+static void fillKey(JsonDocument &res) {
+  res["key_set"] = (bool)cfg.key_set;
+  if (cfg.key_set) {
+    char id[9];
+    configKeyId(cfg.key, id);
+    res["key_id"] = id;
+  } else {
+    res["key_id"] = nullptr;
+  }
+}
+
 static void fillParams(JsonDocument &res) {
   JsonObject params = res["params"].to<JsonObject>();
   JsonArray meta = res["meta"].to<JsonArray>();
@@ -98,7 +110,7 @@ static void fillParams(JsonDocument &res) {
     m["remote"] = (bool)(p.flags & P_REMOTE);
     m["reboot"] = (bool)(p.flags & P_REBOOT);
   }
-  res["key_set"] = (bool)cfg.key_set;
+  fillKey(res);
 }
 
 static void saveFailed(JsonDocument &res) {
@@ -117,7 +129,7 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     res["board"] = "MKR WAN 1310";
     res["role"] = roleName(activeRole);
     res["saved_role"] = roleName(cfg.role);
-    res["key_set"] = (bool)cfg.key_set;
+    fillKey(res);
     res["cfg_store"] = configStoreName();
     char id[9];
     snprintf(id, sizeof(id), "%06lx", (unsigned long)extFlashId());
@@ -160,14 +172,17 @@ static void handle(JsonDocument &req, ConsolePort &from) {
       if (hi < 0 || lo < 0) ok = false;
       else key[i] = (hi << 4) | lo;
     }
-    if (ok) {
+    if (!ok) {
+      res["ok"] = false;
+      res["error"] = "key must be 32 hex chars";
+    } else if (configKeyWeak(key)) {
+      res["ok"] = false;
+      res["error"] = "weak key: all bytes equal, counting by one, or 8 or fewer distinct bytes";
+    } else {
       memcpy(cfg.key, key, 16);
       cfg.key_set = 1;
       if (!configSaveKey()) saveFailed(res);
       appRestartRadio();  // new key: re-establish sessions
-    } else {
-      res["ok"] = false;
-      res["error"] = "key must be 32 hex chars";
     }
   } else if (!strcmp(cmd, "relay.test")) {
     // Read wide: as a uint8_t, k 257 would be K1. And `| default` stands in for a value that doesn't fit, so

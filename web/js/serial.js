@@ -170,7 +170,7 @@ function pickText(e) {
       : e.err.message === 'no answer' ? 'no answer: still booting, or not GateLink firmware' : e.err.message];
   }
   const i = e.info;
-  const sub = [`fw ${i.fw}`, i.key_set ? 'key set' : 'no key'];
+  const sub = [`fw ${i.fw}`, !i.key_set ? 'no key' : i.key_id ? `key ${i.key_id}` : 'key set'];
   if (i.saved_role && i.saved_role !== i.role) sub.push(`${i.saved_role} after reboot`);
   return [`LoRa GateLink – ${cap(i.role)}`, sub.join(' · ')];
 }

@@ -45,13 +45,13 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 
 | Command | Arguments | Reply / effect |
 |---|---|---|
-| `info` | | `fw`, `board`, `role` (running), `saved_role`, `key_set`, `cfg_store`, `flash_id` (SPI flash JEDEC id, hex; `000000` if it doesn't answer), `boot_count` (boots counted in the SPI flash; seeds the session id; 0 if the chip didn't answer) |
+| `info` | | `fw`, `board`, `role` (running), `saved_role`, `key_set`, `key_id` (see below), `cfg_store`, `flash_id` (SPI flash JEDEC id, hex; `000000` if it doesn't answer), `boot_count` (boots counted in the SPI flash; seeds the session id; 0 if the chip didn't answer) |
 | `status` | | `status` object (below) |
-| `config.get` | | `params` (name → value), `meta` (per param: `name`, `id`, `min`, `max`, `radio`, `remote`, `reboot`), `key_set` |
+| `config.get` | | `params` (name → value), `meta` (per param: `name`, `id`, `min`, `max`, `radio`, `remote`, `reboot`), `key_set`, `key_id` |
 | `config.set` | `params`: {name: int} | Applies (doesn't save). `applied`, `errors` (names rejected: unknown, not an integer or out of range; `ok` is false if any), `reboot_required`. Unchanged values are skipped. Radio params restart the radio. Send at most ~8 params per request |
 | `config.save` | | Writes the running config to flash |
 | `config.reset` | | Running config back to defaults at once (key cleared, so the link stops) and the saved config and key erased; `reboot_required` |
-| `key.set` | `key`: 32 hex chars | Sets and saves only the key; restarts the radio and sessions. The key can't be read back |
+| `key.set` | `key`: 32 hex chars | Sets and saves only the key; restarts the radio and sessions. The key can't be read back; `info` then reports its key id. A weak key is refused (see Weak keys, below) |
 | `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command, unless the gate is already at that limit or the opener is unpowered). Needs a role |
 | `radio.ping` | | Sends a PING; a `pong` event follows if the peer answers. Needs a role, a key and a working radio |
 | `remote.diag` | | House only. Requests the gate's diagnostics; a `remote_diag` event follows |
@@ -64,6 +64,16 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 | `debug.replay` | `hello` (bool, default false) | Re-sends the last frame as-is, to test the peer's replay protection. With `hello`, re-sends this board's first HELLO since boot instead (an old session's once the link has restarted, e.g. after a radio param change). Sent as-is, without listening first; `sent` is false if there was nothing to replay or the radio was busy |
 | `debug.mute` | `ms` (max 60000; 0 stops) | The link ignores received frames for `ms`, as if the receiver had gone deaf (it still transmits) |
 | `debug.reboot_after_cmd` | | Gate only, one-shot: the next command that pulses resets the gate right after the pulse, without ACKing it (a power cut or crash at the worst moment) |
+
+**Key id.** `key_id` (from 0.13.8) is 8 lowercase hex digits: the first 4 bytes of HMAC-SHA256(key,
+`"GateLink key id v1"`), null while no key is set. It tells keys apart without revealing them: two boards with the
+same `key_id` hold the same key, and a backup file names the id of the key inside
+([key-management.md](key-management.md)). Firmware before 0.13.8 doesn't send it.
+
+**Weak keys.** From 0.13.8 `key.set` refuses, with `weak key: all bytes equal, counting by one, or 8 or fewer
+distinct bytes`, a key whose 16 bytes are all equal, count up or down by one (mod 256: `00 01 02 … 0f`,
+`fa fb … ff 00 … 09`, `0f 0e … 00`), or take 8 or fewer distinct values (`deadbeef` four times). A random key is
+weak about once in 10^10; the web console and `tools/gatelink.py key gen` never offer one.
 
 Settings are listed in [config.md](config.md) (range, default, when a change applies, what it does), generated
 from the `PARAMS[]` table in `firmware/GateLink/config.cpp` and the Config tab's help text. Saved config and the

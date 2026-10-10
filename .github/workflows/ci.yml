@@ -39,12 +39,36 @@ jobs:
           arduino-cli compile --fqbn arduino:avr:uno --warnings all tools/GateSim 2>&1 | tee sim.log
           ! grep -E "GateSim/[^:]+:[0-9]+:[0-9]+: warning" sim.log
 
-  web-and-python:
+  # The web console: plain ES modules (no build step); the tooling is in package.json.
+  web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Syntax check web console
-        run: node --check web/app.js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Syntax check every module
+        run: for f in web/app.js web/js/*.js; do node --check "$f"; done
+      - name: Lint (eslint.config.js)
+        run: npm run lint
+      - name: Unit tests (tests/web/unit)
+        run: npm run test:unit
+      - name: Browser tests (tests/web/browser, Chromium against fake boards)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:browser
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/web/report/
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

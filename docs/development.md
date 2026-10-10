@@ -20,7 +20,8 @@ difference:
 
 When updating one, change it here and in `.github/workflows/ci.yml` and `release.yml`.
 
-The web console is plain JS with no build step. The bench tools need Python 3 with
+The web console is plain JS (ES modules) with no build step; its lint and tests need Node.js 22 and `npm ci`
+(`package.json`). The bench tools need Python 3 with
 `pip install -r tests/e2e/requirements.txt`.
 
 ## Where things are tracked
@@ -39,25 +40,26 @@ are built from the pull requests since the last tag.
 
 1. Branch from `main`.
 2. Make the change. Things that must change together:
-   - Console protocol (`console.cpp`) ↔ `web/app.js` ↔ `tools/gatelink_client/` and `tests/e2e/` ↔ [docs/console.md](console.md).
+   - Console protocol (`console.cpp`) ↔ the web console (`web/js/`, and the fake board in `tests/web/`) ↔
+     `tools/gatelink_client/` and `tests/e2e/` ↔ [docs/console.md](console.md).
    - Log events (`log.h`/`log.cpp`) ↔ the suite ↔ docs/console.md.
    - STATUS/DIAG wire format (`roles.h`) ↔ `role_house.cpp` / `console.cpp`; both boards need the new firmware.
-   - Pins or role behaviour (`pins.h`) ↔ the `WIRING` table in `web/app.js` ↔ [docs/hardware.md](hardware.md).
+   - Pins or role behaviour (`pins.h`) ↔ the `WIRING` table in `web/js/wiring.js` ↔ [docs/hardware.md](hardware.md).
    - A new setting: field in `Config` + default + `PARAMS` row with a new, never reused id + group/help text
-     in `web/app.js`. Saved config is stored by param id, so a changed meaning or unit needs a new id; bump
+     in `web/js/settings.js`. Saved config is stored by param id, so a changed meaning or unit needs a new id; bump
      `CFG_VERSION` (it only guards the program-flash fallback) if the struct layout changes.
 3. Bump `FW_VERSION` in `firmware/GateLink/config.h` for any firmware change (see Versioning).
 4. Verify:
    ```sh
    arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink   # no warnings in GateLink/
-   node --check web/app.js
+   npm ci && npm test         # web console: lint, unit tests, browser tests (tests/web/README.md)
    ruff check tests tools     # pip install ruff==0.16.10 (the version CI pins); rules in ruff.toml
    python tools/check_contract.py   # firmware enums, log events and console commands vs the suite and docs
    make -C tests/native       # host unit tests for link.cpp and config.cpp; see tests/native/README.md
    pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI
-   compiles the firmware and GateSim (failing on warnings in project files), runs the host unit tests, syntax-checks the web console,
+   compiles the firmware and GateSim (failing on warnings in project files), runs the host unit tests, lints and tests the web console (ESLint, `node --test`, Playwright),
    byte-compiles and lints the Python (`ruff check tests tools`) and collects the e2e suite (`pytest
    --collect-only`, which catches import and fixture errors without the bench).
 6. Merge to `main`. A change under `web/` deploys the web console to GitHub Pages.
@@ -91,7 +93,7 @@ After the pull request carrying a new `FW_VERSION` is merged (`/release` in Clau
    Firmware update** offers it. They are never committed (`web/firmware/` is ignored).
 
 The web console flashes over Web Serial by speaking the Arduino SAM-BA bootloader protocol itself (`SamBa` in
-`web/app.js`): a 1200-baud open/close resets the board into the bootloader (USB PID 0x0059, a separate port
+`web/js/samba.js`, driven by `web/js/firmware.js`): a 1200-baud open/close resets the board into the bootloader (USB PID 0x0059, a separate port
 grant), then erase from 0x2000 (`X`), 4 KB chunks staged in RAM and written (`S` + `Y`), CRC-16 check (`Z`)
 and a reset. It recognises GateLink images by the `GATELINK_FW=x.y.z` marker (`FW_MARKER`, `config.cpp`; the
 version reported by `info`/`status` is read from it so the linker keeps it).

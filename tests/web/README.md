@@ -48,5 +48,5 @@ their texts are in `page.dialogs`.
 Flashing itself needs the real bootloader and stays a bench check (`docs/bench-testing.md`); the image checks before it
 are covered here.
 
-When the console protocol changes, change `fake-serial.js` and `fixtures/firmware.json` with it (CLAUDE.md, "Web
-console").
+When the console protocol changes, change `fake-serial.js` and `fixtures/firmware.json` with it
+([docs/architecture.md](../../docs/architecture.md), "Console").

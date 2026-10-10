@@ -1,10 +1,15 @@
 # Agent tooling
 
 GateLink is developed with Claude Code, and the repo carries what an agent needs to follow the project's rules
-without being reminded: [CLAUDE.md](../CLAUDE.md) (architecture and the behavioural invariants), skills for the
-recurring workflows, hooks that check work as it happens, and nightly routines. They are code: they change in the
-same pull request as what they describe, and [tests/tools/test_agent_tooling.py](../tests/tools/test_agent_tooling.py)
-tests them in CI.
+without being reminded: [CLAUDE.md](../CLAUDE.md) (an overview of each layer, the rules and the behavioural
+invariants), skills for the recurring workflows, hooks that check work as it happens, and nightly routines. They
+are code: they change in the same pull request as what they describe, and
+[tests/tools/test_agent_tooling.py](../tests/tools/test_agent_tooling.py) tests them in CI.
+
+CLAUDE.md is loaded into every session, so it stays short: one or two lines per firmware layer and the rules an
+agent must not break, with the detail (each layer's design, measured numbers and the approaches tried and
+abandoned) in [architecture.md](architecture.md), which an agent reads before changing a layer. A test fails
+CLAUDE.md past 16 KB; move detail to `docs/` rather than raising the limit.
 
 ## Skills
 

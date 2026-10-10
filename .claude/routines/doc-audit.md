@@ -9,8 +9,8 @@ description: Audit the docs, CLAUDE.md, skills and routines against the code; on
 1. Skip if an open pull request titled `[routine] Docs` exists: report it and stop.
 2. Run `/doc-audit`. Cover the whole of step 1 (the mechanical checks) every night; for step 2, take the area
    for tonight from the day of the month (`date +%d`), in this order, wrapping round:
-   1. `CLAUDE.md` firmware architecture
-   2. `CLAUDE.md` invariants and web console
+   1. `docs/architecture.md` firmware layers, and `CLAUDE.md`'s overview of them
+   2. `CLAUDE.md` invariants and rules, and `docs/architecture.md` web console
    3. `docs/console.md`
    4. `docs/hardware.md` and `web/js/wiring.js`
    5. `docs/protocol.md`

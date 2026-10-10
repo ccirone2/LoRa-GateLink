@@ -1101,7 +1101,8 @@ def check_framing(repo):
         return [f"{FW}/link.h: the `// Frame: ...` comment wasn't found"]
     want = [re.sub(r"\(.*?\)", "", f).strip() for f in m.group(1).split("|")]
     probs = []
-    for doc, pat in (("docs/protocol.md", r"Frame: `([^`]+)`"), ("CLAUDE.md", r"authenticated framing: `([^`]+)`")):
+    for doc, pat in (("docs/protocol.md", r"Frame: `([^`]+)`"),
+                     ("docs/architecture.md", r"authenticated framing: `([^`]+)`")):
         found = re.search(pat, repo.text(doc))
         have = [f.strip() for f in found.group(1).split("|")] if found else None
         if have != want:
@@ -1111,11 +1112,11 @@ def check_framing(repo):
 
 def check_radio_settings(repo):
     """docs/protocol.md names the settings that must match on both boards and the radio ones nobody writes over
-    LoRa; CLAUDE.md says radio params and the input inverts are never remote-writable."""
+    LoRa; CLAUDE.md and docs/architecture.md say radio params and the input inverts are never remote-writable."""
     params, must = parse_params(repo), set(repo.js["MUST_MATCH"])
     radio = {p.name for p in params if "RADIO" in p.flags}
     probs = [f"{FW}/config.cpp: `{p.name}` is P_REMOTE, but radio params and the input inverts are never "
-             "remote-writable (CLAUDE.md, docs/protocol.md)" for p in params
+             "remote-writable (CLAUDE.md, docs/architecture.md, docs/protocol.md)" for p in params
              if "REMOTE" in p.flags and ("RADIO" in p.flags or re.fullmatch(r"in\d_invert", p.name))]
     doc = "docs/protocol.md"
     m = re.search(flex(r"Radio settings \(([^)]*)\) must match on both boards \(([^)]*) may differ\)"), repo.text(doc))
@@ -1277,6 +1278,7 @@ def hlog_slots(repo):
 
 C, CON, PRO, HW, BT, DEV = ("CLAUDE.md", "docs/console.md", "docs/protocol.md", "docs/hardware.md",
                             "docs/bench-testing.md", "docs/development.md")
+ARCH = "docs/architecture.md"
 R, E2E, SET = "README.md", "tests/e2e/README.md", "web/js/settings.js"
 CI, REL, BENCH = ".github/workflows/ci.yml", ".github/workflows/release.yml", "tests/e2e/gatelink/bench.py"
 LIBS = (("LoRa", "`LoRa` (sandeepmistry)"), ("Crypto", "`Crypto` (rweather)"),
@@ -1302,34 +1304,34 @@ FACTS = [
     D("BETWEEN_HOLD_MS", f"{FW}/role_gate.cpp", Q(HW, rf"a move into `between` is reported only after {NUM} s", s)),
     D("STATUS_TTL_MS", f"{FW}/role_gate.cpp",
       Q(PRO, r"STATUS: `heartbeat_s` capped at (\d+) s", s),
-      Q(C, r"STATUS's TTL is `heartbeat_s` capped at (\d+) s", s)),
+      Q(ARCH, r"STATUS's TTL is `heartbeat_s` capped at (\d+) s", s)),
     Fact("watchdog", None, r"Watchdog\.enable\((\d+)\)",
          (Q(C, r"Hardware watchdog is (\d+) s", s),
           Q(CON, r"come to the (\d+) s watchdog", s),
           Q(R, r"the firmware froze for (\d+) s", s))),
     Fact("LED breathing period", None, r"ledBump\(now % (\d+), 0,", (Q(R, rf"Dim breathing \({NUM} s\)", s),)),
-    Fact("supply poll", f"{FW}/supply.cpp", r"POLL_MS = (\d+);", (Q(C, r"polled every (\d+) ms before the roles"),)),
+    Fact("supply poll", f"{FW}/supply.cpp", r"POLL_MS = (\d+);", (Q(ARCH, r"polled every (\d+) ms before the roles"),)),
     # Link
     D("TURNAROUND_MS", f"{FW}/link.cpp",
       Q(PRO, r"after a (\d+) ms turnaround"),
-      Q(C, r"after the (\d+) ms turnaround"),
-      Q(C, r"the peer answers (\d+) ms after our frame")),
+      Q(ARCH, r"after the (\d+) ms turnaround"),
+      Q(ARCH, r"the peer answers (\d+) ms after our frame")),
     D("CHALLENGE_LIFE_MS", f"{FW}/link.cpp", Q(PRO, r"A challenge is good for (\d+) s", s)),
     D("HELLO_ANSWER_GAP_MS", f"{FW}/link.cpp",
       Q(PRO, r"answers at most one HELLO (\w+) second", s),
-      Q(C, r"answers at most one (\w+) second from the verified session", s)),
+      Q(ARCH, r"answers at most one (\w+) second from the verified session", s)),
     Fact("HELLO interval cap", f"{FW}/link.cpp", value=hello_base_max,
-         quotes=(Q(C, r"the base doubling to (\d+) s", s),)),
-    D("TXQ_LEN", f"{FW}/link.cpp", Q(PRO, r"queued (\w+) deep"), Q(C, r"wait in a (\d+)-deep queue")),
-    D("TAG_LEN", f"{FW}/link.cpp", Q(PRO, r"truncated to (\d+) bytes"), Q(C, r"truncated to (\d+) bytes")),
+         quotes=(Q(ARCH, r"the base doubling to (\d+) s", s),)),
+    D("TXQ_LEN", f"{FW}/link.cpp", Q(PRO, r"queued (\w+) deep"), Q(ARCH, r"wait in a (\d+)-deep queue")),
+    D("TAG_LEN", f"{FW}/link.cpp", Q(PRO, r"truncated to (\d+) bytes"), Q(ARCH, r"truncated to (\d+) bytes")),
     D("RX_AGE_CAP_MS", f"{FW}/link.cpp", Q(CON, rf"tops out at ~{NUM} days", lambda v: v / 86400000, approx=True)),
     Fact("LBT cap (longest frames)", f"{FW}/link.cpp", r"\((\d+) \* radioAirtimeMs\(MAX_FRAME\)\)",
-         (Q(C, r"after (\d+)× the longest frame"),)),
+         (Q(ARCH, r"after (\d+)× the longest frame"),)),
     Fact("TX deadline margin", f"{FW}/radio.cpp", r"radioAirtimeMs\(len\) \+ (\d+);",
-         (Q(C, r"\(airtime \+ (\d+) ms\)"),)),
+         (Q(ARCH, r"\(airtime \+ (\d+) ms\)"),)),
     Fact("link timeout heartbeats (x1000)", f"{FW}/role_house.cpp", r"gateHeartbeat \* (\d+);",
          (Q(PRO, rf"max\(`link_timeout_s`, {NUM} × the gate's heartbeat\)", s),
-          Q(C, rf"max\(`link_timeout_s`, {NUM} × that heartbeat\)", s),
+          Q(ARCH, rf"max\(`link_timeout_s`, {NUM} × that heartbeat\)", s),
           Q(BT, rf"at least {NUM} × the gate's `heartbeat_s`", s),
           Q(R, rf"at least {NUM} gate heartbeats", s),
           Q(SET, rf"at least {NUM} heartbeats", s),
@@ -1339,11 +1341,11 @@ FACTS = [
     Fact("command retry schedule", f"{FW}/link.cpp", value=retry_schedule, guard=(r"uint32_t g0 = s\.ttl / 32;", r"\(uint32_t\)left / \(cfg\.retries - n\)"),
          quotes=(Q(PRO, r"retries about ((?:[\d.]+,\s*)+[\d.]+\s+and\s+[\d.]+) s;", approx=True),)),
     Fact("replay window (frames)", f"{FW}/link.cpp", r"static uint(\d+)_t peerWindow;",
-         (Q(PRO, r"A (\d+)-frame sliding window"), Q(C, r"then a (\d+)-frame sliding window"))),
+         (Q(PRO, r"A (\d+)-frame sliding window"), Q(ARCH, r"then a (\d+)-frame sliding window"))),
     Fact("boot counter slot", f"{FW}/config.cpp", r"uint8_t b\[(\d+)\], check\[\d+\];",
          (Q(PRO, r"one (\d+)-byte slot per boot"),)),
     Fact("starting seq (bits)", f"{FW}/link.cpp", r"txSeq = radioRandom32\(\) & (0x[0-9A-Fa-f]+);",
-         (Q(C, r"seq starts at a random (\d+)-bit value", lambda v: v.bit_length()),)),
+         (Q(ARCH, r"seq starts at a random (\d+)-bit value", lambda v: v.bit_length()),)),
     D("NODE_HOUSE", f"{FW}/config.h", Q(PRO, r"\(house = (\d+), gate = \d+\)")),
     D("NODE_GATE", f"{FW}/config.h", Q(PRO, r"\(house = \d+, gate = (\d+)\)")),
     Fact("key bytes", f"{FW}/config.h", r"uint8_t key\[(\d+)\];",
@@ -1370,8 +1372,8 @@ FACTS = [
     D("STI_AC_LOST", f"{FW}/roles.h",
       Q(PRO, r"bit (\d+) of the STATUS inputs byte", bit),
       Q(C, r"STATUS bit (\d+) = AC lost", bit)),
-    D("STI_IN3", f"{FW}/roles.h", Q(C, r"reported in STATUS bits (\d+)–\d+", bit)),
-    D("STI_IN4", f"{FW}/roles.h", Q(C, r"reported in STATUS bits \d+–(\d+)", bit)),
+    D("STI_IN3", f"{FW}/roles.h", Q(ARCH, r"reported in STATUS bits (\d+)–\d+", bit)),
+    D("STI_IN4", f"{FW}/roles.h", Q(ARCH, r"reported in STATUS bits \d+–(\d+)", bit)),
     Fact("RES_OK", f"{FW}/link.h", r"RES_OK = (\d+)", (Q(CON, r"ACK result: (\d+) ok,"),)),
     Fact("RES_ALREADY", f"{FW}/link.h", r"RES_ALREADY = (\d+)", (Q(CON, r"ACK result: \d+ ok, (\d+) already"),)),
     Fact("RES_BAD", f"{FW}/link.h", r"RES_BAD = (\d+)", (Q(CON, r"ACK result: [^;]*?(\d+) rejected"),)),
@@ -1381,14 +1383,14 @@ FACTS = [
     D("UART_BAUD", f"{FW}/console_io.cpp",
       Q(CON, r"(\d[\d,]*) baud, 8N1"),
       Q(CON, r"Even at (\d+) kbaud", s),
-      Q(C, r"on Serial1 at (\d+) kbaud", s),
+      Q(ARCH, r"on Serial1 at (\d+) kbaud", s),
       Q(SET, r"3\.3 V, (\d+) kbaud", s)),
     D("LINE_MAX", f"{FW}/console.cpp", Q(CON, r"one over (\d+) characters", lambda v: v - 1)),
     D("USB_TX_TIMEOUT_MS", f"{FW}/console_io.cpp",
       Q(CON, r"untaken for more than (\d+) ms"),
-      Q(C, r"dropped the rest of the line after (\d+) ms")),
+      Q(ARCH, r"dropped the rest of the line after (\d+) ms")),
     Fact("USB packet", f"{FW}/console_io.cpp", r"uint8_t buf\[(\d+)\]",
-         (Q(CON, r"one (\d+)-byte packet at a time"), Q(C, r"written in (\d+)-byte pieces"))),
+         (Q(CON, r"one (\d+)-byte packet at a time"), Q(ARCH, r"written in (\d+)-byte pieces"))),
     D("LOG_SIZE", f"{FW}/log.h", Q(CON, r"the ring buffer \((\d+) entries")),
     Fact("config.set chunk (web)", "web/js/config.js", r"const CFG_CHUNK = (\d+);",
          (Q(CON, r"Send at most ~(\d+) params per request"),)),
@@ -1413,7 +1415,7 @@ FACTS = [
     # Link history
     D("HIST_DEPTH", f"{FW}/history.h",
       Q(CON, r"the last (\d+) plus the one in progress"),
-      Q(C, r"hourly buckets \((\d+) \+ the one in progress")),
+      Q(ARCH, r"hourly buckets \((\d+) \+ the one in progress")),
     Fact("history span (days)", f"{FW}/history.h", value=history_days,
          quotes=(Q(CON, r"plus the one in progress\s+\((\w+) days\)"), Q(R, r"up to (\w+) days; kept across\s+resets"))),
     D("HIST_PERIOD_S", f"{FW}/history.h",
@@ -1429,28 +1431,28 @@ FACTS = [
     D("HLOG_SECTOR0", f"{FW}/histlog.h",
       Q(PRO, r"\| (\d+)–\d+ \| The link history log"),
       Q(CON, r"The log takes sectors (\d+)–\d+ of the chip"),
-      Q(C, r"`histlog\.cpp`, sectors (\d+)–\d+")),
+      Q(ARCH, r"`histlog\.cpp`, sectors (\d+)–\d+")),
     Fact("history log's last sector", f"{FW}/histlog.h", value=hlog_last_sector,
          quotes=(Q(PRO, r"\| \d+–(\d+) \| The link history log"),
                  Q(CON, r"The log takes sectors \d+–(\d+) of the chip"),
-                 Q(C, r"`histlog\.cpp`, sectors \d+–(\d+)"))),
+                 Q(ARCH, r"`histlog\.cpp`, sectors \d+–(\d+)"))),
     D("HLOG_SLOT", f"{FW}/histlog.h", Q(PRO, r"cut into (\d+)-byte slots")),
     Fact("history log slots", f"{FW}/histlog.h", value=hlog_slots,
          quotes=(Q(PRO, r"two to a page and (\d+) in all"), Q(CON, r"a lap\s+of (\d+) buckets"))),
     D("HLOG_DATA", f"{FW}/histlog.h", Q(PRO, r"period_s\(2\) 0\(2\) bucket\((\d+)\) crc")),
     # Config storage and firmware image
-    D("EXTFLASH_PAGE", f"{FW}/extflash.h", Q(C, r"fit one (\d+)-byte page")),
-    D("REC_MAX_PARAMS", f"{FW}/config.cpp", Q(C, r"static_assert, (\d+) params")),
+    D("EXTFLASH_PAGE", f"{FW}/extflash.h", Q(ARCH, r"fit one (\d+)-byte page")),
+    D("REC_MAX_PARAMS", f"{FW}/config.cpp", Q(ARCH, r"static_assert, (\d+) params")),
     Fact("FW_MARKER_PREFIX", f"{FW}/config.h", r'#define FW_MARKER_PREFIX "([^"]+)"',
-         (Q(C, r"`(\w+=)x\.y\.z`"), Q(DEV, r"`(\w+=)x\.y\.z`"))),
+         (Q(ARCH, r"`(\w+=)x\.y\.z`"), Q(DEV, r"`(\w+=)x\.y\.z`"))),
     # Web console
     Fact("RECONNECT_MS", "web/js/serial.js", r"const RECONNECT_MS = (\d+);",
-         (Q(C, r"reopen the already-granted port for (\d+) s", s),
+         (Q(ARCH, r"reopen the already-granted port for (\d+) s", s),
           Q(R, r"reconnects to it automatically for (\d+) s", s))),
     Fact("BOOT_PID", "web/js/samba.js", r"BOOT_PID = (0x[0-9a-fA-F]+);",
-         (Q(C, r"bootloader PID (0x[0-9a-fA-F]+)"), Q(DEV, r"USB PID (0x[0-9a-fA-F]+)"))),
+         (Q(ARCH, r"bootloader PID (0x[0-9a-fA-F]+)"), Q(DEV, r"USB PID (0x[0-9a-fA-F]+)"))),
     Fact("APP_START", "web/js/samba.js", r"APP_START = (0x[0-9a-fA-F]+);",
-         (Q(C, r"`Z` at (0x[0-9a-fA-F]+)"), Q(DEV, r"erase from (0x[0-9a-fA-F]+)"))),
+         (Q(ARCH, r"`Z` at (0x[0-9a-fA-F]+)"), Q(DEV, r"erase from (0x[0-9a-fA-F]+)"))),
     # Tools
     Fact("rftest seconds", "tools/gatelink.py", r'"--seconds", type=float, default=(\d+)',
          (Q(BT, r"\((\d+) minutes of pings both ways", lambda v: v / 60),)),
@@ -1501,7 +1503,7 @@ FACTS = [
          (Q(E2E, r"`ctrl_confirm_ms` (\d+), as IN2 alone needs"),)),
     Fact("e2e simulator travel", BENCH, r"SIM_TRAVEL_S = (\d+)", (Q(E2E, r"simulator travel (\d+) s"),)),
     Fact("soak loop_max_us limit", "tests/e2e/test_soak.py", r"LOOP_MAX_US = ([\d_]+)",
-         (Q(C, r"the soak fails it past (\d+) s", lambda v: v / 1e6),)),
+         (Q(ARCH, r"the soak fails it past (\d+) s", lambda v: v / 1e6),)),
     # Toolchain versions: CI is the source; the docs and the release workflow must say the same
     Fact("arduino:samd core", CI, r"arduino:samd@([\d.]+)",
          (Q(DEV, r"\| `arduino:samd` core \| ([\d.]+) \|"),

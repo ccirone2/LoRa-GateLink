@@ -55,7 +55,8 @@ siren sensor.
 - [tests/e2e/README.md](tests/e2e/README.md) — the end-to-end suite
 - [tools/GateSim/README.md](tools/GateSim/README.md) — the opener simulator
 - [tools/bench-wiring/README.md](tools/bench-wiring/README.md) — the bench wiring diagram
-- [docs/development.md](docs/development.md) — toolchain, workflow, versioning and releases
+- [docs/architecture.md](docs/architecture.md) — how the firmware (layer by layer) and the web console are built, and why
+- [docs/development.md](docs/development.md) — toolchain, workflow, test suites, versioning and releases
 - [docs/release-criteria.md](docs/release-criteria.md) — what a release must pass on the bench, and its evidence
 - [docs/agent-tooling.md](docs/agent-tooling.md) — Claude Code hooks, skills and nightly routines
 

@@ -1,7 +1,8 @@
 # Development
 
-How changes are made, verified and released. Architecture notes and the behavioural invariants that every
-change must keep are in [CLAUDE.md](../CLAUDE.md); read those before touching the firmware.
+How changes are made, verified and released. The behavioural invariants that every change must keep are in
+[CLAUDE.md](../CLAUDE.md), and how each firmware layer and the web console are built (and why) in
+[architecture.md](architecture.md); read both before touching the firmware.
 
 ## Toolchain
 
@@ -23,6 +24,24 @@ When updating one, change it here and in `.github/workflows/ci.yml` and `release
 The web console is plain JS (ES modules) with no build step; its lint and tests need Node.js 22 and `npm ci`
 (`package.json`). The bench tools need Python 3 with
 `pip install -r tests/e2e/requirements.txt`.
+
+## Other commands
+
+The routine ones (compile, flash, tests, the bench suite, `tools/gatelink.py` essentials) are in
+[CLAUDE.md](../CLAUDE.md). The rest:
+
+```sh
+arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COMx firmware/GateLink   # plain upload (python tools/flash.py bounds the waits)
+arduino-cli compile --fqbn arduino:avr:uno --warnings all tools/GateSim   # bench opener simulator (tools/GateSim/README.md)
+python -m http.server 8000 -d web              # serve the web console at http://localhost:8000 (Chrome/Edge; not from file://)
+GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -m power   # real power cuts through the power rig (LiPo in or out; tests chosen per state)
+python tools/gatelink.py house hist --csv f.csv   # link quality history (hourly buckets) as CSV
+python tools/gatelink.py rftest                # radio preflight for a new MKR board (bench-testing.md)
+python tools/bench-wiring/serve.py             # the bench wiring record at http://localhost:8001 (never another server)
+```
+
+`make -C tests/native` needs g++ (without it, the Docker recipe in `tests/native/README.md`), and the fuzz targets
+clang (`tests/native/fuzz/README.md`).
 
 ## Where things are tracked
 
@@ -69,13 +88,39 @@ are built from the pull requests since the last tag.
    Python (`ruff check tests tools`), runs the tools' unit tests (`tests/tools`), collects the e2e suite (`pytest
    --collect-only`, which catches import and fixture errors without the bench), checks the docs against the source
    (`check_contract.py`, `docgen.py`), fails a pull request that changes the firmware without bumping `FW_VERSION`,
-   lints the workflows (actionlint, with shellcheck), runs cppcheck and clang-tidy on the firmware and reports
-   the host tests' coverage of it (failing below 85 % of lines; tests/native/README.md).
-6. Merge to `main`. Once CI has passed on `main`, the web console is deployed to GitHub Pages.
+   lints the workflows (actionlint, with shellcheck), runs cppcheck and clang-tidy (`firmware/GateLink/.clang-tidy`)
+   on the firmware and reports the host tests' coverage of it (failing below 85 % of lines; tests/native/README.md):
+   `make -C tests/native cppcheck tidy coverage`.
+6. Merge to `main`. Once CI has passed on `main`, the web console is deployed to GitHub Pages (`pages.yml`; also
+   after each release build, to bundle its `.bin`, and by hand with `gh workflow run pages.yml`).
 
 CI's actions are pinned by commit SHA and its runners by image (`ubuntu-24.04`); Dependabot
 (`.github/dependabot.yml`) proposes action, npm and Python updates weekly, and the nightly deps-check routine
 covers the Arduino cores and libraries, arduino-cli and ruff.
+
+## Test suites
+
+- **Compile:** clean, with no warnings in project files (filter the output with `grep GateLink[\\/]`); CI fails on
+  them.
+- **Host tests** (`tests/native`, `make -C tests/native`, run by CI; [tests/native/README.md](../tests/native/README.md)):
+  `link.cpp`, `config.cpp` and `histlog.cpp` against fakes, and the system tests: both boards' whole firmware in a
+  simulated site (opener, controller, power, radio channel) with monitors that check every behavioural invariant
+  each simulated millisecond, each test tagged with the invariants it covers. Extend them with any behaviour change,
+  especially for paths the bench can't reach (replays, restarts, wraps, power cuts mid-save, races); `XFAIL_TEST`
+  marks a known open bug.
+- **Mutations:** `tests/native/mutations.json` breaks each invariant in a copy of the firmware and `tools/mutate.py`
+  (weekly in CI) checks a test catches it; a firmware change that moves a mutation's text fails
+  `tests/tools/test_mutate.py` until the catalog follows.
+- **Fuzzing:** `tests/native/fuzz` fuzzes the frame, console and config parsers with the whole firmware under
+  ASan/UBSan and the relay invariants; `make -C tests/native` replays its corpus, and `fuzz/crashes/` holds
+  reproducers of known bugs that must keep crashing until fixed.
+- **Bench end-to-end suite** (`tests/e2e`, pytest; [tests/e2e/README.md](../tests/e2e/README.md)): drives both
+  boards, the GateSim and the Shelly (via Home Assistant) and checks the behavioural invariants after every scenario.
+  It parses console replies, log event names/values and status fields (`tests/e2e/gatelink/`, and the console client
+  `tools/gatelink_client/` it shares with `tools/gatelink.py`: `board.py`, `timeline.py`, wire enums in `wire.py`), so
+  change it together with `console.cpp`/`log.cpp`/`roles.h`, like the web console; `tools/check_contract.py` (run by
+  CI) checks the enums, log event names and console commands against the suite and [console.md](console.md).
+  Scenario timings assume its test profile (`tests/e2e/gatelink/bench.py`).
 
 ## Reference docs from source
 
@@ -112,7 +157,7 @@ python tools/docgen.py --write   # regenerate the generated sections in place, t
   When a doc quotes a new value another way, add a fact next to the similar ones:
 
   ```python
-  D("TXQ_LEN", f"{FW}/link.cpp", Q(PRO, r"queued (\w+) deep"), Q(C, r"wait in a (\d+)-deep queue")),
+  D("TXQ_LEN", f"{FW}/link.cpp", Q(PRO, r"queued (\w+) deep"), Q(ARCH, r"wait in a (\d+)-deep queue")),
   ```
 
   A space in a doc pattern matches any whitespace, line breaks included; a quote's first group is the value

@@ -71,3 +71,7 @@ once its fix is merged and record it in the pull request.
 - [ ] **Record the link key.** It was rotated on 2026-09-30 so the wrong-key test could run. The key is in
   `~/.gatelink_key` (not in the repo). Store it somewhere safe, e.g. a password manager; boards can't read it
   back, and the web console's config export doesn't include it.
+- [ ] **Create the nightly routines** defined in `.claude/routines/` on claude.ai (`/schedule` from the CLI, one per
+  file, each with the two-line prompt in its README), and give the cloud environment network access to
+  `downloads.arduino.cc` and `github.com` so `tools/agent/cloud_setup.sh` can install the toolchain
+  ([docs/agent-tooling.md](docs/agent-tooling.md)). Watch the first week's pull requests and tune the routine files.

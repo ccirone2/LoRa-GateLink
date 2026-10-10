@@ -1,6 +1,8 @@
-# Local Claude Code state; project skills are shared
+# Local Claude Code state; project settings (hooks), skills and routines are shared
 .claude/*
+!.claude/settings.json
 !.claude/skills/
+!.claude/routines/
 build/
 *.bin
 *.elf

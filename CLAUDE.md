@@ -15,6 +15,7 @@ Toolchain is `arduino-cli` (not PlatformIO). Run from the repo root:
 ```sh
 arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink
 arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COMx firmware/GateLink
+python tools/flash.py <dir>/GateLink.ino.bin house gate   # bench upload with bounded waits, checks the version (/flash)
 npm ci && npm test                             # web console: ESLint, unit tests, browser tests (tests/web/README.md)
 python -m http.server 8000 -d web              # serve UI at http://localhost:8000 (Chrome/Edge; ES modules: not from file://)
 make -C tests/native                           # host unit tests for link.cpp/config.cpp (g++; Docker recipe in its README)

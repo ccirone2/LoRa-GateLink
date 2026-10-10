@@ -113,6 +113,8 @@ arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 firmware/GateLink   #
 
 Or flash a release binary (check it first: `sha256sum -c GateLink-vX.Y.Z.bin.sha256`): `arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COM5 --input-file GateLink-vX.Y.Z.bin`
 (from the [latest release](https://github.com/ccirone2/LoRa-GateLink/releases/latest)).
+`python tools/flash.py GateLink-vX.Y.Z.bin COM5` (needs pyserial) does the same with every wait bounded, and checks the board
+comes back reporting that version.
 Without any tools, use the web console's **Tools → Firmware update** (below).
 
 Flash the same firmware to both boards. From 0.5.0 the config and key are kept in the board's SPI flash chip

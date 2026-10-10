@@ -117,8 +117,14 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
   No board resets or radio faults. No MAC failures or replays. The house sent exactly the number of commands the
   scenario expects. The opener saw no press the gate didn't log as a pulse (relay chatter, e.g. while a board
   powers up or down).
-- **Results.** `tests/e2e/results/<run>/` holds a time-ordered timeline per test (all four devices, JSONL) and
-  `summary.md` (results, latencies, link quality, anomalies such as a gate → house status that needed a retry).
+- **Results.** `tests/e2e/results/<run>/` holds a time-ordered timeline per test (all four devices, JSONL),
+  `summary.md` (results, latencies, link quality, anomalies such as a gate → house status that needed a retry) and
+  `summary.json`: the same plus the start and end time, the command line and `-m`/`-k` selection (per marker group,
+  how many tests were collected and selected; `--ignore`, `--lf`, `--sw` and collection errors, which leave whole
+  files out), the git commit, local changes and `firmware/GateLink` tree, both
+  boards' firmware and USB serial numbers, the suite options (`--tx-power`, `--cycles`, `--soak-minutes`, whether
+  `GATELINK_KEY` was set, never the key) and each test's outcome, duration and skip or failure reason.
+  `tools/release_evidence.py` reads it to check a release against [docs/release-criteria.md](../../docs/release-criteria.md).
 
 ## Changing the suite
 

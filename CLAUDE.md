@@ -74,8 +74,8 @@ The boards can be driven from scripts over USB serial with the same JSON console
 
 - `TODO.md` — open bugs, investigations, bench/field tasks. `ROADMAP.md` — desired features. Add findings there as you go; remove items once their fix or feature is merged (the PR and release notes record them).
 - Every firmware change bumps `FW_VERSION` (`config.h`); MINOR for a `CFG_VERSION` or config record format bump, a new feature, or a change both boards need together (STATUS/DIAG or frame format), PATCH otherwise. One branch + PR per change, with bench results in the PR body.
-- The changelog is GitHub Releases (`vX.Y.Z` tag on the merge commit); `.github/workflows/release.yml` attaches the built `.bin`. CI (`ci.yml`) compiles firmware and GateSim (fails on warnings in project files), lints and tests the web console, lints Python (`ruff check tests tools`, `ruff.toml`) and collects the e2e suite. Details: `docs/development.md`.
-- Project skills (`.claude/skills/`): `/flash` (upload to the bench boards, check config/key survived or restore them), `/release` (tag and publish a release with notes).
+- The changelog is GitHub Releases (`vX.Y.Z` tag on the merge commit). A release first needs bench evidence per `docs/release-criteria.md` (by kind): `tools/release_evidence.py collect` writes `docs/releases/vX.Y.Z.md` from the runs' `summary.json`, merged before the tag; `.github/workflows/release.yml` runs its `check --ci`, then attaches the built `.bin` and the evidence. CI (`ci.yml`) compiles firmware and GateSim (fails on warnings in project files), lints and tests the web console, lints Python (`ruff check tests tools`, `ruff.toml`), runs `pytest tests/tools` and collects the e2e suite. Details: `docs/development.md`.
+- Project skills (`.claude/skills/`): `/flash` (upload to the bench boards, check config/key survived or restore them), `/release` (bench per the release criteria, evidence PR, then tag and publish with notes).
 - Keep docs in step with code: console/log/status → `docs/console.md`; pins/wiring → `docs/hardware.md` and the `WIRING` table; suite options → `tests/e2e/README.md`.
 
 ## Behavioural invariants (don't break these)

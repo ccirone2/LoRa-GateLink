@@ -1,0 +1,102 @@
+{
+ "schema": 1,
+ "run": "20261010-100000",
+ "start": "2026-10-10T10:00:00-05:00",
+ "end": "2026-10-10T10:12:00-05:00",
+ "exitstatus": 0,
+ "command": "pytest tests/e2e -m soak --cycles 20",
+ "selection": {
+  "markexpr": "soak",
+  "keyword": "",
+  "paths": [
+   "tests/e2e"
+  ],
+  "groups": {
+   "default": {
+    "collected": 5,
+    "selected": 0
+   },
+   "longsoak": {
+    "collected": 1,
+    "selected": 0
+   },
+   "soak": {
+    "collected": 1,
+    "selected": 1
+   },
+   "power": {
+    "collected": 3,
+    "selected": 0
+   },
+   "rf": {
+    "collected": 1,
+    "selected": 0
+   }
+  },
+  "filters": [],
+  "collect_errors": 0
+ },
+ "git": {
+  "commit": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+  "dirty": true,
+  "dirty_paths": [
+   "REVIEW.md"
+  ],
+  "firmware_tree": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1"
+ },
+ "boards": {
+  "house": {
+   "fw": "0.14.0",
+   "usb_serial": "00000000000000000000000000183013",
+   "port": "COM5",
+   "cfg_store": "spi",
+   "flash_id": "c84015"
+  },
+  "gate": {
+   "fw": "0.14.0",
+   "usb_serial": "B86085DB5031344E432E3120FF0C301C",
+   "port": "COM21",
+   "cfg_store": "spi",
+   "flash_id": "c84015"
+  }
+ },
+ "options": {
+  "tx_power": null,
+  "cycles": 20,
+  "soak_minutes": 120,
+  "rf_cycles": 5,
+  "gatelink_key": true,
+  "ha_power_entity": null,
+  "no_uart": false
+ },
+ "counts": {
+  "passed": 1
+ },
+ "tests": [
+  {
+   "nodeid": "test_normal.py::test_soak_open_close_cycles",
+   "name": "test_soak_open_close_cycles",
+   "outcome": "passed",
+   "group": "soak",
+   "markers": [
+    "soak"
+   ],
+   "duration_s": 700.0,
+   "reason": null
+  }
+ ],
+ "latencies": [
+  {
+   "name": "controller -> house cmd_sent",
+   "n": 2,
+   "min": 0.327,
+   "median": 0.328,
+   "max": 0.328
+  }
+ ],
+ "facts": {
+  "consoles": "house USB COM5 + UART tap COM17, gate USB COM21 + UART tap COM12",
+  "controller power": "wired (in2_invert fakes a loss)"
+ },
+ "anomalies": []
+}

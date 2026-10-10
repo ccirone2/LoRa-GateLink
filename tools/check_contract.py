@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Check that the firmware, the e2e suite and docs/console.md agree on the names and numbers they share.
 
-CLAUDE.md asks for console.cpp, log.cpp, roles.h/link.h, tests/e2e/gatelink and docs/console.md to change
+CLAUDE.md asks for console.cpp, log.cpp, roles.h/link.h, the suite (tests/e2e, tools/gatelink_client) and docs/console.md to change
 together; this catches the drift that slips through. Run from anywhere (CI runs it): exits 1 with a list of
 mismatches, 0 if all agree.
 
 Checked:
-- roles.h / link.h enums (GateState, Cause, Action, AckResult) against the wire values in gatelink/bench.py;
+- roles.h / link.h enums (GateState, Cause, Action, AckResult) against the wire values in gatelink_client/wire.py;
 - log event names (log.cpp NAMES) against the log table in docs/console.md;
 - every log or event name the suite waits for or checks against the firmware's names;
 - console commands (console.cpp `strcmp(cmd, ...)`) against the commands table in docs/console.md.
@@ -19,8 +19,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FW = ROOT / "firmware" / "GateLink"
 DOC = ROOT / "docs" / "console.md"
-BENCH = ROOT / "tests" / "e2e" / "gatelink" / "bench.py"
-TESTS = ROOT / "tests" / "e2e"
+WIRE = ROOT / "tools" / "gatelink_client" / "wire.py"
+SUITE = (ROOT / "tests" / "e2e", ROOT / "tools" / "gatelink_client")
 
 problems = []
 
@@ -47,10 +47,10 @@ def enum(src, name):
     return out
 
 
-def bench_values():
-    """Module-level assignments in bench.py: GS/CAUSE dicts and the ACT_/RES_ constants."""
+def wire_values():
+    """Module-level assignments in wire.py: GS/CAUSE dicts and the ACT_/RES_ constants."""
     vals = {}
-    for node in ast.parse(read(BENCH)).body:
+    for node in ast.parse(read(WIRE)).body:
         if not isinstance(node, ast.Assign):
             continue
         for target in node.targets:
@@ -69,11 +69,11 @@ def bench_values():
 def compare(what, fw, py):
     for k in sorted(set(fw) | set(py)):
         if k not in py:
-            problems.append(f"{what}: {k} = {fw[k]} in the firmware, missing in {BENCH.name}")
+            problems.append(f"{what}: {k} = {fw[k]} in the firmware, missing in {WIRE.name}")
         elif k not in fw:
-            problems.append(f"{what}: {k} = {py[k]} in {BENCH.name}, not in the firmware")
+            problems.append(f"{what}: {k} = {py[k]} in {WIRE.name}, not in the firmware")
         elif fw[k] != py[k]:
-            problems.append(f"{what}: {k} is {fw[k]} in the firmware, {py[k]} in {BENCH.name}")
+            problems.append(f"{what}: {k} is {fw[k]} in the firmware, {py[k]} in {WIRE.name}")
 
 
 def doc_table(header):
@@ -93,14 +93,14 @@ def doc_table(header):
 
 
 def main():
-    roles, link, bench = read(FW / "roles.h"), read(FW / "link.h"), bench_values()
+    roles, link, wire = read(FW / "roles.h"), read(FW / "link.h"), wire_values()
 
-    # Wire values (roles.h, link.h) <-> bench.py
+    # Wire values (roles.h, link.h) <-> wire.py
     gs = {k[3:].lower(): v for k, v in enum(roles, "GateState").items()}
-    compare("GateState", gs, bench.get("GS", {}))
-    compare("Cause", {k[6:].lower(): v for k, v in enum(roles, "Cause").items()}, bench.get("CAUSE", {}))
-    compare("Action", enum(roles, "Action"), {k: v for k, v in bench.items() if k.startswith("ACT_")})
-    compare("AckResult", enum(link, "AckResult"), {k: v for k, v in bench.items() if k.startswith("RES_")})
+    compare("GateState", gs, wire.get("GS", {}))
+    compare("Cause", {k[6:].lower(): v for k, v in enum(roles, "Cause").items()}, wire.get("CAUSE", {}))
+    compare("Action", enum(roles, "Action"), {k: v for k, v in wire.items() if k.startswith("ACT_")})
+    compare("AckResult", enum(link, "AckResult"), {k: v for k, v in wire.items() if k.startswith("RES_")})
 
     # Log event names: log.cpp <-> docs
     m = re.search(r"NAMES\[\]\s*=\s*\{(.*?)\};", read(FW / "log.cpp"), re.S)
@@ -117,7 +117,7 @@ def main():
     events = doc_table("| Event | Fields | When |")
     known = log_names | events
     call = re.compile(r'\b(?:wait_log|expect_no|logs|first)\(\s*(?:"(?:house|gate)"|\w+)\s*,\s*"([a-z_0-9]+)"')
-    for f in sorted(TESTS.rglob("*.py")):
+    for f in sorted(f for d in SUITE for f in d.rglob("*.py")):
         for n, line in enumerate(read(f).splitlines(), 1):
             for name in call.findall(line):
                 if name not in known:

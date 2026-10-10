@@ -1,8 +1,9 @@
 """Board resets (power blips, watchdog): nothing may be commanded by a reboot, and state recovers."""
 import time
 
-from gatelink.bench import ACT_OPEN, CAUSE, GS, PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S
 from gatelink.flows import open_via_ctrl
+from gatelink_client.wire import ACT_OPEN, CAUSE, GS
 
 
 def test_gate_reboot_at_rest(rig):

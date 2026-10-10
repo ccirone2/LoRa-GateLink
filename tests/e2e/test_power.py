@@ -16,9 +16,10 @@ import time
 
 import pytest
 
-from gatelink.bench import ACT_OPEN, CAUSE, PROFILE_COMMON, REAL_CTRL_POWER, SIM_TRAVEL_S
-from gatelink.board import BoardError
+from gatelink.bench import PROFILE_COMMON, REAL_CTRL_POWER, SIM_TRAVEL_S
 from gatelink.flows import outage
+from gatelink_client.board import BoardError
+from gatelink_client.wire import ACT_OPEN, CAUSE
 
 pytestmark = pytest.mark.power
 

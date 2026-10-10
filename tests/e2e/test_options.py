@@ -2,8 +2,9 @@
 ctrl_sync. Each test puts its setting back; the next baseline re-applies the profile anyway."""
 import time
 
-from gatelink.bench import CAUSE, GS, PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S
 from gatelink.flows import outage
+from gatelink_client.wire import CAUSE, GS
 
 LINK_TIMEOUT_S = PROFILE_COMMON["link_timeout_s"]
 HEARTBEAT_S = PROFILE_COMMON["heartbeat_s"]

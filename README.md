@@ -38,6 +38,7 @@ siren sensor.
 | `tools/GateSim/` | Bench-only Uno sketch that simulates the opener |
 | `tools/bench-wiring/` | Bench wiring diagram (`wiring.json`, edited in the page served by `serve.py`) |
 | `tools/gatelink.py` | Command-line access to a board's USB console; config snapshot/restore around a flash; link history as CSV; radio preflight for a new board (`rftest`) |
+| `tools/gatelink_client/` | Python client for the boards' USB console, shared by `tools/gatelink.py` and the e2e suite |
 | `docs/` | Hardware, protocol, console and bench documentation |
 
 ## Documentation

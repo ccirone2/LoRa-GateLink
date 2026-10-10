@@ -2,7 +2,9 @@
 and timed for the summary, and a radio outage."""
 import contextlib
 
-from .bench import ACT_CLOSE, ACT_OPEN, CAUSE, GS, SIM_TRAVEL_S
+from gatelink_client.wire import ACT_CLOSE, ACT_OPEN, CAUSE, GS
+
+from .bench import SIM_TRAVEL_S
 
 SLOW_STATUS_S = 0.5
 

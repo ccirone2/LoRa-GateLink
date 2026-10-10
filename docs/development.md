@@ -39,7 +39,7 @@ are built from the pull requests since the last tag.
 
 1. Branch from `main`.
 2. Make the change. Things that must change together:
-   - Console protocol (`console.cpp`) ↔ `web/app.js` ↔ `tests/e2e/gatelink/` ↔ [docs/console.md](console.md).
+   - Console protocol (`console.cpp`) ↔ `web/app.js` ↔ `tools/gatelink_client/` and `tests/e2e/` ↔ [docs/console.md](console.md).
    - Log events (`log.h`/`log.cpp`) ↔ the suite ↔ docs/console.md.
    - STATUS/DIAG wire format (`roles.h`) ↔ `role_house.cpp` / `console.cpp`; both boards need the new firmware.
    - Pins or role behaviour (`pins.h`) ↔ the `WIRING` table in `web/app.js` ↔ [docs/hardware.md](hardware.md).

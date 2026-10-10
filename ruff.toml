@@ -5,3 +5,7 @@ line-length = 120
 
 [lint]
 select = ["E4", "E7", "E9", "F", "B"]
+
+# Not selected above; for `ruff check --select I --fix` (import order) only.
+[lint.isort]
+known-first-party = ["gatelink", "gatelink_client"]

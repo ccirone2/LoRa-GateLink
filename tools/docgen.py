@@ -1236,12 +1236,16 @@ def onoff(v):
 
 
 def retry_schedule(repo):
-    """When a command's resends go at the default cmd_ttl_s and retries, in s: link.cpp retryDelay() halves the gap
-    back from the TTL, gap n = ttl >> (retries - n) (airtime and jitter aside)."""
+    """When a command's resends go at the default cmd_ttl_s and retries, in s: link.cpp retryDelay() doubles the gap
+    from a 32nd of the TTL, but never past an even share of what's left before the last resend's deadline (the TTL
+    less that 32nd) (airtime minimum and jitter aside)."""
     ttl, retries = default_of(repo, "cmd_ttl_s") * 1000, default_of(repo, "retries")
+    g0 = ttl // 32
     at, out = 0, []
     for n in range(retries):
-        at += ttl >> (retries - n)
+        left = ttl - g0 - at
+        even = left // (retries - n) if left > 0 else 0
+        at += min(g0 << n, even)
         out.append(at / 1000)
     return out
 
@@ -1319,7 +1323,7 @@ FACTS = [
           Q(SET, rf"never shorter than {NUM} gate heartbeats", s))),
     Fact("CFG_SET TTL", f"{FW}/role_house.cpp", r"MSG_CFG_SET, p, \d+, (\d+)\)",
          (Q(PRO, r"config writes: (\d+) s\)", s),)),
-    Fact("command retry schedule", f"{FW}/link.cpp", value=retry_schedule, guard=(r"s\.ttl >> \(cfg\.retries - n\)",),
+    Fact("command retry schedule", f"{FW}/link.cpp", value=retry_schedule, guard=(r"uint32_t g0 = s\.ttl / 32;", r"\(uint32_t\)left / \(cfg\.retries - n\)"),
          quotes=(Q(PRO, r"retries about ((?:[\d.]+,\s*)+[\d.]+\s+and\s+[\d.]+) s;", approx=True),)),
     Fact("replay window (frames)", f"{FW}/link.cpp", r"static uint(\d+)_t peerWindow;",
          (Q(PRO, r"A (\d+)-frame sliding window"), Q(C, r"then a (\d+)-frame sliding window"))),
@@ -1454,8 +1458,8 @@ FACTS = [
       Q(HW, r"only ever pulsed \(default (\d+) ms\)"),
       Q(R, r"\*\*only ever pulsed\*\* \(default (\d+) ms\)")),
     S("uart_console", Q(CON, r"it is (on|off) by default", onoff)),
-    S("cmd_ttl_s", Q(PRO, r"`cmd_ttl_s` for commands: at (\d+) s and")),
-    S("retries", Q(PRO, r"`cmd_ttl_s` for commands: at \d+ s and (\d+) retries")),
+    S("cmd_ttl_s", Q(PRO, r"just before the end: at (\d+) s and")),
+    S("retries", Q(PRO, r"just before the end: at \d+ s and the default (\d+) retries")),
     # Settings the docs say the house can write on the gate (P_REMOTE)
     RW("power_sense", Q(HW, r"`power_sense` toggle off \((also possible remotely) over LoRa\)",
                         said("also possible remotely"))),

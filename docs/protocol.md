@@ -46,7 +46,7 @@ Commands, status and remote config writes are acknowledged and retried: the `ret
 the message's lifetime (`cmd_ttl_s` for commands; STATUS: `heartbeat_s` capped at 10 s; config writes: 10 s). The
 gaps double from a 32nd of the lifetime, so a lost frame is retried quickly, but never beyond an even share of
 what's left, so the later resends come evenly up to just before the end: at 10 s and the default 8 retries about
-0.3, 0.9, 2.2, then every ~1.5 s to 9.7 s (with 5 retries, as before 0.13.7: 0.3, 0.9, 2.2, 4.7 and 9.7 s). A
+0.3, 0.9, 2.2, 3.7, 5.2, 6.7, 8.2 and 9.7 s; with 5 retries, as before 0.13.7, about 0.3, 0.9, 2.2, 4.7 and 9.7 s. A
 command still has four sends after a 5 s outage and two after 8 s, and is dropped, never fired late, after
 `cmd_ttl_s`. Duplicate commands are detected by their command id and not re-pulsed. A message still waiting when the peer
 answers a HELLO is renumbered, and if the peer had already taken it (its ACK lost) the resend is taken as new: every

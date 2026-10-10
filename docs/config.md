@@ -39,7 +39,7 @@ tab). **What it does** is the Config tab's help text.
 
 | Setting | Id | Range | Default | Applies | What it does |
 |---|---|---|---|---|---|
-| `retries` | 9 | 0–10 | 5 | at once, remote | Resends of an unacknowledged message, spread over its lifetime. Raise it on a lossy link; lower it to keep the channel quieter. |
+| `retries` | 9 | 0–10 | 8 | at once, remote | Resends of an unacknowledged message, spread over its lifetime. Raise it on a lossy link; lower it to keep the channel quieter. |
 | `heartbeat_s` | 10 | 5–3600 | 30 | at once, remote | Gate: how often it reports status when nothing changes. Shorter spots a dead link sooner but uses more airtime. The house waits at least 2.5 heartbeats before calling the link lost. |
 | `link_timeout_s` | 11 | 15–10800 | 100 | at once, remote | House: silence from the gate this long = link lost (the contact sensor then reads open). Raise it if short dropouts cause false alarms; it is never shorter than 2.5 gate heartbeats. |
 | `cmd_ttl_s` | 12 | 2–120 | 10 | at once | House: how long a gate command keeps being retried before it is dropped (never fired late). Raise it if commands give up during short dropouts; lower it so a stale command isn’t delivered seconds later. |

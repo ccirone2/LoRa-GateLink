@@ -35,7 +35,7 @@
   ],
   "params": {
     "role": 0, "net_id": 66, "freq_hz": 915000000, "sf": 9, "bw_hz": 500000, "cr": 5, "tx_power": 17, "sync_word": 18,
-    "retries": 5, "heartbeat_s": 30, "link_timeout_s": 100, "cmd_ttl_s": 10, "debounce_ms": 50, "in1_invert": 0,
+    "retries": 8, "heartbeat_s": 30, "link_timeout_s": 100, "cmd_ttl_s": 10, "debounce_ms": 50, "in1_invert": 0,
     "in2_invert": 0, "pulse_ms": 500, "travel_timeout_s": 60, "ctrl_sync": 1, "sync_window_ms": 3000, "resync_ms": 1000,
     "mismatch_timeout_s": 75, "sensor_invert": 0, "linkloss_open": 1, "in3_invert": 0, "in4_invert": 0, "power_sense": 1,
     "ctrl_power_sense": 1, "ctrl_confirm_ms": 500, "ctrl_settle_ms": 10000, "ctrl_power_pmic": 1, "uart_console": 0

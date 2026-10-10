@@ -1249,18 +1249,12 @@ TEST(robustness_quiet_20_days_then_gate_reboot_relinks) {
 }
 
 // [wrap-safe] [restarts]
-XFAIL_TEST(robustness_quiet_26_days_then_house_reboot_relinks,
-           "link.cpp: helloKnownAt/helloOtherAt (HELLO_ANSWER_GAP_MS) are compared with signed elapsed() and never "
-           "capped: 2^31 ms (24.9 days) after the gate last answered a HELLO from an unverified session it drops every "
-           "such HELLO as answered <1 s ago, until the stamp's age wraps at 49.7 days; a house rebooting in that window "
-           "can't relink (sensor failed open, no commands)") {
+TEST(robustness_quiet_26_days_then_house_reboot_relinks) {
   relinkAfterQuiet(true, 26);
 }
 
 // [wrap-safe] [restarts]
-XFAIL_TEST(robustness_quiet_26_days_then_gate_reboot_relinks,
-           "link.cpp: the same stale helloOtherAt on the house: 24.9-49.7 days after it last answered an unverified "
-           "session's HELLO, a rebooted gate's HELLOs are all dropped, so the gate never verifies and never reports") {
+TEST(robustness_quiet_26_days_then_gate_reboot_relinks) {
   relinkAfterQuiet(false, 26);
 }
 

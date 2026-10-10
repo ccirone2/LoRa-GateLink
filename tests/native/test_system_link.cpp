@@ -36,25 +36,48 @@ TEST(link_command_gets_through_a_neighbour_sending_every_100ms) {
   CHECK_EQ(w.house.count("cmd_dropped"), 0);
 }
 
-// [busy-channel] The gate's status reports keep getting through a busy neighbour too. A frame every ~125 ms leaves
-// ~84 ms gaps: room for a STATUS (47 bytes, ~77 ms on air), but the backoff (73..106 ms after the last frame heard)
-// started it too late in the gap, so every one collided and the house lost the link (timeout 100 s). Now it starts
-// as a gap opens. (Gaps shorter than our frames are jamming: then the house losing the link, and failing safe, is
-// right.)
-TEST(link_stays_up_through_ten_minutes_of_neighbour_traffic) {
-  World w;
-  w.commission();
-  uint32_t next = w.now, until = w.now + 600000;
-  while ((int32_t)(w.now - until) < 0) {
-    if ((int32_t)(w.now - next) >= 0) {
-      w.airSend(neighbourFrame());
-      next = w.now + 120 + (w.now % 3) * 5;  // 120..130 ms apart
+// [busy-channel] The gate's status reports keep getting through a busy neighbour too. A frame every 130..140 ms
+// leaves 89..99 ms gaps: room for a STATUS (47 bytes, ~77 ms on air) sent within a few ms of a gap opening, but the
+// backoff (73..106 ms after the last frame heard) started it too late in the gap, so every one collided and the house
+// lost the link (timeout 100 s). Now it starts as a gap opens. Three phases of the neighbour against our boot, so it
+// can't pass by alignment luck. (Gaps not longer than our frames plus the few ms we take to notice one are jamming:
+// 120 ms apart leaves 79 ms, and then the house losing the link, and failing safe, is right.) And no frame of ours
+// starts while a neighbour's is on the air and detectable (6 ms in at SF9/500 kHz): the busy cap once let one go
+// straight into it, kept from an earlier frame.
+TEST(link_stays_up_through_five_minutes_of_neighbour_traffic) {
+  for (uint32_t phase : { 0u, 37u, 71u }) {
+    World w;
+    w.commission();
+    uint32_t next = w.now + phase, until = w.now + 300000, checked = w.now;
+    int intoBusy = 0;
+    auto checkAir = [&] {  // our frames since the last look, against the neighbour's on the air (the last minute's)
+      for (const AirFrame &ours : w.air) {
+        if (ours.from < 0 || (int32_t)(ours.start - checked) <= 0) continue;
+        for (const AirFrame &n : w.air)
+          if (n.from < 0 && (int32_t)(ours.start - (n.start + 6)) >= 0 && (int32_t)(ours.start - n.end) < 0) {
+            intoBusy++;
+            w.trace.add(ours.start, std::string(ours.from == w.house.idx ? "house" : "gate") + " frame type " +
+                                        std::to_string(ours.type()) + " sent into a neighbour's (" +
+                                        std::to_string(n.start) + ".." + std::to_string(n.end) + ")");
+          }
+      }
+      checked = w.now;
+    };
+    while ((int32_t)(w.now - until) < 0) {
+      if ((int32_t)(w.now - next) >= 0) {
+        w.airSend(neighbourFrame());
+        next = w.now + 130 + (w.now % 3) * 5;  // 130..140 ms apart
+      }
+      w.step();
+      if (w.now % 1000 == 0) checkAir();
     }
-    w.step();
+    checkAir();
+    CHECK_EQ(intoBusy, 0);
+    CHECK_EQ(w.house.count("link_down"), 0);
+    CHECK(w.houseLinkUp());
+    CHECK(w.sensorClosed());
+    CHECK(w.gate.count("lbt_forced") >= 1);  // the gaps were too short for the backoff: the cap is what got through
   }
-  CHECK_EQ(w.house.count("link_down"), 0);
-  CHECK(w.houseLinkUp());
-  CHECK(w.sensorClosed());
 }
 
 // [outage] A five-second outage as the user opens, then a lossy channel that loses the first command frame after it

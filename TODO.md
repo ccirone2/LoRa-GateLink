@@ -41,8 +41,6 @@ once its fix is merged and record it in the pull request.
   `gate_relays_second_relay_test_mid_pulse_keeps_its_ms`; XFAIL). Two OPENs ~200 ms apart hold K1 for 738 ms. Don't
   restart a running pulse (ACK the command as done; refuse the test `busy`). The fuzzer measures a re-pulsed relay from its latest pulse until then
   (`GATELINK_FUZZ_STRICT_PULSE=1` for the strict check).
-- [ ] **HELLO answer stamps go stale after 24.9 days** (`robustness_quiet_26_days_then_*_reboot_relinks`; XFAIL): fixed
-  on the link-robustness branch (0.13.7), which flips these tests.
 - [ ] **The boot counter sticks at 1 once a slot reads 0xFFFFFFFD or more.** `configCountBoot` returns the largest
   slot value + 1 and maps 0xFFFFFFFF to 1, but the large slot stays (the sector holding the largest value is never
   erased), so every later boot counts 1 again. A slot can read that high if programming it was cut short (a cut

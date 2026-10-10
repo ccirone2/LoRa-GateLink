@@ -22,9 +22,10 @@
 
 // Listen-before-talk state of one frame waiting to go (clearToSend).
 struct Lbt {
-  uint32_t busySince;  // channel busy since (0 = not waiting on it)
+  uint32_t busySince;  // channel busy without a break since (0 = it read clear last time)
   uint32_t backoff;    // this frame's gap after the last air activity (0 = not drawn yet)
   uint32_t waitSince;  // first held back (0 = not waiting): past waitCapMs() the gaps no longer hold it
+  bool deferred;       // counted in lbtDefers
 };
 
 struct PendingSlot {
@@ -156,7 +157,8 @@ static bool isResponse(uint8_t type) {
 // waits out the response slot plus a random backoff drawn once per frame, by which time a response or the
 // other side's new frame is detectable. On a quiet channel neither waits.
 // Then hold a frame while the peer's frame is on the air (or one waits unread). A channel that never
-// clears (noise read as a signal) must not mute the board: after twice the longest frame it is sent anyway.
+// clears (noise read as a signal) must not mute the board: busy without a break for twice the longest frame, it is
+// sent anyway.
 // The gaps count from the last frame heard, any frame: frames arriving more often than the backoff (a neighbour's
 // LoRa on our channel and sync word, or someone replaying ours) would hold new frames off for good. So a frame held
 // back longer than waitCapMs() stops waiting for the gaps: it goes as soon as a frame heard ends (the gap after it
@@ -193,11 +195,18 @@ static bool clearToSend(Lbt &l, uint8_t type) {
   }
   int32_t gap = isResponse(type) ? TURNAROUND_MS : (int32_t)l.backoff;  // let the peer get back into RX, or answer
   bool early = quiet < gap;  // only the cap lets it go now
+  // The busy cap is for a channel that stays busy: once it reads clear, a later busy spell starts over. (Kept from
+  // an earlier frame, it let a send go straight into the next frame heard: a neighbour's every 135 ms.)
+  bool busy = radioChannelBusy();
+  if (!busy) l.busySince = 0;
   if (early && !(capped && quiet <= CAPPED_SLOT_MS)) return false;
-  if (!radioChannelBusy()) return sendNow(l, type, early, now - l.waitSince);
+  if (!busy) return sendNow(l, type, early, now - l.waitSince);
   if (!l.busySince) {
     l.busySince = now | 1;
-    stats.lbtDefers++;
+    if (!l.deferred) {  // counted once per frame
+      l.deferred = true;
+      stats.lbtDefers++;
+    }
     return false;
   }
   uint32_t waited = now - l.busySince;

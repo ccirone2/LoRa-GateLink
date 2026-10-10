@@ -1886,5 +1886,36 @@
     "replace": "  syncUntil = until;"
    }
   ]
+ },
+ {
+  "name": "link_m1_busy_cap_not_restarted_by_a_clear_reading",
+  "invariant": "busy-channel",
+  "why": "clearToSend keeps busySince from an earlier busy reading after the channel reads clear, so the next busy reading forces a frame at once, into a neighbour's frame (found 2026-10-10 by link_stays_up_through_five_minutes_of_neighbour_traffic)",
+  "killed_by": [
+   "link_stays_up_through_five_minutes_of_neighbour_traffic"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "  if (!busy) l.busySince = 0;\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "link_m2_backoff_not_capped",
+  "invariant": "busy-channel",
+  "why": "a frame held back past waitCapMs() still waits for its full backoff after the last frame heard, so frames heard more often than the backoff hold commands off until their TTL runs out",
+  "killed_by": [
+   "link_command_gets_through_a_neighbour_sending_every_100ms",
+   "link_stays_up_through_five_minutes_of_neighbour_traffic"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "  if (early && !(capped && quiet <= CAPPED_SLOT_MS)) return false;\n",
+    "replace": "  if (early) return false;\n"
+   }
+  ]
  }
 ]

@@ -188,14 +188,19 @@ def test_replayed_hello_flood_answered_once_a_second(rig):
     rig.allow_counters("gate")
     _restart_gate_link(rig)
     tx0 = rig.house.status()["link"]["tx"]
+    resent0 = rig.gate.status()["link"]["retries"]
     m = rig.mark()
     for _ in range(15):  # old-session HELLOs about every 100 ms for 1.5 s
         rig.gate.request("debug.replay", hello=True)
         time.sleep(0.1)
     time.sleep(0.5)
     tx = rig.house.status()["link"]["tx"] - tx0
-    # 2 HELLO_ACKs (1.5 s at one a second), the house's own challenge, and a heartbeat's ACK or two.
-    assert tx <= 6, f"the house sent {tx} frames during the flood: replayed HELLOs aren't rate-limited"
+    resent = rig.gate.status()["link"]["retries"] - resent0
+    # 2 HELLO_ACKs (1.5 s at one a second), the house's own challenge, and a heartbeat's ACK or two; plus an ACK for
+    # each STATUS the gate resent meanwhile (busy sending the replays, it can miss the house's ACK, and its first
+    # resend comes after TTL/32). Unlimited answers would be about one per replay.
+    assert tx <= 6 + resent, (f"the house sent {tx} frames during the flood ({resent} STATUS resends to ACK): "
+                              "replayed HELLOs aren't rate-limited")
     st = rig.house.status()
     assert st["link_up"] and st["gate"] == "closed"
     rig.expect_no("house", "cmd_hold", since=m)

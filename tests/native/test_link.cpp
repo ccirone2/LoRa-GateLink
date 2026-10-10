@@ -531,3 +531,68 @@ TEST(throttled_rechallenge_is_sent_later_not_forgotten) {
   CHECK_EQ(s.sent(s.house, MSG_HELLO).size(), hellos + 1);  // held back by the HELLO interval
   CHECK(s.runUntil([&] { return s.sent(s.house, MSG_HELLO).size() == hellos + 2; }, 5000));
 }
+
+// --- long uptimes: stamps that sit unused for 2^31 ms (~24.9 days) read as in the future under elapsed() ---------
+
+// Runs the clock on by `days` in hour steps, polling both nodes once per step (nothing is on the air meanwhile).
+static void quietDays(Sim &s, int days) {
+  for (int h = 0; h < days * 24; h++) s.step(3600000);
+}
+
+TEST(peer_restart_after_25_quiet_days_verifies_again) {
+  // The house last answered a HELLO from another session at the first handshake. 25 days on, that stamp read as
+  // recent, so the restarted gate's HELLOs were ignored for another ~25 days: link down, sensor open.
+  Sim s;
+  CHECK(s.handshake());
+  quietDays(s, 26);
+  s.gate.begin();
+  CHECK(s.runUntil([&] { return s.house.verified() && s.gate.verified() && s.house.stats().sessions == 2; }, 15000));
+}
+
+TEST(house_restart_after_25_quiet_days_verifies_again) {
+  Sim s;
+  CHECK(s.handshake());
+  quietDays(s, 26);
+  s.house.begin();
+  CHECK(s.runUntil([&] { return s.house.verified() && s.gate.verified() && s.gate.stats().sessions == 2; }, 15000));
+}
+
+TEST(a_command_goes_out_after_25_quiet_days) {
+  // Nothing heard or sent for 25 days: the last air activity read as in the future, and listen-before-talk held
+  // every frame (the house's command, its HELLOs) until the clock wrapped round at ~49.7 days.
+  Sim s;
+  CHECK(s.handshake());
+  quietDays(s, 26);
+  s.house.sendReliable(SLOT_CMD, MSG_CMD, CMD_OPEN, 10000);
+  CHECK(s.runUntil([&] { return !s.house.pending(SLOT_CMD); }, 3000));
+  CHECK(s.house.acks.back().acked);
+  CHECK_EQ(s.gate.rxCount(MSG_CMD), 1);
+  CHECK_EQ(s.house.stats().lbtForced, 0);  // a quiet channel: nothing to force
+}
+
+TEST(an_answer_to_a_25_day_old_challenge_is_rejected) {
+  // A challenge left unanswered (its HELLO_ACK withheld) and an answer recorded then, played back 25 days later:
+  // the age check read the old HELLO as recent and accepted it.
+  Sim s;
+  CHECK(s.handshake());
+  Bytes oldHello = last(s.sent(s.gate, MSG_HELLO))->b;
+  s.gate.begin();
+  CHECK(s.runUntil([&] { return s.gate.verified() && s.house.stats().sessions == 2; }, 10000));
+  s.run(1500);
+  Bytes recorded;
+  s.drop = [&](const AirFrame &f) {
+    if (f.from != 1 || f.type() != MSG_HELLO_ACK || !recorded.empty()) return false;
+    recorded = f.b;
+    return true;
+  };
+  s.inject(s.house, oldHello);  // the house challenges the verified gate; its answer is recorded, not delivered
+  CHECK(s.runUntil([&] { return !recorded.empty(); }, 3000));
+  s.drop = [](const AirFrame &) { return true; };  // and nothing else gets through: the challenge stays open
+  s.run(20000);
+  quietDays(s, 26);
+  uint32_t sessions = s.house.stats().sessions;
+  s.inject(s.house, recorded);
+  s.run(200);
+  CHECK_EQ(s.house.stats().sessions, sessions);
+  CHECK_EQ(s.house.count(EV_SESSION), 2);
+}

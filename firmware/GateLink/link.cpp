@@ -458,7 +458,9 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
     // on too. Answering costs airtime and renumbers our pending frames: do it at most once a second per kind.
     bool known = peerSession != 0 && session == peerSession;
     uint32_t &answeredAt = known ? helloKnownAt : helloOtherAt;
-    if (answeredAt && !elapsed(now, answeredAt, HELLO_ANSWER_GAP_MS)) return;
+    // Unsigned: a stamp left unused for 2^31 ms (~24.9 days of a steady link) would read as in the future with
+    // elapsed(), and a restarted peer's HELLOs would be ignored for weeks.
+    if (answeredAt && now - answeredAt < HELLO_ANSWER_GAP_MS) return;
     answeredAt = now | 1;
     // A new session after a verified one: the peer restarted, and with it went its ACK memo and its record of the
     // last command, so a command still waiting for an ACK may already have run there (the ACK lost to the reset).
@@ -482,7 +484,7 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
     // it: an answer recorded back then (and kept from us) mustn't count later. Sending a HELLO already replaces a
     // challenge over CHALLENGE_LIFE_MS old, and holding a command sends one at once; this covers the rest.
     if (plen < 4 || challenge == 0 || getU32(payload) != challenge) return;
-    if (elapsed(now, lastHelloAt, CHALLENGE_LIFE_MS)) return;
+    if (now - lastHelloAt >= CHALLENGE_LIFE_MS) return;  // unsigned, as above: an old HELLO never reads as recent
     challenge = 0;
     stats.lastRxAt = now;
     stats.lastRssi = rssi;
@@ -564,6 +566,9 @@ void linkPoll(uint32_t now) {
   }
   if (muteUntil && elapsed(now, muteUntil, 0)) muteUntil = 0;
   if (n && !muteUntil) handleFrame(buf, n, rssi, snr, now);
+  // The same for the last air activity: after 2^31 ms of silence it would read as just now for the next 2^31 ms, and
+  // listen-before-talk would hold every frame. Kept at most RX_AGE_CAP_MS old.
+  if (elapsed(now, lastAirAt, RX_AGE_CAP_MS)) lastAirAt = now - RX_AGE_CAP_MS;
   // Ages are signed (elapsed()): after 2^31 ms of silence lastRxAt would read as fresh again and the link as up
   // (house K2 no longer failing open). Keep it at most RX_AGE_CAP_MS old; status age_ms tops out there.
   if (stats.lastRxAt && elapsed(now, stats.lastRxAt, RX_AGE_CAP_MS)) {

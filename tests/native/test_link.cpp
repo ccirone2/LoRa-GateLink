@@ -263,10 +263,24 @@ static std::vector<uint32_t> retryOffsets(Sim &s, uint32_t ttl, uint32_t *gaveUp
   return out;
 }
 
-TEST(retries_double_and_span_the_ttl) {
-  // cmd_ttl_s 10, retries 5: resends about 0.3, 0.9, 2.2, 4.7 and 9.7 s after the first (gaps ttl >> 5..1, less
+// The resend schedule retryDelay() aims at: gaps doubling from TTL/32, but never more than an even share of what
+// is left until the last resend's deadline (TTL - TTL/32), so the `retries` resends end just before the TTL.
+static std::vector<double> nominalOffsets(double ttl, int retries) {
+  double g0 = ttl / 32, deadline = ttl - g0, t = 0;
+  std::vector<double> out = { 0 };
+  for (int n = 0; n < retries; n++) {
+    double even = (deadline - t) / (retries - n), gap = g0 * (1 << n);
+    t += gap < even ? gap : even;
+    out.push_back(t);
+  }
+  return out;
+}
+
+TEST(retries_with_5_keep_the_doubling_schedule) {
+  // retries 5, cmd_ttl_s 10: resends about 0.3, 0.9, 2.2, 4.7 and 9.7 s after the first (gaps TTL/32 doubling; less
   // up to 1/8 jitter, plus the frame's airtime and the listen-before-talk backoff), then a give-up at the TTL.
   Sim s;
+  s.house.cfg.retries = 5;
   CHECK(s.handshake());
   s.run(500);
   uint32_t gaveUp;
@@ -281,6 +295,28 @@ TEST(retries_double_and_span_the_ttl) {
   CHECK(t[5] <= 10000);
   CHECK_IN(gaveUp, 10000, 10010);
   CHECK(!s.house.acks.back().acked);
+  CHECK_EQ(s.house.count(EV_TX_GIVEUP), 1);
+}
+
+TEST(retries_double_then_spread_evenly_to_the_ttl) {
+  // The defaults (retries 8, cmd_ttl_s 10): the gaps double from 0.3 s until they reach an even share of what's left,
+  // about 0.3, 0.9, 2.2, then every ~1.5 s to 9.7 s, so a command still has several sends after a mid-TTL outage.
+  Sim s;
+  CHECK_EQ(s.house.cfg.retries, 8);
+  CHECK(s.handshake());
+  s.run(500);
+  uint32_t gaveUp;
+  std::vector<uint32_t> t = retryOffsets(s, 10000, &gaveUp);
+  std::vector<double> want = nominalOffsets(10000, 8);
+  CHECK_EQ(t.size(), want.size());
+  for (size_t i = 1; i < t.size(); i++) {
+    // Jitter shortens a gap by up to 1/8; airtime and backoff lengthen it. The even share re-plans from the actual
+    // time each round, so the drift doesn't add up.
+    CHECK_IN(t[i], want[i] - (want[i] - want[i - 1]) / 8 - 50, want[i] + 300);
+    if (i > 1) CHECK(t[i] - t[i - 1] <= 2000);  // no long gap left to swallow an outage
+  }
+  CHECK(t.back() <= 10000);
+  CHECK_IN(gaveUp, 10000, 10010);
   CHECK_EQ(s.house.count(EV_TX_GIVEUP), 1);
 }
 
@@ -302,7 +338,44 @@ TEST(command_outage_coverage) {
     for (int i = 0; i < left; i++) p10 *= 0.1, p30 *= 0.3;
     printf("      %4.1f s   %d           %5.1f %% / %5.1f %%\n", outage / 1000.0, left, 100 * (1 - p10), 100 * (1 - p30));
     if (outage < 9500) CHECK(left >= 1);  // a clean channel after the outage still delivers
+    if (outage <= 5000) CHECK(left >= 4);  // TODO.md item: one lost frame after a ~5 s outage used to drop it
+    else if (outage <= 8000) CHECK(left >= 2);
   }
+}
+
+TEST(frames_heard_more_often_than_the_backoff_do_not_starve_new_frames) {
+  // Every frame heard restarts the turnaround and the new-frame backoff (up to ~106 ms at SF9/500 kHz), so frames
+  // heard every 60 ms (a neighbour's LoRa on our channel and sync word, or someone replaying) held a command off until
+  // its TTL ran out. Past the wait cap a frame skips the gaps and only a channel that reads busy holds it.
+  Sim s;
+  CHECK(s.handshake());
+  s.run(2000);
+  Bytes foreign = last(s.sent(s.gate, MSG_HELLO_ACK))->b;
+  foreign[2] ^= 0x01;  // another network: dropped on its header, but heard
+  s.house.sendReliable(SLOT_CMD, MSG_CMD, CMD_OPEN, 10000);
+  for (int i = 0; i < 100 && s.house.pending(SLOT_CMD); i++) {
+    s.inject(s.house, foreign);
+    s.run(60);
+  }
+  CHECK(!s.house.pending(SLOT_CMD));
+  CHECK(s.house.acks.back().acked);
+  CHECK(s.house.acks.back().t - s.sent(s.house, MSG_CMD).front()->start < 2000);
+  CHECK_EQ(s.gate.rxCount(MSG_CMD), 1);
+  CHECK(s.house.stats().lbtForced >= 1);
+  CHECK(s.house.count(EV_LBT_FORCED) >= 1);
+}
+
+TEST(on_a_quiet_channel_nothing_is_forced) {
+  // The cap only matters when frames keep arriving: normal traffic never reaches it.
+  Sim s;
+  CHECK(s.handshake());
+  for (int i = 0; i < 20; i++) {
+    s.house.sendReliable(SLOT_CMD, MSG_CMD, { (uint8_t)i, 0, 1 }, 10000);
+    s.gate.send(MSG_PING, { (uint8_t)i, 0 });
+    s.run(700);
+  }
+  CHECK_EQ(s.house.stats().lbtForced + s.gate.stats().lbtForced, 0);
+  CHECK_EQ(s.gate.rxCount(MSG_CMD), 20);
 }
 
 TEST(command_delivered_after_a_long_outage) {
@@ -457,4 +530,69 @@ TEST(throttled_rechallenge_is_sent_later_not_forgotten) {
   s.run(200);
   CHECK_EQ(s.sent(s.house, MSG_HELLO).size(), hellos + 1);  // held back by the HELLO interval
   CHECK(s.runUntil([&] { return s.sent(s.house, MSG_HELLO).size() == hellos + 2; }, 5000));
+}
+
+// --- long uptimes: stamps that sit unused for 2^31 ms (~24.9 days) read as in the future under elapsed() ---------
+
+// Runs the clock on by `days` in hour steps, polling both nodes once per step (nothing is on the air meanwhile).
+static void quietDays(Sim &s, int days) {
+  for (int h = 0; h < days * 24; h++) s.step(3600000);
+}
+
+TEST(peer_restart_after_25_quiet_days_verifies_again) {
+  // The house last answered a HELLO from another session at the first handshake. 25 days on, that stamp read as
+  // recent, so the restarted gate's HELLOs were ignored for another ~25 days: link down, sensor open.
+  Sim s;
+  CHECK(s.handshake());
+  quietDays(s, 26);
+  s.gate.begin();
+  CHECK(s.runUntil([&] { return s.house.verified() && s.gate.verified() && s.house.stats().sessions == 2; }, 15000));
+}
+
+TEST(house_restart_after_25_quiet_days_verifies_again) {
+  Sim s;
+  CHECK(s.handshake());
+  quietDays(s, 26);
+  s.house.begin();
+  CHECK(s.runUntil([&] { return s.house.verified() && s.gate.verified() && s.gate.stats().sessions == 2; }, 15000));
+}
+
+TEST(a_command_goes_out_after_25_quiet_days) {
+  // Nothing heard or sent for 25 days: the last air activity read as in the future, and listen-before-talk held
+  // every frame (the house's command, its HELLOs) until the clock wrapped round at ~49.7 days.
+  Sim s;
+  CHECK(s.handshake());
+  quietDays(s, 26);
+  s.house.sendReliable(SLOT_CMD, MSG_CMD, CMD_OPEN, 10000);
+  CHECK(s.runUntil([&] { return !s.house.pending(SLOT_CMD); }, 3000));
+  CHECK(s.house.acks.back().acked);
+  CHECK_EQ(s.gate.rxCount(MSG_CMD), 1);
+  CHECK_EQ(s.house.stats().lbtForced, 0);  // a quiet channel: nothing to force
+}
+
+TEST(an_answer_to_a_25_day_old_challenge_is_rejected) {
+  // A challenge left unanswered (its HELLO_ACK withheld) and an answer recorded then, played back 25 days later:
+  // the age check read the old HELLO as recent and accepted it.
+  Sim s;
+  CHECK(s.handshake());
+  Bytes oldHello = last(s.sent(s.gate, MSG_HELLO))->b;
+  s.gate.begin();
+  CHECK(s.runUntil([&] { return s.gate.verified() && s.house.stats().sessions == 2; }, 10000));
+  s.run(1500);
+  Bytes recorded;
+  s.drop = [&](const AirFrame &f) {
+    if (f.from != 1 || f.type() != MSG_HELLO_ACK || !recorded.empty()) return false;
+    recorded = f.b;
+    return true;
+  };
+  s.inject(s.house, oldHello);  // the house challenges the verified gate; its answer is recorded, not delivered
+  CHECK(s.runUntil([&] { return !recorded.empty(); }, 3000));
+  s.drop = [](const AirFrame &) { return true; };  // and nothing else gets through: the challenge stays open
+  s.run(20000);
+  quietDays(s, 26);
+  uint32_t sessions = s.house.stats().sessions;
+  s.inject(s.house, recorded);
+  s.run(200);
+  CHECK_EQ(s.house.stats().sessions, sessions);
+  CHECK_EQ(s.house.count(EV_SESSION), 2);
 }

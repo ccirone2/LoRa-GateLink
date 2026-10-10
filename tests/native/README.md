@@ -128,10 +128,11 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `pull-down` | Inputs are pulled down, active high: a dead opto or cut wire reads inactive | `robustness` |
 | `restarts` | Boards, controller and opener restarting in any order recover with no command and no false closed | `robustness` |
 | `chaos` | Seeded random sequences of everything at once, every monitor on | `robustness` |
+| `busy-channel` | Listen-before-talk: frames get through a busy neighbour's gaps, and never start into a frame heard | `link` |
 
 ## Mutation testing (`mutations.json`, `tools/mutate.py`)
 
-A test that can't fail proves nothing. `mutations.json` lists 110 ways to break the invariants above, each an exact
+A test that can't fail proves nothing. `mutations.json` lists 113 ways to break the invariants above, each an exact
 text edit to the firmware (`find` must occur once) with the invariant it breaks, why, and the tests that killed it
 (`killed_by`). `tools/mutate.py` applies each to a scratch copy of `firmware/GateLink`, rebuilds the host tests
 against it (`make FW=`) and runs its `killed_by` tests, then, if they all pass, the whole suite: a mutation is

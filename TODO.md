@@ -9,22 +9,6 @@ once its fix is merged and record it in the pull request.
 
 ## Firmware
 
-- [ ] **Commands don't survive outages longer than ~4.7 s well.** Retries are spread over `cmd_ttl_s` with
-  doubling gaps (about 0.3, 0.9, 2.2, 4.7 and 9.7 s at the defaults), so after a ~4.7 s outage only the last
-  retry is left and one lost frame drops the command. Decide whether to raise the default `retries` or change
-  the spacing once the install-site RF numbers are in. The host test `command_outage_coverage` (`tests/native`)
-  prints the numbers for the defaults. Sends left after an outage that starts as the command is queued: 6
-  without one, 4 up to ~1 s, 3 up to ~2 s, 2 up to ~4.5 s, and 1 from ~5 s up to the TTL. At 30 % frame loss
-  after the outage the command gets through 97 %, 91 % and 70 % of the time with 3, 2 and 1 sends left. Change
-  `retries`/TTL in the test to compare alternatives.
-- [ ] **Frames heard more often than the new-frame backoff hold our new frames off for good.** Every frame
-  received restarts the listen-before-talk gap (`lastAirAt` in `handleFrame`, before any check, so another
-  net_id's frames count too). A new frame waits a backoff of up to ~106 ms at SF9/500 kHz, drawn once and kept
-  until it's sent. A frame arriving every ~100 ms therefore keeps every slot and queued frame waiting until its TTL
-  runs out, and the forced send (`lbt_forced`) only covers a channel that reads busy, not this. Found with the
-  host tests (a replayed HELLO every 100 ms). It needs a very busy channel (a neighbour's LoRa traffic on our
-  frequency, SF and sync word, or someone replaying frames), close to jamming. Possible fix: count only our
-  peer's authenticated frames for the backoff, or cap the total wait as for a busy channel.
 - [ ] **A warm reset of the house blips its outputs for at least 0.5 s.** On a watchdog, crash, reset-button or
   software reset, K1/K2 drop until the house is back and the gate reports (~1.5 s). With the gate open the
   controller follows K1 off and on (Alarm.com shows it closed for a moment); with it closed the contact sensor
@@ -57,8 +41,6 @@ once its fix is merged and record it in the pull request.
   `gate_relays_second_relay_test_mid_pulse_keeps_its_ms`; XFAIL). Two OPENs ~200 ms apart hold K1 for 738 ms. Don't
   restart a running pulse (ACK the command as done; refuse the test `busy`). The fuzzer measures a re-pulsed relay from its latest pulse until then
   (`GATELINK_FUZZ_STRICT_PULSE=1` for the strict check).
-- [ ] **HELLO answer stamps go stale after 24.9 days** (`robustness_quiet_26_days_then_*_reboot_relinks`; XFAIL): fixed
-  on the link-robustness branch (0.13.7), which flips these tests.
 - [ ] **The boot counter sticks at 1 once a slot reads 0xFFFFFFFD or more.** `configCountBoot` returns the largest
   slot value + 1 and maps 0xFFFFFFFF to 1, but the large slot stays (the sector holding the largest value is never
   erased), so every later boot counts 1 again. A slot can read that high if programming it was cut short (a cut

@@ -20,7 +20,7 @@ PULSE_TOL_MS = 60  # measured pulse vs requested: relay operate/release and loop
 # The rest are the firmware defaults (config.cpp), pinned because scenarios rely on them: the limit-chatter test
 # needs debounce_ms > the GateSim's 30 ms flicker steps, and the waits assume the default windows.
 PROFILE_COMMON = {"heartbeat_s": 5, "link_timeout_s": 15, "travel_timeout_s": 15, "cmd_ttl_s": 10,
-                  "retries": 5, "debounce_ms": 50}
+                  "retries": 8, "debounce_ms": 50}
 # The controller power senses are off: most scenarios fake IN2 (gatelink/controller.py, CtrlPower), and the board's
 # supply sense (ctrl_power_pmic) can't be faked; ctrl_confirm_ms is the IN2-only value those fakes rely on. The power
 # tests turn the real senses on with REAL_CTRL_POWER.
@@ -305,8 +305,10 @@ class Bench:
             for e in self.timeline.logs(n, "radio_fail", since):
                 problems.append(f"{n} radio_fail at {e['t']}s (a={e['a']})")
             for e in self.timeline.logs(n, "lbt_forced", since):
-                # The channel read busy for twice the longest frame: noise taken for a signal, or a stuck modem.
-                self.anomalies.append(f"{self.test_name}: {n} sent type {e['a']} into a channel busy for {e['b']} ms")
+                # Held back past the cap: a channel busy for twice the longest frame (noise taken for a signal, a stuck
+                # modem), or frames heard so often the gaps never opened (a neighbour, a replay flood).
+                self.anomalies.append(f"{self.test_name}: {n} sent type {e['a']} anyway after waiting {e['b']} ms "
+                                      "for the channel")
         try:
             end = self.snapshot()
         except BoardError as e:

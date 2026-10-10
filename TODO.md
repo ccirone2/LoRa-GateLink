@@ -84,8 +84,7 @@ once its fix is merged and record it in the pull request.
 
 - [ ] **Repository settings** (threat model `pages-malicious-firmware`, `release-asset-mutable`,
   `agent-tooling-push-path`; owner's decision). A ruleset on `main` (pull request and CI required, no force push), a
-  protected `v*` tag pattern, immutable releases, build provenance attestations for release binaries, and Pages
-  deploying only after CI has passed on the same commit.
+  protected `v*` tag pattern, immutable releases, and build provenance attestations for release binaries.
 - [ ] **Bench hygiene** (threat model, low). Home Assistant TLS verified by default (`ha-token-tls-off`), Python
   dependencies locked with hashes (`python-deps-unpinned`), a Host check in `tools/bench-wiring/serve.py`
   (`bench-wiring-server`), a content security policy in `web/index.html` and numeric coercion of `hist.get` fields

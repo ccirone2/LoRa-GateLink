@@ -144,8 +144,8 @@ deploy could flash a backdoored image or take the key through the page. Nothing 
 
 | Id | Threat | Sev | Status |
 |---|---|---|---|
-| `pages-malicious-firmware` | A compromised repo or deploy serves a console that flashes a backdoor or steals the key | H | Open: repository rulesets (PRs and CI required on `main`, protected `v*` tags), deploy Pages only after CI passes, immutable releases, build provenance attestations. **Repository settings are the owner's decision** |
-| `actions-tag-pinning` | Workflows use actions by tag or branch (`setup-arduino-cli@v2` is a branch), and arduino-cli is unpinned | M | Open: pin actions by SHA, pin arduino-cli, split the release job's write token (CI hardening) |
+| `pages-malicious-firmware` | A compromised repo or deploy serves a console that flashes a backdoor or steals the key | H | Partly: Pages deploys only after CI passes on `main` (#74). Open: repository rulesets (PRs and CI required on `main`, protected `v*` tags), immutable releases, build provenance attestations. **Repository settings are the owner's decision** |
+| `actions-tag-pinning` | Workflows use actions by tag or branch (`setup-arduino-cli@v2` is a branch), and arduino-cli is unpinned | M | Partly: actions pinned by commit SHA, with Dependabot proposing updates (#74); cloud sessions install arduino-cli by checksum. Open: pin arduino-cli in CI, split the release job's write token |
 | `release-asset-mutable` | A release binary can be replaced, and its `.sha256` shares the same trust root | M | Open: immutable releases, attestations; Pages fails closed without a checksum |
 | `shared-github-io-origin` | The console shares `ccirone2.github.io` (and its Web Serial grants) with the account's other Pages sites | M | **Decision needed**: serve it from its own origin (custom domain or organisation). Until then, Forget the ports after an install visit |
 | `arduino-deps-integrity` | Core and libraries pinned by version, not hash | M | Open: hash lock checked in CI; the dependency routine proposes updates as PRs |

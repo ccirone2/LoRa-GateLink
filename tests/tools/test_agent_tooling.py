@@ -458,3 +458,29 @@ def test_every_stop_item_is_documented():
     doc = (ROOT / "docs/agent-tooling.md").read_text(encoding="utf-8")
     items = set(re.findall(r'Finding\("([\w-]+)"', code))
     assert items == set(re.findall(r"^\| `([\w-]+)` \|", doc, flags=re.M))
+
+
+def fake_docgen(repo, ok):
+    edit(repo, "tools/docgen.py", "import sys\nprint('drift: docs/console.md')\nsys.exit(0)\n" if ok else
+         "import sys\nprint('Docs out of step: `link_ok` names nothing')\nsys.exit(1)\n")
+
+
+def test_docgen_drift_is_asked_at_stop(repo):
+    fake_docgen(repo, ok=False)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "docgen")
+    git(repo, "branch", "-f", "main")  # docgen is part of the base
+    edit(repo, "docs/console.md")
+    [f] = [f for f in hooks.stop_findings(repo) if f.rule == "docgen"]
+    assert "`link_ok` names nothing" in f.message
+    fake_docgen(repo, ok=True)
+    assert "docgen" not in rules(repo)
+
+
+def test_post_edit_runs_docgen_on_a_doc(repo, monkeypatch, capsys):
+    fake_docgen(repo, ok=False)
+    edit(repo, "docs/console.md", "# Console\n")
+    rc, _, err = post_edit(repo, "docs/console.md", monkeypatch, capsys)
+    assert rc == 2 and "tools/docgen.py (after editing docs/console.md)" in err
+    fake_docgen(repo, ok=True)
+    assert post_edit(repo, "docs/console.md", monkeypatch, capsys)[0] == 0

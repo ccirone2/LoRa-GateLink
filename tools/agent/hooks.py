@@ -38,6 +38,9 @@ CONTRACT_FILES = (
     "tools/check_contract.py",
 )
 CONTRACT_DIRS = ("tools/gatelink_client/", "tests/e2e/gatelink/")
+# What tools/docgen.py reads besides the docs themselves.
+DOCGEN_SOURCES = (FW, "web/js/", "tests/e2e/", "tools/release_evidence.py", "tools/bench-wiring/wiring.json",
+                  "tools/docgen.py")
 
 
 # ---- helpers ------------------------------------------------------------------------------------------------
@@ -246,6 +249,14 @@ def check_contract(root, rel):
     return None if r is None or r[0] == 0 else f"tools/check_contract.py (after editing {rel}):\n{tail(r[1])}"
 
 
+def check_docgen(root, rel):
+    script = root / "tools/docgen.py"
+    if not script.exists():
+        return None
+    r = run([sys.executable, str(script)], root)
+    return None if r is None or r[0] == 0 else f"tools/docgen.py (after editing {rel}):\n{tail(r[1])}"
+
+
 def check_json(root, rel):
     try:
         json.loads((root / rel).read_text(encoding="utf-8"))
@@ -312,6 +323,8 @@ def post_edit_checks(rel):
         checks.append(check_routine)
     if is_contract(rel):
         checks.append(check_contract)
+    if rel.endswith(".md"):
+        checks.append(check_docgen)  # a doc edit: does it still agree with the source?
     return checks
 
 
@@ -437,6 +450,14 @@ def stop_findings(root, base=None):
         r = run([sys.executable, str(root / "tools/check_contract.py")], root)
         if r and r[0] != 0:
             out.append(Finding("contract", [r[1]], f"tools/check_contract.py fails:\n{tail(r[1], 15)}"))
+
+    docgen = root / "tools/docgen.py"
+    if docgen.exists() and any(f.startswith(DOCGEN_SOURCES) or f.endswith(".md") for f in changed):
+        r = run([sys.executable, str(docgen)], root)
+        if r and r[0] != 0:
+            out.append(Finding("docgen", [r[1]], (
+                "tools/docgen.py finds the docs out of step with the source (`python tools/docgen.py --write` "
+                f"regenerates the generated tables; fix the rest by hand):\n{tail(r[1], 15)}")))
 
     if FW + "pins.h" in ch:
         missing = [f for f in ("web/js/wiring.js", "docs/hardware.md") if f not in ch]

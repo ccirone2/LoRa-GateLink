@@ -46,8 +46,9 @@ are built from the pull requests since the last tag.
    - STATUS/DIAG wire format (`roles.h`) ↔ `role_house.cpp` / `console.cpp`; both boards need the new firmware.
    - Pins or role behaviour (`pins.h`) ↔ the `WIRING` table in `web/js/wiring.js` ↔ [docs/hardware.md](hardware.md).
    - A new setting: field in `Config` + default + `PARAMS` row with a new, never reused id + group/help text
-     in `web/js/settings.js`. Saved config is stored by param id, so a changed meaning or unit needs a new id; bump
-     `CFG_VERSION` (it only guards the program-flash fallback) if the struct layout changes.
+     in `web/js/settings.js`, then `python tools/docgen.py --write` ([config.md](config.md)). Saved config is
+     stored by param id, so a changed meaning or unit needs a new id; bump `CFG_VERSION` (it only guards the
+     program-flash fallback) if the struct layout changes.
 3. Bump `FW_VERSION` in `firmware/GateLink/config.h` for any firmware change (see Versioning).
 4. Verify:
    ```sh
@@ -55,8 +56,9 @@ are built from the pull requests since the last tag.
    npm ci && npm test         # web console: lint, unit tests, browser tests (tests/web/README.md)
    ruff check tests tools     # pip install ruff==0.16.10 (the version CI pins); rules in ruff.toml
    python tools/check_contract.py   # firmware enums, log events and console commands vs the suite and docs
+   python tools/docgen.py     # reference docs vs the source (--write regenerates the generated tables)
    make -C tests/native       # host unit tests for link.cpp and config.cpp; see tests/native/README.md
-   python -m pytest tests/tools -q   # unit tests for the tools (release_evidence.py, the agent hooks)
+   python -m pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks)
    pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI
@@ -64,13 +66,55 @@ are built from the pull requests since the last tag.
    (`tools/fw_size.py`: 160 KB flash, 24 KB static RAM; raising it is a decision for the pull request), runs the host
    unit tests, lints and tests the web console (ESLint, `node --test`, Playwright), byte-compiles and lints the
    Python (`ruff check tests tools`), runs the tools' unit tests (`tests/tools`), collects the e2e suite (`pytest
-   --collect-only`, which catches import and fixture errors without the bench), fails a pull request that changes
-   the firmware without bumping `FW_VERSION`, and lints the workflows (actionlint, with shellcheck).
+   --collect-only`, which catches import and fixture errors without the bench), checks the docs against the source
+   (`check_contract.py`, `docgen.py`), fails a pull request that changes the firmware without bumping `FW_VERSION`,
+   and lints the workflows (actionlint, with shellcheck).
 6. Merge to `main`. Once CI has passed on `main`, the web console is deployed to GitHub Pages.
 
 CI's actions are pinned by commit SHA and its runners by image (`ubuntu-24.04`); Dependabot
 (`.github/dependabot.yml`) proposes action, npm and Python updates weekly, and the nightly deps-check routine
 covers the Arduino cores and libraries, arduino-cli and ruff.
+
+## Reference docs from source
+
+`tools/docgen.py` keeps the reference docs provably in step with the code (stdlib Python; it reads the web
+console's tables by importing `web/js/settings.js`, `wiring.js` and `logdecode.js` in Node.js):
+
+```sh
+python tools/docgen.py           # check, as CI does: exit 1 listing every drift and how to fix it
+python tools/docgen.py --write   # regenerate the generated sections in place, then check the rest
+```
+
+- **Generated** (between `<!-- docgen:NAME begin -->` and `<!-- docgen:NAME end -->`; edit the source, never the
+  section): [config.md](config.md), every setting with its id, range, default, when it applies and its help text
+  (`PARAMS`, `configDefaults()`, `paramValid()` in `config.cpp`; `GROUPS`, `HELP`, `MUST_MATCH`, `SELECTS` in
+  `web/js/settings.js`; a setting missing from `GROUPS` or `HELP` fails, as the Config tab would hide it); and the
+  message types, ACK results, STATUS and DIAG layouts in [protocol.md](protocol.md) "Wire formats" (`link.h`,
+  `roles.h`). Descriptions `roles.h` lacks are in `ST_MEANING`/`STI_MEANING` in `docgen.py`.
+- **Checked** (hand-written, compared with the source): the status fields `appFillStatus`, `houseStatus` and
+  `gateStatus` write and the console events' fields, against [console.md](console.md), with the names an
+  enumerated field can take; the link history fields (`FIELDS`); each command's arguments (`req["..."]`), the
+  keys its reply carries and whether it is house or gate only, and the commands held while a relay pulses
+  (`blocksLoop()`, also in CLAUDE.md); log events in `log.h` order, `log.cpp` and `logdecode.js` (and against
+  console.md in `check_contract.py`); pins (`pins.h`) against every doc, the bench wiring record and
+  `WIRING`/`IO_LABELS`; the frame layout; the radio settings that must match; the e2e profile's "firmware
+  defaults". Every backticked snake_case name in the docs (`ctrl_confirm_ms`, `link_up`,
+  `test_power_loss_at_rest`) must still be a setting, field, argument, log event, e2e test or release criterion,
+  so a rename can't live on in the prose (`OTHER_NAMES` in `docgen.py` takes any other kind).
+- **Facts:** `FACTS` in `docgen.py` lists the constants and setting defaults the docs quote (`INTERLOCK_MS`,
+  `BOOT_SETTLE_MS`, the watchdog, the radio defaults, toolchain versions, ...). Each reads its value from the
+  source with one regex and finds every quote of it with another, converting units (`s` turns ms into s). Two
+  kinds of quote are checked without an entry: a setting's default ("`setting` (default X)", "`setting`, default
+  on", "`setting` is X by default", "`setting` defaults to X", "the default `setting` of X") against
+  `configDefaults()`, and a time constant next to its name ("`INTERLOCK_MS` (100 ms)", "100 ms (`INTERLOCK_MS`)").
+  When a doc quotes a new value another way, add a fact next to the similar ones:
+
+  ```python
+  D("TXQ_LEN", f"{FW}/link.cpp", Q(PRO, r"queued (\w+) deep"), Q(C, r"wait in a (\d+)-deep queue")),
+  ```
+
+  A space in a doc pattern matches any whitespace, line breaks included; a quote's first group is the value
+  (digits, `0x..`, or a word such as "four"). A reworded doc fails with "no quote of ...": fix the pattern.
 
 ## Versioning
 

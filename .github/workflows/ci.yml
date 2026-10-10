@@ -110,6 +110,10 @@ jobs:
         run: python -m pytest --collect-only -q -m "" tests/e2e
       - name: Firmware, suite and docs agree (enums, log events, console commands)
         run: python tools/check_contract.py
+      # Generated tables current, hand-written reference docs and quoted values in step with the source. Reads the
+      # web console's tables through node (on the runner image).
+      - name: Reference docs from source (tools/docgen.py)
+        run: python tools/docgen.py
       # Every firmware change bumps FW_VERSION (docs/development.md): the stop hook asks, this enforces.
       - name: Firmware changes bump FW_VERSION
         if: github.event_name == 'pull_request'

@@ -82,6 +82,3 @@ once its fix is merged and record it in the pull request.
   file, each with the two-line prompt in its README), and give the cloud environment network access to
   `downloads.arduino.cc` and `github.com` so `tools/agent/cloud_setup.sh` can install the toolchain
   ([docs/agent-tooling.md](docs/agent-tooling.md)). Watch the first week's pull requests and tune the routine files.
-- [ ] **CI, part 2: static analysis, sanitizers, coverage.** Once the host simulation of both boards is merged:
-  cppcheck (`warning,performance,portability` are clean; style noise like `badBitmaskCheck` off), clang-tidy over
-  the host build, the host tests under ASan/UBSan, and gcovr line coverage of the firmware reported per run.

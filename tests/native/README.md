@@ -151,3 +151,17 @@ make -C tests/native run JOBS=4 T=interlock                   # the system tests
 change that moves a mutation's text fails CI until the catalog follows: update its `find`/`replace` to break the same
 rule in the new code, or remove it if the rule went with the change. A new invariant, or a new way to break one that
 tests miss, gets an entry here with a test that kills it.
+
+## Static analysis and coverage
+
+```sh
+make -C tests/native cppcheck              # cppcheck: warning, performance, portability (every firmware file)
+make -C tests/native tidy                  # clang-tidy with firmware/GateLink/.clang-tidy (the host-built files)
+make -C tests/native coverage MIN_LINES=85 # a --coverage build in build-cov, the tests, then gcovr on the firmware
+```
+
+CI's `static` and `coverage` jobs run these. clang-tidy's checks are the bug-finding families (bugprone, the
+analyzer, performance); `.clang-tidy` says which are off and why. Coverage counts the firmware lines and branches the
+host tests run (the fuzzers aside): about 90 % of lines when this was set up, mostly short of it in `console.cpp`
+commands and `history.cpp` paging. A finding to keep on purpose gets an inline suppression with its reason
+(`// cppcheck-suppress id: why`, `// NOLINT(check): why`), never a wider exception.

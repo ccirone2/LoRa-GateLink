@@ -174,6 +174,11 @@ def test_untracked_firmware_file_counts(repo):
     assert "fw-version" in rules(repo)
 
 
+def test_tool_config_in_the_firmware_folder_is_not_a_firmware_change(repo):
+    edit(repo, "firmware/GateLink/.clang-tidy", "Checks: '-*'\n")
+    assert "fw-version" not in rules(repo)
+
+
 def test_console_change_wants_its_docs(repo):
     edit(repo, "firmware/GateLink/console.cpp")
     assert "console-docs" in rules(repo)

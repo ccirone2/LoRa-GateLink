@@ -18,7 +18,7 @@ suite's Python requirements; this routine covers what it can't read, and checks 
    `pip index versions ruff`, and `npm audit`. Read the changelog of anything newer.
 2. **Security first:** an advisory against something we use (npm audit, a library's release notes, GitHub
    advisories) is tonight's subject, whatever else is pending.
-3. **Development tooling Dependabot doesn't cover** (ruff in `ci.yml`, arduino-cli in
+3. **Development tooling Dependabot doesn't cover** (ruff and gcovr in `ci.yml`, arduino-cli in
    `tools/agent/cloud_setup.sh`): bump one per pull request when its checks still pass (`ruff check tests tools`,
    fixing new findings; for arduino-cli, the new release's SHA-256 from its checksums file). Keep exact pins and
    versions at least two weeks old; update `docs/development.md` with them. An open Dependabot pull request with

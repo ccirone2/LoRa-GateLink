@@ -54,7 +54,7 @@ says why the rest doesn't, and the hook doesn't ask the same item again in that 
 
 | Item | Asked when | Settled by a change to |
 |---|---|---|
-| `fw-version` | anything under `firmware/GateLink/` | `FW_VERSION` in `config.h` |
+| `fw-version` | a source under `firmware/GateLink/` (`.cpp`, `.h`, `.ino`) | `FW_VERSION` in `config.h` |
 | `native-tests` | `link.cpp`/`.h`, `config.cpp`/`.h`, `extflash.cpp` | anything under `tests/native/` |
 | `console-docs` | `console.cpp`, `log.cpp`, `log.h`, `roles.h` | `docs/console.md` |
 | `contract` | a console contract file | `tools/check_contract.py` passing |

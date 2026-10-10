@@ -421,7 +421,7 @@ def stop_findings(root, base=None):
     def touched(prefix):
         return any(f.startswith(prefix) for f in ch)
 
-    fw = [f for f in changed if f.startswith(FW)]
+    fw = [f for f in changed if f.startswith(FW) and f.endswith((".cpp", ".h", ".ino"))]  # sources, not tool config
     if fw:
         old = fw_version(show(root, base, FW + "config.h"))
         new_path = root / FW / "config.h"

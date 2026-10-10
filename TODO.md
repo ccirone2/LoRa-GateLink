@@ -36,6 +36,21 @@ once its fix is merged and record it in the pull request.
 
 ## Bench and field tests
 
+- [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
+  - `pulse_ms` isn't in the test profile: `test_reboots.py` assumes 500 ms and `test_options.py` uses the saved
+    value. Add `pulse_ms: 500` to `PROFILE_GATE` (`gatelink/bench.py`) and check pulses against it.
+  - Fixed sleeps that bet on timing: `test_reboots.py` (`sleep(0.2)` to catch the gate in its ~0.5 s bootloader;
+    start from the UART `boot` event or `sim.restart` instead), `test_history.py` (`sleep(62)` against a 60 s
+    bucket; poll until the bucket rolls), and the `sleep(2)`/`sleep(3)` before negative assertions (derive them from
+    the profile).
+  - The checks after every test cover K2 but not K1: add one comparing house K1 with the gate state, allowing for
+    `holdingTravel` and the sync window.
+  - Not covered on the bench: `openSyncWindow` never shortening a window, the `settleUntil` floor, and a controller
+    that toggles on SW edges (a scenario with `in1_invert` would do). The host system tests cover them since the
+    host simulation; keep the bench gap only if a real-hardware angle remains.
+  - `tests/e2e/requirements.txt` has no upper bounds (`pytest>=8`; the conftest relies on
+    `hookimpl(wrapper=True)`). Pin them (see the threat model's bench hygiene item for hashes).
+
 - [ ] **USB serial ports hang after uploads.** On 2026-10-05, twice after an upload every USB serial port on the
   bench (both boards and the FTDI adapter) stopped opening until the USB hub was replugged. Uploading one board at
   a time, and checking the ports between, avoided it since. Try another hub port or the PC's own ports to find the

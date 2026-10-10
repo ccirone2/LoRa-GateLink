@@ -1,5 +1,7 @@
 #include "console.h"
+#include "console_io.h"
 #include "app.h"
+#include "board.h"
 #include "config.h"
 #include "crc32.h"
 #include "extflash.h"
@@ -9,95 +11,35 @@
 #include "radio.h"
 
 #define LINE_MAX 1024  // a config.set with every param fits (a full import after a firmware upload)
-// Second console on Serial1 (uart_console), for bench power tests: a USB-to-UART adapter stays on the PC when the
-// board loses power, so it sees the boot right away. Serial1 writes block once its 256-byte buffer is full (a ~5 KB
-// config.get reply takes ~200 ms at 250 kbaud). Not faster: at 1 Mbaud ~4 % of requests arrived garbled on the
-// bench (bad json), whatever the interrupt priority; at 250 kbaud none did with the board idle.
-#define UART_BAUD 250000
 
 // One console port, with its own request line so bytes from one can't garble a request on the other.
 struct ConsolePort {
-  Stream &io;
-  bool usb;
+  uint8_t id;  // ConsolePortId
   char line[LINE_MAX];
   size_t len;
   bool overflow;
-  // Lines go out whole packets at a time (LineWriter): serialized straight to Serial, every character was its
-  // own USB transfer, and single bytes went missing on the bench (lines like `{"event":"lo",...`). If the host
-  // doesn't take a USB packet within 70 ms, the rest of the line is dropped. The cut line has no newline, so the
-  // next line would run into it and be lost too: start the next one with a newline instead, so the host
-  // discards only the cut line.
+  // If the host doesn't take a USB packet within 70 ms, the rest of the line is dropped (console_io.cpp). The cut
+  // line has no newline, so the next line would run into it and be lost too: start the next one with a newline
+  // instead, so the host discards only the cut line.
   bool lineCut;
   bool held;  // line holds a request that waits for the relays (blocksLoop)
 };
 
-static ConsolePort usbPort = { Serial, true, {}, 0, false, false, false };
-static ConsolePort uartPort = { Serial1, false, {}, 0, false, false, false };
+static ConsolePort usbPort = { CON_USB, {}, 0, false, false, false };
+static ConsolePort uartPort = { CON_UART, {}, 0, false, false, false };
 static bool uartOn = false;
 
-static bool writable(const ConsolePort &p) {
-  return p.usb ? Serial.dtr() : uartOn;  // not Serial's bool operator: it delays 10 ms
-}
-
-// How long a USB packet may wait for the host to take the previous one, as in the SAMD core.
-#define USB_TX_TIMEOUT_MS 70
-
-// The USB data IN endpoint (the bulk IN one). Its BK1RDY bit is set while a packet waits for the host.
-static UsbDeviceEndpoint *usbInEndpoint() {
-  for (int ep = 1; ep < 8; ep++)
-    if (USB->DEVICE.DeviceEndpoint[ep].EPCFG.bit.EPTYPE1 == 3) return &USB->DEVICE.DeviceEndpoint[ep];
-  return nullptr;
-}
-
-// Writes one line to a port in 64-byte pieces, and to USB each only once the host has taken the previous one.
-// Handed a longer write, the core's USBDevice.send() waits between packets for the endpoint's transfer-complete
-// flag, which its USB interrupt also clears (the CDC IN endpoint has no handler, so the interrupt acks all its
-// flags; it runs at every 1 ms start of frame): when the interrupt got there first, send() waited out its 70 ms
-// and dropped the rest of the line. A single packet onto an idle endpoint never waits. BK1RDY is cleared only by
-// the hardware.
-class LineWriter : public Print {
- public:
-  explicit LineWriter(ConsolePort &p) : port(p) {}
-  size_t write(uint8_t c) override { return write(&c, 1); }
-  size_t write(const uint8_t *data, size_t n) override {
-    for (size_t i = 0; i < n; i++) {
-      buf[len++] = data[i];
-      if (len == sizeof(buf)) push();
-    }
+// ArduinoJson writer: serializes straight onto one port's line.
+struct LineWriter {
+  uint8_t port;
+  size_t write(uint8_t c) {
+    conIoLineWrite(port, &c, 1);
+    return 1;
+  }
+  size_t write(const uint8_t *data, size_t n) {
+    conIoLineWrite(port, data, n);
     return n;
   }
-  // Writes what's left; false if any of the line was lost.
-  bool end() {
-    push();
-    return ok;
-  }
-
- private:
-  void push() {
-    if (ok && len) ok = port.usb ? usbPacket() : port.io.write(buf, len) == len;
-    len = 0;
-  }
-  bool usbPacket() {
-    // Once the host has left a packet for USB_TX_TIMEOUT_MS, later ones don't wait until it takes that one (as
-    // in the core), or every line would block the loop that long.
-    static bool stalled = false;
-    UsbDeviceEndpoint *ep = usbInEndpoint();
-    if (!ep) return false;
-    uint32_t t0 = millis();
-    while (ep->EPSTATUS.bit.BK1RDY) {
-      if (stalled || elapsed(millis(), t0, USB_TX_TIMEOUT_MS)) {
-        stalled = true;
-        return false;
-      }
-    }
-    stalled = false;
-    // On a failed send the core returns -1, which Serial.write passes on as a huge count.
-    return Serial.write(buf, len) == len;
-  }
-  ConsolePort &port;
-  uint8_t buf[64];
-  size_t len = 0;
-  bool ok = true;
 };
 
 static uint32_t usbCutLines = 0;
@@ -110,8 +52,8 @@ static void send(JsonDocument &doc, ConsolePort *to = nullptr) {
   bool fits = n < sizeof(out);  // else stream it
   bool serialized = false;
   for (ConsolePort *p : ports) {
-    if ((to && p != to) || !writable(*p)) continue;
-    LineWriter w(*p);
+    if ((to && p != to) || !conIoOpen(p->id)) continue;
+    LineWriter w = { p->id };
     if (p->lineCut) w.write('\n');
     if (!fits) {
       serializeJson(doc, w);
@@ -121,8 +63,8 @@ static void send(JsonDocument &doc, ConsolePort *to = nullptr) {
       w.write((const uint8_t *)out, n);
     }
     w.write('\n');
-    p->lineCut = !w.end();
-    if (p->lineCut && p->usb) usbCutLines++;
+    p->lineCut = !conIoLineEnd(p->id);
+    if (p->lineCut && p->id == CON_USB) usbCutLines++;
   }
 }
 
@@ -177,7 +119,7 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     res["saved_role"] = roleName(cfg.role);
     res["key_set"] = (bool)cfg.key_set;
     res["cfg_store"] = configStoreName();
-    char id[7];
+    char id[9];
     snprintf(id, sizeof(id), "%06lx", (unsigned long)extFlashId());
     res["flash_id"] = id;
     res["boot_count"] = appBootCount();
@@ -287,9 +229,10 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     }
   } else if (!strcmp(cmd, "reboot")) {
     send(res, &from);
-    from.io.flush();
+    conIoFlush(from.id);
     delay(100);
-    NVIC_SystemReset();
+    boardReset();
+    return;  // on the board it never does
   } else if (!strcmp(cmd, "identify")) {
     uint32_t ms = req["ms"] | 6000;
     appIdentify(ms > 60000 ? 60000 : ms);
@@ -313,25 +256,17 @@ static void handle(JsonDocument &req, ConsolePort &from) {
 }
 
 void consoleBegin() {
-  Serial.begin(115200);
+  conIoBegin();
 }
 
 void consoleConfigure() {
   bool on = cfg.uart_console;
   if (on == uartOn) return;
   uartOn = on;
-  if (!on) {
-    Serial1.end();
-    return;
-  }
-  Serial1.begin(UART_BAUD);
+  conIoUart(on);
   // While we were unpowered the adapter could pick up junk (its own TX leaking through our pins): start on a
   // fresh line, so it doesn't swallow the boot event.
-  uartPort.lineCut = true;
-  // Pull RX up, so an unplugged adapter reads as an idle line rather than noise.
-  const PinDescription &rx = g_APinDescription[PIN_SERIAL1_RX];
-  PORT->Group[rx.ulPort].PINCFG[rx.ulPin].bit.PULLEN = 1;
-  PORT->Group[rx.ulPort].OUTSET.reg = 1ul << rx.ulPin;
+  if (on) uartPort.lineCut = true;
 }
 
 // Reply to a request we couldn't parse, with its id if one can be found in the raw text, so the caller gets
@@ -382,8 +317,10 @@ static bool blocksLoop(const char *cmd) {
 // rest waits in the port's buffer (USB holds it back from the host when that's full).
 static void poll(ConsolePort &p) {
   if (p.held && appRelaysPulsing()) return;
-  while (!p.held && p.io.available()) {
-    char c = p.io.read();
+  while (!p.held) {
+    int r = conIoRead(p.id);
+    if (r < 0) break;
+    char c = (char)r;
     if (c == '\r') continue;
     if (c != '\n') {
       if (p.len < LINE_MAX - 1) p.line[p.len++] = c;
@@ -401,7 +338,7 @@ static void poll(ConsolePort &p) {
     JsonDocument req;
     if (crc < 0) {
       sendError(p, p.line, "bad crc");
-    } else if (crc == 0 && !p.usb) {
+    } else if (crc == 0 && p.id != CON_USB) {
       sendError(p, p.line, "crc required");
     } else if (deserializeJson(req, p.line) == DeserializationError::Ok) {
       if (blocksLoop(req["cmd"] | "") && appRelaysPulsing()) return;  // keep it until the pulse is over

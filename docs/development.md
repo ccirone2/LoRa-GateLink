@@ -57,7 +57,7 @@ are built from the pull requests since the last tag.
    ruff check tests tools     # pip install ruff==0.16.10 (the version CI pins); rules in ruff.toml
    python tools/check_contract.py   # firmware enums, log events and console commands vs the suite and docs
    python tools/docgen.py     # reference docs vs the source (--write regenerates the generated tables)
-   make -C tests/native       # host unit tests for link.cpp and config.cpp; see tests/native/README.md
+   make -C tests/native       # host tests: link/config, and both boards' firmware in a simulated site (tests/native/README.md)
    python -m pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks)
    pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```

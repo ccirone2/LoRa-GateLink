@@ -33,6 +33,34 @@ once its fix is merged and record it in the pull request.
   released, before the firmware starts. Remaining options: a bootloader that skips that wait on watchdog/software
   resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
+- [ ] **A resync can turn into a command** (host test `robustness_resync_window_ended_by_a_matching_edge_lets_the_resync_command_the_gate`,
+  found by `robustness_chaos_seed_8`; both XFAIL). The mismatch resync does `k1.set(!t); openSyncWindow(now, t, ...)`,
+  so an IN1 edge at `t` inside it (the user's own edge still in its debounce, or chatter) ends the window early; the
+  controller then follows K1 to `!t` outside any window, and that edge is sent as a command: the user switched on
+  with the gate open and the gate closed. About 30–50 ms per resync. Fix: the window must expect the level K1 drives
+  (and its return), and a matching edge must not end it before `resync_ms`.
+- [ ] **A command overridden mid-travel waits 75 s for its resync** (`gate_state_override_to_the_far_limit_resyncs_the_controller_at_once`,
+  `house_sync_siren_override_mid_travel_resyncs_at_once`; XFAIL). The house fast-forwards a `timeout` result only
+  when `mismatchSince` is set, but `holdingTravel()` keeps it at 0 all through the travel, so the controller shows
+  the wrong state for `mismatch_timeout_s`.
+- [ ] **The boot checkSoon reverts a user command** (`house_sync_edge_on_arming_is_not_reverted_by_the_boot_check_soon`;
+  XFAIL). `sendCommand()` clears `mismatchSince` but not `checkSoon`, so once the command's ACK lets the mismatch
+  check run, the gate still reads closed and the house resyncs the controller off while the gate opens.
+- [ ] **A quick switch-back between the ACK and the gate's STATUS is dropped** (no host test yet). Gate open; off,
+  CLOSE sent and ACKed; on again ~150 ms later: `sendCommand`'s opposing check sees no pending CMD and no target yet,
+  logs `cmd_suppressed`, and the gate closes with the controller off. Repro in the host sim: `openByUser; user(false);`
+  wait for `cmd_sent`; `run(150); user(true)`.
+- [ ] **`leaving` outlives a pulse that never moved the gate** (`gate_state_leaving_mark_does_not_outlive_our_pulse`;
+  XFAIL). After a reversal whose first pulse the opener ignored (siren holding OPEN), a later external move off that
+  limit is reported with cause `lora`.
+- [ ] **A second pulse of a relay already pulsing restarts its timer** (`gate_relays_second_open_cmd_mid_pulse_keeps_pulse_ms`,
+  `gate_relays_second_relay_test_mid_pulse_keeps_its_ms`; XFAIL). Two OPENs ~200 ms apart hold K1 for 738 ms. Don't
+  restart a running pulse (ACK the command as done; refuse the test `busy`).
+- [ ] **A radio restart can run during a pulse** (`gate_relays_radio_reinit_waits_for_the_pulse`; XFAIL). The 5 s retry
+  in `radioReceive` and `fault()` re-initialise the radio without checking `appRelaysPulsing()`; `LoRa.begin()` holds the
+  loop ~470 ms, stretching the pulse.
+- [ ] **HELLO answer stamps go stale after 24.9 days** (`robustness_quiet_26_days_then_*_reboot_relinks`; XFAIL): fixed
+  on the link-robustness branch (0.13.7), which flips these tests.
 
 ## Bench and field tests
 

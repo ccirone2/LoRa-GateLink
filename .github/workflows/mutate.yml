@@ -1,0 +1,40 @@
+name: Mutation tests
+
+# Every firmware mutation in tests/native/mutations.json must be killed by a host test (tools/mutate.py,
+# tests/native/README.md): a survivor is a behavioural invariant no test checks. Too slow for every pull request
+# (each mutation rebuilds the firmware); weekly, on pull requests that change the catalog or the tool, and by hand.
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  pull_request:
+    paths:
+      - 'tests/native/mutations.json'
+      - 'tools/mutate.py'
+      - '.github/workflows/mutate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  mutate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+      # Versions: keep in sync with ci.yml (pins listed in docs/development.md).
+      - name: Install libraries
+        run: arduino-cli lib install "Crypto@0.4.0" "ArduinoJson@7.4.3"
+      - name: Mutations (shard ${{ matrix.shard }} of 4)
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: python3 tools/mutate.py --libs "$HOME/Arduino/libraries" --jobs 2 --shard "$SHARD/4"

@@ -1360,17 +1360,17 @@ FACTS = [
     Fact("RES_BAD", f"{FW}/link.h", r"RES_BAD = (\d+)", (Q(CON, r"ACK result: [^;]*?(\d+) rejected"),)),
     Fact("RES_NO_POWER", f"{FW}/link.h", r"RES_NO_POWER = (\d+)", (Q(CON, r"ACK result: [^;]*?(\d+) no AC power"),)),
     # Console
-    Fact("USB baud", f"{FW}/console.cpp", r"Serial\.begin\((\d+)\)", (Q(CON, r"over USB serial \((\d+) baud\)"),)),
-    D("UART_BAUD", f"{FW}/console.cpp",
+    Fact("USB baud", f"{FW}/console_io.cpp", r"Serial\.begin\((\d+)\)", (Q(CON, r"over USB serial \((\d+) baud\)"),)),
+    D("UART_BAUD", f"{FW}/console_io.cpp",
       Q(CON, r"(\d[\d,]*) baud, 8N1"),
       Q(CON, r"Even at (\d+) kbaud", s),
       Q(C, r"on Serial1 at (\d+) kbaud", s),
       Q(SET, r"3\.3 V, (\d+) kbaud", s)),
     D("LINE_MAX", f"{FW}/console.cpp", Q(CON, r"one over (\d+) characters", lambda v: v - 1)),
-    D("USB_TX_TIMEOUT_MS", f"{FW}/console.cpp",
+    D("USB_TX_TIMEOUT_MS", f"{FW}/console_io.cpp",
       Q(CON, r"untaken for more than (\d+) ms"),
       Q(C, r"dropped the rest of the line after (\d+) ms")),
-    Fact("USB packet", f"{FW}/console.cpp", r"uint8_t buf\[(\d+)\];",
+    Fact("USB packet", f"{FW}/console_io.cpp", r"uint8_t buf\[(\d+)\];",
          (Q(CON, r"one (\d+)-byte packet at a time"), Q(C, r"written in (\d+)-byte pieces"))),
     D("LOG_SIZE", f"{FW}/log.h", Q(CON, r"the ring buffer \((\d+) entries")),
     Fact("config.set chunk (web)", "web/js/config.js", r"const CFG_CHUNK = (\d+);",
@@ -1662,6 +1662,12 @@ def known_names(repo):
     for rel in repo.glob("tests/e2e/**/*.py"):
         names.add(Path(rel).stem)
         names |= set(re.findall(r"^\s*def (test_\w+)", repo.text(rel), re.M))
+    for rel in repo.glob("tests/native/*.cpp"):  # host tests, and the system test groups (test_system_<group>.cpp)
+        names.add(Path(rel).stem.removeprefix("test_system_"))
+        names |= set(re.findall(r"^(?:XFAIL_)?TEST\((\w+)", repo.text(rel), re.M))
+    for rel in repo.glob("tests/native/mutations.json"):  # the mutation catalog's names and keys
+        for m in json.loads(repo.text(rel)):
+            names |= {m["name"], *m}
     for rel in repo.glob("tools/release_evidence.py"):
         names |= set(re.findall(r'\bCriterion\(\s*"(\w+)"', repo.text(rel)))
     for rel in repo.glob("tools/**/*.py"):  # docs/agent-tooling.md names the hooks' functions

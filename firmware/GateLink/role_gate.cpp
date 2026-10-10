@@ -9,6 +9,7 @@
 #include "radio.h"
 #include "history.h"
 #include "app.h"
+#include "board.h"
 
 #define STATUS_TTL_MS 10000
 // After boot, the first STATUS waits until the inputs have been steady this long (at most BOOT_SETTLE_MAX_MS): the
@@ -129,7 +130,7 @@ void gateBegin() {
 }
 
 void gateLoop(uint32_t now) {
-  if (rebootAt && elapsed(now, rebootAt, 0)) NVIC_SystemReset();
+  if (rebootAt && elapsed(now, rebootAt, 0)) boardReset();
   in1.update(now, cfg.debounce_ms, cfg.in1_invert);
   in2.update(now, cfg.debounce_ms, cfg.in2_invert);
   bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense

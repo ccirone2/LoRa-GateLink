@@ -60,10 +60,17 @@ are built from the pull requests since the last tag.
    pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI
-   compiles the firmware and GateSim (failing on warnings in project files), runs the host unit tests, lints and tests the web console (ESLint, `node --test`, Playwright),
-   byte-compiles and lints the Python (`ruff check tests tools`), runs the tools' unit tests (`tests/tools`) and
-   collects the e2e suite (`pytest --collect-only`, which catches import and fixture errors without the bench).
-6. Merge to `main`. A change under `web/` deploys the web console to GitHub Pages.
+   compiles the firmware and GateSim (failing on warnings in project files) and checks the firmware's size budget
+   (`tools/fw_size.py`: 160 KB flash, 24 KB static RAM; raising it is a decision for the pull request), runs the host
+   unit tests, lints and tests the web console (ESLint, `node --test`, Playwright), byte-compiles and lints the
+   Python (`ruff check tests tools`), runs the tools' unit tests (`tests/tools`), collects the e2e suite (`pytest
+   --collect-only`, which catches import and fixture errors without the bench), fails a pull request that changes
+   the firmware without bumping `FW_VERSION`, and lints the workflows (actionlint, with shellcheck).
+6. Merge to `main`. Once CI has passed on `main`, the web console is deployed to GitHub Pages.
+
+CI's actions are pinned by commit SHA and its runners by image (`ubuntu-24.04`); Dependabot
+(`.github/dependabot.yml`) proposes action, npm and Python updates weekly, and the nightly deps-check routine
+covers the Arduino cores and libraries, arduino-cli and ruff.
 
 ## Versioning
 

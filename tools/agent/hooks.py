@@ -5,7 +5,8 @@
     hooks.py post-edit       fast checks for the file just written (syntax, lint, the console contract, links)
     hooks.py stop            before finishing, ask once about the things that change together (FW_VERSION, docs,
                              tests, TODO.md/ROADMAP.md, the skills that describe a changed file)
-    hooks.py check [--base REF]   print the stop findings for this branch (no state; for people and CI)
+    hooks.py check [--base REF] [--only ITEM]   print the stop findings for this branch (no state; for people and
+                             CI, which fails a pull request that changes firmware without bumping FW_VERSION)
     hooks.py paths FILE...   repo paths named in these Markdown files that don't exist
 
 Each hook reads its event as JSON on stdin. A hook never breaks the session: an error of its own is reported on
@@ -607,6 +608,7 @@ def main(argv=None):
     sub.add_parser("stop")
     c = sub.add_parser("check", help="print the stop findings for this branch")
     c.add_argument("--base", help="ref to measure from (default: merge base with origin/main)")
+    c.add_argument("--only", action="append", metavar="ITEM", help="only these items (CI: --only fw-version)")
     p = sub.add_parser("paths", help="repo paths named in these files that don't exist")
     p.add_argument("files", nargs="+")
     args = ap.parse_args(argv)
@@ -614,6 +616,8 @@ def main(argv=None):
     if args.cmd == "check":
         root = repo_root(os.getcwd())
         findings = stop_findings(root, args.base) if root else []
+        if args.only:
+            findings = [f for f in findings if f.rule in args.only]
         for f in findings:
             print(f"[{f.rule}] {f.message}")
         return 1 if findings else 0

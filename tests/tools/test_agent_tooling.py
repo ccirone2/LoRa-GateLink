@@ -305,6 +305,17 @@ def test_check_command_lists_findings(repo, monkeypatch, capsys):
     assert "[fw-version]" in capsys.readouterr().out
 
 
+def test_check_only_one_item_as_ci_does(repo, monkeypatch, capsys):
+    monkeypatch.chdir(repo)
+    edit(repo, "web/app.js")
+    assert hooks.main(["check", "--base", "main", "--only", "fw-version"]) == 0
+    edit(repo, "firmware/GateLink/link.cpp")
+    git(repo, "commit", "-qam", "change")
+    assert hooks.main(["check", "--base", "main", "--only", "fw-version"]) == 1
+    out = capsys.readouterr().out
+    assert "[fw-version]" in out and "[native-tests]" not in out
+
+
 # ---- post-edit ----------------------------------------------------------------------------------------------
 
 

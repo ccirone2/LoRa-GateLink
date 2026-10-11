@@ -152,6 +152,35 @@ def test_gate_power_cut_during_config_save(rig, lipo, lead_ms):
         rig.resave("gate")  # put the backup's saved config back, and the profile on top
 
 
+def test_gate_power_cut_keeps_history(rig, lipo):
+    """The link history's completed buckets are in the SPI flash (histlog.cpp): after a real power cut hist.get has
+    them as they were, the 60 s period goes on with them, and the bucket in progress at the cut starts over under the
+    new boot (test_history.py checks the same across a reboot)."""
+    require(lipo, gate=False)
+    rig.expect_commands(0)
+    try:
+        rig.gate.request("hist.clear", period_s=60)
+        time.sleep(62)
+        before, head = rig.gate.history()
+        assert head["persist"] is True, f"gate history not kept in its flash: {head}"
+        assert [b["idx"] for b in before] == [0, 1], before
+        boot0 = rig.gate.info()["boot_count"]
+        m = rig.mark()
+        rig.power_cut("gate", 3000)
+        boot = rig.wait_power_return("gate", m)
+        assert boot["a"] & RCAUSE_POWER, f"expected a power-on/brownout reset, got RCAUSE {boot['a']:#x}"
+        after, head = rig.gate.history()
+        boot1 = rig.gate.info()["boot_count"]
+        assert boot1 > boot0
+        assert head["persist"] is True and head["period_s"] == 60, f"the history and its period after the cut: {head}"
+        # Bucket 1 was in progress at the cut: lost, and the numbers go on from it.
+        assert [b["idx"] for b in after] == [0, 1], after
+        assert after[0] == before[0], f"bucket 0 changed across the power cut: {before[0]} -> {after[0]}"
+        assert after[1]["boot"] == boot1, after[1]
+    finally:
+        rig.gate.request("hist.clear", period_s=3600)  # the firmware default (history.h HIST_PERIOD_S)
+
+
 @pytest.mark.parametrize("cut_ms", [5000, (LINK_TIMEOUT_S + 5) * 1000], ids=["back_mid_travel", "beyond_link_timeout"])
 def test_gate_unpowered_opener_moved_by_hand(rig, lipo, cut_ms):
     """The gate board is down while the opener is opened locally (a button, the AES controller): back while it's

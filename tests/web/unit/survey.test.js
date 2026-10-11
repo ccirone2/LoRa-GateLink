@@ -83,3 +83,10 @@ test('the plain-text report has the settings, the table, the verdict and the adv
   assert.ok(lines.includes(r.headline));
   assert.ok(lines.includes(`- ${r.advice[0]}`));
 });
+
+test("the survey card's help quotes the thresholds survey.js judges by", () => {
+  const html = readFileSync(new URL('../../../web/index.html', import.meta.url), 'utf8');
+  const m = html.match(/Good from (\d+) dB, fair from (\d+) dB, and poor if more than ([\d.]+) % of pings \(and at least (\d+)\)/);
+  assert.ok(m, 'the survey card help text');
+  assert.deepEqual(m.slice(1).map(Number), [sv.GOOD_DB, sv.FAIR_DB, 100 * sv.MAX_LOSS, sv.MIN_LOST]);
+});

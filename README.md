@@ -67,7 +67,7 @@ siren sensor.
   firmware version (from v0.3.5 on with a prebuilt `.bin`; from the release criteria on with its bench evidence,
   [docs/releases](docs/releases))
 - **[TODO.md](TODO.md)** — open bugs, investigations and bench/field tasks
-- **[ROADMAP.md](ROADMAP.md)** — desired features and ideas
+- **[ROADMAP.md](ROADMAP.md)** — decisions, open questions and planned work, in tiers
 
 ## How it behaves
 
@@ -102,7 +102,7 @@ Per install (one house end, one gate end); wiring and settings for each part are
 | 4-channel PNP-output opto isolator (NOYITO MT-301R4P-P or similar) | 1–2 | gate (IN1–IN3), house (IN2) | Outputs from the board's 3.3 V only; a 12 V-rated channel for the house |
 | 24 V → 5 V buck converter | 1 | gate | From the opener's 24 V accessory output (MKR VIN is 5 V max) |
 | 12 V → 5 V buck converter | 1 | house | From the Shelly's 12 V supply |
-| 3.7 V LiPo (JST-PH) | 0–2 | optional | Rides through supply cuts; the house needs one for `ctrl_power_pmic` to see its supply drop |
+| 3.7 V LiPo (JST-PH) | 1–2 | house; gate optional | Rides through supply cuts. Always fit one at the house (`ctrl_power_pmic` needs it to see its supply drop); at the gate only if the opener has no battery backup and the enclosure stays within the cell's temperature range |
 | Shelly Wave 1 on a 12 V DC supply | 1 | house | The Z-Wave "controller" Alarm.com switches |
 | 2GIG-compatible contact sensor with terminal input | 1 | house | Driven by K2: closed = gate closed |
 | Relay module (active-high input, switches at 3.3 V) + a second 2GIG contact sensor | 0–1 | optional, house | The fault output (D5, `fault_out`): "gate needs attention" |

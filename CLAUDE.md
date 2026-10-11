@@ -55,7 +55,7 @@ Plain ES modules, no build step (`web/app.js`, `web/js/`), tested by `npm test` 
 
 ## Tracking, versions and releases
 
-- `TODO.md` — open bugs, investigations, bench/field tasks. `ROADMAP.md` — desired features. Add findings there as you go; remove items once their fix or feature is merged (the PR and release notes record them).
+- `TODO.md` — open bugs, investigations, bench/field tasks. `ROADMAP.md` — decisions and planned work in tiers (the owner ranks them). Add findings there as you go; remove items once their fix or feature is merged (the PR and release notes record them).
 - Every firmware change bumps `FW_VERSION` (`config.h`); MINOR for a `CFG_VERSION` or config record format bump, a new feature, or a change both boards need together (STATUS/DIAG or frame format), PATCH otherwise. One branch + PR per change, with bench results in the PR body.
 - The changelog is GitHub Releases (`vX.Y.Z` tag on the merge commit). A release first needs bench evidence per `docs/release-criteria.md` (`/release`), merged before the tag. CI (`docs/development.md`) must pass.
 - Agent tooling (`docs/agent-tooling.md`): skills in `.claude/skills/` (`/flash`, `/bench`, `/release`, `/doc-audit`, `/pr-followup`), hooks in `.claude/settings.json` running `tools/agent/hooks.py` (checks after each edit; a checklist before finishing), nightly routines in `.claude/routines/`. Change them in the same PR as the code they describe; `tests/tools/test_agent_tooling.py` tests them.

@@ -49,7 +49,7 @@ clang (`tests/native/fuzz/README.md`).
 |---|---|
 | Released changes (changelog) | [GitHub Releases](https://github.com/ccirone2/LoRa-GateLink/releases), one per firmware version |
 | Open bugs, investigations, bench and field tasks | [TODO.md](../TODO.md) |
-| Desired features and ideas | [ROADMAP.md](../ROADMAP.md) |
+| Decisions, open questions and planned work, in tiers | [ROADMAP.md](../ROADMAP.md) |
 | Work in progress | A branch and pull request per change |
 
 When an item is done, remove it from TODO.md / ROADMAP.md and describe it in the pull request; the release notes

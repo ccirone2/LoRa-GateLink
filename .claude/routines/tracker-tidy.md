@@ -6,7 +6,8 @@ description: Keep TODO.md and ROADMAP.md true - drop what's done, merge duplicat
 
 # Nightly tracker tidy
 
-`TODO.md` holds open bugs, investigations and bench or field tasks; `ROADMAP.md` desired features. An item leaves
+`TODO.md` holds open bugs, investigations and bench or field tasks; `ROADMAP.md` decisions and planned work, in tiers the
+owner sets. An item leaves
 when its fix or feature is merged (`docs/development.md`).
 
 1. **What merged lately:** `git log --merges --since="8 days ago" origin/main` and the pull requests behind them

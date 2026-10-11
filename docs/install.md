@@ -109,7 +109,7 @@ the web console (it works without a board) before powering up.
 ### Gate board
 
 - [ ] Power: a 24 V→5 V buck from the opener's 24 V accessory output (battery-backed) or the AC 24 V supply (dies
-  with AC: add a LiPo). MKR VIN is 5 V max.
+  with AC: add a LiPo, if the enclosure stays within the cell's temperature range). MKR VIN is 5 V max.
 - [ ] CSW24UL: AUX relay A set to *open limit*, AUX relay B to *closed limit* (LiftMaster manual).
 - [ ] Opto board: OUT1–OUT4 → IN1–IN4 (OUT4 spare), output GND → board GND, output VCC → the board's **3.3 V only**. 24 V side:
   the accessory output's 24 V → AUX C; open-limit AUX NO → channel 1; closed-limit AUX **NC** → channel 2;

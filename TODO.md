@@ -15,7 +15,8 @@ once its fix is merged and record it in the pull request.
   blips open. Restoring K1/K2 from `.noinit` RAM in `setup()` was tried (2026-10-05) and only shortened the drop to
   ~0.6–0.8 s: the MKR bootloader's double-tap check waits ~0.5 s on every reset except power-on, with the relay pins
   released, before the firmware starts. Remaining options: a bootloader that skips that wait on watchdog/software
-  resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
+  resets (it's also what lets a double-tap rescue a board). Latching relays are ruled out ([ROADMAP.md](ROADMAP.md),
+  Decisions): a latched contact would keep reporting a state nobody maintains. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
 
 

@@ -54,7 +54,9 @@ and `firmware/GateLink/pins.h` in sync.
   target, so the limit read when power returns isn't attributed to it. Turn the `power_sense` toggle off (also
   possible remotely over LoRa) if IN3 isn't wired.
 - **MKR VIN is 5 V max.** Power the gate board through a 24 V→5 V buck from the opener's 24 V accessory output
-  (battery-backed) or the AC 24 V supply (dies with AC; add a LiPo to ride through).
+  (battery-backed) or the AC 24 V supply (dies with AC; add a LiPo to ride through). A gate LiPo is optional: fit one
+  only if the opener has no battery backup and the enclosure stays within the cell's charge/discharge temperature
+  range.
 
 ## House board
 

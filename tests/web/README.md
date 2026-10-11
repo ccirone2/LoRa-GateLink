@@ -16,11 +16,13 @@ CI runs the same (`ci.yml`, job `web`) and keeps the Playwright report as an art
 ## Unit tests (`unit/`)
 
 `node --test` on the modules that don't touch the page: `samba.js` (firmware image checks, the bootloader's CRC),
-`logdecode.js` (log events as text), `keys.js` (key ids, the weak-key rule, encrypted key backups) and `util.js`.
-Some also read the firmware sources, so the page can't drift from them: every log event in `log.cpp` must have a
-decoder, the gate states and causes must match `roles.h`, and the key id label must match `config.cpp`. The key
-backup tests also open a backup written by the Python tools (`tests/tools/fixtures/key-backup-v1-python.glkey`), and
-`tests/tools` opens one written by `keys.js` (`key-backup-v1.glkey`), so the two implementations stay one format.
+`logdecode.js` (log events as text), `keys.js` (key ids, the weak-key rule, encrypted key backups), `util.js`, and
+`survey.js` (the site survey's verdict, against the vectors in `tests/tools/fixtures/survey-vectors.json` that
+`tests/tools/test_survey.py` checks the Python twin with). Some also read the firmware sources, so the page can't drift
+from them: every log event in `log.cpp` must have a decoder, the gate states and causes must match `roles.h`, and the
+key id label must match `config.cpp`. The key backup tests also open a backup written by the Python tools
+(`tests/tools/fixtures/key-backup-v1-python.glkey`), and `tests/tools` opens one written by `keys.js`
+(`key-backup-v1.glkey`), so the two implementations stay one format.
 
 ## Browser tests (`browser/`)
 
@@ -34,7 +36,7 @@ keys from firmware 0.13.8; give a board `key` to hold another key than the defau
 import { openConsole, connect, requests, pushEvent } from './helpers.js';
 
 test('…', async ({ page }) => {
-  await openConsole(page, [{ role: 'house', status: { link_up: false } }]); // boards: role, status, params, log, fw…
+  await openConsole(page, [{ role: 'house', status: { link_up: false } }]); // boards: role, status, params, log, fw, pongs…
   await connect(page);                                  // through the board picker
   await pushEvent(page, { event: 'log', t: 1000, ev: 'link_down', a: 0, b: 0 }); // as the firmware would
   expect((await requests(page)).map((r) => r.cmd)).toContain('status');          // what the page sent

@@ -4,12 +4,12 @@
 import { $, esc, fmtDur, fmtNum, sum, niceScale } from './util.js';
 import { S } from './state.js';
 import { request } from './serial.js';
+import { SNR_FLOOR } from './survey.js'; // SX127x demodulation limit per SF, dB
 
 // The board's hourly link record (hist.get, docs/console.md#link-history), fetched page by page. Buckets count
 // from the last hist.clear as if without a break: bucket i started now_s − i × period_s seconds before the reply,
 // unless the board reset after it (firmware 0.14.0 keeps the history across resets; `boot` changes where one came):
 // then it started earlier, by however long the reset took.
-const SNR_FLOOR = { 7: -7.5, 8: -10, 9: -12.5, 10: -15, 11: -17.5, 12: -20 }; // SX127x demodulation limit, dB
 let hist = null; // { buckets, period, nowS, current, fetchedAt, peer, sf, role, persist, lastReset }
 let histAt = -1; // bucket (index into hist.buckets) under the crosshair, -1 = none
 let histLayout = null;

@@ -199,8 +199,10 @@ roles). `activeRole` is latched at boot; `cfg.role` changes only take effect aft
 Plain ES modules, no build step: `web/app.js` wires the page; the work is in `web/js/` (`serial.js` transport,
 picker and reconnect; `status.js`, `config.js`, `tools.js`, `history.js`, `firmware.js` + `samba.js` per tab;
 `security.js` the Security tab, with `keys.js` the key ids and encrypted backups
-([key-management.md](key-management.md)); `wiring.js` Install tab; `settings.js` setting groups/help; `logdecode.js`
-log events as text; `ui.js` the log view and toasts; `util.js` small helpers; shared state in `state.js`'s `S`).
+([key-management.md](key-management.md)); `survey.js` the site survey's verdict, twin of
+`tools/gatelink_client/survey.py` (shared vectors in `tests/tools/fixtures/`; [install.md](install.md)); `wiring.js`
+Install tab; `settings.js` setting groups/help; `logdecode.js` log events as text; `ui.js` the log view and toasts;
+`util.js` small helpers; shared state in `state.js`'s `S`).
 Lint and tests: `npm test` (ESLint, `node --test` unit tests of the pure modules, Playwright browser tests of the
 real page against fake boards in `tests/web/fake-serial.js`; `tests/web/README.md`).
 

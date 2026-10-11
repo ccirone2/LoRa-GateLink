@@ -172,6 +172,28 @@
           </div>
           <p class="muted" id="remResult" role="status"></p>
         </div>
+        <div class="card wide" id="surveyCard">
+          <div class="label">Site survey</div>
+          <p class="muted small">For the install: with the gate board at its final spot and both antennas mounted, ping the other board for a few minutes and judge the link margin both ways. Needs the link up (<i>Peer verified: yes</i>). The ping card pauses while it runs.</p>
+          <div class="toolbar">
+            <select id="surveyMins" aria-label="Survey length">
+              <option value="1">1 min</option>
+              <option value="2" selected>2 min</option>
+              <option value="5">5 min</option>
+            </select>
+            <button id="btnSurvey" class="primary">Start survey</button>
+            <span class="spacer"></span>
+            <button id="btnSurveyCopy" disabled title="Copy the report as plain text, for the install record">Copy report</button>
+          </div>
+          <progress id="surveyProgress" max="1" value="0" hidden></progress>
+          <p class="muted small" id="surveyStep"></p>
+          <div id="surveyBody" hidden>
+            <div class="verdict-row"><span id="surveyVerdict" class="verdict">—</span><span id="surveyHeadline"></span></div>
+            <div class="table-wrap"><table id="surveyTable" class="wtable"></table></div>
+            <p class="muted small">Each row is what that board received. Margin: dB above the spreading factor's demodulation limit; 10th pct: 90 % of pings had at least this. Good from 15 dB, fair from 10 dB, and poor if more than 2 % of pings go unanswered.</p>
+            <ul id="surveyAdvice" class="notes"></ul>
+          </div>
+        </div>
         <div class="card wide" id="histCard">
           <div class="label">Link history</div>
           <div class="toolbar">

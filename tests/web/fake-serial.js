@@ -76,6 +76,7 @@
       this.histN = spec.histBuckets ?? 30;
       this.histResetAt = spec.histResetAt ?? -1;
       this.requests = [];
+      this.pings = 0;
       this.replyDelayMs = spec.replyDelayMs ?? 5;
       this.silent = false; // stops answering (a hung board)
     }
@@ -90,16 +91,19 @@
       return { key_set: this.keySet, ...(this.hasKeyId ? { key_id: this.keySet ? this.keyId : null } : {}) };
     }
 
-    // info's saved_role is the running config's role (cfg.role), which a reboot makes the active one.
+    // info's saved_role is the running config's role (cfg.role), which a reboot makes the active one. spec.roleText
+    // replaces the role string info and status report (only to check the page treats it as text).
     info() {
-      return { fw: this.fw, board: 'MKR WAN 1310', role: this.role, saved_role: ROLE_NAME[this.params.role], ...this.keyFields(),
+      return { fw: this.fw, board: 'MKR WAN 1310', role: this.spec.roleText ?? this.role,
+        saved_role: ROLE_NAME[this.params.role], ...this.keyFields(),
         cfg_store: this.spec.cfgStore || 'spi', flash_id: 'ef4015', boot_count: 7 };
     }
 
     // The status reply, from the board's state as appFillStatus builds it.
     statusNow() {
       this.uptimeMs += 2000;
-      const s = { ...clone(this.status), fw: this.fw, role: this.role, uptime_ms: this.uptimeMs, key_set: this.keySet,
+      const s = { ...clone(this.status), fw: this.fw, role: this.spec.roleText ?? this.role, uptime_ms: this.uptimeMs,
+        key_set: this.keySet,
         cfg_store: this.spec.cfgStore || 'spi', reboot_pending: this.params.role !== ROLE_NUM[this.role] };
       // D5 follows fault_out at once (health.cpp): null while it's off, else high unless a test gave a level. The
       // hold isn't modelled: a test that wants D5 low with problems listed sets both.
@@ -165,9 +169,22 @@
             return err('k must be 1|2, ms 50..5000, role set');
           }
           return ok();
-        case 'radio.ping':
-          this.emit({ event: 'pong', ping_id: 1, rtt_ms: 142, rssi: -61, snr: 9.25, peer_rssi: -60, peer_snr: 9, fei: -1450 });
+        case 'radio.ping': {
+          // spec.pongs: the answers to successive pings, cycled; each overrides these levels, null = no answer. With
+          // `late` (levels), the previous ping's pong lands first, just before this ping reaches the board, as one
+          // past the page's 8 s can. As in the firmware, a pong is reported only while its ping is the latest.
+          const p = this.spec.pongs ? this.spec.pongs[this.pings % this.spec.pongs.length] : {};
+          const pong = (id, levels) => ({ event: 'pong', ping_id: id, rtt_ms: 142, rssi: -61, snr: 9.25, peer_rssi: -60,
+            peer_snr: 9, fei: -1450, ...levels });
+          if (p?.late) this.port?.push(pong(this.pings, { rtt_ms: 8100, ...p.late }));
+          const id = ++this.pings;
+          if (p !== null) {
+            const levels = { ...p };
+            delete levels.late;
+            setTimeout(() => { if (this.pings === id) this.port?.push(pong(id, levels)); }, 20);
+          }
           return ok();
+        }
         case 'remote.diag':
           if (this.role !== 'house') return err('house node only');
           this.emit({ event: 'remote_diag', fw: this.fw, uptime_s: 3600,

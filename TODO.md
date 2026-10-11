@@ -50,11 +50,15 @@ once its fix is merged and record it in the pull request.
   `test_gate_power_cut_keeps_history` in `-m power`), cuts inside a sector erase, the hourly write in a long soak and
   `free_ram` all passed on the bench (2026-10-11). Left: the boot time with a full log (512 records: the firmware reads
   every slot's header and ~100 records in full, timed from the UART `boot` event).
-- [ ] **Fault output D5 (0.14.0).** Host-tested only (`tests/native`, tag `fault-out`); the suite has no D5 check (it
-  needs a wire from D5 to something it reads, e.g. a GateSim input). On the bench: D5 low or floating through a reset
-  and the bootloader, no glitch when it becomes an output, and the pull-down when `fault_out` is off; a relay module
-  or opto switching reliably from 3.3 V at a few mA; the 2GIG sensor loop and how Alarm.com reports it (trouble vs
-  intrusion); D5 dropping `fault_hold_s` after a link loss, AC loss and a radio fault, and rising at once after.
+- [ ] **Fault output D5 (0.14.0): a relay module and the alarm side.** Checked with a meter on both bench boards
+  (2026-10-11), each reading as status `fault_out` reported: 0.01 V with `fault_out` off, 3.31 V healthy; 0.01 V
+  `fault_hold_s` (10 s) after a link loss (house) or an AC loss (both boards), and 3.31 V again within a second of the
+  link's first STATUS or AC's return; through a house `reboot`, LOW from 128 ms into the sketch until it armed (~5 s).
+  The suite has no D5 check (it needs a wire from D5 to something it reads, e.g. a GateSim input). Left: the pin
+  floating from the reset until `healthBegin` and no glitch when it becomes an output (a scope, or a relay module that
+  mustn't chatter); the pull-down with `fault_out` off (a meter reads 0 V either way: 100 kΩ from 3.3 V reads 0.5–1.2 V
+  across its 20–60 kΩ, 3.3 V without it); a relay module or opto switching reliably from 3.3 V at a few mA; the 2GIG
+  sensor loop and how Alarm.com reports it (trouble vs intrusion); a radio fault (host-tested only).
 - [ ] **0.13.9 fixes the bench can't trigger on demand** (host-tested, #86). A radio fault during a gate relay pulse
   (the pulse must not stretch, and the command's ACK still lands within `cmd_ttl_s`); five remote config writes
   during one pulse (four queued, the fifth refused and taken from the house's resend after the pulse, all within the

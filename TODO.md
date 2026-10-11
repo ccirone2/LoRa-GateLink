@@ -18,6 +18,7 @@ once its fix is merged and record it in the pull request.
   resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
 
+
 ## Bench and field tests
 
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
@@ -70,6 +71,16 @@ once its fix is merged and record it in the pull request.
 
 - [ ] **Install checklist.** Write the on-site steps (wiring checks per board, Shelly SW mode, CSW24UL AUX relay
   settings, power sense checks, RF margin, final config export) as a doc once the install hardware is in hand.
+
+## Supply chain
+
+- [ ] **Repository settings** (threat model `pages-malicious-firmware`, `release-asset-mutable`,
+  `agent-tooling-push-path`; owner's decision). A ruleset on `main` (pull request and CI required, no force push), a
+  protected `v*` tag pattern, immutable releases, and build provenance attestations for release binaries.
+- [ ] **Bench hygiene** (threat model, low). Home Assistant TLS verified by default (`ha-token-tls-off`), Python
+  dependencies locked with hashes (`python-deps-unpinned`), a Host check in `tools/bench-wiring/serve.py`
+  (`bench-wiring-server`), a content security policy in `web/index.html` and numeric coercion of `hist.get` fields
+  (`board-output-xss`).
 
 ## Housekeeping
 

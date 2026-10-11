@@ -283,7 +283,7 @@ void histGet(JsonObject res, int32_t from, int32_t n) {
   res["current"] = cur;
   res["persist"] = histLogOn();
   JsonArray fields = res["fields"].to<JsonArray>();
-  for (const char *f : FIELDS) fields.add(f);
+  for (const char *f : FIELDS) fields.add(JsonString(f, true));  // in flash: linked, not copied into the heap
   uint32_t first = from < 0 || (uint32_t)from < oldest ? oldest : from;
   if (n < 1 || n > HIST_PAGE) n = HIST_PAGE;
   JsonArray rows = res["rows"].to<JsonArray>();

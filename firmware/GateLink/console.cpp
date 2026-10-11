@@ -100,9 +100,12 @@ static void fillParams(JsonDocument &res) {
   JsonArray meta = res["meta"].to<JsonArray>();
   for (size_t i = 0; i < PARAM_COUNT; i++) {
     const ParamDef &p = PARAMS[i];
-    params[p.name] = cfg.*(p.field);
+    // The names live in flash for good: linked, not copied into the heap (this is the largest reply, and its heap
+    // high-water mark is what's left between heap and stack: status free_ram).
+    JsonString name(p.name, true);
+    params[name] = cfg.*(p.field);
     JsonObject m = meta.add<JsonObject>();
-    m["name"] = p.name;
+    m["name"] = name;
     m["id"] = p.id;
     m["min"] = p.minV;
     m["max"] = p.maxV;

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { decodeLog, rawLog, resetCause, KNOWN_EVENTS, STATES, CAUSES } from '../../../web/js/logdecode.js';
+import { decodeLog, rawLog, resetCause, KNOWN_EVENTS, STATES, CAUSES, PROBLEMS } from '../../../web/js/logdecode.js';
 
 const fw = (f) => readFileSync(new URL(`../../../firmware/GateLink/${f}`, import.meta.url), 'utf8');
 
@@ -34,6 +34,17 @@ test('decoded lines', () => {
   assert.equal(decodeLog({ ev: 'cfg_remote', a: 99, b: 1 }), 'remote write: param 99 = 1');
   assert.equal(decodeLog({ ev: 'something_new', a: 1, b: 2 }), 'something_new a=1 b=2');
   assert.equal(rawLog({ ev: 'pulse', a: 1, b: 500 }), 'pulse a=1 b=500');
+});
+
+test('health problems follow health.cpp, in bit order', () => {
+  const names = [...fw('health.cpp').match(/healthName[\s\S]*?\[\]\s*=\s*\{([^}]*)\}/)[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(Object.keys(PROBLEMS), names);
+  const bits = [...fw('health.h').matchAll(/PROB_(\w+) = (0x[0-9A-Fa-f]+)/g)].map(([, n, v]) => [n.toLowerCase(), Number(v)]);
+  assert.deepEqual(bits, names.map((n, i) => [n, 1 << i]));
+  assert.equal(decodeLog({ ev: 'health', a: 1, b: 0 }), 'fault output high: healthy');
+  assert.equal(decodeLog({ ev: 'health', a: 0, b: 0x0c }), 'fault output low: needs attention (link down, no AC power at the gate)');
+  assert.equal(decodeLog({ ev: 'health', a: 0, b: 1 }), 'fault output low: needs attention (starting up)');
+  assert.equal(decodeLog({ ev: 'health', a: -1, b: 0 }), 'fault output off (D5 an input again)');
 });
 
 test('reset causes as the firmware names them', () => {

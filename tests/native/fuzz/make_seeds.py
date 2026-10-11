@@ -5,7 +5,8 @@
 The frames and console seeds are built here from the targets' input formats (the comments at the top of
 fuzz_frames.cpp and fuzz_console.cpp). The config seeds start from the flash images the firmware itself provisions:
 run any target with GATELINK_FUZZ_DUMP_IMAGES=DIR first (it writes DIR/house.bin and DIR/gate.bin), then pass
---images DIR. Without it the config corpus is left as it is.
+--images DIR. Without it the config record seeds are left as they are; the history log's (sectors 4..19, built here
+from histlog.h's record layout) are written either way.
 
 Seeds are small, readable starting points; a fuzzing run minimises what it finds into the corpus later
 (make -f fuzz/Makefile corpus-merge).
@@ -319,6 +320,40 @@ def config_seeds(images):
     }
 
 
+# History log (histlog.h): 128-byte slots from sector 4, each record magic "HL" fmt kind lseq idx period_s 0, a 68-byte
+# bucket and a CRC-32 over the rest. The harness fixes a slot's CRC unless its byte 100 (past the record) is even.
+HLOG_BASE, HLOG_SLOT = 4 * 4096, 128
+BUCKET, CLEARED = 1, 2
+
+
+def hist_record(lseq, idx, period=3600, kind=BUCKET, fmt=1):
+    data = bytes((idx * 7 + i * 13 + 1) & 0xFF for i in range(68)) if kind == BUCKET else bytes(68)
+    rec = b"HL" + bytes([fmt, kind]) + struct.pack("<IIHH", lseq, idx, period, 0) + data
+    return rec + struct.pack("<I", zlib.crc32(rec))
+
+
+def slot(s):
+    return HLOG_BASE + HLOG_SLOT * s
+
+
+def history_seeds():
+    run = [(slot(i), hist_record(i + 1, i)) for i in range(5)]
+    torn = hist_record(6, 5)
+    sector = [(slot(i), hist_record(i + 1, i)) for i in range(32)]  # sector 4 full
+    return {
+        "history-run": flash(*run),
+        # A power cut mid-write: the newest slot half written (its CRC left wrong), skipped at the next boot.
+        "history-torn-newest": flash(*run, (slot(5), torn[:44]), (slot(5) + 100, b"\x00")),
+        # A sector's first write failed, the next ones in it didn't: the newest records come after a torn one.
+        "history-sector-first-failed": flash(*sector, (slot(32), hist_record(33, 32)[:20]), (slot(32) + 100, b"\x00"),
+                                             (slot(33), hist_record(34, 33)), (slot(34), hist_record(35, 34))),
+        "history-cleared": flash(*run, (slot(5), hist_record(6, 0, 120, CLEARED)), (slot(6), hist_record(7, 0, 120))),
+        # Another firmware's bucket layout after ours (a downgrade), and lseq about to run out.
+        "history-other-fmt": flash(*run, (slot(5), hist_record(6, 5, fmt=2))),
+        "history-lseq-at-the-top": flash((slot(0), hist_record(0xFFFFFFFE, 7)), (slot(1), hist_record(0xFFFFFFFF, 8))),
+    }
+
+
 def write(target, seeds):
     d = CORPUS / target
     d.mkdir(parents=True, exist_ok=True)
@@ -333,6 +368,7 @@ def main():
     args = ap.parse_args()
     write("fuzz_frames", FRAMES)
     write("fuzz_console", {name: bytes([sel]) + text.encode() for name, (sel, text) in CONSOLE.items()})
+    write("fuzz_config", history_seeds())
     if args.images:
         write("fuzz_config", config_seeds(args.images))
 

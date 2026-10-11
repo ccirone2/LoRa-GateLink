@@ -2159,5 +2159,392 @@
     "replace": "  if (false) {"
    }
   ]
+ },
+ {
+  "name": "fault_out_h1_hold_not_applied",
+  "invariant": "fault-out",
+  "why": "H1: D5 drops as soon as a problem shows, fault_hold_s ignored: a brief blip (an AC flicker, a link dropout that recovers) trips the alarm.",
+  "killed_by": [
+   "fault_out_link_loss_drops_after_the_hold_and_recovers_at_once",
+   "fault_out_faults_shorter_than_the_hold_never_drop_it",
+   "fault_out_ac_lost_drops_both_after_the_hold"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "    if (elapsed(now, troubleSince, (uint32_t)cfg.fault_hold_s * 1000)) healthy = false;",
+    "replace": "    healthy = false;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h2_recovery_waits_for_the_hold",
+  "invariant": "fault-out",
+  "why": "H2: recovery waits out fault_hold_s too (a symmetric debounce), so D5 stays LOW for the hold after the problem is over, and after boot it rises only fault_hold_s after the board has decided.",
+  "killed_by": [
+   "fault_out_link_loss_drops_after_the_hold_and_recovers_at_once",
+   "fault_out_reboot_reads_as_a_fault_until_decided",
+   "fault_out_gate_no_power_drops_both_after_the_hold"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "  if (!problems) {\n    troubled = false;\n    healthy = true;  // recovery raises D5 at once",
+    "replace": "  static uint32_t okSince = 0;\n  if (problems) okSince = now;\n  if (!problems && elapsed(now, okSince, (uint32_t)cfg.fault_hold_s * 1000)) {\n    troubled = false;\n    healthy = true;  // recovery raises D5 at once"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h3_healthy_at_boot",
+  "invariant": "fault-out",
+  "why": "H3: D5 starts HIGH at boot (healthy until shown otherwise), so a reboot reads as healthy before anything is known, until the hold runs out.",
+  "killed_by": [
+   "fault_out_reboot_reads_as_a_fault_until_decided",
+   "fault_out_healthy_after_commissioning"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "  healthy = false;\n  troubled = true;",
+    "replace": "  healthy = true;\n  troubled = true;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h4_starting_ignored",
+  "invariant": "fault-out",
+  "why": "H4: the role's decision isn't waited for after boot: the house raises D5 as soon as the link is up (before it is armed), the gate as soon as it hears the house (before its inputs settled).",
+  "killed_by": [
+   "fault_out_reboot_reads_as_a_fault_until_decided"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "  if (!decided) p |= PROB_STARTING;",
+    "replace": "  if (!decided && false) p |= PROB_STARTING;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h5_radio_ignored",
+  "invariant": "fault-out",
+  "why": "H5: a radio that is down (faulted, failing to restart) isn't a problem: D5 stays HIGH until the link times out, if it ever does on that board.",
+  "killed_by": [
+   "fault_out_radio_down_drops_after_the_hold_on_that_board"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "  if (!radioOk()) p |= PROB_RADIO;",
+    "replace": "  if (!radioOk() && false) p |= PROB_RADIO;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h6_link_ignored",
+  "invariant": "fault-out",
+  "why": "H6: link loss isn't a problem: with the gate unheard the house keeps D5 HIGH, so the alarm never learns the gate went silent.",
+  "killed_by": [
+   "fault_out_link_loss_drops_after_the_hold_and_recovers_at_once"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "  if (!linkUp) p |= PROB_LINK;",
+    "replace": "  if (!linkUp && false) p |= PROB_LINK;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h7_house_ignores_the_gate_ac_bit",
+  "invariant": "fault-out",
+  "why": "H7: the house ignores the AC-lost bit (STATUS bit 6): the gate on its battery at a limit reads healthy at the house.",
+  "killed_by": [
+   "fault_out_ac_lost_drops_both_after_the_hold",
+   "fault_out_gate_no_power_drops_both_after_the_hold"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "    ac = !houseGateAcLost();",
+    "replace": "    ac = true;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h8_gate_ignores_its_ac",
+  "invariant": "fault-out",
+  "why": "H8: the gate ignores its own AC power sense (IN3): no AC at the opener reads healthy at the gate.",
+  "killed_by": [
+   "fault_out_ac_lost_drops_both_after_the_hold",
+   "fault_out_gate_no_power_drops_both_after_the_hold",
+   "fault_out_hold_zero_drops_at_once"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "    ac = gateAcPresent();",
+    "replace": "    ac = true;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h9_no_power_ignored",
+  "invariant": "fault-out",
+  "why": "H9: a gate reading no_power isn't a problem of its own: the health list and the log's bits leave it out (D5 still drops for the AC it implies).",
+  "killed_by": [
+   "fault_out_gate_no_power_drops_both_after_the_hold"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "  if (gs == GS_NO_POWER) p |= PROB_NO_POWER;\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h10_fault_ignored",
+  "invariant": "fault-out",
+  "why": "H10: a gate reading fault (both limits) isn't a problem: D5 stays HIGH on both boards while the gate's position can't be known.",
+  "killed_by": [
+   "fault_out_gate_fault_drops_both_after_the_hold",
+   "fault_out_faults_shorter_than_the_hold_never_drop_it"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "  if (gs == GS_FAULT) p |= PROB_FAULT;\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h11_driven_with_the_setting_off",
+  "invariant": "fault-out",
+  "why": "H11: D5 is driven whatever fault_out says: an existing install, with fault_out off and D5 unwired or used otherwise, gets an output it never asked for.",
+  "killed_by": [
+   "fault_out_off_by_default_leaves_d5_an_input",
+   "fault_out_setting_applies_at_once_and_only_locally"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "  int8_t want = cfg.fault_out ? healthy : -1;",
+    "replace": "  int8_t want = healthy;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h12_house_relay_test_restarts_it",
+  "invariant": "fault-out",
+  "why": "H12: the house's decision follows `armed` itself, which a K1 relay test clears for a while: the test reads as a new start, and with a short fault_hold_s D5 drops for it.",
+  "killed_by": [
+   "fault_out_setting_applies_at_once_and_only_locally"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "bool houseDecided() {\n  return everArmed;",
+    "replace": "bool houseDecided() {\n  return armed || (everArmed && false);"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h13_gate_decided_before_settling",
+  "invariant": "fault-out",
+  "why": "H13: the gate counts as decided at once after boot, before its inputs settled and its first STATUS went out: a gate reboot raises D5 as soon as it hears the house.",
+  "killed_by": [
+   "fault_out_reboot_reads_as_a_fault_until_decided"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  return !settling;  // settling ends with the first STATUS sent (gateLoop)",
+    "replace": "  return true;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h14_hold_not_wrap_safe",
+  "invariant": "wrap-safe",
+  "why": "H14: the fault hold compares absolute times (now >= since + hold) instead of the signed elapsed(): a problem that starts within fault_hold_s before millis() wraps at 2^32 drops D5 at once.",
+  "killed_by": [
+   "fault_out_hold_across_the_millis_wraps"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "    if (elapsed(now, troubleSince, (uint32_t)cfg.fault_hold_s * 1000)) healthy = false;",
+    "replace": "    if (now >= troubleSince + (uint32_t)cfg.fault_hold_s * 1000) healthy = false;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h15_gate_link_timeout_ignores_heartbeat",
+  "invariant": "fault-out",
+  "why": "H15: the gate counts its link down after link_timeout_s alone, not 2.5 of its heartbeats: with a heartbeat_s past link_timeout_s / 2.5 (which the house allows, stretching its own timeout) the gate hears the house only once a heartbeat, so its link drops between heartbeats and D5 falls every cycle.",
+  "killed_by": [
+   "fault_out_gate_heartbeat_longer_than_link_timeout_stays_healthy"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  uint32_t hb = (uint32_t)cfg.heartbeat_s * 2500;",
+    "replace": "  uint32_t hb = 0;"
+   }
+  ]
+ },
+ {
+  "name": "history_h1_bucket_written_during_a_pulse",
+  "invariant": "no-stall-in-pulse",
+  "why": "H1: a completed history bucket is written to the flash (~0.5 s with the radio restart) while a relay pulses, so the pulse runs that much long",
+  "killed_by": [
+   "history_bucket_written_after_a_relay_pulse_not_during_it"
+  ],
+  "edits": [
+   {
+    "file": "app.cpp",
+    "find": "  if (histSaveDue() && !appRelaysPulsing()) histSave();",
+    "replace": "  if (histSaveDue()) histSave();"
+   }
+  ]
+ },
+ {
+  "name": "history_h2_clear_held_no_more",
+  "invariant": "no-stall-in-pulse",
+  "why": "H2: hist.clear, which now writes the history log, isn't held while a relay pulses (blocksLoop)",
+  "killed_by": [
+   "gate_relays_console_flash_and_radio_requests_wait_for_the_pulse"
+  ],
+  "edits": [
+   {
+    "file": "console.cpp",
+    "find": "         || !strcmp(cmd, \"hist.clear\")\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "history_h3_bad_crc_record_loaded",
+  "invariant": "history-kept",
+  "why": "H3: the log takes a record without checking its CRC, so one torn by a power cut mid-write loads as the newest bucket (half of it erased bytes)",
+  "killed_by": [
+   "history_power_cut_mid_write_loses_that_bucket_only"
+  ],
+  "edits": [
+   {
+    "file": "histlog.cpp",
+    "find": "  if (get16(buf) != MAGIC || get32(buf + REC_LEN - 4) != crc32(buf, REC_LEN - 4)) return R_INVALID;",
+    "replace": "  if (get16(buf) != MAGIC) return R_INVALID;"
+   }
+  ]
+ },
+ {
+  "name": "history_h4_torn_slot_written_over",
+  "invariant": "history-kept",
+  "why": "H4: at boot the next record goes straight after the newest valid one, onto a slot a power cut tore, so it doesn't verify and that bucket is lost too (and the run ends there at the next boot)",
+  "killed_by": [
+   "history_power_cut_mid_write_loses_that_bucket_only"
+  ],
+  "edits": [
+   {
+    "file": "histlog.cpp",
+    "find": "  while (head % PER_SECTOR) {",
+    "replace": "  while (head % PER_SECTOR && head == SLOTS) {"
+   }
+  ]
+ },
+ {
+  "name": "history_h5_wrap_erases_the_newest_sector",
+  "invariant": "history-kept",
+  "why": "H5: entering a sector, the log erases the one before it (the newest records) instead of the one it enters (the oldest)",
+  "killed_by": [
+   "history_log_wrap_erases_only_its_oldest_sector"
+  ],
+  "edits": [
+   {
+    "file": "histlog.cpp",
+    "find": "  if (head % PER_SECTOR == 0 && !extFlashEraseSector(addr)) return false;",
+    "replace": "  if (head % PER_SECTOR == 0 && !extFlashEraseSector(slotAddr((head + SLOTS - 1) % SLOTS))) return false;"
+   }
+  ]
+ },
+ {
+  "name": "history_h6_newest_by_position",
+  "invariant": "history-kept",
+  "why": "H6: the newest record is taken as the first valid one in slot order, not the one with the largest lseq: a boot then goes on from an old record (here the CLEARED one at the log's start)",
+  "killed_by": [
+   "history_gate_reboot_keeps_the_completed_buckets",
+   "history_house_reboot_keeps_the_completed_buckets"
+  ],
+  "edits": [
+   {
+    "file": "histlog.cpp",
+    "find": "    while (i > 0 && candSeq[i - 1] < q) {",
+    "replace": "    while (i > 0 && candSeq[i - 1] < q && q == 0) {"
+   }
+  ]
+ },
+ {
+  "name": "history_h7_boot_loads_nothing",
+  "invariant": "history-kept",
+  "why": "H7: the boot doesn't take the history the log holds: every reset starts it over at bucket 0",
+  "killed_by": [
+   "history_gate_reboot_keeps_the_completed_buckets",
+   "history_house_reboot_keeps_the_completed_buckets"
+  ],
+  "edits": [
+   {
+    "file": "history.cpp",
+    "find": "  if (histLogBegin(HIST_DEPTH, takeBucket, p, next) && p >= 60",
+    "replace": "  if (histLogBegin(HIST_DEPTH, takeBucket, p, next) && p == 0 && p >= 60"
+   }
+  ]
+ },
+ {
+  "name": "history_h8_clear_leaves_the_flash",
+  "invariant": "history-kept",
+  "why": "H8: hist.clear empties the RAM only: the next reset brings the old history (and its period) back",
+  "killed_by": [
+   "history_clear_clears_the_flash_too"
+  ],
+  "edits": [
+   {
+    "file": "history.cpp",
+    "find": "  return histLogClear((uint16_t)periodS) ? HIST_CLEARED : HIST_NOT_SAVED;",
+    "replace": "  return HIST_CLEARED;"
+   }
+  ]
+ },
+ {
+  "name": "history_h9_failed_write_retried_every_pass",
+  "invariant": "history-kept",
+  "why": "H9: a bucket whose write failed is tried again on every loop pass, each one stopping the loop ~0.5 s and restarting the radio, so a failing chip takes the link down",
+  "killed_by": [
+   "history_failing_flash_costs_one_try_a_bucket"
+  ],
+  "edits": [
+   {
+    "file": "history.cpp",
+    "find": "  histLogAppend(saveNext, (uint16_t)period, (const uint8_t *)&ring[saveNext % (HIST_DEPTH + 1)]);\n  saveNext++;",
+    "replace": "  if (histLogAppend(saveNext, (uint16_t)period, (const uint8_t *)&ring[saveNext % (HIST_DEPTH + 1)])) saveNext++;"
+   }
+  ]
+ },
+ {
+  "name": "history_h10_zeros_taken_for_a_garbled_bus",
+  "invariant": "history-kept",
+  "why": "H10: a slot that reads zeros twice is taken for a garbled bus without asking the chip for its id: zeros the flash really holds (an erase cut short, another program's data) then turn the log off at every boot, for good, hist.clear included",
+  "killed_by": [
+   "history_zeros_in_the_flash_leave_the_log_on"
+  ],
+  "edits": [
+   {
+    "file": "histlog.cpp",
+    "find": "  return extFlashAnswers();",
+    "replace": "  return false;"
+   }
+  ]
  }
 ]

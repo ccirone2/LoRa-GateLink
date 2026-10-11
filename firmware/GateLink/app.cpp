@@ -13,6 +13,7 @@
 #include "roles.h"
 #include "console.h"
 #include "history.h"
+#include "health.h"
 
 Input in1, in2, in3, in4;
 Relay k1, k2;
@@ -106,9 +107,10 @@ bool appRelaysPulsing() {
 
 bool appLinkUp(uint32_t now) {
   // The house goes by the gate's STATUS reports alone, taken in order (houseStatusAt): any other frame, or a STATUS
-  // held back and delivered late, says nothing about the gate now.
+  // held back and delivered late, says nothing about the gate now. The gate goes by anything heard from the house.
+  // Either way the timeout covers 2.5 of the gate's heartbeats at least.
   uint32_t at = activeRole == ROLE_HOUSE ? houseStatusAt() : linkStats().lastRxAt;
-  uint32_t timeout = activeRole == ROLE_HOUSE ? houseLinkTimeoutMs() : (uint32_t)cfg.link_timeout_s * 1000;
+  uint32_t timeout = activeRole == ROLE_HOUSE ? houseLinkTimeoutMs() : gateLinkTimeoutMs();
   return at && !elapsed(now, at, timeout);
 }
 
@@ -129,6 +131,12 @@ void appFillStatus(JsonObject o) {
   o["free_ram"] = boardFreeRam();
   o["usb_cut"] = consoleUsbCutLines();
   o["loop_max_us"] = loopMaxUs;
+  int8_t faultOut = healthFaultOut();
+  if (faultOut < 0) o["fault_out"] = nullptr;
+  else o["fault_out"] = faultOut > 0;
+  JsonArray health = o["health"].to<JsonArray>();
+  for (uint8_t i = 0; i < PROBLEM_COUNT; i++)
+    if (healthProblems() & (1u << i)) health.add(healthName(i));
   JsonObject io = o["io"].to<JsonObject>();
   io["in1"] = in1.active();
   io["in2"] = in2.active();
@@ -241,7 +249,8 @@ void appSetup(uint8_t rc, const uint32_t serial[4]) {
   in4.begin(PIN_IN4, cfg.in4_invert);
   logEvent(EV_BOOT, resetCause, activeRole);
   logEvent(EV_CFG, configSource(), configDropped());
-  histBegin();
+  healthBegin();  // fault_out: D5 LOW until the role has decided
+  histBegin(bootCount);  // the history kept in the flash
   supplyBegin();
   boardKick();
 
@@ -260,14 +269,19 @@ void appLoop() {
   // A radio that faulted or didn't start is re-initialised here, never while a relay pulses: LoRa.begin() stops the
   // loop ~0.5 s, and Relay::update couldn't end the pulse meanwhile (nor start one waiting out the interlock).
   if (radioRecoverDue() && !appRelaysPulsing()) radioRecover();
+  // Likewise a completed history bucket's write to the flash (~0.5 s, the radio restarted): it waits for the pulse.
+  if (histSaveDue() && !appRelaysPulsing()) histSave();
   consolePoll();
   supplyPoll(now);  // before the roles: the house's controller power sense reads it
+  bool up = false;
   if (activeRole != ROLE_UNSET) {
     linkPoll(now);
     if (activeRole == ROLE_HOUSE) houseLoop(now);
     else gateLoop(now);
-    histPoll(now, appLinkUp(now));
+    up = appLinkUp(now);
+    histPoll(now, up);
   }
+  healthPoll(now, up);  // after the roles, which it reads (and nothing there reads it)
   updateLed(now);
   uint32_t took = micros() - start;
   if (took > loopMaxUs) loopMaxUs = took;

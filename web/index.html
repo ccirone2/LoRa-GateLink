@@ -87,6 +87,7 @@
           <div class="kv"><span>Last reset</span><b id="bReset">—</b></div>
           <div class="kv"><span>Supply (VIN)</span><b id="bSupply">—</b></div>
           <div class="kv"><span>Radio</span><b id="bRadio">—</b></div>
+          <div class="kv" title="What this board counts as needing attention now, and the fault output on D5 (fault_out): high while healthy, low once a problem has lasted fault_hold_s, low after a restart until the board has started up"><span>Health / fault output</span><b id="bHealth">—</b></div>
           <div class="kv" data-role="gate" title="After boot the first report to the house waits until the gate inputs have been steady for 3 s (at most 10 s)"><span>Inputs settling</span><b id="bSettling">—</b></div>
           <div class="kv" title="Whether a saved config was found at boot, where it lives, and the flash chip's id (000000 = chip not answering)"><span>Config at boot</span><b id="bCfg">—</b></div>
           <div class="kv" title="Free RAM: bytes between the heap's high-water mark and the stack. USB lines lost: console lines dropped since boot"><span>Free RAM / USB lines lost</span><b id="bMem">—</b></div>
@@ -179,7 +180,7 @@
             <span class="spacer"></span>
             <button id="btnHistClear" class="danger" title="Empty this board's history and start again from now">Clear</button>
           </div>
-          <p class="muted small" id="histNote">The board records the link hour by hour since it booted (up to four days; lost on reset). Firmware 0.4.0 or later.</p>
+          <p class="muted small" id="histNote">The board records the link hour by hour (up to four days; kept across resets from firmware 0.14.0). Firmware 0.4.0 or later.</p>
           <div id="histBody" hidden>
             <div class="tiles" id="histTiles"></div>
             <div class="legend" id="histLegend"></div>

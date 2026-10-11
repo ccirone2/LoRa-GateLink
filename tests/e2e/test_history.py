@@ -1,5 +1,6 @@
 """Link quality history (hist.get / hist.clear): bucket counters against the status totals, bucket rollover and
-paging, link-down time across an outage, and the gate's counters as the house records them from STATUS."""
+paging, link-down time across an outage, the gate's counters as the house records them from STATUS, and the
+completed buckets kept in the SPI flash across a reboot (firmware 0.14.0 on)."""
 import time
 
 from gatelink.bench import PROFILE_COMMON
@@ -90,6 +91,31 @@ def test_history_rollover_and_paging(rig):
         assert len(page["rows"]) <= PAGE
         bad = rig.house.request("hist.clear", period_s=30, check=False)
         assert not bad["ok"], "hist.clear accepted a period under 60 s"
+    finally:
+        _clear(rig)
+
+
+def test_history_kept_across_a_reboot(rig):
+    """Completed buckets are written to the board's SPI flash: after a reboot hist.get has them as they were, each
+    with the boot it was recorded in, and the numbering (and the 60 s period) goes on from them."""
+    try:
+        _clear(rig, 60)
+        time.sleep(62)
+        before, head = rig.gate.history()
+        assert head["persist"] is True, f"gate history not kept in its flash: {head}"
+        assert [b["idx"] for b in before] == [0, 1], before
+        boot0 = rig.gate.info()["boot_count"]
+        assert before[0]["boot"] == boot0, before[0]
+        rig.reboot("gate")
+        rig.wait_for(lambda: rig.gate.status()["link"]["verified"], 20, "the gate's session verified after its reboot")
+        after, head = rig.gate.history()
+        boot1 = rig.gate.info()["boot_count"]
+        assert boot1 > boot0
+        assert head["period_s"] == 60, f"the period goes with the history: {head}"
+        # Bucket 1 was in progress at the reset: lost, and the numbers go on from it.
+        assert [b["idx"] for b in after] == [0, 1], after
+        assert after[0] == before[0], f"bucket 0 changed across the reboot: {before[0]} -> {after[0]}"
+        assert after[1]["boot"] == boot1, after[1]
     finally:
         _clear(rig)
 

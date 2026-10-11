@@ -22,7 +22,7 @@ FUZZ_SECONDS ?= 60
 FUZZ_FLAGS ?=
 
 TARGETS := fuzz_frames fuzz_console fuzz_config
-FW_SRCS := app link role_gate role_house io log history console config
+FW_SRCS := app link role_gate role_house io log history histlog health console config
 CRYPTO_SRCS := Crypto Hash SHA256
 HARNESS := hal harness
 HEADERS := $(wildcard fuzz/*.h stubs/*.h $(FW)/*.h)
@@ -57,7 +57,7 @@ COVS := $(TARGETS:fuzz_%=$(CV)/replay_%)
 # Per target: input size limit and dictionary.
 MAXLEN_fuzz_frames := 4096
 MAXLEN_fuzz_console := 8192
-MAXLEN_fuzz_config := 16384
+MAXLEN_fuzz_config := 81920
 DICT_fuzz_frames :=
 DICT_fuzz_console := -dict=fuzz/console.dict
 DICT_fuzz_config := -dict=fuzz/config.dict

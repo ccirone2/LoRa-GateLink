@@ -176,6 +176,7 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .sw.line { height: 2px; }
 .sw.band { height: 10px; opacity: .25; background: var(--muted); }
 .sw.heat { height: 10px; background: var(--chart-heat); }
+.sw.reset { width: 0; height: 12px; border-left: 1px dashed var(--muted); border-radius: 0; }
 .hist-plot { position: relative; margin-top: 6px; transition: opacity .15s; }
 .hist-plot.loading { opacity: .5; }
 #histChart { display: block; width: 100%; touch-action: pan-y; }
@@ -193,12 +194,15 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); }
 #histChart .dot { stroke: var(--surface); stroke-width: 2; }
 #histChart .track { fill: var(--bg); }
 #histChart .cross { stroke: var(--muted); stroke-width: 1; }
+#histChart line.reset { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+#histTable tr.reset td { border-bottom: 2px dashed var(--muted); }
 #histChart .hit { fill: transparent; }
 .hist-tip {
   position: absolute; top: 0; z-index: 2; pointer-events: none; min-width: 190px; padding: 8px 10px; font-size: 12px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
 }
 .hist-tip .tt { font-weight: 600; margin-bottom: 2px; }
+.hist-tip .note { color: var(--muted); font-size: 11px; }
 .hist-tip .sec { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
 .hist-tip .r { display: flex; align-items: center; gap: 6px; }
 .hist-tip .r b { min-width: 72px; text-align: right; font-variant-numeric: tabular-nums; }

@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.13.9"
+#define FW_VERSION "0.14.0"
 #define FW_MARKER_PREFIX "GATELINK_FW="
 // FW_MARKER_PREFIX FW_VERSION: the web console looks for it in a .bin to check the file is GateLink and
 // read its version. The version is reported from it (fwVersion()) so the linker keeps it in the image.
@@ -55,6 +55,9 @@ struct Config {
   int32_t ctrl_power_pmic;  // house: the board's supply (charger power good) counts as controller power too
   // Board
   int32_t uart_console;  // also run the console on Serial1 (pins 13 RX / 14 TX), for bench power tests
+  // Fault output (health.cpp)
+  int32_t fault_out;     // D5 HIGH while healthy, LOW otherwise; 0 = D5 left an input (pull-down)
+  int32_t fault_hold_s;  // a problem must last this long before D5 drops; recovery raises it at once
   // Security
   uint8_t key[16];
   int32_t key_set;
@@ -73,6 +76,16 @@ struct ParamDef {
   int32_t minV;
   int32_t maxV;
   uint8_t flags;
+};
+
+// The SPI flash (extflash.h), in 4 KB sectors: 0-1 the config records and 2-3 the boot counter (config.cpp), 4-19 the
+// link history log (histlog.cpp). The rest is unused. Uploads don't touch it.
+//
+// Every access holds the radio module in reset (extflash.h), which resets the radio: a FlashAccess around it restarts
+// the radio afterwards (about 0.5 s off the air, in LoRa.begin()'s reset delays, with the loop stopped).
+struct FlashAccess {
+  FlashAccess();
+  ~FlashAccess();
 };
 
 extern Config cfg;

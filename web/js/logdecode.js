@@ -12,6 +12,11 @@ const RADIO_FAIL = { 0: 'radio failed to initialise', 1: 'radio TX fault, re-ini
   3: 'radio initialised on retry' };
 const CMD_HOLD = { 0: 'held command sent after all: the gate’s session answered', 1: 'command held: HELLO from an unverified gate session',
   2: 'held command dropped: the gate restarted (it may have run it)' };
+// The board's health problems (health.h Problem), in bit order: status `health` names them, log `health` b has the bits.
+export const PROBLEMS = { starting: 'starting up', radio: 'radio down', link: 'link down', ac: 'no AC power at the gate',
+  no_power: 'gate has no power', fault: 'gate limit fault' };
+const problems = (bits) => Object.values(PROBLEMS).filter((_, i) => bits & (1 << i)).join(', ');
+const FAULT_OUT = { 1: 'fault output high: healthy', 0: 'fault output low: needs attention', '-1': 'fault output off (D5 an input again)' };
 
 const state = (v) => (STATES[v] ?? `state ${v}`).replaceAll('_', ' ');
 const action = (v) => ACTIONS[v] ?? `action ${v}`;
@@ -57,6 +62,7 @@ const DECODE = {
   cfg: (a, b) => `config loaded from ${CFG_SOURCES[a] ?? a}${b ? `; ${b} saved setting${b === 1 ? '' : 's'} dropped` : ''}`,
   supply: (a) => (a < 0 ? 'charger not answering: board supply unknown' : a ? 'board supply good' : 'board supply lost: running on the LiPo'),
   cmd_hold: (a, b) => `${CMD_HOLD[a] ?? `command hold ${a}`} (session ${hex(b)})`,
+  health: (a, b) => `${FAULT_OUT[a] ?? `fault output ${a}`}${b ? ` (${problems(b)})` : ''}`,
 };
 
 export const KNOWN_EVENTS = Object.keys(DECODE);

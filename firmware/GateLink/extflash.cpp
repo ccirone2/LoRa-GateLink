@@ -59,6 +59,16 @@ void extFlashHoldModem() {
   delay(1);
 }
 
+static uint32_t readId() {
+  select();
+  FLASH_BUS.transfer(CMD_JEDEC_ID);
+  uint32_t id = (uint32_t)FLASH_BUS.transfer(0) << 16;
+  id |= (uint32_t)FLASH_BUS.transfer(0) << 8;
+  id |= FLASH_BUS.transfer(0);
+  deselect();
+  return id;
+}
+
 bool extFlashBegin() {
   extFlashHoldModem();
   pinMode(LORA_IRQ_DUMB, OUTPUT);  // the radio's select, on the same bus
@@ -68,12 +78,7 @@ bool extFlashBegin() {
   FLASH_BUS.begin();
   command(CMD_RELEASE_PD);
   delayMicroseconds(50);  // tRES1 is 3 us
-  select();
-  FLASH_BUS.transfer(CMD_JEDEC_ID);
-  uint32_t id = (uint32_t)FLASH_BUS.transfer(0) << 16;
-  id |= (uint32_t)FLASH_BUS.transfer(0) << 8;
-  id |= FLASH_BUS.transfer(0);
-  deselect();
+  uint32_t id = readId();
   rawId = id;
   uint8_t mfr = id >> 16;
   jedecId = (mfr == 0x00 || mfr == 0xFF || !waitReady(10)) ? 0 : id;
@@ -86,6 +91,10 @@ bool extFlashPresent() {
 
 uint32_t extFlashId() {
   return rawId;
+}
+
+bool extFlashAnswers() {
+  return jedecId && readId() == jedecId;
 }
 
 void extFlashRead(uint32_t addr, uint8_t *buf, size_t len) {

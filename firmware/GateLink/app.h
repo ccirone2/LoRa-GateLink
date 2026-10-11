@@ -15,7 +15,8 @@ bool appPing();
 bool appRelayTest(uint8_t k, uint32_t ms);  // false: on the gate, that relay is pulsing already (busy)
 // A relay pulse is running or waiting for its interlock start. Flash saves and radio restarts block the loop for
 // up to ~1 s, and Relay::update doesn't run meanwhile, so they wait until this is false (the pulse would stretch):
-// console requests (console.cpp blocksLoop), remote config writes (role_gate.cpp) and radio recovery (appLoop).
+// console requests (console.cpp blocksLoop), remote config writes (role_gate.cpp), radio recovery and the history's
+// writes to the flash (appLoop).
 bool appRelaysPulsing();
 void appRestartRadio();
 void appIdentify(uint32_t ms);  // strobe the LED so the board can be picked out on the bench

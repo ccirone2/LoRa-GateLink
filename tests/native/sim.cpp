@@ -99,6 +99,7 @@ void FakeFlash::reset() {
   present = true;
   memset(mem, 0xFF, sizeof(mem));
   garbleReads = 0;
+  failErases = 0;
   cutNextProgram = false;
   cutAfterPrograms = 0;
   erases = programs = 0;
@@ -110,6 +111,13 @@ void extFlashHoldModem() {}
 bool extFlashBegin() { return flash.present; }
 bool extFlashPresent() { return flash.present; }
 uint32_t extFlashId() { return flash.present ? 0xEF4015 : 0; }
+bool extFlashAnswers() {
+  if (flash.garbleReads > 0) {  // the id is read on the same garbled bus
+    flash.garbleReads--;
+    return false;
+  }
+  return flash.present;
+}
 void extFlashRead(uint32_t addr, uint8_t *buf, size_t len) {
   inRange(addr, len);
   if (flash.garbleReads > 0) {
@@ -120,13 +128,20 @@ void extFlashRead(uint32_t addr, uint8_t *buf, size_t len) {
   memcpy(buf, flash.mem + addr, len);
 }
 bool extFlashEraseSector(uint32_t addr) {
+  addr &= ~(EXTFLASH_SECTOR - 1);
   inRange(addr, EXTFLASH_SECTOR);
+  if (flash.failErases > 0) {
+    flash.failErases--;
+    return false;
+  }
   flash.erases++;
   memset(flash.mem + (addr & ~(EXTFLASH_SECTOR - 1)), 0xFF, EXTFLASH_SECTOR);
   return true;
 }
 bool extFlashProgram(uint32_t addr, const uint8_t *buf, size_t len) {
   inRange(addr, len);
+  // The driver refuses one that crosses a page (the chip would wrap within it): a firmware bug.
+  if (len == 0 || (addr % EXTFLASH_PAGE) + len > EXTFLASH_PAGE) throw Failure("flash program crosses a page");
   flash.programs++;
   size_t n = len;
   if (flash.cutNextProgram && flash.cutAfterPrograms-- <= 0) {

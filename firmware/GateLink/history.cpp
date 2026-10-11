@@ -1,4 +1,5 @@
 #include "history.h"
+#include "histlog.h"
 #include "link.h"
 #include "radio.h"
 
@@ -13,13 +14,19 @@ struct Bucket {
   int16_t rssiMin, noiseMax, peerRssiMin, peerNoiseMax;
   uint8_t giveups, macFail, lbtForced, sessions, faults, peerGiveups;
   int8_t snrMinQ, peerSnrMin;
+  uint32_t boot;  // the boot it was recorded in (appBootCount; 0 = unknown)
 };
+static_assert(sizeof(Bucket) == HLOG_DATA, "a bucket is what the flash log keeps");
 
 static Bucket ring[HIST_DEPTH + 1];
 static uint32_t period = HIST_PERIOD_S;
-static uint32_t secs;   // seconds since the history started (boot or hist.clear)
+// Seconds since bucket 0 started, as if the history had run without a break (a boot goes on at cur * period).
+static uint32_t secs;
 static uint32_t secAt;  // millis() at the last whole second
 static uint32_t cur;    // number of the bucket in progress
+static uint32_t base;   // the oldest bucket there is: 0, or the oldest loaded from the flash at boot
+static uint32_t saveNext;  // the next completed bucket to write to the flash (== cur: none waiting)
+static uint32_t bootNo;
 static uint32_t noiseAt;
 static int16_t pendingNoise = NOISE_NONE;  // last reading, kept once no frame turned out to be starting
 static uint32_t pendingRxDone;
@@ -46,6 +53,18 @@ static void startBucket() {
   b.rssiMin = b.peerRssiMin = NO_MIN;
   b.noiseMax = b.peerNoiseMax = NOISE_NONE;
   b.snrMinQ = b.peerSnrMin = INT8_MAX;
+  b.boot = bootNo;
+}
+
+// The history goes on at bucket `next` (base: the oldest there is), its first second from now.
+static void startAt(uint32_t periodS, uint32_t next, uint32_t oldest) {
+  period = periodS;
+  cur = next;
+  base = oldest;
+  saveNext = next;
+  secs = next * periodS;
+  secAt = millis();
+  startBucket();
 }
 
 static void add16(uint16_t &c, uint32_t d) {
@@ -76,22 +95,35 @@ static int8_t clamp8(int32_t v) {
   return v < INT8_MIN ? INT8_MIN : v > INT8_MAX - 1 ? INT8_MAX - 1 : v;  // INT8_MAX marks "no sample"
 }
 
-bool histClear(uint32_t periodS) {
-  if (periodS < 60 || periodS > 3600) return false;
-  period = periodS;
-  secs = 0;
-  cur = 0;
-  secAt = millis();
-  startBucket();
-  return true;
+HistClear histClear(uint32_t periodS) {
+  if (periodS < 60 || periodS > 3600) return HIST_BAD_PERIOD;
+  startAt(periodS, 0, 0);
+  return histLogClear((uint16_t)periodS) ? HIST_CLEARED : HIST_NOT_SAVED;
 }
 
 uint32_t histPeriod() {
   return period;
 }
 
-void histBegin() {
-  histClear(HIST_PERIOD_S);
+static uint32_t loadedFrom;  // the oldest bucket histLogBegin handed over (newest first)
+
+static void takeBucket(uint32_t idx, const uint8_t *data) {
+  memcpy(&ring[idx % (HIST_DEPTH + 1)], data, sizeof(Bucket));
+  loadedFrom = idx;
+}
+
+void histBegin(uint32_t bootCount) {
+  bootNo = bootCount;
+  uint16_t p = HIST_PERIOD_S;
+  uint32_t next = 0;
+  loadedFrom = UINT32_MAX;
+  // What the flash holds, if it makes sense here: a period hist.clear can set, and numbers that leave secs room to go
+  // on (an hourly history fills half of it in 68 years).
+  if (histLogBegin(HIST_DEPTH, takeBucket, p, next) && p >= 60 && p <= 3600 && (uint64_t)next * p <= UINT32_MAX / 2
+      && (loadedFrom == UINT32_MAX || loadedFrom < next))
+    startAt(p, next, loadedFrom == UINT32_MAX ? next : loadedFrom);
+  else
+    startAt(HIST_PERIOD_S, 0, 0);
   noiseAt = millis();
 }
 
@@ -168,6 +200,16 @@ void histPoll(uint32_t now, bool linkUp) {
   }
 }
 
+bool histSaveDue() {
+  return saveNext != cur && histLogOn();
+}
+
+void histSave() {
+  if (cur - saveNext > HIST_DEPTH) saveNext = cur - HIST_DEPTH;  // left the ring meanwhile
+  histLogAppend(saveNext, (uint16_t)period, (const uint8_t *)&ring[saveNext % (HIST_DEPTH + 1)]);
+  saveNext++;  // written or not: a failing chip costs one try per bucket, not one per loop pass
+}
+
 void histPeer(const PeerReport &r) {
   Bucket &b = bucket();
   if (r.rssi != 0 && b.peerN < 0xFFFF) {
@@ -229,17 +271,19 @@ static const char *const FIELDS[] = {
   "idx", "tx", "rx", "retries", "giveups", "crc_err", "mac_fail", "lbt_defers", "lbt_forced", "sessions",
   "radio_faults", "down_s", "rssi_min", "rssi_avg", "snr_min", "snr_avg", "noise_avg", "noise_max", "peer_n",
   "peer_rssi_min", "peer_rssi_avg", "peer_snr_min", "peer_snr_avg", "peer_noise_avg", "peer_noise_max",
-  "peer_retries", "peer_giveups", "peer_crc_err",
+  "peer_retries", "peer_giveups", "peer_crc_err", "boot",
 };
 
 void histGet(JsonObject res, int32_t from, int32_t n) {
   uint32_t oldest = cur > HIST_DEPTH ? cur - HIST_DEPTH : 0;
+  if (base > oldest) oldest = base;
   res["period_s"] = period;
   res["now_s"] = secs;
   res["oldest"] = oldest;
   res["current"] = cur;
+  res["persist"] = histLogOn();
   JsonArray fields = res["fields"].to<JsonArray>();
-  for (const char *f : FIELDS) fields.add(f);
+  for (const char *f : FIELDS) fields.add(JsonString(f, true));  // in flash: linked, not copied into the heap
   uint32_t first = from < 0 || (uint32_t)from < oldest ? oldest : from;
   if (n < 1 || n > HIST_PAGE) n = HIST_PAGE;
   JsonArray rows = res["rows"].to<JsonArray>();
@@ -274,5 +318,6 @@ void histGet(JsonObject res, int32_t from, int32_t n) {
     r.add(b.peerRetries);
     r.add(b.peerGiveups);
     r.add(b.peerCrc);
+    r.add(b.boot);
   }
 }

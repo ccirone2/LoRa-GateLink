@@ -34,6 +34,23 @@ def test_bench_safe_settings(bench):
     assert not inverted, f"set back to 0 and save: {', '.join(inverted)} (fix reversed signals in the wiring)"
 
 
+# Bytes the heap's high-water mark must leave below the stack (status free_ram) once each board has built its largest
+# replies: every hist.get page, then config.get. A full history page followed by config.get left the house 795 B on
+# 0.14.0 before the setting names were linked rather than copied (1771 B after).
+MIN_FREE_RAM = 1024
+
+
+def test_free_ram_after_the_largest_replies(bench):
+    for name in ("house", "gate"):
+        b = getattr(bench, name)
+        b.history()
+        b.config_get()
+        free = b.status()["free_ram"]
+        bench.facts[f"free_ram after hist.get and config.get ({name})"] = f"{free} B"
+        assert free >= MIN_FREE_RAM, (f"{name}: {free} B between heap and stack after hist.get and config.get "
+                                      f"(at least {MIN_FREE_RAM}): a larger reply could reach the stack")
+
+
 def test_ping(bench):
     # The house misses ~2-3 % of pongs (TODO.md): one lost pong mustn't skip the whole run.
     pong = bench.ping("house", required=False) or bench.ping("house", required=False) or bench.ping("house")

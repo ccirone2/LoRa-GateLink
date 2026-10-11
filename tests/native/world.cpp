@@ -81,7 +81,7 @@ Board::Board(World &w, int idx, const char *name) : w(w), idx(idx), name(name) {
     soCopies.files.push_back(so);
     copied[idx] = true;
   }
-  flash.assign(16 * 4096, 0xFF);
+  flash.assign(20 * 4096, 0xFF);
   for (int i = 0; i < 4; i++) serial[i] = 0x5EED0000u + idx * 16 + i;
   rng = 0x9E3779B97F4A7C15ULL + idx;
   holdUpMs = idx == 0 ? 100 : 600;  // bench: house ~0.1 s, gate ~0.6 s without a LiPo
@@ -343,12 +343,17 @@ void randomSeed(unsigned long seed) {
   if (cur) cur->prng = seed ? seed : 1;
 }
 void pinMode(uint32_t pin, uint32_t mode) {
-  if (cur && pin < P_COUNT) cur->mode[pin] = (uint8_t)mode;
+  if (!cur || pin >= P_COUNT) return;
+  if (pin == P_D5 && cur->mode[pin] != mode)
+    world->trace.add(world->now, cur->name + (mode == PM_OUTPUT ? ": D5 an output" : fmt(": D5 an input (mode %u)", mode)));
+  cur->mode[pin] = (uint8_t)mode;
 }
 void digitalWrite(uint32_t pin, uint32_t value) {
   if (!cur || pin >= P_COUNT) return;
   if (cur->out[pin] != (bool)value && (pin == P_K1 || pin == P_K2))
     world->trace.add(world->now, cur->name + fmt(": K%u %s", pin, value ? "on" : "off"));
+  if (cur->out[pin] != (bool)value && pin == P_D5)
+    world->trace.add(world->now, cur->name + fmt(": D5 %s", value ? "high" : "low"));
   cur->out[pin] = value;
 }
 int digitalRead(uint32_t pin) {
@@ -545,8 +550,15 @@ void radioAddEntropy(const void *data, size_t len) {
 static void flashRange(Board &b, uint32_t addr, size_t len) {
   if (addr + len > b.flash.size()) throw Failure(b.name + fmt(": flash access at 0x%x+%zu beyond the faked chip", addr, len));
 }
+// [no-stall-in-pulse] Every flash access stops the loop (and restarts the radio): never while a gate relay pulses. (The
+// house's K1 is held for as long as the gate is open, so its relay tests are checked by the tests that run them.)
+static void flashUse(Board &b, const char *what) {
+  if (world && b.idx == 1 && b.state == Board::RUN && (b.coil(1) || b.coil(2)))
+    world->violate(b.name + fmt(": flash %s while a relay pulses (K1 %d, K2 %d)", what, b.coil(1), b.coil(2)));
+}
 void extFlashHoldModem() {
   Board &b = *cur;
+  flashUse(b, "accessed");
   b.radioHeld = true;  // the module's reset also resets the SX1276: any frame on its way in or out is lost
   b.radioUp = false;
   b.rxq.clear();
@@ -563,6 +575,9 @@ bool extFlashPresent() {
 uint32_t extFlashId() {
   return cur->flashPresent ? 0xEF4015 : 0;
 }
+bool extFlashAnswers() {
+  return cur->flashPresent;
+}
 void extFlashRead(uint32_t addr, uint8_t *buf, size_t len) {
   Board &b = *cur;
   flashRange(b, addr, len);
@@ -578,8 +593,10 @@ bool extFlashEraseSector(uint32_t addr) {
   if (!b.flashPresent) return false;
   addr &= ~(EXTFLASH_SECTOR - 1);
   flashRange(b, addr, EXTFLASH_SECTOR);
+  flashUse(b, "erased");
   memset(b.flash.data() + addr, 0xFF, EXTFLASH_SECTOR);
   b.flashErases++;
+  b.flashOps.push_back({ world ? world->now : 0, 'E', addr, true });
   b.block(b.eraseMs * 1000);
   return true;
 }
@@ -587,13 +604,18 @@ bool extFlashProgram(uint32_t addr, const uint8_t *buf, size_t len) {
   Board &b = *cur;
   if (!b.flashPresent || len == 0 || (addr % EXTFLASH_PAGE) + len > EXTFLASH_PAGE) return false;
   flashRange(b, addr, len);
+  flashUse(b, "programmed");
   size_t n = len;
-  if (b.cutNextProgram) {
+  if (b.failPrograms > 0) {
+    b.failPrograms--;
+    n = 0;
+  } else if (b.cutNextProgram) {
     b.cutNextProgram = false;
     n = len / 2;
   }
   for (size_t i = 0; i < n; i++) b.flash[addr + i] &= buf[i];  // NOR: programming only clears bits
   b.flashPrograms++;
+  b.flashOps.push_back({ world ? world->now : 0, 'P', addr, n == len });
   b.block(800 + (uint32_t)len * 8);
   return n == len;
 }
@@ -957,6 +979,13 @@ static bool recentRelayTest(World &w, int board, int k, uint32_t at, uint32_t wi
 
 void World::onLog(Board &b, const LogEv &e) {
   if (e.ev == "boot") {
+    ft[b.idx] = FaultTrack();
+    ft[b.idx].bootT = e.t;
+  } else if (e.ev == "link_up" && &b == &house && !ft[0].upSinceBoot) {
+    ft[0].upSinceBoot = true;
+    ft[0].upT = e.t;
+  }
+  if (e.ev == "boot") {
     if (&b == &house) {
       houseView = GS_UNKNOWN_;
       houseLink = false;
@@ -1080,5 +1109,46 @@ void World::monitor() {
     }
   } else if (displayWrongSince != 0x7FFFFFFF) {
     displayWrongSince = 0;
+  }
+
+  monitorFaultOut(0);
+  monitorFaultOut(1);
+}
+
+// D5, the fault output (health.cpp): driven only with fault_out on; LOW after boot until the board has decided
+// (house: armed, the first STATUS plus sync_window_ms; gate: inputs settled, at least BOOT_SETTLE_MS after boot);
+// and never HIGH once a fault this monitor can see has lasted fault_hold_s (plus a margin for the input debounce):
+// a board's radio down; the house's link down, or the gate shown no_power or fault; the gate's AC (IN3) off with
+// power_sense, or its state fault. (The firmware counts more: the gate's link, the AC lost bit at the house.)
+void World::monitorFaultOut(int i) {
+  Board &b = board(i);
+  FaultTrack &t = ft[i];
+  int d5 = b.faultOut();
+  if (d5 >= 0 && !b.get("fault_out")) {  // the setting applies on the next loop pass at the latest
+    if (!t.offDriven) {
+      t.offDriven = now | 1;
+    } else if (after(now, t.offDriven + 5) && !t.reported) {
+      t.reported = true;
+      violate(b.name + ": D5 driven with fault_out off");
+    }
+  } else {
+    t.offDriven = 0;
+  }
+  bool bad = false;
+  if (b.running()) {
+    bad = !b.radioUp;
+    if (i == 0) bad = bad || !houseLink || houseView == GS_NO_POWER_ || houseView == GS_FAULT_;
+    else bad = bad || gateView == GS_FAULT_ || (!opener.in(3) && gate.get("power_sense"));
+  }
+  if (!bad) t.badSince = 0;
+  else if (!t.badSince) t.badSince = now | 1;
+  if (d5 != 1 || !limits.faultOut || t.reported) return;
+  if (i == 0 ? !t.upSinceBoot || (int32_t)(b.clockMs - (t.upT + (uint32_t)b.get("sync_window_ms"))) < -5
+             : (int32_t)(b.clockMs - t.bootT) < 3000) {
+    t.reported = true;
+    violate(b.name + fmt(": D5 high %d ms after boot, before the board had decided", (int32_t)(b.clockMs - t.bootT)));
+  } else if (t.badSince && after(now, t.badSince + (uint32_t)b.get("fault_hold_s") * 1000 + 200)) {
+    t.reported = true;
+    violate(b.name + fmt(": D5 high %u ms into a fault (fault_hold_s %d)", now - t.badSince, b.get("fault_hold_s")));
   }
 }

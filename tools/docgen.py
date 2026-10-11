@@ -808,8 +808,13 @@ def enum_values(repo):
         body = repo.function(func)[1]
         found = re.findall(r"\[\]\s*=\s*\{([^}]*)\}", body) + re.findall(r"\breturn\b([^;]*);", body)
         return {s for text in found for s in c_strings(text) if s != "?"}
-    return {"reset_cause": names("resetCauseName"), "cfg_store": names("configStoreName"),
-            "gate": names("gateStateName"), "cause": names("causeName"), "last_result": names("resultName")}
+    values = {"reset_cause": names("resetCauseName"), "cfg_store": names("configStoreName"),
+              "gate": names("gateStateName"), "cause": names("causeName"), "last_result": names("resultName")}
+    try:  # the `health` list's problem names (health.cpp, from 0.14.0)
+        values["health"] = names("healthName")
+    except DocgenError:
+        pass
+    return values
 
 
 def compare_tree(where, doc_text, tree, values, refs, fix):
@@ -1262,6 +1267,14 @@ def history_days(repo):
     return repo.names()["HIST_DEPTH"] * repo.names()["HIST_PERIOD_S"] / 86400
 
 
+def hlog_last_sector(repo):
+    return repo.names()["HLOG_SECTOR0"] + repo.names()["HLOG_SECTORS"] - 1
+
+
+def hlog_slots(repo):
+    return repo.names()["HLOG_SECTORS"] * repo.names()["EXTFLASH_SECTOR"] // repo.names()["HLOG_SLOT"]
+
+
 C, CON, PRO, HW, BT, DEV = ("CLAUDE.md", "docs/console.md", "docs/protocol.md", "docs/hardware.md",
                             "docs/bench-testing.md", "docs/development.md")
 R, E2E, SET = "README.md", "tests/e2e/README.md", "web/js/settings.js"
@@ -1402,16 +1415,29 @@ FACTS = [
       Q(CON, r"the last (\d+) plus the one in progress"),
       Q(C, r"hourly buckets \((\d+) \+ the one in progress")),
     Fact("history span (days)", f"{FW}/history.h", value=history_days,
-         quotes=(Q(CON, r"plus the one in progress\s+\((\w+) days\)"), Q(R, r"up to (\w+) days since its"))),
+         quotes=(Q(CON, r"plus the one in progress\s+\((\w+) days\)"), Q(R, r"up to (\w+) days; kept across\s+resets"))),
     D("HIST_PERIOD_S", f"{FW}/history.h",
       Q(CON, r"by default (\w+) hour each", lambda v: v / 3600),
-      Q(CON, r"lasts until the next boot \(then (\d+)\)")),
+      Q(CON, r"until the next `hist\.clear` \((\d+) on a board that has none\)")),
     D("HIST_PAGE", f"{FW}/history.h", Q(CON, r"`n` \(1–(\d+), default"), Q(CON, r"`n` \(1–\d+, default (\d+)\)")),
     Fact("hist.clear period min", f"{FW}/history.cpp", r"periodS < (\d+) \|\| periodS > \d+",
          (Q(CON, r"`period_s` \((\d+)–\d+, default"),)),
     Fact("hist.clear period max", f"{FW}/history.cpp", r"periodS < \d+ \|\| periodS > (\d+)",
          (Q(CON, r"`period_s` \(\d+–(\d+), default"),)),
     D("NOISE_EVERY_MS", f"{FW}/history.cpp", Q(CON, r"read (\d+)× a second", lambda v: 1000 / v)),
+    # The SPI flash map and the history log in it
+    D("HLOG_SECTOR0", f"{FW}/histlog.h",
+      Q(PRO, r"\| (\d+)–\d+ \| The link history log"),
+      Q(CON, r"The log takes sectors (\d+)–\d+ of the chip"),
+      Q(C, r"`histlog\.cpp`, sectors (\d+)–\d+")),
+    Fact("history log's last sector", f"{FW}/histlog.h", value=hlog_last_sector,
+         quotes=(Q(PRO, r"\| \d+–(\d+) \| The link history log"),
+                 Q(CON, r"The log takes sectors \d+–(\d+) of the chip"),
+                 Q(C, r"`histlog\.cpp`, sectors \d+–(\d+)"))),
+    D("HLOG_SLOT", f"{FW}/histlog.h", Q(PRO, r"cut into (\d+)-byte slots")),
+    Fact("history log slots", f"{FW}/histlog.h", value=hlog_slots,
+         quotes=(Q(PRO, r"two to a page and (\d+) in all"), Q(CON, r"a lap\s+of (\d+) buckets"))),
+    D("HLOG_DATA", f"{FW}/histlog.h", Q(PRO, r"period_s\(2\) 0\(2\) bucket\((\d+)\) crc")),
     # Config storage and firmware image
     D("EXTFLASH_PAGE", f"{FW}/extflash.h", Q(C, r"fit one (\d+)-byte page")),
     D("REC_MAX_PARAMS", f"{FW}/config.cpp", Q(C, r"static_assert, (\d+) params")),

@@ -25,6 +25,7 @@ and `firmware/GateLink/pins.h` in sync.
 | IN4 (A4) | spare | spare |
 | K1 (D1) | Shelly SW input (energized = gate not closed) | CSW24UL OPEN + COM (pulsed only) |
 | K2 (D2) | 2GIG contact sensor terminals (energized = gate closed) | CSW24UL CLOSE + COM (pulsed only) |
+| FAULT (D5) | optional fault output (`fault_out`, HIGH = healthy) to a relay module for a second 2GIG sensor | optional fault output (`fault_out`), as on the house |
 
 ## Gate board
 
@@ -85,6 +86,30 @@ and `firmware/GateLink/pins.h` in sync.
   off if IN2 isn't wired.
 - **2GIG contact sensor**: any 2GIG-compatible door/window sensor with external terminal input. Wire K2 NO/COM
   to its terminals; name it "Gate" in Alarm.com. (`sensor_invert` flips the sense if needed.)
+
+## Fault output (D5)
+
+The house shows `no_power`, `fault` and a lost link the way it shows an open gate: the 2GIG contact sensor opens and
+the Alarm.com switch turns on. To have the alarm system report "gate needs attention" separately, either board can
+drive D5 (`fault_out`, off by default): HIGH while the board is healthy, LOW once a problem has lasted `fault_hold_s`
+(default 10 s), and LOW after a reset until the board has started up. The problems each board counts (its radio, the
+link, AC power at the gate, `no_power`, `fault`) are listed in [console.md](console.md#fault-output); status `health`
+shows them, and log `health` each change of D5.
+
+- **D5 is a 3.3 V logic output good for a few mA.** Drive an opto or a relay module's input with it, never a relay
+  coil: a relay module with an active-high input that switches at 3.3 V (energized while D5 is HIGH), powered from the
+  board's 5 V supply (VIN) and GND.
+- **Alarm side:** wire the relay module's NO and COM contacts to the terminals of a second 2GIG wireless contact
+  sensor (or a hardwired zone of the 2GIG panel) as a normally-closed loop: closed while healthy, open on a problem.
+  Since D5 has to be driven HIGH to keep the loop closed, a dead board, a reset, a cut wire or a dead relay module
+  opens it too. Name it e.g. "Gate link trouble" in Alarm.com, set to report a trouble or notification rather than an
+  intrusion.
+- **Which board:** the house's D5 covers what matters to the alarm (the link, and the gate's AC, `no_power` and
+  `fault` as its STATUS reports them), so most installs wire only the house. At the gate the same output can feed a
+  sensor near the opener, which also covers the gate board itself going dead.
+- Set `fault_out` on the board whose D5 is wired; it applies at once. It isn't remote-writable (it's a wiring
+  decision); `fault_hold_s` can also be set on the gate from the house. With `fault_out` off, D5 stays an input with
+  its pull-down: leave it unwired.
 
 ## Bench UART console
 

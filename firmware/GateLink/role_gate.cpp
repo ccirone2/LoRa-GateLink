@@ -375,6 +375,27 @@ void gateStatus(JsonObject o) {
   o["settling"] = settling;
 }
 
+// The house answers each of our STATUS reports (heartbeat_s apart, or sooner) and sends nothing else unasked, so a
+// working link may be quiet for a heartbeat: the timeout covers 2.5 of them whatever link_timeout_s says, as the house's
+// does (houseLinkTimeoutMs; a heartbeat_s past link_timeout_s / 2.5 would read as a link that keeps dropping).
+uint32_t gateLinkTimeoutMs() {
+  uint32_t ms = (uint32_t)cfg.link_timeout_s * 1000;
+  uint32_t hb = (uint32_t)cfg.heartbeat_s * 2500;
+  return hb > ms ? hb : ms;
+}
+
+bool gateDecided() {
+  return !settling;  // settling ends with the first STATUS sent (gateLoop)
+}
+
+uint8_t gateCurrentState() {
+  return state;
+}
+
+bool gateAcPresent() {
+  return acPower();
+}
+
 void gateDebugRebootAfterCmd() {
   rebootAfterCmd = true;
 }

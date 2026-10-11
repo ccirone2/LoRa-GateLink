@@ -32,6 +32,8 @@ enum LogCode : uint8_t {
   EV_SUPPLY,         // a = board supply (VIN) power good, -1 = charger not answering (at boot only), b = REG08
   EV_CMD_HOLD,       // a = 1 command held (HELLO from an unverified session b), 0 sent after all (verified
                      //     session b answered), 2 dropped (new session b verified: the peer restarted)
+  EV_HEALTH,         // fault output D5 changed: a = 1 HIGH (healthy), 0 LOW (needs attention), -1 released (fault_out
+                     //   off: an input again); b = the problems then (Problem bits, health.h)
   EV_COUNT
 };
 

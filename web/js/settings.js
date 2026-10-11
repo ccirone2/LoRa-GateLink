@@ -8,6 +8,7 @@ export const GROUPS = [
   ['Gate node', ['pulse_ms', 'travel_timeout_s']],
   ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open',
     'ctrl_power_sense', 'ctrl_power_pmic', 'ctrl_confirm_ms', 'ctrl_settle_ms']],
+  ['Fault output', ['fault_out', 'fault_hold_s']],
   ['Board', ['uart_console']],
 ];
 // Config tooltips: what the setting does, then when you'd change it.
@@ -23,7 +24,7 @@ export const HELP = {
   sync_word: 'Both boards must match. Rarely changed: it filters out other LoRa networks on the same channel.',
   retries: 'Resends of an unacknowledged message, spread over its lifetime. Raise it on a lossy link; lower it to keep the channel quieter.',
   heartbeat_s: 'Gate: how often it reports status when nothing changes. Shorter spots a dead link sooner but uses more airtime. The house waits at least 2.5 heartbeats before calling the link lost.',
-  link_timeout_s: 'House: no status report from the gate this long = link lost (the contact sensor then reads open). Raise it if short dropouts cause false alarms; it is never shorter than 2.5 gate heartbeats.',
+  link_timeout_s: 'House: no status report from the gate this long = link lost (the contact sensor then reads open). Raise it if short dropouts cause false alarms; it is never shorter than 2.5 gate heartbeats. Gate: nothing heard from the house this long (at least 2.5 of its own heartbeats) = link down, for its LED and fault output.',
   cmd_ttl_s: 'House: how long a gate command keeps being retried before it is dropped (never fired late). Raise it if commands give up during short dropouts; lower it so a stale command isn’t delivered seconds later.',
   debounce_ms: 'How long an input must hold steady before it counts. Raise it if long field wires or a bouncy contact show up as flicker in the log.',
   in1_invert: `IN1 (house: controller output; gate: open limit). ${NO_INVERT}`,
@@ -44,6 +45,8 @@ export const HELP = {
   ctrl_confirm_ms: 'House: a controller switch-OFF waits this long before it becomes a CLOSE, so one caused by the controller losing power (its relay drops before the power sense notices) can be discarded. Switch-ON (OPEN) goes at once: a power loss can’t cause it. With ctrl_power_pmic the board’s supply drops first, so 0.5 s is plenty; with IN2 alone keep it above the opto’s lag (~1.7 s on the bench, so 3000).',
   uart_console: 'Also run this console on the board’s serial pins (13 RX, 14 TX; 3.3 V, 250 kbaud) for a USB-to-UART adapter. Bench power testing only: the adapter keeps its port while the board is unpowered. Leave off at the install.',
   ctrl_settle_ms: 'House: after the controller powers up (or the house boots), its changes count as sync for at least this long. Raise it if the controller takes longer to settle after power returns.',
+  fault_out: 'Use D5 as a “needs attention” output for the alarm system: high while this board is healthy (radio working, link up and, as the gate sees or reports it, AC power present and no limit fault), low otherwise, and low after a restart until the board has started up. A dead board or a cut wire reads as a fault too. 3.3 V, a few mA: wire it to an opto or a relay module input, never a relay coil. Off: D5 stays an unused input. Takes effect at once; set it on each board that has D5 wired.',
+  fault_hold_s: 'How long a problem must last before D5 goes low, so a short dropout or blip doesn’t trip the alarm. Recovery raises D5 at once. 0 = low as soon as a problem appears.',
 };
 // Settings that must be identical on both boards (marked * in the form). The link's retry and response timing
 // assumes the peer's frames use the same air settings, so cr counts even though the LoRa header carries it.

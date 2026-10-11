@@ -15,6 +15,8 @@ void extFlashHoldModem();  // holds the radio module in reset (LoRa.begin() rele
 bool extFlashBegin();      // holds the module, wakes the chip, checks its JEDEC id; false if it doesn't answer
 bool extFlashPresent();
 uint32_t extFlashId();     // JEDEC id as read (manufacturer << 16 | type << 8 | capacity)
+// The chip reads back the JEDEC id extFlashBegin() found: the bus isn't garbled, so a read of zeros is what it holds.
+bool extFlashAnswers();
 void extFlashRead(uint32_t addr, uint8_t *buf, size_t len);
 bool extFlashEraseSector(uint32_t addr);                          // blocks up to ~400 ms
 bool extFlashProgram(uint32_t addr, const uint8_t *buf, size_t len);  // within one page

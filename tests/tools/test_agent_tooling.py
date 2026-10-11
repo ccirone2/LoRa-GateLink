@@ -163,6 +163,14 @@ def test_firmware_change_wants_version_tests_and_trackers(repo):
     assert rules(repo) == []
 
 
+def test_history_log_change_wants_host_tests(repo):
+    """The history log's flash format (histlog.cpp) has host tests of its own, like config.cpp's."""
+    edit(repo, "firmware/GateLink/histlog.cpp")
+    assert "native-tests" in rules(repo)
+    edit(repo, "tests/native/test_histlog.cpp")
+    assert "native-tests" not in rules(repo)
+
+
 def test_committed_changes_count_too(repo):
     edit(repo, "firmware/GateLink/link.cpp")
     git(repo, "commit", "-qam", "change")

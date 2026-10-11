@@ -2,8 +2,9 @@
 
 The firmware built with g++ and run on the PC, two ways:
 
-- **`tests`**: `link.cpp` and `config.cpp` on their own (`test_link.cpp`, `test_config.cpp`): replays across sessions
-  and restarts, HELLO side effects, retry spacing, timer wraps, power cuts mid-save, records from other firmware.
+- **`tests`**: `link.cpp`, `config.cpp` and `histlog.cpp` on their own (`test_link.cpp`, `test_config.cpp`,
+  `test_histlog.cpp`): replays across sessions and restarts, HELLO side effects, retry spacing, timer wraps, power cuts
+  mid-save, records from other firmware, the history log's wrap and failed writes.
 - **`systests`**: both boards' **whole firmware** in a simulated site (`world.h`, `test_system*.cpp`): the opener, the
   controller (Shelly) and its power, the contact sensor and the radio channel, on one clock, with monitors that check
   the behavioural invariants (CLAUDE.md) every simulated millisecond. Every invariant has tests here that fail if it
@@ -41,7 +42,7 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
 ## The simulated site (`systests`)
 
 - **Each board is a copy of `build/node.so`**: the firmware (`app.cpp`, `link.cpp`, both roles, `io.cpp`, `log.cpp`,
-  `history.cpp`, `console.cpp`, `config.cpp`) plus `node/api.cpp`, its entry points. `world.cpp` loads one copy per
+  `history.cpp`, `histlog.cpp`, `health.cpp`, `console.cpp`, `config.cpp`) plus `node/api.cpp`, its entry points. `world.cpp` loads one copy per
   board with `dlopen`, so each has its own globals; `-Bsymbolic` keeps each copy's references inside it, and
   `-fno-gnu-unique` lets `dlclose` really unload it, so a reset loads it again with fresh RAM. Left out: the drivers
   (`radio.cpp`, `extflash.cpp`, `supply.cpp`, `console_io.cpp`) and `GateLink.ino`. Their functions, and the Arduino
@@ -56,16 +57,21 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
   Alarm.com switch = house IN1, SW input = house K1, follow/toggle/detached modes, and its 12 V rail: relay and IN2 opto
   dropping at their bench delays, booting when power returns); the house board's VIN on that rail and the charger's
   power good lagging it; the gate board's feed; LiPos; the radio channel (airtime, half duplex, preamble detection for
-  listen-before-talk, collisions, `drop`/`corrupt` hooks, frames of our own with `airSend`); each board's SPI flash,
-  which survives resets.
+  listen-before-talk, collisions, `drop`/`corrupt` hooks, frames of our own with `airSend`); each board's SPI flash
+  (sectors 0–19), which survives resets, with every erase and program in `flashOps` and faults to inject
+  (`cutNextProgram`: a write torn by a power cut; `failPrograms`: writes that fail; `flashPresent`).
 - **Monitors** (`World::monitor`, `World::onLog`) check the invariants all the time: gate relays pulsed only, never
   both, 100 ms interlock, no pulse without AC; every command traced to a user action and every gate pulse to a command or
   a relay test, at most once per command; gate state only from its limits; the contact sensor closed only while the house
   knows the gate closed with the link up, and never lagging the real gate past the link timeout; `no_power`/`fault`
-  shown as not-closed; no loop near the watchdog. A breach fails the test (and prints the trace).
+  shown as not-closed; no loop near the watchdog; no flash access while a gate relay pulses; the fault output D5 driven only with `fault_out` on, LOW after a boot
+  until the board has decided, and never HIGH once a fault the world can see (a radio down, the house's link down or
+  its view of the gate `no_power`/`fault`, the gate's AC off or its state `fault`) has lasted `fault_hold_s`. A breach
+  fails the test (and prints the trace).
 - **Writing a test:** `World w; w.commission();` brings both boards up with roles and the shared key and waits for the
   link, the first STATUS and the house's arming. Then act (`w.user(on)`, `w.extPress`, `w.setRail12`, `w.opener.ac`,
-  `b.reset(...)`, `w.drop = ...`, `b.request("relay.test", "\"k\":1")`) and check pins (`b.coil(k)`, `w.sensorClosed()`),
+  `b.reset(...)`, `w.drop = ...`, `b.request("relay.test", "\"k\":1")`) and check pins (`b.coil(k)`, `w.sensorClosed()`,
+  `b.faultOut()` for D5),
   the opener, log events (`b.logs`, `b.count`, `b.last`, `b.waitLog`), console replies and `b.status()` (it's slow: don't
   call it every millisecond in `runUntil`). Name the invariants a test covers in a comment above it, e.g.
   `// [interlock] [pulse-only]`. `w.trace.dump()` prints what happened; it is printed anyway when a test fails.
@@ -76,8 +82,9 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
   `random()` is seeded, so every run is the same.
 - **`sim.cpp`** holds the fakes:
   - The radio (`radio.h`): one SX127x per node on a shared channel, as above. `Sim::drop`, `Sim::corrupt`, `Sim::inject`.
-  - The SPI NOR flash (`extflash.h`, sectors 0–3). Programming only clears bits. `cutNextProgram` simulates a
-    power cut mid-write (of a later one with `cutAfterPrograms`); `garbleReads` simulates a garbled bus.
+  - The SPI NOR flash (`extflash.h`, sectors 0–19). Programming only clears bits, within a page. `cutNextProgram`
+    simulates a power cut mid-write (of a later one with `cutAfterPrograms`); `garbleReads` simulates a garbled bus (data and id reads);
+    `failErases` erases that time out.
   - `logEvent`, which records events per node.
 - **Two nodes, one `link.cpp`.** `link.cpp` keeps its state in file-scope statics, so `link_house.cpp` and
   `link_gate.cpp` compile it into two namespaces (`link_node.inc`). Each `Node` calls its own copy through a
@@ -88,7 +95,8 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
 - Link: build a `Sim`, call `s.handshake()`, then drive the two `Node`s (`sendReliable`, `send`, `ack`, `ackLater`,
   `begin` for a restart, `boot(count)` for a boot with a boot count, `stuckRng` for a dead entropy source, `onRx` to
   answer as a role would) and check `stats()`, `rx`, `acks`, `logs` and `s.sent(node, type)`. Config: call `fresh()`
-  first (blank flash, defaults), then change `cfg`, save, load and inspect `flash.mem`.
+  first (blank flash, defaults), then change `cfg`, save, load and inspect `flash.mem`. History log: `boot()` (a
+  `histLogBegin` on the flash as it is), `append`, `checkRun`.
 
 ## Framework (`testing.h`)
 
@@ -106,7 +114,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `pulse-only` | Gate relays are only ever pulsed (`pulse_ms`, or a relay test's ms), never held, never restarted while pulsing | `gate_relays` |
 | `interlock` | A pulse never starts within `INTERLOCK_MS` of the other relay releasing, cut short or ended by itself | `gate_relays` |
 | `relay-test-target` | A relay test sets a target only if the gate isn't already at that limit (and the opener has power) | `gate_relays` |
-| `no-stall-in-pulse` | Nothing that stops the loop (a flash save, a radio restart, a reboot's wait) runs while a pulse does | `gate_relays` |
+| `no-stall-in-pulse` | Nothing that stops the loop (a flash save, a radio restart, a history write, a reboot's wait) runs while a pulse does | `gate_relays`, `history` |
 | `watchdog` | The loop stays well inside the 8 s watchdog; one console request per port per pass | `gate_relays`, `robustness` |
 | `state-from-limits` | Gate state comes only from the opener's limit inputs, never from our last command | `gate_state` |
 | `cause` | `lora` only while our pulse's target is being reached; `timeout` at the opposite limit; else `external` | `gate_state` |
@@ -124,15 +132,17 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `settle-window` | Power return and boot open a `ctrl_settle_ms` window a matching edge can't end early; windows never shorten | `house_power`, `robustness` |
 | `unknown-shows-open` | Gate `no_power` or `fault`: the house shows not-closed and commands nothing | `house_power` |
 | `sensor-closed-only-known` | House K2 reads closed only while the gate is known closed (from its latest STATUS); it fails open on link loss | `house_power`, `robustness`, `link` |
-| `wrap-safe` | Timing survives the `millis()` wraps (2^31 for signed comparisons, 2^32) | `robustness` |
+| `wrap-safe` | Timing survives the `millis()` wraps (2^31 for signed comparisons, 2^32) | `robustness`, `fault_out` |
 | `pull-down` | Inputs are pulled down, active high: a dead opto or cut wire reads inactive | `robustness` |
 | `restarts` | Boards, controller and opener restarting in any order recover with no command and no false closed | `robustness` |
 | `chaos` | Seeded random sequences of everything at once, every monitor on | `robustness` |
 | `busy-channel` | Listen-before-talk: frames get through a busy neighbour's gaps, and never start into a frame heard | `link` |
+| `history-kept` | Each completed history bucket is written to the flash once (a failing chip costs one try per bucket) and a reset loads them back as they were; a write torn by a power cut is skipped and nothing else lost; the log wraps by erasing only its oldest sector; `hist.clear` clears the flash too | `history` |
+| `fault-out` | D5 (`fault_out`): untouched while off; HIGH only while healthy, LOW once a problem has lasted `fault_hold_s` and at once after a reset until the board has decided; recovery raises it at once; it commands nothing | `fault_out` |
 
 ## Mutation testing (`mutations.json`, `tools/mutate.py`)
 
-A test that can't fail proves nothing. `mutations.json` lists 126 ways to break the invariants above, each an exact
+A test that can't fail proves nothing. `mutations.json` lists 151 ways to break the invariants above, each an exact
 text edit to the firmware (`find` must occur once) with the invariant it breaks, why, and the tests that killed it
 (`killed_by`). `tools/mutate.py` applies each to a scratch copy of `firmware/GateLink`, rebuilds the host tests
 against it (`make FW=`) and runs its `killed_by` tests, then, if they all pass, the whole suite: a mutation is

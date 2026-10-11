@@ -104,6 +104,38 @@ seq of the last one taken). The house's own link restart (a new key or radio set
 gate's next STATUS, which it sends as soon as it has verified the house's new session. Since 0.13.9; before, any
 frame from the gate kept the link up.
 
+The gate hears the house at least once a heartbeat (the ACK of its STATUS) and counts the link down (its LED, link
+history and fault output) after max(`link_timeout_s`, 2.5 × its own heartbeat) without a frame from the house (since
+0.14.0; before, after `link_timeout_s` alone).
+
+## SPI flash
+
+Each board's on-board SPI flash (W25Q16JV, 4 KB sectors) holds what must survive a reset or a firmware upload. Every
+access holds the radio module in reset, so the radio is restarted after it: about 0.5 s off the air, with the loop
+stopped (never while a relay pulses).
+
+| Sectors | What | Written |
+|---|---|---|
+| 0–1 | Config records (settings and key), alternately; the newest valid one is loaded (`config.cpp`) | On a save |
+| 2–3 | The boot counter: a 4-byte slot per boot (`configCountBoot`, above) | At every boot |
+| 4–19 | The link history log (`histlog.cpp`; [console.md](console.md#link-history)) | Once per completed bucket, and by `hist.clear` |
+
+The history log is cut into 128-byte slots written in turn, two to a page and 512 in all, each holding one record:
+`magic(2) fmt(1) kind(1) lseq(4) idx(4) period_s(2) 0(2) bucket(68) crc(4)`, little-endian, the CRC-32 over the rest.
+`lseq` numbers every record ever written, so the newest has the largest; `idx` is the bucket's number and `kind` a
+bucket (1) or a CLEARED record (2, written by `hist.clear`: the history starts again at bucket 0 with its period).
+`fmt` versions the bucket's layout (`history.cpp`); a firmware loads only its own, but finds the newest record
+whatever its format and writes after it. Writing into a sector's first slot erases that sector first, which drops the
+oldest records as the log wraps. At boot the board finds the newest record, the valid one with the largest `lseq` (it
+reads every slot's first 8 bytes, then in full the few with the largest `lseq` until one is valid, or every slot if
+none of those is), puts the next write after it and after any slot past it that isn't erased (one torn by a power
+cut), and loads back up to 96 buckets: going back from the newest, while each is the bucket before it,
+written before it and of the same period and format. A record with a bad CRC is passed over; an erased slot or a
+CLEARED record ends the run. A read that comes back garbled twice (a slot starting with four zero bytes, which no
+record does, and the chip's JEDEC id not reading back either) leaves the log unread and unwritten until the next boot,
+rather than write from the wrong place. Zeros read while the id still reads back are what the flash holds (an erase
+cut short may leave a sector so): such a slot is passed over like any that isn't a valid record.
+
 ## Wire formats
 
 The STATUS payload layout is defined in `firmware/GateLink/roles.h` and parsed in `role_house.cpp`; the DIAG
@@ -204,7 +236,7 @@ Enums in STATUS (also the `status` reply's names):
 | 13 | 2 | u16 | `DC_REPLAY` | counter `replay` (saturating) |
 | 15 | 2 | u16 | `DC_RETRIES` | counter `retries` (saturating) |
 | 17 | 2 | u16 | `DC_GIVEUPS` | counter `giveups` (saturating) |
-| 19 | 5 each | u8 + i32 | — | (param id, value) per remote-writable param, in `PARAMS` order: `retries` (9), `heartbeat_s` (10), `link_timeout_s` (11), `debounce_ms` (13), `pulse_ms` (16), `travel_timeout_s` (17), `power_sense` (26) |
+| 19 | 5 each | u8 + i32 | — | (param id, value) per remote-writable param, in `PARAMS` order: `retries` (9), `heartbeat_s` (10), `link_timeout_s` (11), `debounce_ms` (13), `pulse_ms` (16), `travel_timeout_s` (17), `power_sense` (26), `fault_hold_s` (33) |
 
 <!-- docgen:diag end -->
 

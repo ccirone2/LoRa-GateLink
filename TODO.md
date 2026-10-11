@@ -46,14 +46,10 @@ once its fix is merged and record it in the pull request.
   behind a power-blocked cable. Since 0.12.0 the suite sends every request over the UART while USB is down (CRC
   checked), so the power tests don't depend on USB coming back.
 
-- [ ] **Link history kept in the SPI flash (0.14.0): power cuts and a full log.** The bench passed
-  `test_history_kept_across_a_reboot`, the free-RAM preflight and an hour's soak across each board's hourly write (a
-  few STATUS resends, no give-ups; 2026-10-10, #89). Left: a power cut of each board with
-  buckets completed (`tools/gatelink.py <board> hist` before and after: the completed ones come back as they were,
-  `boot` changes); the boot time with a full log (512 records: the firmware reads every slot's header and ~100 records
-  in full, timed from the UART `boot` event); and what a sector erase cut short by a power cut leaves (the log takes
-  zeros as data while the chip's id reads back, and a garbled bus only when it doesn't): cut a board's power during a
-  `hist.clear` that enters a new sector, then check `persist` and the history after the boot.
+- [ ] **Link history kept in the SPI flash (0.14.0): boot time with a full log.** Reboots, power cuts (now
+  `test_gate_power_cut_keeps_history` in `-m power`), cuts inside a sector erase, the hourly write in a long soak and
+  `free_ram` all passed on the bench (2026-10-11). Left: the boot time with a full log (512 records: the firmware reads
+  every slot's header and ~100 records in full, timed from the UART `boot` event).
 - [ ] **Fault output D5 (0.14.0).** Host-tested only (`tests/native`, tag `fault-out`); the suite has no D5 check (it
   needs a wire from D5 to something it reads, e.g. a GateSim input). On the bench: D5 low or floating through a reset
   and the bootloader, no glitch when it becomes an output, and the pull-down when `fault_out` is off; a relay module

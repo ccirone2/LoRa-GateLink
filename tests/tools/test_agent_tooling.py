@@ -81,6 +81,27 @@ def test_doc_links_resolve(doc):
     assert hooks.broken_links(ROOT / doc) == []
 
 
+CLAUDE_MD_MAX = 16 * 1024  # bytes
+
+
+def test_claude_md_stays_short():
+    """CLAUDE.md is loaded into every session: an overview, the rules and the invariants. The detail (each layer's
+    design, numbers and lessons) lives in docs/architecture.md, which CLAUDE.md points at."""
+    text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    size = len(text.encode("utf-8"))
+    assert size <= CLAUDE_MD_MAX, (f"CLAUDE.md is {size} bytes, over {CLAUDE_MD_MAX}: move detail to docs/ "
+                                   "(a layer's to docs/architecture.md) rather than raising the limit")
+    assert "docs/architecture.md" in text
+
+
+def test_architecture_doc_covers_every_firmware_source():
+    """Each firmware source file is described in docs/architecture.md, so a new layer gets its section."""
+    text = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
+    sources = sorted(p.name for p in (ROOT / "firmware/GateLink").iterdir() if p.suffix in (".cpp", ".ino"))
+    assert sources
+    assert [s for s in sources if f"`{s}`" not in text] == []
+
+
 def test_cloud_setup_pins_match_ci():
     setup = (ROOT / "tools/agent/cloud_setup.sh").read_text(encoding="utf-8")
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")

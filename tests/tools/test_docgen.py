@@ -590,9 +590,9 @@ def test_pins_drift(tmp_path):
 def test_framing(tmp_path):
     link = "// Frame: ver | type | session(u32) | tag(8)\n"
     files = {f"{FW}/link.h": link, "docs/protocol.md": "Frame: `ver | type | session | tag`, tag = ...",
-             "CLAUDE.md": "authenticated framing: `ver|type|tag`"}
+             "docs/architecture.md": "authenticated framing: `ver|type|tag`"}
     probs = docgen.check_framing(make(tmp_path, files))
-    assert probs == ["CLAUDE.md: the frame layout reads ['ver', 'type', 'tag'], link.h has ['ver', 'type', 'session', "
+    assert probs == ["docs/architecture.md: the frame layout reads ['ver', 'type', 'tag'], link.h has ['ver', 'type', 'session', "
                      "'tag']: make it `ver | type | session | tag`"]
 
 

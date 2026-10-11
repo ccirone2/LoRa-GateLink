@@ -20,9 +20,9 @@ description: Look for bugs and simplifications in one area a night; fix one, pro
    10. `tests/native/` and `tests/web/` (fakes that disagree with the real thing)
    11. `.github/workflows/`, `tools/agent/` (hooks), `tools/check_contract.py`
 2. **Read it closely** against the rules in `CLAUDE.md` (behavioural invariants, wrap-safe timing, non-blocking
-   loop, the console contract) and look for: invariant breaks, wrap or overflow, unchecked lengths, state left
-   behind on an error path, a retry or timer that can stall, dead code, and code that a simpler form would make
-   clearer without changing behaviour. Check `TODO.md` first: a known item is not a new finding.
+   loop, the console contract) and the area's section of `docs/architecture.md`, and look for: invariant breaks,
+   wrap or overflow, unchecked lengths, state left behind on an error path, a retry or timer that can stall, dead
+   code, and code that a simpler form would make clearer without changing behaviour. Check `TODO.md` first: a known item is not a new finding.
 3. **Prove before fixing.** A bug counts only with a test that fails on `main`: the host tests
    (`make -C tests/native`, including the system tests' invariant monitors), the web tests (`npm test`) or the
    tools tests (`python -m pytest tests/tools -q`). Write the test, see it fail, fix, see it pass, run the area's

@@ -1,7 +1,7 @@
 # Radio, protocol and security
 
 The implementation notes (radio driver details, why things are done the way they are) live in
-[CLAUDE.md](../CLAUDE.md) under "Firmware architecture". This page is the overview.
+[architecture.md](architecture.md), under `radio.cpp` and `link.cpp`. This page is the overview.
 
 ## Radio defaults
 

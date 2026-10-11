@@ -1,21 +1,30 @@
 # Bench testing
 
 Every bench wire, and whether it's confirmed, is in [tools/bench-wiring](../tools/bench-wiring/README.md)
-(`wiring.json`, viewed and edited in a local page).
+(`wiring.json`, viewed and edited in a local page). Always serve that page with `python tools/bench-wiring/serve.py`
+(port 8001), which saves the page's edits back to the file; never with `python -m http.server` or any other server,
+where Save falls back to a file dialog (the page shows a warning banner). If something else holds port 8001, stop it
+and start `serve.py`. Update `wiring.json` in the same session whenever a wire moves or is confirmed; the user edits
+it in the page.
 
 The bench: both MKR boards powered into VIN from bench bucks (gate 24 V → 5 V, house 12 V → 5 V, the house rail shared
 with the Shelly and the IN2 opto) and on USB through power-blocked cables, the [GateSim](../tools/GateSim/README.md) Uno standing in for the opener on
-the gate board, and the real Shelly on the house board (driven through Home Assistant). Most of the checklist
-below is automated by the [end-to-end suite](../tests/e2e/README.md); the test covering each item is named after
-it.
+the gate board (a separate bench-only sketch, `--fqbn arduino:avr:uno`, not GateLink firmware), and the real Shelly
+on the house board (driven through Home Assistant). Most of the checklist below is automated by the
+[end-to-end suite](../tests/e2e/README.md); the test covering each item is named after it.
+
+The boards can be driven from scripts over USB serial with the same JSON console the web page uses
+([console.md](console.md); `python tools/gatelink.py house status`, or pyserial: `{"id":1,"cmd":"status"}`). With the
+GateSim wired to the gate board, the full loop (controller → house → gate → simulated opener) can be scripted.
 
 ## Bench rules
 
 - **Uploads keep the saved config and key** from 0.5.0 (SPI flash; `ports` shows `cfg spi`). Uploading 0.5.0
   over an older version, a board showing `cfg internal`, or `config.reset` leaves defaults (no role or key,
   `tx_power` 17; `power_sense`, `ctrl_power_sense` and `ctrl_power_pmic` on, `ctrl_confirm_ms` 500). `python tools/gatelink.py snapshot` before flashing
-  and `restore` after puts them back; the key is read from `~/.gatelink_key`. Boards can't read the key back,
-  so keep an encrypted backup (`tools/gatelink.py key backup`, [key-management.md](key-management.md)); `ports`
+  and `restore` after puts them back (`/flash` in Claude Code does both); the key is read from `~/.gatelink_key`.
+  Boards can't read the key back (if `~/.gatelink_key` is lost, `key.set` a fresh one on both boards), so keep an
+  encrypted backup (`tools/gatelink.py key backup`, [key-management.md](key-management.md)); `ports`
   shows each board's key id (0.13.8 on), which should match `tools/gatelink.py key id` for the file.
 - **On USB power, keep `tx_power` at about 5 dBm** on both boards: a full-power transmit while a relay is
   energized crashed the board into watchdog resets (`reset_cause` in Status).

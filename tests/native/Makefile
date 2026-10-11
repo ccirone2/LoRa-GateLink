@@ -11,7 +11,8 @@ CXX ?= g++
 BUILD ?= build
 
 SAN := -fsanitize=address,undefined -fno-sanitize-recover=undefined
-FLAGS := -std=gnu++17 -g -O1 -DHOST_BUILD $(SAN)
+# COVERAGE=1: gcov counters for gcovr (tests/native/README.md, "Coverage").
+FLAGS := -std=gnu++17 -g -O1 -DHOST_BUILD $(SAN) $(if $(COVERAGE),--coverage)
 # GCC 13 reports maybe-uninitialized inside ArduinoJson's inlined iterators (false positives, more so with ASan).
 WNO := -Wno-maybe-uninitialized
 # Third-party headers as system headers: their warnings (ArduinoJson trips GCC 13 maybe-uninitialized) aren't ours.
@@ -40,7 +41,7 @@ JOBS ?= $(shell nproc 2>/dev/null || echo 1)
 NORAND := $(shell setarch $$(uname -m) -R true 2>/dev/null && echo setarch $$(uname -m) -R)
 HEADERS := $(wildcard *.h stubs/*.h $(FW)/*.h)
 
-.PHONY: run run-tests run-systests run-fuzz-replay clean
+.PHONY: run run-tests run-systests run-fuzz-replay coverage cppcheck tidy clean
 run: run-tests run-systests run-fuzz-replay
 run-tests: $(BUILD)/tests
 	$(NORAND) $(BUILD)/tests
@@ -86,5 +87,23 @@ $(BUILD)/node/crypto_%.o: $(CRYPTO)/%.cpp | $(BUILD)/node
 $(BUILD) $(BUILD)/node:
 	mkdir -p $@
 
+# --- static analysis and coverage (CI's static and coverage jobs) -----------------------------------------------
+# The firmware files the host build compiles, with the same flags (radio.cpp, extflash.cpp, supply.cpp and
+# GateLink.ino need the Arduino core: cppcheck reads them, clang-tidy doesn't).
+TIDY ?= clang-tidy
+TIDY_SRCS := $(NODE_FW:%=$(FW)/%.cpp)
+cppcheck:
+	cppcheck -q --error-exitcode=1 --enable=warning,performance,portability --inline-suppr --std=c++17 \
+	  --language=c++ --suppress=missingIncludeSystem --suppress=missingInclude $(FW)/*.cpp $(FW)/*.ino
+# Checks and exceptions: $(FW)/.clang-tidy.
+tidy:
+	$(TIDY) --quiet $(TIDY_SRCS) -- -std=gnu++17 -DHOST_BUILD -Istubs -I. -I$(FW) -isystem $(CRYPTO) -isystem $(JSON)
+# COVERAGE=1 build in $(BUILD)-cov, the tests run, then gcovr on the firmware (MIN_LINES=n fails below n %).
+coverage:
+	$(MAKE) BUILD=$(BUILD)-cov COVERAGE=1 run-tests run-systests
+	gcovr -r ../.. --gcov-object-directory $(CURDIR) --filter '$(abspath $(FW))/' -j $(JOBS) --print-summary \
+	  --txt $(BUILD)-cov/coverage.txt --json-summary $(BUILD)-cov/coverage.json \
+	  $(if $(MIN_LINES),--fail-under-line $(MIN_LINES)) $(BUILD)-cov
+
 clean:
-	rm -rf $(BUILD)
+	rm -rf $(BUILD) $(BUILD)-cov

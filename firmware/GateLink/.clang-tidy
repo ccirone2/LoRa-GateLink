@@ -1,0 +1,18 @@
+# clang-tidy for the firmware (make -C tests/native tidy; CI's static job). Bug-finding checks only; the ones
+# turned off flag deliberate idioms here: implicit memcmp/strncmp tests, signed dBm bytes, bounded snprintf,
+# narrowing to the wire's widths, and struct padding (RAM budget aside, layouts follow the wire formats). The firmware
+# allocates nothing itself; ArduinoJson's pool reads as a leak to the analyzer (NewDeleteLeaks, in its headers).
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-suspicious-string-compare,
+  -bugprone-signed-char-misuse,
+  -clang-analyzer-optin.performance.Padding,
+  -clang-analyzer-cplusplus.NewDeleteLeaks
+WarningsAsErrors: '*'
+HeaderFilterRegex: 'firmware/GateLink/'

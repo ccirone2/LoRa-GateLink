@@ -58,6 +58,7 @@ are built from the pull requests since the last tag.
    python tools/check_contract.py   # firmware enums, log events and console commands vs the suite and docs
    python tools/docgen.py     # reference docs vs the source (--write regenerates the generated tables)
    make -C tests/native       # host tests: link/config, and both boards' firmware in a simulated site (tests/native/README.md)
+   make -C tests/native cppcheck tidy coverage   # static analysis and coverage (in Docker on Windows, as the README says)
    python -m pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks, key backups)
    pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
@@ -68,7 +69,8 @@ are built from the pull requests since the last tag.
    Python (`ruff check tests tools`), runs the tools' unit tests (`tests/tools`), collects the e2e suite (`pytest
    --collect-only`, which catches import and fixture errors without the bench), checks the docs against the source
    (`check_contract.py`, `docgen.py`), fails a pull request that changes the firmware without bumping `FW_VERSION`,
-   and lints the workflows (actionlint, with shellcheck).
+   lints the workflows (actionlint, with shellcheck), runs cppcheck and clang-tidy on the firmware and reports
+   the host tests' coverage of it (failing below 85 % of lines; tests/native/README.md).
 6. Merge to `main`. Once CI has passed on `main`, the web console is deployed to GitHub Pages.
 
 CI's actions are pinned by commit SHA and its runners by image (`ubuntu-24.04`); Dependabot

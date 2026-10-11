@@ -58,6 +58,42 @@ jobs:
           arduino-cli compile --fqbn arduino:avr:uno --warnings all tools/GateSim 2>&1 | tee sim.log
           ! grep -E "GateSim/[^:]+:[0-9]+:[0-9]+: warning" sim.log
 
+  # The firmware's own code, statically: cppcheck (warning, performance, portability) and clang-tidy (bug-finding
+  # checks, firmware/GateLink/.clang-tidy), with the host build's flags (tests/native/Makefile).
+  static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+      - name: Libraries the host build needs
+        run: arduino-cli lib install "Crypto@0.4.0" "ArduinoJson@7.4.3"
+      - name: Install cppcheck and clang-tidy (Ubuntu 24.04's)
+        run: sudo apt-get update -q && sudo apt-get install -y -q cppcheck clang-tidy-18
+      - name: cppcheck
+        run: make -C tests/native cppcheck
+      - name: clang-tidy
+        run: make -C tests/native TIDY=clang-tidy-18 tidy
+
+  # How much of the firmware the host tests run (gcovr over a --coverage build); fails below MIN_LINES %.
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+      - name: Libraries the host build needs
+        run: arduino-cli lib install "Crypto@0.4.0" "ArduinoJson@7.4.3"
+      - name: Install gcovr
+        run: pip install gcovr==7.0
+      - name: Coverage
+        run: make -C tests/native coverage MIN_LINES=85
+      - name: Report
+        if: always()
+        run: |
+          { echo '### Firmware coverage by the host tests'; echo; echo '```'
+            cat tests/native/build-cov/coverage.txt 2>/dev/null || echo "no report"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   # The web console: plain ES modules (no build step); the tooling is in package.json.
   web:
     runs-on: ubuntu-24.04

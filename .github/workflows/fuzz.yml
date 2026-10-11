@@ -33,7 +33,7 @@ jobs:
       matrix:
         target: [fuzz_frames, fuzz_console, fuzz_config]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
       # Versions: keep in sync with docs/development.md and ci.yml (pinned actions: see ci.yml).
       - name: Install libraries
@@ -48,13 +48,13 @@ jobs:
             TARGETS=${{ matrix.target }} FUZZ_SECONDS="$SECONDS_PER_TARGET" fuzz-smoke
       - name: Upload the crash
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.target }}-crash
           path: tests/native/build/fuzz/artifacts/
       - name: Upload what the run found (merge with make -f fuzz/Makefile corpus-merge)
         if: always() && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.target }}-corpus
           path: tests/native/build/fuzz/work/${{ matrix.target }}/

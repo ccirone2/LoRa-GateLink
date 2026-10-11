@@ -18,7 +18,7 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
    python tools/gatelink.py ports
    python tools/gatelink.py snapshot
    ```
-   Check `ports` first: both boards should show their role, `key set` and the bench `tx_power` 5. If a board
+   Check `ports` first: both boards should show their role, the same key id (`key <8 hex>`; `key set` before 0.13.8) and the bench `tx_power` 5. If a board
    runs a test profile left behind by an interrupted e2e run (`python tools/gatelink.py <role> config.get`
    shows short `heartbeat_s` 5 / `link_timeout_s` 15), reboot it (`python tools/gatelink.py <role> reboot`) before the snapshot so the saved config is captured.
 3. **Compile once, upload to each board.** Clean compile means no warnings in project files:
@@ -37,7 +37,7 @@ are identified by role), the GateSim Uno is on COM10, the key is in `~/.gatelink
    - If ports report `no answer within 8 s` (every USB serial port stuck, seen after uploads), ask the user to
      replug the USB hub; the boards keep running on their bench supplies.
 4. **Check, then restore if needed.** Run `python tools/gatelink.py ports`. If both boards show their role,
-   `key set`, `tx_power` 5 and `cfg spi`, the config survived: skip to the link check below. Otherwise restore
+   the same key id on both (`key set` before 0.13.8), `tx_power` 5 and `cfg spi`, the config survived: skip to the link check below. Otherwise restore
    role, config and key, reboot, and wait for the link:
    ```sh
    python tools/gatelink.py restore

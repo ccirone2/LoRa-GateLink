@@ -1,0 +1,18 @@
+{
+  "format": "gatelink-key-backup",
+  "version": 1,
+  "key_id": "e03fddf7",
+  "created": "2026-10-10T07:31:07Z",
+  "note": "test fixture: made by web/js/keys.js",
+  "kdf": {
+    "name": "PBKDF2",
+    "hash": "SHA-256",
+    "iterations": 600000,
+    "salt": "mm6mAJrubpB3n0UF5co5fw=="
+  },
+  "cipher": {
+    "name": "AES-GCM",
+    "iv": "BzNjwdAV5U2ST85y"
+  },
+  "ciphertext": "5RHrn80+PdgMdzdHy6GNaguPtnM4Z+lwPQ5wpXs5bGA="
+}

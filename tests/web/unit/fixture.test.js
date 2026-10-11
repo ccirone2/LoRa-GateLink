@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import { GROUPS } from '../../../web/js/settings.js';
 
 const root = new URL('../../../', import.meta.url);
@@ -69,4 +70,16 @@ test('the Config tab groups list every setting, once', () => {
   const grouped = GROUPS.flatMap(([, names]) => names);
   assert.equal(new Set(grouped).size, grouped.length, 'a setting in two groups');
   assert.deepEqual([...grouped].sort(), params.map((p) => p.name).sort());
+});
+
+test('fixture key ids = HMAC-SHA256(key, config.cpp KEY_ID_LABEL), as the host tests check them', () => {
+  assert.equal(config.match(/KEY_ID_LABEL\[\] = "([^"]+)"/)[1], fx.key.label);
+  for (const [key, id] of fx.key.vectors) {
+    assert.equal(createHmac('sha256', Buffer.from(key, 'hex')).update(fx.key.label).digest('hex').slice(0, 8), id, key);
+  }
+  assert.ok(fx.key.vectors.some(([key]) => key === fx.key.default));
+  const native = [...read('tests/native/test_config.cpp').matchAll(/keyIdOf\("([0-9a-f]{32})"\) == "([0-9a-f]{8})"/g)]
+    .map(([, key, id]) => [key, id]);
+  assert.deepEqual(native, fx.key.vectors);
+  assert.ok(read('firmware/GateLink/console.cpp').includes(`"${fx.key.weak_error}"`), 'key.set refuses a weak key so');
 });

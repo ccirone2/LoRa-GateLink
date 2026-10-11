@@ -41,7 +41,7 @@
     "ctrl_power_sense": 1, "ctrl_confirm_ms": 500, "ctrl_settle_ms": 10000, "ctrl_power_pmic": 1, "uart_console": 0
   },
   "status_common": {
-    "fw": "0.13.6", "reboot_pending": false, "uptime_ms": 3723000, "radio_ok": true, "radio_faults": 0,
+    "fw": "0.13.8", "reboot_pending": false, "uptime_ms": 3723000, "radio_ok": true, "radio_faults": 0,
     "reset_cause": "power_on", "supply": true, "cfg_loaded": true, "cfg_store": "spi", "key_set": true, "free_ram": 9120,
     "usb_cut": 0, "loop_max_us": 1350,
     "link": { "verified": true, "age_ms": 1200, "rssi": -61, "snr": 9.5, "fei": -1450, "tx": 140, "rx": 152, "retries": 1,
@@ -60,6 +60,18 @@
     "io": { "in1": false, "in2": true, "in3": true, "in4": false, "k1": false, "k2": false },
     "gate": "closed", "cause": "none", "last_result": "none", "target": "", "last_cmd_id": 4710, "power_sense": true,
     "ac_power": true, "settling": false
+  },
+  "key": {
+    "_comment": "Key ids (config.cpp configKeyId: HMAC-SHA256(key, label), first 4 bytes, hex). The fake board computes them; it holds `default` unless a test gives it a key. The vectors are also in tests/native/test_config.cpp.",
+    "label": "GateLink key id v1",
+    "default": "8a3f1c6e9b2d4f70a1c3e5f7092b4d6f",
+    "vectors": [
+      ["8a3f1c6e9b2d4f70a1c3e5f7092b4d6f", "e03fddf7"],
+      ["00112233445566778899aabbccddeeff", "fa60d1a7"],
+      ["0f1e2d3c4b5a69788796a5b4c3d2e1f0", "2fa26167"]
+    ],
+    "weak_error": "weak key: all bytes equal, counting by one, or 8 or fewer distinct bytes",
+    "since_fw": "0.13.8"
   },
   "hist_fields": ["idx", "tx", "rx", "retries", "giveups", "crc_err", "mac_fail", "lbt_defers", "lbt_forced", "sessions",
     "radio_faults", "down_s", "rssi_min", "rssi_avg", "snr_min", "snr_avg", "noise_avg", "noise_max", "peer_n",

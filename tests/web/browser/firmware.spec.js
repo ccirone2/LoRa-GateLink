@@ -87,7 +87,7 @@ for (const [what, tweak, message] of MISMATCHES) {
 test('Install latest offers the bundled release, checks it, then asks', async ({ page }) => {
   const bin = image({ marker: 'GATELINK_FW=0.14.0' });
   await serveLatest(page, { version: '0.14.0', file: 'GateLink-v0.14.0.bin', sha256: await sha256(bin), size: bin.length }, bin);
-  await openConsole(page, [{ role: 'house' }], { dismissDialogs: true });
+  await openConsole(page, [{ role: 'house', fw: '0.13.6' }], { dismissDialogs: true });
   await connect(page);
   await page.locator('#tabbtn-tools').click();
   await expect(page.locator('#btnFwLatest')).toHaveText('Install 0.14.0');

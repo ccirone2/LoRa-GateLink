@@ -3,6 +3,7 @@
 #include "extflash.h"
 #include "radio.h"
 #include <FlashStorage.h>
+#include <SHA256.h>
 
 // Config is kept in the on-board SPI flash, which firmware uploads don't touch. It's stored as (param id,
 // value) pairs plus the key, so a firmware with added, removed or reordered settings still loads every
@@ -385,6 +386,35 @@ bool configFactoryReset() {
   spiSector = -1;
   extras.n = 0;
   return ok;
+}
+
+// The id's message can never be a frame (frames start with PROTO_VER, 1, and are longer), so the id is no tag the
+// link would accept, and 4 bytes of an HMAC tell nothing about the key. It does confirm a guessed key, which is why
+// key.set refuses guessable ones (configKeyWeak).
+static const char KEY_ID_LABEL[] = "GateLink key id v1";
+
+void configKeyId(const uint8_t key[16], char out[9]) {
+  uint8_t mac[4];
+  SHA256 h;
+  h.resetHMAC(key, 16);
+  h.update(KEY_ID_LABEL, sizeof(KEY_ID_LABEL) - 1);
+  h.finalizeHMAC(key, 16, mac, sizeof(mac));
+  for (int i = 0; i < 4; i++) snprintf(out + 2 * i, 3, "%02x", mac[i]);
+}
+
+bool configKeyWeak(const uint8_t key[16]) {
+  bool up = true, down = true;
+  for (int i = 1; i < 16; i++) {
+    up &= (uint8_t)(key[i] - key[i - 1]) == 1;
+    down &= (uint8_t)(key[i - 1] - key[i]) == 1;
+  }
+  int distinct = 0;  // all bytes equal is 1
+  for (int i = 0; i < 16; i++) {
+    bool seen = false;
+    for (int j = 0; j < i && !seen; j++) seen = key[j] == key[i];
+    distinct += !seen;
+  }
+  return up || down || distinct <= 8;
 }
 
 const ParamDef *paramByName(const char *name) {

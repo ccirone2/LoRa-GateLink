@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.13.7"
+#define FW_VERSION "0.13.8"
 #define FW_MARKER_PREFIX "GATELINK_FW="
 // FW_MARKER_PREFIX FW_VERSION: the web console looks for it in a .bin to check the file is GateLink and
 // read its version. The version is reported from it (fwVersion()) so the linker keeps it in the image.
@@ -100,6 +100,13 @@ bool configFactoryReset();  // defaults in RAM; saved config and key erased
 // Counts this boot in SPI flash and returns the count (0 if the chip doesn't answer). Never repeats: it seeds the
 // session id (link.cpp). Kept apart from the config record, so config.reset doesn't restart it.
 uint32_t configCountBoot();
+// The link key's id: the first 4 bytes of HMAC-SHA256(key, "GateLink key id v1") as 8 lowercase hex digits (out
+// holds 9 chars). It tells keys apart (do both boards hold the same one? which backup is it?) without revealing
+// the key. docs/key-management.md; the web console and tools/gatelink.py compute it the same way.
+void configKeyId(const uint8_t key[16], char out[9]);
+// A key key.set refuses as guessable: all 16 bytes equal, bytes counting up or down by one (mod 256), or 8 or
+// fewer distinct byte values. A random key is weak about once in 10^10 draws.
+bool configKeyWeak(const uint8_t key[16]);
 const ParamDef *paramByName(const char *name);
 const ParamDef *paramById(uint8_t id);
 bool paramValid(const ParamDef *p, int32_t value);  // range check, as paramSet does

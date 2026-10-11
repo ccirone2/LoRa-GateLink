@@ -37,7 +37,7 @@ siren sensor.
 | `tests/e2e/` | Bench end-to-end suite (pytest; needs the hardware) |
 | `tools/GateSim/` | Bench-only Uno sketch that simulates the opener |
 | `tools/bench-wiring/` | Bench wiring diagram (`wiring.json`, edited in the page served by `serve.py`) |
-| `tools/gatelink.py` | Command-line access to a board's USB console; config snapshot/restore around a flash; link history as CSV; radio preflight for a new board (`rftest`) |
+| `tools/gatelink.py` | Command-line access to a board's USB console; config snapshot/restore around a flash; link history as CSV; radio preflight for a new board (`rftest`); the link key: generate, encrypted backup and restore, key id (`key`) |
 | `tools/gatelink_client/` | Python client for the boards' USB console, shared by `tools/gatelink.py` and the e2e suite |
 | `docs/` | Hardware, protocol, console and bench documentation |
 
@@ -47,6 +47,7 @@ siren sensor.
 - [docs/protocol.md](docs/protocol.md) — radio defaults, framing, sessions and replay protection, wire formats
 - [docs/console.md](docs/console.md) — USB JSON console: commands, status fields, events, log codes
 - [docs/config.md](docs/config.md) — every setting: range, default, when a change applies, what it does
+- [docs/key-management.md](docs/key-management.md) — the link key: generating, encrypted backups, key ids, rotating, wiping
 - [docs/bench-testing.md](docs/bench-testing.md) — bench rules and the test checklist
 - [tests/e2e/README.md](tests/e2e/README.md) — the end-to-end suite
 - [tools/GateSim/README.md](tools/GateSim/README.md) — the opener simulator
@@ -161,7 +162,7 @@ chart or use the arrow keys to read an hour. There is also a table view and CSV 
 
 Tabs: **Status** (gate, link quality, I/O incl. AC power and spare inputs, house bridge state, board uptime,
 last reset cause, radio TX faults), **Config** (all parameters, with toggle switches for on/off settings;
-apply/save, export/import JSON), **Security** (generate and write the link key), **Tools** (relay tests, ping with
+apply/save, export/import JSON), **Security** (generate, back up and write the link key; key ids), **Tools** (relay tests, ping with
 RSSI chart, remote gate diagnostics and settings over LoRa from the house board, replay self-test),
 **Log** (live events and the board's event ring buffer), **Install** (field wiring diagram, terminal
 table and notes for each board; works without a board connected).
@@ -173,9 +174,11 @@ table and notes for each board; works without a board connected).
 3. Power senses: on the gate, turn `power_sense` off if IN3 (AC power) isn't wired yet, or the gate reads
    `no_power` and refuses commands. On the house, turn `ctrl_power_sense` off until IN2 is wired, or Alarm.com
    commands are ignored (Status: *Controller power: off*). Apply and Save.
-4. Security → **Generate** → write the key to board A, then write the **same** key to board B.
-   The radio link stays off until a key is set, so a fresh or reset board can never be commanded.
-   Store the key somewhere safe: boards can't read it back, and config export doesn't include it.
+4. Security → **Generate** → **Save encrypted backup…** (keep the passphrase in a password manager) → write the key
+   to board A, then write the **same** key to board B: both then show the same key id. The radio link stays off
+   until a key is set, so a fresh or reset board can never be commanded. Boards can't read the key back and config
+   export doesn't include it, so the backup is the only copy; see [docs/key-management.md](docs/key-management.md)
+   (generating from a local copy of the page or with `tools/gatelink.py key gen`, and when to replace the key).
 5. With both powered, Status on either board should show *Peer verified: yes* within a few seconds.
 6. Tools → Ping to check RSSI/SNR. At the install site aim for ≥10 dB margin above the SF's sensitivity;
    raise `sf` (and/or `tx_power`) on **both** boards if the link is marginal.

@@ -17,7 +17,8 @@ the SF's sensitivity; raise `sf` (and/or `tx_power`) on **both** boards if the l
 
 Frame: `ver | type | net_id | src | dst | session | seq | payload | tag`, tag = HMAC-SHA256 (shared
 128-bit key) truncated to 8 bytes. Node addresses are fixed by role (house = 1, gate = 2). The radio link is
-off until a key is set, so a fresh or reset board can never be commanded.
+off until a key is set, so a fresh or reset board can never be commanded. Generating, backing up, checking (key
+ids) and replacing the key: [key-management.md](key-management.md).
 
 ## Sessions and replay protection
 

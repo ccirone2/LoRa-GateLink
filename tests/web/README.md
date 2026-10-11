@@ -16,14 +16,19 @@ CI runs the same (`ci.yml`, job `web`) and keeps the Playwright report as an art
 ## Unit tests (`unit/`)
 
 `node --test` on the modules that don't touch the page: `samba.js` (firmware image checks, the bootloader's CRC),
-`logdecode.js` (log events as text) and `util.js`. Some also read the firmware sources, so the page can't drift from
-them: every log event in `log.cpp` must have a decoder, and the gate states and causes must match `roles.h`.
+`logdecode.js` (log events as text), `keys.js` (key ids, the weak-key rule, encrypted key backups) and `util.js`.
+Some also read the firmware sources, so the page can't drift from them: every log event in `log.cpp` must have a
+decoder, the gate states and causes must match `roles.h`, and the key id label must match `config.cpp`. The key
+backup tests also open a backup written by the Python tools (`tests/tools/fixtures/key-backup-v1-python.glkey`), and
+`tests/tools` opens one written by `keys.js` (`key-backup-v1.glkey`), so the two implementations stay one format.
 
 ## Browser tests (`browser/`)
 
 The real page, served by `serve.js` (port 47123), in Chromium, with `navigator.serial` replaced by fake boards
 (`fake-serial.js`, injected before the page loads). The fakes answer the console protocol (`docs/console.md`) from
-`fixtures/firmware.json`, which has the firmware's settings table, defaults and status fields. A test:
+`fixtures/firmware.json`, which has the firmware's settings table, defaults and status fields, and the key id
+label and test vectors (a fake board computes its `key_id` with WebCrypto, as the firmware does, and refuses weak
+keys from firmware 0.13.8; give a board `key` to hold another key than the default). A test:
 
 ```js
 import { openConsole, connect, requests, pushEvent } from './helpers.js';

@@ -4,7 +4,8 @@
 //   config.js   Config tab                                    tools.js    ping, diagnostics, remote writes, relays
 //   history.js  link history chart                            firmware.js firmware update (samba.js: bootloader)
 //   wiring.js   Install tab (tracks pins.h)                   settings.js setting groups and help text
-//   logdecode.js log events as text      ui.js log view, toasts      state.js shared state      util.js helpers
+//   security.js Security tab (keys.js: key ids, backups)      logdecode.js log events as text
+//   ui.js log view, toasts      state.js shared state      util.js helpers
 import { $, fmtDur, download } from './js/util.js';
 import { S } from './js/state.js';
 import { OFFLINE_OK, logLine, logLines, clearLog, toast, hideToast, guard } from './js/ui.js';
@@ -21,6 +22,9 @@ import { updateFwCard, loadLatest, installLatest, flashFile, pickBootPort } from
 import {
   ping, setAutoPing, resetToolsView, stopTools, relayTest, remoteDiag, remoteSet, replay, onToolsEvent,
 } from './js/tools.js';
+import {
+  checkKeyInput, showBoardKey, generate, copyKey, keyToWrite, reportKeyWritten, saveBackup, restoreBackup,
+} from './js/security.js';
 
 let pollTimer = null;
 
@@ -39,6 +43,7 @@ function setConnected(on) {
   $('btnHistCsv').disabled = !historyLoaded();
   if (!on) {
     S.boardInfo = null;
+    showBoardKey();
     updateFwCard();
     $('devline').textContent = 'not connected';
     $('keyWarn').hidden = true;
@@ -82,17 +87,6 @@ serial.hooks.onClosing = () => {
 serial.hooks.onClosed = () => setConnected(false);
 serial.hooks.onEvent = onEvent;
 serial.hooks.onRawLine = (line) => { if ($('logRaw').checked) logLine(line, 'raw'); };
-
-// Key input: accept pasted keys with spaces, colons or dashes; flag anything that isn't 32 hex chars.
-function keyValue() {
-  return $('keyInput').value.replace(/[\s:-]/g, '').toLowerCase();
-}
-function checkKeyInput() {
-  const k = keyValue();
-  const ok = /^[0-9a-f]{32}$/.test(k);
-  $('keyInput').setAttribute('aria-invalid', String(!!k && !ok));
-  $('keyHint').textContent = !k || ok ? '' : `${k.length}/32 characters${/[^0-9a-f]/.test(k) ? ', hex digits only (0–9, a–f)' : ''}`;
-}
 
 // Tabs: click or arrow keys (roving tabindex, per the ARIA tabs pattern).
 function initTabs() {
@@ -194,30 +188,27 @@ function init() {
   $('btnCfgExport').onclick = exportConfig;
   $('fileImport').onchange = (e) => { if (e.target.files[0]) importConfig(e.target.files[0]); e.target.value = ''; };
 
-  $('btnKeyGen').onclick = () => {
-    const b = crypto.getRandomValues(new Uint8Array(16));
-    $('keyInput').value = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-    checkKeyInput();
-  };
+  // Key input: accepts pasted keys with spaces, colons or dashes; the hint flags anything that isn't 32 hex chars, or
+  // gives the key's id.
+  $('btnKeyGen').onclick = generate;
   $('keyInput').addEventListener('input', checkKeyInput);
   $('keyInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('btnKeySet').disabled) $('btnKeySet').click(); });
-  $('btnKeyCopy').onclick = async () => {
-    const key = keyValue();
-    if (!key) return toast('Nothing to copy: generate or enter a key first.', 'err');
-    try {
-      await navigator.clipboard.writeText(key);
-      toast('Key copied to the clipboard.');
-    } catch (e) {
-      toast(`Copy failed: ${e.message}`, 'err');
-    }
-  };
+  $('btnKeyCopy').onclick = copyKey;
   $('btnKeySet').onclick = guard(async () => {
-    const key = keyValue();
-    if (!/^[0-9a-f]{32}$/.test(key)) return toast('Key must be exactly 32 hex characters.', 'err');
-    if (S.keySet && !confirm('This board already has a key. Replacing it takes the link down until the other board gets the same key. Continue?')) return;
-    await serial.call('key.set', { key });
+    const key = await keyToWrite();
+    if (!key) return;
+    const same = S.boardInfo?.key_id === key.id;
+    if (S.keySet && !confirm(same ? `This board already has this key (id ${key.id}). Write it again?`
+      : 'This board already has a key. Replacing it takes the link down until the other board gets the same key. Continue?')) return;
+    await serial.call('key.set', { key: key.hex });
     await refreshInfo();
-    toast('Key written and saved. Write the same key to the other board.');
+    reportKeyWritten(key.id);
+  });
+  $('btnKeyBackup').onclick = guard(saveBackup);
+  $('keyRestoreFile').onchange = guard(async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (f) await restoreBackup(f);
   });
 
   $('btnK1').onclick = guard(() => relayTest(1));

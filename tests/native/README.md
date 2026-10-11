@@ -77,7 +77,7 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
 - **`sim.cpp`** holds the fakes:
   - The radio (`radio.h`): one SX127x per node on a shared channel, as above. `Sim::drop`, `Sim::corrupt`, `Sim::inject`.
   - The SPI NOR flash (`extflash.h`, sectors 0–3). Programming only clears bits. `cutNextProgram` simulates a
-    power cut mid-write; `garbleReads` simulates a garbled bus.
+    power cut mid-write (of a later one with `cutAfterPrograms`); `garbleReads` simulates a garbled bus.
   - `logEvent`, which records events per node.
 - **Two nodes, one `link.cpp`.** `link.cpp` keeps its state in file-scope statics, so `link_house.cpp` and
   `link_gate.cpp` compile it into two namespaces (`link_node.inc`). Each `Node` calls its own copy through a
@@ -86,9 +86,9 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
   namespaced calls ambiguous).
 - **`config.cpp`** is compiled once and tested on its own; no node is current.
 - Link: build a `Sim`, call `s.handshake()`, then drive the two `Node`s (`sendReliable`, `send`, `ack`, `ackLater`,
-  `begin` for a restart, `onRx` to answer as a role would) and check `stats()`, `rx`, `acks`, `logs` and
-  `s.sent(node, type)`. Config: call `fresh()` first (blank flash, defaults), then change `cfg`, save, load and inspect
-  `flash.mem`.
+  `begin` for a restart, `boot(count)` for a boot with a boot count, `stuckRng` for a dead entropy source, `onRx` to
+  answer as a role would) and check `stats()`, `rx`, `acks`, `logs` and `s.sent(node, type)`. Config: call `fresh()`
+  first (blank flash, defaults), then change `cfg`, save, load and inspect `flash.mem`.
 
 ## Framework (`testing.h`)
 
@@ -103,10 +103,10 @@ mutation in `mutations.json` names the one it breaks. The tags:
 
 | Tag | Invariant | Tests |
 |---|---|---|
-| `pulse-only` | Gate relays are only ever pulsed (`pulse_ms`, or a relay test's ms), never held | `gate_relays` |
+| `pulse-only` | Gate relays are only ever pulsed (`pulse_ms`, or a relay test's ms), never held, never restarted while pulsing | `gate_relays` |
 | `interlock` | A pulse never starts within `INTERLOCK_MS` of the other relay releasing, cut short or ended by itself | `gate_relays` |
 | `relay-test-target` | A relay test sets a target only if the gate isn't already at that limit (and the opener has power) | `gate_relays` |
-| `no-stall-in-pulse` | Nothing that stops the loop (a flash save, a radio restart) runs while a pulse does | `gate_relays` |
+| `no-stall-in-pulse` | Nothing that stops the loop (a flash save, a radio restart, a reboot's wait) runs while a pulse does | `gate_relays` |
 | `watchdog` | The loop stays well inside the 8 s watchdog; one console request per port per pass | `gate_relays`, `robustness` |
 | `state-from-limits` | Gate state comes only from the opener's limit inputs, never from our last command | `gate_state` |
 | `cause` | `lora` only while our pulse's target is being reached; `timeout` at the opposite limit; else `external` | `gate_state` |
@@ -123,7 +123,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `ctrl-power` | While IN2 or the charger's power good is off, IN1 edges never command and resync pauses; CLOSE waits `ctrl_confirm_ms` | `house_power` |
 | `settle-window` | Power return and boot open a `ctrl_settle_ms` window a matching edge can't end early; windows never shorten | `house_power`, `robustness` |
 | `unknown-shows-open` | Gate `no_power` or `fault`: the house shows not-closed and commands nothing | `house_power` |
-| `sensor-closed-only-known` | House K2 reads closed only while the gate is known closed; it fails open on link loss | `house_power`, `robustness` |
+| `sensor-closed-only-known` | House K2 reads closed only while the gate is known closed (from its latest STATUS); it fails open on link loss | `house_power`, `robustness`, `link` |
 | `wrap-safe` | Timing survives the `millis()` wraps (2^31 for signed comparisons, 2^32) | `robustness` |
 | `pull-down` | Inputs are pulled down, active high: a dead opto or cut wire reads inactive | `robustness` |
 | `restarts` | Boards, controller and opener restarting in any order recover with no command and no false closed | `robustness` |
@@ -132,7 +132,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 
 ## Mutation testing (`mutations.json`, `tools/mutate.py`)
 
-A test that can't fail proves nothing. `mutations.json` lists 113 ways to break the invariants above, each an exact
+A test that can't fail proves nothing. `mutations.json` lists 126 ways to break the invariants above, each an exact
 text edit to the firmware (`find` must occur once) with the invariant it breaks, why, and the tests that killed it
 (`killed_by`). `tools/mutate.py` applies each to a scratch copy of `firmware/GateLink`, rebuilds the host tests
 against it (`make FW=`) and runs its `killed_by` tests, then, if they all pass, the whole suite: a mutation is

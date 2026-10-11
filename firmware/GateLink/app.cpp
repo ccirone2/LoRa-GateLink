@@ -82,6 +82,7 @@ uint32_t appBootCount() {
 void appRestartRadio() {
   radioBegin();  // logs radio_fail itself
   linkBegin(onRx, onAck);
+  if (activeRole == ROLE_HOUSE) houseLinkRestarted();
 }
 
 bool appPing() {
@@ -93,9 +94,10 @@ bool appPing() {
   return true;
 }
 
-void appRelayTest(uint8_t k, uint32_t ms) {
+bool appRelayTest(uint8_t k, uint32_t ms) {
+  if (activeRole == ROLE_GATE) return gateRelayTest(k, ms);
   if (activeRole == ROLE_HOUSE) houseRelayTest(k, ms);
-  else if (activeRole == ROLE_GATE) gateRelayTest(k, ms);
+  return true;
 }
 
 bool appRelaysPulsing() {
@@ -103,9 +105,11 @@ bool appRelaysPulsing() {
 }
 
 bool appLinkUp(uint32_t now) {
-  const LinkStats &st = linkStats();
+  // The house goes by the gate's STATUS reports alone, taken in order (houseStatusAt): any other frame, or a STATUS
+  // held back and delivered late, says nothing about the gate now.
+  uint32_t at = activeRole == ROLE_HOUSE ? houseStatusAt() : linkStats().lastRxAt;
   uint32_t timeout = activeRole == ROLE_HOUSE ? houseLinkTimeoutMs() : (uint32_t)cfg.link_timeout_s * 1000;
-  return st.lastRxAt && !elapsed(now, st.lastRxAt, timeout);
+  return at && !elapsed(now, at, timeout);
 }
 
 void appFillStatus(JsonObject o) {
@@ -222,8 +226,10 @@ void appSetup(uint8_t rc, const uint32_t serial[4]) {
   consoleBegin();
   cfgLoaded = configLoad();
   bootCount = configCountBoot();
-  // Per-boot seed for session ids (link.cpp): a count that never repeats, this chip's serial number and timing.
-  // Without the radio (init failed) these are all radioRandom32() has.
+  // Session ids are drawn from the count (link.cpp, drawSession), which never repeats. The per-boot seed for the random
+  // part (and for everything else random): that count, this chip's serial number and timing. Without the radio (init
+  // failed) these are all radioRandom32() has.
+  linkSetBoot(bootCount, serial);
   uint32_t seed[] = { bootCount, serial[0], serial[1], serial[2], serial[3], resetCause, micros() };
   radioAddEntropy(seed, sizeof(seed));
   boardKick();
@@ -251,6 +257,9 @@ void appLoop() {
   uint32_t now = millis();
   k1.update(now);
   k2.update(now);
+  // A radio that faulted or didn't start is re-initialised here, never while a relay pulses: LoRa.begin() stops the
+  // loop ~0.5 s, and Relay::update couldn't end the pulse meanwhile (nor start one waiting out the interlock).
+  if (radioRecoverDue() && !appRelaysPulsing()) radioRecover();
   consolePoll();
   supplyPoll(now);  // before the roles: the house's controller power sense reads it
   if (activeRole != ROLE_UNSET) {

@@ -13,7 +13,7 @@ namespace LINK_NS {
 }
 
 LinkApi LINK_API() {
-  return { LINK_NS::linkBegin, LINK_NS::linkPoll, LINK_NS::linkSend, LINK_NS::linkSendReliable,
-           LINK_NS::linkPending, LINK_NS::linkAck, LINK_NS::linkAckLater, LINK_NS::linkStats,
+  return { LINK_NS::linkSetBoot, LINK_NS::linkBegin, LINK_NS::linkPoll, LINK_NS::linkSend, LINK_NS::linkSendReliable,
+           LINK_NS::linkPending, LINK_NS::linkAck, LINK_NS::linkAckLater, LINK_NS::linkRefuse, LINK_NS::linkStats,
            LINK_NS::linkPeerVerified };
 }

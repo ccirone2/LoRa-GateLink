@@ -17,56 +17,6 @@ once its fix is merged and record it in the pull request.
   released, before the firmware starts. Remaining options: a bootloader that skips that wait on watchdog/software
   resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
-- [ ] **A resync can turn into a command** (host test `robustness_resync_window_ended_by_a_matching_edge_lets_the_resync_command_the_gate`,
-  found by `robustness_chaos_seed_8`; both XFAIL). The mismatch resync does `k1.set(!t); openSyncWindow(now, t, ...)`,
-  so an IN1 edge at `t` inside it (the user's own edge still in its debounce, or chatter) ends the window early; the
-  controller then follows K1 to `!t` outside any window, and that edge is sent as a command: the user switched on
-  with the gate open and the gate closed. About 30–50 ms per resync. Fix: the window must expect the level K1 drives
-  (and its return), and a matching edge must not end it before `resync_ms`.
-- [ ] **A command overridden mid-travel waits 75 s for its resync** (`gate_state_override_to_the_far_limit_resyncs_the_controller_at_once`,
-  `house_sync_siren_override_mid_travel_resyncs_at_once`; XFAIL). The house fast-forwards a `timeout` result only
-  when `mismatchSince` is set, but `holdingTravel()` keeps it at 0 all through the travel, so the controller shows
-  the wrong state for `mismatch_timeout_s`.
-- [ ] **The boot checkSoon reverts a user command** (`house_sync_edge_on_arming_is_not_reverted_by_the_boot_check_soon`;
-  XFAIL). `sendCommand()` clears `mismatchSince` but not `checkSoon`, so once the command's ACK lets the mismatch
-  check run, the gate still reads closed and the house resyncs the controller off while the gate opens.
-- [ ] **A quick switch-back between the ACK and the gate's STATUS is dropped** (no host test yet). Gate open; off,
-  CLOSE sent and ACKed; on again ~150 ms later: `sendCommand`'s opposing check sees no pending CMD and no target yet,
-  logs `cmd_suppressed`, and the gate closes with the controller off. Repro in the host sim: `openByUser; user(false);`
-  wait for `cmd_sent`; `run(150); user(true)`.
-- [ ] **`leaving` outlives a pulse that never moved the gate** (`gate_state_leaving_mark_does_not_outlive_our_pulse`;
-  XFAIL). After a reversal whose first pulse the opener ignored (siren holding OPEN), a later external move off that
-  limit is reported with cause `lora`.
-- [ ] **A second pulse of a relay already pulsing restarts its timer** (`gate_relays_second_open_cmd_mid_pulse_keeps_pulse_ms`,
-  `gate_relays_second_relay_test_mid_pulse_keeps_its_ms`; XFAIL). Two OPENs ~200 ms apart hold K1 for 738 ms. Don't
-  restart a running pulse (ACK the command as done; refuse the test `busy`). The fuzzer measures a re-pulsed relay from its latest pulse until then
-  (`GATELINK_FUZZ_STRICT_PULSE=1` for the strict check).
-- [ ] **The boot counter sticks at 1 once a slot reads 0xFFFFFFFD or more.** `configCountBoot` returns the largest
-  slot value + 1 and maps 0xFFFFFFFF to 1, but the large slot stays (the sector holding the largest value is never
-  erased), so every later boot counts 1 again. A slot can read that high if programming it was cut short (a cut
-  slot "can only read high": a value like 0xFFFFFF23 reaches the wrap within ~220 boots) or a read was garbled.
-  The count seeds the session id, which must never repeat under one key; `boot_count` in `info` shows it. Found
-  by `fuzz_config`; reproducers in `tests/native/fuzz/crashes/fuzz_config/`: `boot-counter-wraps-to-1` (a slot of
-  0xFFFFFFFD) and `boot-counter-high-slot-then-1` (CI's first run: a high torn slot, 3392943128, then 1); they must keep
-  crashing until fixed, then move it to the corpus and drop the tolerance in `fuzz_config.cpp`).
-- [ ] **A console `reboot` during a gate relay pulse holds the relay up to 100 ms long.** `reboot` flushes its
-  reply and `delay(100)`s before `boardReset()`, and isn't held while a relay pulses as `config.save` and the
-  other loop-blocking commands are, so a pulse ending in that 100 ms runs on until the reset (K1 575 ms for a
-  500 ms `relay.test`). Hold `reboot` too (`blocksLoop`), or drop the relays before the wait. Found by
-  `fuzz_frames`; reproducer `tests/native/fuzz/crashes/fuzz_frames/console-reboot-during-pulse` (tolerance in
-  `boardReset()`, `tests/native/fuzz/hal.cpp`).
-- [ ] **A radio restart during a gate relay pulse holds the relay up to ~0.45 s long.** `radio.cpp` re-initialises
-  the radio whenever a fault or the 5 s retry calls for it, even mid-pulse, and `LoRa.begin()` blocks the loop
-  ~450 ms (200 + 200 + 50 ms of reset delays), against the rule that nothing stopping the loop runs during a pulse.
-  The likeliest trigger is the relay coil dipping the supply as the gate sends the command's ACK. The same stall in
-  the 100 ms interlock gap shortens or skips the next pulse. Defer the restart while `appRelaysPulsing()`. Found by
-  `fuzz_frames`; reproducer `tests/native/fuzz/crashes/fuzz_frames/radio-fault-during-pulse`; host test
-  `gate_relays_radio_reinit_waits_for_the_pulse` (XFAIL).
-- [ ] **Decide: a fifth remote config write during one pulse is saved at once.** The gate queues `CFG_SET`s that
-  arrive during a pulse (4 deep) and saves a fifth straight away, holding the relay ~0.5 s long (K1 1,372 ms for a
-  1,000 ms test with real timings). A real house sends one at a time, but its resends get new sequence numbers
-  whenever replayed HELLOs at the house renumber them, so in principle they can queue up. Refuse it `busy`
-  instead of saving. The fuzzer would flag it; `fuzz_frames` hasn't reached it yet.
 
 ## Bench and field tests
 
@@ -109,6 +59,12 @@ once its fix is merged and record it in the pull request.
   passed) and a 60-minute `-m longsoak`. No resets, no `radio_faults`, no `lbt_forced`. Left: at the install, save
   `tx_power` 17 on both boards and watch `reset_cause` and `radio_faults` for a few days, with the antenna away from
   the relay shield.
+- [ ] **How long the CSW24UL takes to leave a limit after a pulse.** Since 0.13.9 the gate's `leaving` mark lapses
+  `debounce_ms` after the last relay releases with the gate still at that limit, so a reversal (CLOSE, then OPEN
+  before the gate left open) is `cause: lora` only if the opener's limit drops within the pulse plus `debounce_ms`;
+  later, that move is logged `external` (a label: K1, K2 and commands don't depend on it). The GateSim and the host
+  simulation react within 20 ms. At the install, measure the time from a pulse to the limit input dropping (gate log
+  `pulse` to `gate_state` between, less `BETWEEN_HOLD_MS`, both ways) and widen the lapse if it's longer.
 
 ## Install
 
@@ -127,6 +83,5 @@ once its fix is merged and record it in the pull request.
   `downloads.arduino.cc` and `github.com` so `tools/agent/cloud_setup.sh` can install the toolchain
   ([docs/agent-tooling.md](docs/agent-tooling.md)). Watch the first week's pull requests and tune the routine files.
 - [ ] **CI, part 2: static analysis, sanitizers, coverage.** Once the host simulation of both boards is merged:
-  cppcheck (`warning,performance,portability` are clean apart from `LineWriter::buf` uninitialised and the
-  `memset` of the link stats; style noise like `badBitmaskCheck` off), clang-tidy over the host build, the host tests
-  under ASan/UBSan, and gcovr line coverage of the firmware reported per run.
+  cppcheck (`warning,performance,portability` are clean; style noise like `badBitmaskCheck` off), clang-tidy over
+  the host build, the host tests under ASan/UBSan, and gcovr line coverage of the firmware reported per run.

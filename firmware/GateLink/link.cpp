@@ -78,6 +78,9 @@ static uint32_t helloKnownAt, helloOtherAt;  // when we last answered a HELLO fr
 // sent once the verified session proves alive.
 static bool cmdHeld;
 static bool sessionWeak;  // mySession was drawn while the radio was down (no RSSI noise): drawn again first
+static uint32_t bootNo;  // this boot's count (linkSetBoot; 0 = none): session ids are drawn from it
+static uint32_t bootSerial[4];  // the chip's serial number
+static uint8_t draws;  // session ids drawn this boot
 static uint32_t muteUntil;  // debug: received frames are ignored until then (0 = not muted)
 
 static PendingSlot slots[SLOT_COUNT];
@@ -312,13 +315,53 @@ static void reframePending(uint32_t now) {
   }
 }
 
-// The session id must never repeat under the same key: with txSeq starting over, frames recorded in the earlier
-// boot would pass both the MAC and the replay window. radioRandom32() is seeded per boot (boot counter, chip
-// serial) and samples RSSI noise only while the radio is up. Starting seq at a random offset as well costs nothing.
+// A permutation of the 32-bit values, keyed by the link key, our node id and the chip's serial number: a 4-round
+// Feistel network, each round's function HMAC-SHA256 truncated to 16 bits. Distinct inputs give distinct outputs,
+// and without the key the output of the next input can't be told.
+static const char SESSION_LABEL[] = "GateLink session v1";
+
+static uint32_t permute(uint32_t x) {
+  uint16_t l = x >> 16, r = (uint16_t)x;
+  for (uint8_t round = 0; round < 4; round++) {
+    uint8_t in[4] = { myNodeId(), round, (uint8_t)r, (uint8_t)(r >> 8) };
+    uint8_t f[2];
+    SHA256 h;
+    h.resetHMAC(cfg.key, sizeof(cfg.key));
+    h.update(SESSION_LABEL, sizeof(SESSION_LABEL) - 1);
+    h.update(bootSerial, sizeof(bootSerial));
+    h.update(in, sizeof(in));
+    h.finalizeHMAC(cfg.key, sizeof(cfg.key), f, sizeof(f));
+    uint16_t t = l ^ (uint16_t)(f[0] | f[1] << 8);
+    l = r;
+    r = t;
+  }
+  return (uint32_t)l << 16 | r;
+}
+
+// The session id must never repeat under the same key: with txSeq starting over, frames recorded under it earlier
+// would pass both the MAC and the replay window. So while the boot counter works (linkSetBoot) the id is the keyed
+// permutation of this boot's count (20 bits), the draws so far this boot (4 bits: restarts after a key or radio
+// change, a weak draw) and 8 random bits: distinct by construction for the first million boots, and a count that
+// repeats all the same (flash rolled back or replaced, a board that hit the pre-0.13.9 counter bug) still differs in
+// its random bits. The permutation's key keeps the ids unpredictable; the chip serial in it makes another
+// board given the same key draw other ids (its count starts over). Past the 20 bits, the 16th draw or without a count:
+// random, as before 0.13.9. radioRandom32() is seeded per boot (boot counter, chip serial) and samples RSSI noise only
+// while the radio is up. Starting seq at a random offset as well costs nothing.
 static void drawSession() {
   sessionWeak = !radioOk();
   do { mySession = radioRandom32(); } while (mySession == 0);
+  if (bootNo && bootNo < (1UL << 20) && draws < 16) {
+    uint32_t x = bootNo << 12 | (uint32_t)draws++ << 8 | (mySession & 0xFF);
+    do { x = permute(x); } while (x == 0);  // cycle-walking: still distinct, and never 0 (no session)
+    mySession = x;
+  }
   txSeq = radioRandom32() & 0x7FFFFFFF;  // leaves 2^31 frames before the (unsigned) window would wrap
+}
+
+void linkSetBoot(uint32_t bootCount, const uint32_t serial[4]) {
+  bootNo = bootCount;
+  memcpy(bootSerial, serial, sizeof(bootSerial));
+  draws = 0;
 }
 
 static void releaseCmd() {
@@ -333,7 +376,7 @@ void linkBegin(RxHandler rx, AckHandler ack) {
     if (slots[i].active && ackHandler) ackHandler((Slot)i, slots[i].type, false, 0);
   rxHandler = rx;
   ackHandler = ack;
-  memset(&stats, 0, sizeof(stats));
+  stats = {};
   memset(slots, 0, sizeof(slots));
   memset(acks, 0, sizeof(acks));
   txqCount = 0;
@@ -398,6 +441,11 @@ void linkAck(uint32_t seq, uint8_t result) {
 
 void linkAckLater(uint32_t seq) {
   *ackMemo(seq) = { true, true, seq, 0 };
+}
+
+void linkRefuse(uint32_t seq) {
+  uint32_t d = peerLastSeq - seq;  // just accepted: at or below the last seq
+  if (d < 32) peerWindow &= ~(1UL << d);
 }
 
 static void handleAck(const uint8_t *p, uint8_t len) {
@@ -645,6 +693,10 @@ const LinkStats &linkStats() {
 
 bool linkPeerVerified() {
   return peerOk;
+}
+
+uint32_t linkPeerSession() {
+  return peerSession;
 }
 
 bool linkDebugReplay(bool hello) {

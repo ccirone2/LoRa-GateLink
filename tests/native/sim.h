@@ -19,6 +19,7 @@
 extern uint32_t simNow;  // millis()
 
 struct LinkApi {
+  void (*setBoot)(uint32_t, const uint32_t *);
   void (*begin)(RxHandler, AckHandler);
   void (*poll)(uint32_t);
   void (*send)(uint8_t, const uint8_t *, uint8_t);
@@ -26,6 +27,7 @@ struct LinkApi {
   bool (*pending)(Slot);
   void (*ack)(uint32_t, uint8_t);
   void (*ackLater)(uint32_t);
+  void (*refuse)(uint32_t);
   const LinkStats &(*stats)();
   bool (*verified)();
 };
@@ -77,6 +79,8 @@ struct Node {
   std::deque<Bytes> rxq;  // frames heard, not yet read (an empty one: a bad CRC)
   uint32_t rxDone = 0;   // radioRxDoneCount()
   uint64_t rng;
+  uint32_t stuckRng = 0;  // nonzero: radioRandom32() returns this every time (a dead entropy source)
+  uint32_t serial[4];     // the chip's serial number (linkSetBoot)
   // What the link handed up
   std::vector<LogRec> logs;
   std::vector<RxRec> rx;
@@ -94,11 +98,13 @@ struct Node {
     int32_t prevRole;
   };
 
-  void begin();  // linkBegin: a boot, or a radio/key restart
+  void begin();  // linkBegin: a radio/key restart, or a boot without a boot count
+  void boot(uint32_t count);  // a boot: linkSetBoot(count, serial), then linkBegin
   void sendReliable(Slot slot, uint8_t type, const Bytes &payload, uint32_t ttlMs);
   void send(uint8_t type, const Bytes &payload);
   void ack(uint32_t seq, uint8_t result);
   void ackLater(uint32_t seq);
+  void refuse(uint32_t seq);
   bool pending(Slot slot);
   LinkStats stats();
   bool verified();
@@ -144,6 +150,7 @@ struct FakeFlash {
   uint8_t mem[4 * 4096];
   int garbleReads = 0;       // the next N reads return zeros (bus garbled by the radio module's MCU)
   bool cutNextProgram = false;  // the next program writes only its first half and fails (power cut mid-save)
+  int cutAfterPrograms = 0;  // with cutNextProgram: this many programs go through first
   int erases = 0, programs = 0;
   void reset();
 };

@@ -76,6 +76,7 @@ struct Board {
   uint32_t kickAt = 0;  // last watchdog reset (board millis)
   uint64_t prng = 1;    // random()
   uint64_t rng = 1;     // radioRandom32()
+  uint32_t stuckRng = 0;  // nonzero: radioRandom32() returns this every time (a dead entropy source)
 
   // Supply
   bool lipo = false;
@@ -95,6 +96,8 @@ struct Board {
   // Radio
   bool radioPresent = true;  // a module that answers
   bool radioUp = false, radioBegun = false, radioHeld = false;  // held: the flash access holds the module in reset
+  bool radioFault = false;    // test: the radio resets; the next poll finds it out of LoRa mode (radio_fail a=2)
+  bool radioRestartDue = false;  // radio.cpp after a fault: down until radioRecover() starts it over
   uint32_t txStart = 0, txEnd = 0;  // the last frame sent (equal: none on the air)
   std::deque<Bytes> rxq;  // at most one frame waits in the FIFO (a newer one overwrites it); empty = bad CRC
   uint32_t rxDone = 0, crcErr = 0, faults = 0;

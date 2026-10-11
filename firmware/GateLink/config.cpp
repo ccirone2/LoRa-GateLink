@@ -186,6 +186,20 @@ static void adopt(const SpiRecord &r) {
   extras = r.extras;
 }
 
+// The record in the other sector, the one before, holds the key as it was: after a key change, the old key, which
+// would stay readable from the chip until the next save. Overwrite it with zeros (programming only clears bits, so
+// that record can't come out newer; it then fails its CRC, and a power cut midway leaves the new record standing).
+static void scrubOldKey(int8_t sector, const uint8_t key[16]) {
+  uint8_t old[16];
+  uint32_t addr = sector * EXTFLASH_SECTOR + 14;
+  extFlashRead(addr, old, sizeof(old));
+  bool erased = true;
+  for (uint8_t b : old) erased &= b == 0xFF;
+  if (erased || !memcmp(old, key, sizeof(old))) return;
+  memset(old, 0, sizeof(old));
+  extFlashProgram(addr, old, sizeof(old));
+}
+
 // Writes into the sector not holding the newest record, then reads it back.
 static bool spiWrite(const Config &c) {
   uint8_t buf[EXTFLASH_PAGE], check[EXTFLASH_PAGE];
@@ -198,6 +212,7 @@ static bool spiWrite(const Config &c) {
   if (memcmp(buf, check, len)) return false;
   spiSector = sector;
   spiSeq = seq;
+  scrubOldKey(1 - sector, c.key);
   return true;
 }
 
@@ -328,12 +343,18 @@ bool configSaveKey() {
 }
 
 // Boot counter: append-only 4-byte slots in two sectors after the config record's, so a boot programs one slot
-// and a sector is erased only every 1024 boots. The count is the largest value found + 1: a slot cut short by a
-// power loss holds more 1 bits than intended, so it can only read high. When the sector holding the largest value
-// is full, the other one (all smaller values) is erased and continues; a power cut during that erase still
-// leaves the largest value in place.
+// and a sector is erased only every 1024 boots. A slot is written in two steps: the count with bit 31 set, read
+// back, then bit 31 cleared (committed). A program cut short by a power loss leaves bits at 1 (it "can only read
+// high"), so a torn slot has bit 31 set, whatever else it reads, and its count was never returned: such slots are
+// skipped. The count is the largest committed value + 1. (Before 0.13.9 slots were written in one step and the count
+// was the largest value + 1, so a torn slot reading 0xFFFFFFFD or more wrapped it to 1 for good. A torn slot from then
+// with bit 31 set is skipped now too.) When the sector holding the largest value is full, the other one (all smaller
+// values) is erased and continues; a power cut during that erase still leaves the largest value in place. Past
+// BOOT_COUNT_MAX (2^31 boots, or an old torn slot that cleared bit 31 and read high) the counter has run out and
+// returns 0, as without the chip, rather than repeat a count. So does a scan that reads a slot as 0 (garbled).
 #define BOOT_SECTOR0 REC_SECTORS
-
+#define BOOT_UNCOMMITTED 0x80000000u
+#define BOOT_COUNT_MAX 0x7FFFFFFEu  // uncommitted, 0x7FFFFFFF would read as an unwritten slot
 
 uint32_t configCountBoot() {
   if (!extFlashPresent()) return 0;
@@ -352,15 +373,19 @@ uint32_t configCountBoot() {
           freeSlot[s] = (off + i) / 4;
           break;
         }
-        if (v > maxV) {
+        // No slot is ever written 0 (counts start at 1; one being written has bit 31 set): zeros are a read garbled
+        // by the radio module's MCU (extflash.h). They could hide the largest count, which would come round again,
+        // and with it the session ids drawn from it: no count this boot, and nothing written or erased.
+        if (!v) return 0;
+        if (!(v & BOOT_UNCOMMITTED) && v > maxV) {
           maxV = v;
           maxSector = s;
         }
       }
     }
   }
+  if (maxV >= BOOT_COUNT_MAX) return 0;
   uint32_t count = maxV + 1;
-  if (count == 0xFFFFFFFFu) count = 1;  // would read as unwritten; not reachable at one boot per second for 136 years
   int8_t s = maxSector;
   int32_t slot = freeSlot[s];
   if (slot < 0) {
@@ -370,10 +395,14 @@ uint32_t configCountBoot() {
   }
   uint32_t addr = (BOOT_SECTOR0 + s) * EXTFLASH_SECTOR + slot * 4;
   uint8_t b[4], check[4];
-  put32(b, count);
+  put32(b, count | BOOT_UNCOMMITTED);
   if (!extFlashProgram(addr, b, 4)) return 0;
   extFlashRead(addr, check, 4);
-  return memcmp(b, check, 4) ? 0 : count;
+  if (memcmp(b, check, 4)) return 0;
+  b[3] &= 0x7F;  // commit: bit 31 cleared
+  if (!extFlashProgram(addr + 3, b + 3, 1)) return 0;
+  extFlashRead(addr + 3, check + 3, 1);
+  return check[3] == b[3] ? count : 0;
 }
 
 bool configFactoryReset() {

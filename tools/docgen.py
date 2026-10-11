@@ -1374,7 +1374,7 @@ FACTS = [
     D("USB_TX_TIMEOUT_MS", f"{FW}/console_io.cpp",
       Q(CON, r"untaken for more than (\d+) ms"),
       Q(C, r"dropped the rest of the line after (\d+) ms")),
-    Fact("USB packet", f"{FW}/console_io.cpp", r"uint8_t buf\[(\d+)\];",
+    Fact("USB packet", f"{FW}/console_io.cpp", r"uint8_t buf\[(\d+)\]",
          (Q(CON, r"one (\d+)-byte packet at a time"), Q(C, r"written in (\d+)-byte pieces"))),
     D("LOG_SIZE", f"{FW}/log.h", Q(CON, r"the ring buffer \((\d+) entries")),
     Fact("config.set chunk (web)", "web/js/config.js", r"const CFG_CHUNK = (\d+);",

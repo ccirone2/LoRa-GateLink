@@ -121,7 +121,7 @@ static void dropOutputs(Board &b) {
   memset(b.mode, 0, sizeof(b.mode));
   memset(b.out, 0, sizeof(b.out));
   b.led = -1;
-  b.radioUp = b.radioBegun = b.radioHeld = false;
+  b.radioUp = b.radioBegun = b.radioHeld = b.radioFault = b.radioRestartDue = false;
   b.rxq.clear();
   b.rx[0].clear();
   b.rx[1].clear();
@@ -416,6 +416,7 @@ bool radioBegin() {
   Board &b = *cur;
   b.radioBegun = true;
   b.radioHeld = false;
+  b.radioRestartDue = false;
   b.rxq.clear();
   b.txStart = b.txEnd = b.clockMs;  // abandons a TX
   b.block(470000);      // LoRa.begin() on the MKR WAN 1310: delay(200 + 200 + 50) on the module's reset, 2 x 10 ms on the SX1276's
@@ -434,6 +435,17 @@ void radioRestart() {
 }
 bool radioOk() {
   return cur->radioUp;
+}
+// As radio.cpp: after a fault, or every 5 s while the radio didn't start, the firmware (appLoop) restarts it here.
+bool radioRecoverDue() {
+  Board &b = *cur;
+  return b.radioRestartDue || (!b.radioUp && retryAt[b.idx] && after(b.clockMs, retryAt[b.idx]));
+}
+void radioRecover() {
+  Board &b = *cur;
+  if (!radioRecoverDue()) return;
+  bool retry = !b.radioRestartDue;
+  if (radioBegin() && retry) b.fnLog(EV_RADIO_FAIL, 3, (int32_t)b.faults);
 }
 bool radioTxBusy() {
   // Unsigned: a frame sent weeks ago must not read as still on the air once the signed difference flips.
@@ -484,8 +496,16 @@ bool radioChannelBusy() {
 }
 size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
   Board &b = *cur;
-  if (!b.radioUp) {
-    if (retryAt[b.idx] && after(b.clockMs, retryAt[b.idx]) && radioBegin()) b.fnLog(EV_RADIO_FAIL, 3, (int32_t)b.faults);
+  if (!b.radioUp) return 0;  // radioRecover() restarts it
+  if (b.radioFault) {
+    // radio.cpp fault(2): out of LoRa mode, a reset seen in RX. Counted, logged, and down until radioRecover().
+    b.radioFault = false;
+    b.faults++;
+    b.fnLog(EV_RADIO_FAIL, 2, (int32_t)b.faults);
+    b.radioUp = false;
+    b.radioRestartDue = true;
+    b.rxq.clear();
+    b.txStart = b.txEnd = b.clockMs;
     return 0;
   }
   if (b.radioHeld || radioTxBusy() || b.rxq.empty()) return 0;
@@ -512,6 +532,7 @@ uint32_t radioAirtimeMs(size_t payloadLen) {
 }
 uint32_t radioRandom32() {
   cur->block(20500);  // 512 RSSI samples 40 us apart
+  if (cur->stuckRng) return cur->stuckRng;
   return (uint32_t)(next64(cur->rng) >> 32);
 }
 void radioAddEntropy(const void *data, size_t len) {

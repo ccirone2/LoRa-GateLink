@@ -2080,23 +2080,21 @@ TEST(robustness_chaos_toggling_controller_seed_4) {
 }
 
 // [chaos] [sync-window] [resync]
-XFAIL_TEST(robustness_chaos_seed_8,
-           "found by this seed at t=7447834: a mismatch resync started 32 ms after the user switched on (the edge still "
-           "in its 50 ms debounce); that edge, at the resync's target level, ended the resync's sync window early, and "
-           "the controller following K1's resync pulse (off) was taken as the user: CLOSE sent for an open gate. See "
-           "robustness_resync_window_ended_by_a_matching_edge_lets_the_resync_command_the_gate") {
+TEST(robustness_chaos_seed_8) {
+  // This seed found, at t=7447834, a mismatch resync started 32 ms after the user switched on (the edge still in its
+  // 50 ms debounce): that edge, at the resync's target level, ended the resync's sync window early, and the controller
+  // following K1's resync pulse (off) was taken as the user, a CLOSE sent for an open gate. See
+  // robustness_resync_window_outlasts_a_matching_edge_so_the_resync_never_commands_the_gate.
   chaos(8, 3);
 }
 
 // [sync-window] [resync]
-XFAIL_TEST(robustness_resync_window_ended_by_a_matching_edge_lets_the_resync_command_the_gate,
-           "role_house.cpp: a resync drives K1 to !t for resync_ms but opens its window expecting t "
-           "(openSyncWindow(now, t, resync_ms)); an IN1 edge at t inside it (the user's, or chatter) ends the window "
-           "(shellyLevel == syncExpect), so the controller then following K1 to !t is taken as the user: a command "
-           "to !t, away from where the gate is") {
+TEST(robustness_resync_window_outlasts_a_matching_edge_so_the_resync_never_commands_the_gate) {
   // Chaos seed 8, made deterministic. The controller is out of step (detached while someone opens the gate): K1 on,
   // the Alarm.com switch off. mismatch_timeout_s after K1 opened, the house resyncs: K1 off for resync_ms, then on.
   // The user switches on 32 ms before that (towards the open gate); the house takes the edge 19 ms into the resync.
+  // That edge is at the level the window expects, but it must not end the window before K1 is back: the controller
+  // following K1 off, and back on, are syncs too, never a command (a CLOSE, away from where the gate is).
   World w;
   Guard g{ w };
   w.commission();

@@ -12,6 +12,7 @@ static uint32_t rxDone = 0;     // frames received, good or not, since boot
 static int32_t lastFei = 0;     // frequency error of the last good frame (Hz)
 static uint32_t retryAt = 0;  // while !ok: when to try radioBegin() again
 #define RETRY_MS 5000
+static bool restartDue = false;  // a fault: radioRecover() re-initialises the radio
 // Transmission in progress. TX is asynchronous: a frame takes up to seconds at SF12, and blocking for it held
 // up the loop (relay pulses ran long by the airtime, and back-to-back frames could reach the watchdog).
 static volatile bool txActive = false;
@@ -58,12 +59,15 @@ static void startRx() {
   writeReg(REG_OP_MODE, OPMODE_LORA_RX_CONT);
 }
 
-// The radio reset itself (supply dip) or stopped answering: count it, log it and start over.
+// The radio reset itself (supply dip) or stopped answering: count it, log it, and take it down until radioRecover()
+// starts it over. Not from here: LoRa.begin() stops the loop ~0.5 s, which must wait while a relay pulses.
 static void fault(int32_t kind) {
   faults++;
   logEvent(EV_RADIO_FAIL, kind, faults);
-  radioBegin();
+  ok = false;
+  txActive = false;
   txEndAt = millis();
+  restartDue = true;
 }
 
 static void finishTx() {
@@ -85,6 +89,7 @@ void radioRestart() {
 
 bool radioBegin() {
   txActive = false;
+  restartDue = false;
   if (begun) LoRa.end();
   begun = true;
   ok = LoRa.begin(cfg.freq_hz);
@@ -111,6 +116,18 @@ bool radioOk() {
   return ok;
 }
 
+bool radioRecoverDue() {
+  return restartDue || (!ok && retryAt && (int32_t)(millis() - retryAt) >= 0);
+}
+
+void radioRecover() {
+  if (!radioRecoverDue()) return;
+  // After a fault, start over; a radio that failed to initialise is retried, so a transient fault doesn't need a
+  // reboot (logged when it comes back).
+  bool retry = !restartDue;
+  if (radioBegin() && retry) logEvent(EV_RADIO_FAIL, 3, faults);
+}
+
 uint32_t radioFaults() {
   return faults;
 }
@@ -128,7 +145,7 @@ uint32_t radioRxDoneCount() {
 }
 
 bool radioSend(const uint8_t *buf, size_t len) {
-  if (!ok || radioTxBusy()) return false;
+  if (radioTxBusy() || !ok) return false;  // in this order: radioTxBusy() can find a fault
   LoRa.beginPacket();
   LoRa.write(buf, len);
   writeReg(REG_DIO_MAPPING_1, DIO0_TX_DONE);
@@ -169,14 +186,7 @@ uint32_t radioTxEndAt() {
 // re-arms it, and a frame whose preamble straddled that moment was lost (~2 % of frames at SF9, more at
 // SF12, both directions).
 size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
-  if (!ok) {
-    // A radio that failed to initialise is retried, so a transient fault doesn't need a reboot.
-    if (retryAt && (int32_t)(millis() - retryAt) >= 0) {
-      if (radioBegin()) logEvent(EV_RADIO_FAIL, 3, faults);
-    }
-    return 0;
-  }
-  if (radioTxBusy()) return 0;
+  if (radioTxBusy() || !ok) return 0;  // down (radioRecover() restarts it), or a fault radioTxBusy() just found
   uint8_t mode = readReg(REG_OP_MODE);
   if (mode != OPMODE_LORA_RX_CONT) {
     // Out of LoRa mode (or no answer) means the radio reset: startRx() alone can't fix that, as LoRa mode can
@@ -206,8 +216,8 @@ size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
 }
 
 bool radioChannelBusy() {
-  if (!ok) return false;
   if (radioTxBusy()) return true;
+  if (!ok) return false;
   // A packet we haven't read yet: transmitting now would overwrite it in the FIFO.
   if (readReg(REG_IRQ_FLAGS) & IRQ_RX_DONE) return true;
   if (readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) return false;
@@ -254,7 +264,7 @@ uint32_t radioRandom32() {
   const size_t stateLen = sizeof(randState);
   uint8_t pool[64];
   uint32_t t = micros();
-  bool sample = ok && !radioTxBusy();
+  bool sample = !radioTxBusy() && ok;
   if (sample && readReg(REG_OP_MODE) != OPMODE_LORA_RX_CONT) startRx();
   for (size_t i = 0; i < sizeof(pool); i++) {
     uint8_t b = 0;

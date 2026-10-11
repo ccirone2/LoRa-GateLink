@@ -88,7 +88,10 @@ size_t radioReceive(uint8_t *buf, size_t max, int16_t &rssi, float &snr) {
 }
 int16_t radioNoiseDbm() { return -120; }
 uint32_t radioAirtimeMs(size_t payloadLen) { return airtimeMs(payloadLen); }
-uint32_t radioRandom32() { return cur ? (uint32_t)(next64(cur->rng) >> 32) : (uint32_t)(next64(prng) >> 32); }
+uint32_t radioRandom32() {
+  if (cur && cur->stuckRng) return cur->stuckRng;
+  return cur ? (uint32_t)(next64(cur->rng) >> 32) : (uint32_t)(next64(prng) >> 32);
+}
 void radioAddEntropy(const void *, size_t) {}
 
 // --- extflash.h ----------------------------------------------------------------------------------------------
@@ -97,6 +100,7 @@ void FakeFlash::reset() {
   memset(mem, 0xFF, sizeof(mem));
   garbleReads = 0;
   cutNextProgram = false;
+  cutAfterPrograms = 0;
   erases = programs = 0;
 }
 static void inRange(uint32_t addr, size_t len) {
@@ -125,8 +129,9 @@ bool extFlashProgram(uint32_t addr, const uint8_t *buf, size_t len) {
   inRange(addr, len);
   flash.programs++;
   size_t n = len;
-  if (flash.cutNextProgram) {
+  if (flash.cutNextProgram && flash.cutAfterPrograms-- <= 0) {
     flash.cutNextProgram = false;
+    flash.cutAfterPrograms = 0;
     n = len / 2;
   }
   for (size_t i = 0; i < n; i++) flash.mem[addr + i] &= buf[i];  // NOR: programming only clears bits
@@ -169,6 +174,13 @@ void Node::begin() {
   rxq.clear();
   api.begin(onRxThunk, onAckThunk);
 }
+void Node::boot(uint32_t count) {
+  {
+    Ctx c(*this);
+    api.setBoot(count, serial);
+  }
+  begin();
+}
 void Node::sendReliable(Slot slot, uint8_t type, const Bytes &p, uint32_t ttlMs) {
   Ctx c(*this);
   api.sendReliable(slot, type, p.data(), (uint8_t)p.size(), ttlMs);
@@ -184,6 +196,10 @@ void Node::ack(uint32_t seq, uint8_t result) {
 void Node::ackLater(uint32_t seq) {
   Ctx c(*this);
   api.ackLater(seq);
+}
+void Node::refuse(uint32_t seq) {
+  Ctx c(*this);
+  api.refuse(seq);
 }
 bool Node::pending(Slot slot) {
   Ctx c(*this);
@@ -222,6 +238,7 @@ static void setupNode(Node &n, int idx, const char *name, int32_t role, uint64_t
   n.cfg.key_set = 1;
   for (int i = 0; i < 16; i++) n.cfg.key[i] = (uint8_t)(0xA0 + i);
   n.rng = seed;
+  for (int i = 0; i < 4; i++) n.serial[i] = 0x5EED0000u + idx * 16 + i;
   n.txStart = n.txEnd = simNow;
 }
 

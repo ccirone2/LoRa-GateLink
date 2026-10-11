@@ -36,15 +36,13 @@ struct RxFrame {
   float snr;
 };
 
-// Gate relay monitor (CLAUDE.md: pulsed only, never both, interlocked).
+// Gate relay monitor (CLAUDE.md: pulsed only, never restarted, never both, interlocked).
 struct RelayMon {
   bool on = false;
   uint32_t onAt = 0;
   uint32_t allowMs = 0;    // pulse_ms, or a relay.test's ms, when it went on
   bool offSeen = false;
   uint32_t offAt = 0;
-  bool repulsed = false;   // pulsed again while on (a second command or test): measured from that pulse
-  uint32_t pulseAt = 0, pulseAllowMs = 0;
 };
 
 struct Hal {
@@ -64,6 +62,7 @@ struct Hal {
   // Radio
   bool radioPresent = true;  // the module answers (false: radioBegin fails, retried every 5 s)
   bool radioUp = false, radioBegun = false, radioHeld = false;
+  bool restartDue = false;   // after a fault: down until the firmware calls radioRecover()
   bool jammed = false;       // the channel reads busy (a carrier that never ends: listen-before-talk is forced)
   uint32_t txEnd = 0, retryAt = 0;
   uint32_t rxDone = 0, crcErr = 0, faults = 0;
@@ -99,13 +98,10 @@ struct Hal {
     uint32_t at = 0, ms = 0;
   } asked[2];
   bool houseK2Test = false;  // house K2 is on for a relay.test: the sensor check is off until K2 next releases
-  bool strictPulse = false;  // GATELINK_FUZZ_STRICT_PULSE: a second pulse doesn't extend what's allowed
   // GATELINK_FUZZ_KNOWN_BUGS: also trap on the known, reported firmware bugs (README.md, Known bugs). Fuzzing
   // tolerates exactly those, so it can look for others; the replay of fuzz/crashes sets it.
   bool knownBugs = false;
   bool trace = false;        // GATELINK_FUZZ_TRACE: print what happens (console lines, frames, relays) to stderr
-  bool rebootFlushed = false;  // the console's reboot flushed its reply (it then waits 100 ms and resets)
-  uint32_t rebootFlushAt = 0;
   // The house's idea of the gate and the link, from its gate_state / link_up / link_down log events.
   int32_t houseView = 0;  // GS_*
   bool houseLink = false;
@@ -121,7 +117,8 @@ void halReset(uint32_t startMs);
 // After every loop pass: the invariants that depend on time passing.
 void halCheckPass();
 uint32_t halAirtimeMs(size_t len);
-// radio.cpp's fault(): a TX that never finished, or a reset seen in RX. Counted, logged, re-initialised.
+// radio.cpp's fault(): a TX that never finished, or a reset seen in RX. Counted, logged, and down until the firmware
+// calls radioRecover() (appLoop, once no relay pulses).
 void halRadioFault();
 void halHash(const void *p, size_t n);
 // With GATELINK_FUZZ_TRACE: a line on stderr, stamped with the board's millis().

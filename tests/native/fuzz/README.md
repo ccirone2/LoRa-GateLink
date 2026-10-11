@@ -35,20 +35,23 @@ On every loop pass and at every relay edge (hal.cpp), whatever the input:
 - Gate K1 and K2 are never both energized, and neither goes on within 100 ms (`INTERLOCK_MS`) of the other releasing.
 - A gate relay is on no longer than `pulse_ms` + 50 ms, or a console `relay.test`'s `ms` + 50 ms when one asked
   for it just before (read as console.cpp reads it, and counted only if its reply says it ran: a refused one, bad
-  crc or line too long, doesn't count). A relay pulsed again while on (a second command the same way) is measured
-  from that pulse's start, and a second request in the very millisecond it went on (a delayed start, then a
-  `relay.test` read in the same loop pass) allows the longer of the two; `GATELINK_FUZZ_STRICT_PULSE=1` measures
-  from the first pulse (see Findings). Loop stalls count: the fake board blocks as long as the real one (flash
-  erase 45 ms, radio init 451 ms: `LoRa.begin()` on the MKR WAN 1310 waits 200 + 200 + 50 ms), so a stall that
-  straddles the end of a pulse shows up as a longer pulse.
+  crc, line too long or `busy`, doesn't count), measured from when it went on. A running pulse is never restarted:
+  a `pulse` logged for a relay that is on traps (a second command for it is the same press, and a `relay.test` of
+  it is refused `busy`). Loop stalls count: the fake board blocks as long as the real one (flash erase 45 ms, radio
+  init 451 ms: `LoRa.begin()` on the MKR WAN 1310 waits 200 + 200 + 50 ms), so a stall that straddles the end of a
+  pulse shows up as a longer pulse; that covers the radio's own recovery (a fault, the 5 s retry), which the
+  firmware runs only once no relay pulses.
 - House K2 (the alarm's contact sensor, `sensor_invert` 0) reads closed only while the house knows the gate as
   closed (its last `gate_state`) and, with `linkloss_open`, its link is up (`link_up`/`link_down`); a console
   `relay.test` of K2 that ran overrides it until K2 next releases.
 - No loop pass blocks for the 8 s watchdog.
 - Every line the console prints is one JSON object: a reply (`ok`) or an event.
-- `fuzz_config`: every loaded setting is in range (`paramValid`); the boot counter counts up; save then load gives
-  the same config; `configSaveParam` writes one setting and leaves an unsaved edit unsaved; `configSaveKey` keeps
-  the settings; nothing loads after `configFactoryReset`; none of the saves fails on a healthy chip.
+- `fuzz_config`: every loaded setting is in range (`paramValid`); the boot counter counts up (two boots, two counts,
+  the second higher), or gives none, 0, only for a slot in its way (a committed one at the top, `BOOT_COUNT_MAX`: it
+  has run out; or one reading 0, which no slot is ever written: a garbled read) and then writes nothing; save then
+  load gives the same config; `configSaveParam` writes one setting and leaves an unsaved edit unsaved;
+  `configSaveKey` keeps the settings and leaves the old key in neither record (unless it was all 0x00 or 0xFF, which
+  hides nothing); nothing loads after `configFactoryReset`; none of the saves fails on a healthy chip.
 
 Plus everything ASan and UBSan catch (`-fno-sanitize-recover`).
 
@@ -119,7 +122,15 @@ one that ran; `relay-test-cmd-ending-in-nul`: `"cmd":"relay.test\u0000"` runs as
 reads the command as a C string, and the monitor must read it the same way; in `make_seeds.py`,
 `corpus/fuzz_frames/gate-relay-test-refused-after-one-that-waits`: refused requests pushed out the one that was
 waiting out the interlock; `gate-relay-test-as-a-delayed-pulse-starts`: a second request in the millisecond the
-relay went on was ignored).
+relay went on was ignored, and it is now refused `busy`; `corpus/fuzz_config/boot-counter-top-past-the-free-slot` and
+`boot-counter-zero-past-the-free-slot`: a slot past the first unwritten one that gives no count, which the second boot
+reads once the first has written that slot). Reproducers of fixed firmware bugs stay in the corpus too
+(`corpus/fuzz_frames/console-reboot-during-pulse`: a `reboot` 25 ms before a 500 ms `relay.test` ended kept K1 on
+575 ms, fixed in 0.13.9 by holding `reboot` like a save; `radio-fault-during-pulse`: a radio reset 200 ms into one
+restarted the radio at once and kept K1 on 656 ms, fixed in 0.13.9 by restarting it only once no relay pulses;
+`gate-cmd-same-direction-twice`: two OPENs 277 ms apart kept K1 on 777 ms, until 0.13.9 made the second the same
+press; `corpus/fuzz_config/boot-counter-wraps-to-1`: a boot counter slot reading 0xFFFFFFFD, as a program cut short can
+leave it, wrapped the count to 1 for good, until 0.13.9 wrote slots in two steps and skipped torn ones).
 
 ## Reproducing a crash
 
@@ -143,35 +154,10 @@ the fix makes it stop, which fails the run until the input moves to the corpus a
 |---|---|
 | `GATELINK_FUZZ_TRACE=1` | Print what happens, stamped with the board's `millis()` |
 | `GATELINK_FUZZ_KNOWN_BUGS=1` | Also trap on the known bugs below |
-| `GATELINK_FUZZ_STRICT_PULSE=1` | Measure a re-pulsed relay from its first pulse |
 | `GATELINK_FUZZ_DUMP_IMAGES=<dir>` | Write the provisioned flash images (`house.bin`, `gate.bin`) at start-up |
 
 ## Known bugs
 
 Found by these targets, reported, not fixed here; their reproducers are in `crashes/`.
 
-- **The boot counter falls back to 1 after a slot reads high** (`crashes/fuzz_config/boot-counter-wraps-to-1`: a slot
-  of 0xFFFFFFFD; `crashes/fuzz_config/boot-counter-high-slot-then-1`: a torn slot of 3392943128, found by CI's first run).
-  `configCountBoot` returns the largest slot value + 1 and maps 0xFFFFFFFF to 1; the large slot stays (the sector
-  holding the largest value is never erased), so every later boot counts 1 again. A slot can read that high when a
-  program is cut short (it "can only read high") or a read is garbled. The count seeds the session id, which must
-  never repeat under one key.
-- **A console `reboot` during a gate relay pulse holds the relay up to 100 ms long**
-  (`crashes/fuzz_frames/console-reboot-during-pulse`: `relay.test` 500 ms, `reboot` 25 ms before its end: K1 on
-  575 ms). `reboot` flushes its reply and `delay(100)`s before resetting, and isn't held while a relay pulses as
-  `config.save` and the others are.
-- **A radio fault or retry during a gate relay pulse holds the relay up to ~0.45 s long**
-  (`crashes/fuzz_frames/radio-fault-during-pulse`: `relay.test` 500 ms, a radio reset 200 ms in: K1 on 656 ms).
-  radio.cpp re-initialises the radio (`fault()`: a TX that never finished, a reset seen in RX; and the retry every
-  5 s while it doesn't answer) whenever it's due, and `LoRa.begin()` blocks the loop ~450 ms, against "nothing
-  that stops the loop (a radio restart) may run while a pulse does". A supply dip from the relay coil switching on
-  while the gate sends the command's ACK is the likely way in. hal.cpp excuses the stall of those two paths
-  (`radioInit(true)`) unless `GATELINK_FUZZ_KNOWN_BUGS` is set.
-
-## Findings that aren't bugs
-
-- **A second command the same way restarts the pulse** (`corpus/fuzz_frames/gate-cmd-same-direction-twice`, which
-  crashes with `GATELINK_FUZZ_STRICT_PULSE=1`): two OPENs with different ids 277 ms apart keep K1 on 777 ms, each
-  pulse `pulse_ms` from its own start. `Relay::pulse` on a relay that is on extends it; it's still a pulse per
-  command, so the default check measures each pulse from its start. A stream of same-direction commands less than
-  `pulse_ms` apart keeps the relay on for as long as it lasts.
+None open.

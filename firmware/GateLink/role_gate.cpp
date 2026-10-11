@@ -136,6 +136,12 @@ void gateLoop(uint32_t now) {
   bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense
 
   uint8_t s = readState();
+  // `leaving` holds only while our pulse may still be what moves the gate off that limit: with both relays released
+  // for debounce_ms (the inputs' own lag) and the gate still reading it, the pulse didn't move it (the siren holding
+  // OPEN, say), and a later move off that limit is someone else's.
+  if (leaving != GS_UNKNOWN && s == leaving && !appRelaysPulsing() && !k1.gapLeft(now, cfg.debounce_ms)
+      && !k2.gapLeft(now, cfg.debounce_ms))
+    leaving = GS_UNKNOWN;
   if (s != GS_BETWEEN || state == GS_BETWEEN) {
     betweenAt = 0;
   } else if (!betweenAt) {
@@ -240,6 +246,12 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   } else if (state == want && !reversing) {
     lastResult = TR_ALREADY;
     lastCmdAck = RES_ALREADY;
+  } else if ((action == ACT_OPEN ? k1 : k2).pulsing()) {
+    // That relay is pulsing already (or waiting out the interlock to start): a second command the same way, such as
+    // the switch flicked off and on inside ctrl_confirm_ms. It's the same press: ACK it as done. A running pulse is
+    // never restarted, which would hold the opener's input for the gap plus pulse_ms.
+    if (target != want) setTarget(want, now);
+    lastCmdAck = RES_OK;
   } else {
     if (action == ACT_OPEN) pulse(k1, k2, 1, now);
     else pulse(k2, k1, 2, now);
@@ -259,7 +271,8 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
 // Remote writes waiting for the relays: a save blocks the loop (sector erase, then radioRestart: ~1 s), and
 // Relay::update doesn't run meanwhile, so a pulse in progress would be held that much longer. They are accepted
 // at once (linkAckLater) and applied, saved and ACKed once no pulse is running or waiting for its interlock start;
-// the house's CFG slot keeps retrying meanwhile, and its retransmits are held, not answered.
+// the house's CFG slot keeps retrying meanwhile, and its retransmits are held, not answered. One arriving with the
+// queue full isn't taken at all (linkRefuse): the house's slot resends it, and its TTL outlasts any pulse.
 #define CFG_QUEUE 4
 struct QueuedCfg {
   uint32_t seq;
@@ -294,7 +307,10 @@ static void handleCfgSet(const RxMsg &m) {
     cfgQueue[cfgQueued++] = q;
     linkAckLater(m.seq);
   } else {
-    applyCfgSet(q);  // can't happen with one CFG slot on the house; better a longer pulse than a lost write
+    // Full: the house sends one at a time, but its resends are renumbered whenever it answers a HELLO (replayed ones
+    // too), so copies of one write can fill the queue. Saving now would hold the relay ~0.5 s long: don't take it,
+    // nor ACK it, and its resend is taken once there's room.
+    linkRefuse(m.seq);
   }
 }
 
@@ -363,10 +379,11 @@ void gateDebugRebootAfterCmd() {
   rebootAfterCmd = true;
 }
 
-void gateRelayTest(uint8_t k, uint32_t ms) {
+bool gateRelayTest(uint8_t k, uint32_t ms) {
   uint32_t now = millis();
   Relay &r = k == 1 ? k1 : k2;
   Relay &other = k == 1 ? k2 : k1;
+  if (r.pulsing()) return false;  // running, or waiting out the interlock: never restarted (the console says busy)
   interlockedPulse(r, other, now, ms);
   // Track it like a command so the resulting movement is attributed to us, not external. A gate already at
   // that limit won't move for it, so there's nothing to attribute (a later move off it is someone else's).
@@ -375,4 +392,5 @@ void gateRelayTest(uint8_t k, uint32_t ms) {
   uint8_t want = k == 1 ? GS_OPEN : GS_CLOSED;
   if (state != want && state != GS_NO_POWER) setTarget(want, now);
   logEvent(EV_PULSE, k, ms);
+  return true;
 }

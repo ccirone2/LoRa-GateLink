@@ -23,7 +23,7 @@ export const HELP = {
   sync_word: 'Both boards must match. Rarely changed: it filters out other LoRa networks on the same channel.',
   retries: 'Resends of an unacknowledged message, spread over its lifetime. Raise it on a lossy link; lower it to keep the channel quieter.',
   heartbeat_s: 'Gate: how often it reports status when nothing changes. Shorter spots a dead link sooner but uses more airtime. The house waits at least 2.5 heartbeats before calling the link lost.',
-  link_timeout_s: 'House: silence from the gate this long = link lost (the contact sensor then reads open). Raise it if short dropouts cause false alarms; it is never shorter than 2.5 gate heartbeats.',
+  link_timeout_s: 'House: no status report from the gate this long = link lost (the contact sensor then reads open). Raise it if short dropouts cause false alarms; it is never shorter than 2.5 gate heartbeats.',
   cmd_ttl_s: 'House: how long a gate command keeps being retried before it is dropped (never fired late). Raise it if commands give up during short dropouts; lower it so a stale command isn’t delivered seconds later.',
   debounce_ms: 'How long an input must hold steady before it counts. Raise it if long field wires or a bouncy contact show up as flicker in the log.',
   in1_invert: `IN1 (house: controller output; gate: open limit). ${NO_INVERT}`,

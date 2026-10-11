@@ -6,8 +6,9 @@
 // Frame: ver | type | net_id | src | dst | session(u32) | seq(u32) | payload | tag(8)
 // tag = HMAC-SHA256(key, header+payload) truncated to 8 bytes.
 //
-// Replay protection without persistent counters: each node picks a random session
-// id at boot. A frame is accepted only if its session matches the peer session we
+// Replay protection without persistent seq counters: each node picks a new session
+// id at boot and at every link restart (from the boot counter, see drawSession() in
+// link.cpp). A frame is accepted only if its session matches the peer session we
 // have verified and its seq is new: above the HELLO_ACK that verified the session,
 // and not seen before in a 32-frame sliding window. Unknown sessions are verified
 // with a HELLO challenge that the peer must echo in a MAC'd HELLO_ACK; until one
@@ -60,6 +61,9 @@ typedef void (*RxHandler)(const RxMsg &msg);
 // Called when a reliable send completes (acked) or gives up (acked = false).
 typedef void (*AckHandler)(Slot slot, uint8_t type, bool acked, uint8_t result);
 
+// Once per boot, before the first linkBegin: this boot's count (configCountBoot(); 0 if none) and the chip's serial
+// number, which session ids are drawn from.
+void linkSetBoot(uint32_t bootCount, const uint32_t serial[4]);
 void linkBegin(RxHandler rx, AckHandler ack);
 void linkPoll(uint32_t now);
 void linkSend(uint8_t type, const uint8_t *payload, uint8_t len);
@@ -71,8 +75,13 @@ void linkAck(uint32_t seq, uint8_t result);
 // Accept a reliable message now and ACK it later with linkAck: until then its retransmits are dropped quietly
 // (not counted as replays), and the sender keeps retrying within its TTL.
 void linkAckLater(uint32_t seq);
+// Don't take a reliable message after all (call from RxHandler): no ACK, and its seq is forgotten, as if the frame had
+// been lost, so the sender's resend (the same seq) is taken as new. That replays nothing a lost frame wouldn't let
+// through late anyway; the message must be safe to take later (every reliable message is idempotent).
+void linkRefuse(uint32_t seq);
 const LinkStats &linkStats();
 bool linkPeerVerified();
+uint32_t linkPeerSession();  // the verified peer session (0 = none): it changes when the peer restarts
 // Debug: retransmit the last frame verbatim (peer must reject it as a replay), or with hello our first HELLO since
 // boot (from an old session after a link restart: the peer must challenge it, not act on it).
 bool linkDebugReplay(bool hello = false);  // false if not sent (nothing to replay, or the radio is busy)

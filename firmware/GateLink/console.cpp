@@ -192,8 +192,9 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     if ((k != 1 && k != 2) || ms < 50 || ms > 5000 || activeRole == ROLE_UNSET) {
       res["ok"] = false;
       res["error"] = "k must be 1|2, ms 50..5000, role set";
-    } else {
-      appRelayTest((uint8_t)k, (uint32_t)ms);
+    } else if (!appRelayTest((uint8_t)k, (uint32_t)ms)) {
+      res["ok"] = false;
+      res["error"] = "busy";  // gate: that relay is pulsing already, and a running pulse is never restarted
     }
   } else if (!strcmp(cmd, "radio.ping")) {
     if (!appPing()) {
@@ -321,10 +322,11 @@ static int checkCrc(const char *line, size_t len) {
 
 // Requests that save to flash or restart the radio, which blocks the loop for up to ~1 s: while a relay pulses they
 // wait (appRelaysPulsing), or the pulse would be held that much longer. config.set restarts the radio for a radio
-// param; it waits whatever it sets, which costs at most one pulse.
+// param; it waits whatever it sets, which costs at most one pulse. reboot waits 100 ms after its reply before the
+// reset drops the relays.
 static bool blocksLoop(const char *cmd) {
   return !strcmp(cmd, "config.set") || !strcmp(cmd, "config.save") || !strcmp(cmd, "config.reset")
-         || !strcmp(cmd, "key.set");
+         || !strcmp(cmd, "key.set") || !strcmp(cmd, "reboot");
 }
 
 // At most one request per call: with the host sending requests back to back, handling them while bytes kept

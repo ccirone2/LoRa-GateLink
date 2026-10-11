@@ -1,6 +1,6 @@
 {
   "title": "GateLink bench wiring",
-  "updated": "2026-10-09",
+  "updated": "2026-10-11",
   "statuses": {
     "connected": "In place and confirmed (by eye, a meter, or the e2e suite)",
     "unverified": "Believed to be in place (from the docs) but not confirmed yet",
@@ -252,7 +252,7 @@
     {
       "id": "gate",
       "name": "MKR WAN 1310 + Relay Proto Shield",
-      "note": "COM6 on a power-blocked USB cable. Role gate",
+      "note": "COM21 (…0C301C) on a power-blocked USB cable. Role gate",
       "top": [
         "VIN",
         "GND",
@@ -376,7 +376,7 @@
     {
       "id": "house",
       "name": "MKR WAN 1310 + Relay Proto Shield",
-      "note": "COM5 on a power-blocked USB cable. Role house",
+      "note": "COM5 (…183013) on a power-blocked USB cable. Role house",
       "top": [
         "VIN",
         "GND",
@@ -840,7 +840,7 @@
       "from": "gate:USB",
       "to": "pc",
       "status": "connected",
-      "signal": "COM6, data only (power-blocked)",
+      "signal": "COM21, data only (power-blocked)",
       "usb": "data"
     },
     {

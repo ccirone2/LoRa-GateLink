@@ -92,8 +92,8 @@ export function peerDiffs() {
 }
 
 // The Status card's line: what differs from the other board, and how old that view is.
-export function peerHtml(verified) {
-  const { other, there, diffs, fwMinor } = peerDiffs();
+export function peerHtml(verified, pd = peerDiffs()) {
+  const { other, there, diffs, fwMinor } = pd;
   if (!other || !ready) return '—';
   if (!there) return `${other} not seen yet: connect it once to compare`;
   if (!there.params) { // only the gate's firmware, from the house's remote.diag

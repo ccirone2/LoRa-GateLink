@@ -7,7 +7,7 @@ import { updateFwCard, reportFlash } from './firmware.js';
 import { showBoardKey } from './security.js';
 import { PROBLEMS } from './logdecode.js';
 import { askGateFw, peerDiffs, peerHtml } from './peer.js';
-import { healthLine } from './healthline.js';
+import { healthLine, linkMargin } from './healthline.js';
 
 // Status `health` (the problems now) and `fault_out` (D5: true high, false low, null off) as HTML; firmware before
 // 0.14.0 reports neither.
@@ -18,6 +18,22 @@ export function healthHtml(s) {
   const d5 = s.fault_out === true ? '<span class="good">D5 high</span>'
     : s.fault_out === false ? '<span class="bad">D5 low</span>' : 'D5 off';
   return `${now} · ${d5}`;
+}
+
+// The health line's link margin: the median of the latest polls' (about 20 s), so one frame near the line doesn't
+// flip the verdict every poll.
+const MARGIN_POLLS = 10;
+let margins = [];
+const median = (v) => {
+  const s = v.filter((x) => typeof x === 'number').sort((a, b) => a - b);
+  return s.length ? s[Math.floor((s.length - 1) / 2)] : null;
+};
+
+// The health line; null clears it (disconnected, or the board stopped answering).
+export function showHealthLine(hl) {
+  if (!hl) margins = [];
+  $('healthLine').textContent = hl ? hl.text : '—';
+  $('healthLine').className = `card wide health-line ${hl ? hl.level : ''}`;
 }
 
 // Tab title: the gate state first, so a background tab still shows it.
@@ -94,6 +110,7 @@ export async function pollStatus() {
   const stale = pollMisses >= 2;
   document.body.classList.toggle('offline', stale);
   $('devline').textContent = stale ? `${devline} · not responding` : devline;
+  if (stale) showHealthLine(null);
 }
 
 export const resetPoll = () => { pollMisses = 0; };
@@ -116,11 +133,12 @@ export function renderStatus(s) {
   const l = s.link || {}; // absent from a malformed or foreign status: render what's there
   const heard = l.age_ms >= 0;
   $('lnkVerified').innerHTML = l.verified ? '<span class="good">yes</span>' : '<span class="bad">no</span>';
-  $('lnkPeer').innerHTML = peerHtml(l.verified);
+  const pd = peerDiffs();
+  $('lnkPeer').innerHTML = peerHtml(l.verified, pd);
   askGateFw(s);
-  const hl = healthLine(s, { sf: S.params.sf, peer: peerDiffs() });
-  $('healthLine').textContent = hl.text;
-  $('healthLine').className = `card wide health-line ${hl.level}`;
+  margins.push(linkMargin(s, S.params.sf));
+  if (margins.length > MARGIN_POLLS) margins.shift();
+  showHealthLine(healthLine(s, { margin: median(margins), peer: pd }));
   $('lnkAge').textContent = heard ? `${fmtDur(l.age_ms)} ago` : 'never';
   $('lnkRssi').textContent = heard ? `${l.rssi} dBm / ${Number(l.snr).toFixed(1)} dB` : '—';
   $('lnkTxRx').textContent = `${l.tx} / ${l.rx}`;

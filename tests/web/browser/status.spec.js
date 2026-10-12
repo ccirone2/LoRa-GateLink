@@ -98,4 +98,7 @@ test('the health line sums up the site, most important first', async ({ page }) 
   await expect(page.locator('#lnkTxRx')).toBeHidden();
   await page.locator('#tab-status details.more summary').first().click();
   await expect(page.locator('#lnkTxRx')).toBeVisible();
+  // Disconnected, no verdict is left standing.
+  await page.locator('#btnDisconnect').click();
+  await expect(line).toHaveText('—');
 });

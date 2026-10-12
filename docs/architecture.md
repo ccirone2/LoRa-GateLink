@@ -236,7 +236,8 @@ Notable pieces:
   `peerDiffs()`. Order follows the project's goals: setup (role, key, radio), a reboot loop, the link (naming what
   differs from the other board when it can't verify), the gate's power and limits, AC, the controller's power,
   start-up (first half minute only, so a link that never comes is called that), then firmware or settings last seen
-  differing, a weak latest-frame margin (below the survey's fair line: a hint to run the survey), the board's own
+  differing, a weak margin (the median of the last ten polls' latest frames below the survey's fair line: a hint
+  to run the survey), the board's own
   supply, a past watchdog hang. Pure, unit-tested; the raw link and board counters sit under *Details*.
 
 The naming rule (no install hardware brand names under `web/`) is in CLAUDE.md.

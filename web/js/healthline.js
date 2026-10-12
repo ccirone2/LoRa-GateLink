@@ -7,12 +7,14 @@ import { FAIR_DB, sampleMargin, fmt1 } from './survey.js';
 const STARTUP_MS = 30000;
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const startingLine = (s) => ({ level: 'info',
-  text: s.role === 'house' ? 'Starting up: waiting for the gate’s first report.' : 'Starting up: the gate inputs are settling.' });
+  text: s.role === 'house' ? 'Starting up: waiting for the gate’s first report and the controller to settle.'
+    : 'Starting up: the gate inputs are settling.' });
 const words = (t) => String(t).replaceAll('_', ' ');
 
 // The weaker direction's margin above the SF's floor from the latest frames (null when unknown): one frame each way,
 // so a hint to survey, not a verdict on the site.
 export function linkMargin(s, sf) {
+  if (!isNum(sf)) return null;
   const l = s.link || {};
   const here = l.age_ms >= 0 ? sampleMargin(sf, l.snr, l.rssi, l.noise) : null;
   const r = s.role === 'house' ? s.remote || {} : {};
@@ -21,14 +23,15 @@ export function linkMargin(s, sf) {
   return m.length ? Math.min(...m) : null;
 }
 
-// { level: 'good' | 'info' | 'warn' | 'bad', text } for status reply `s`, with sf the running sf and peer what
-// peerDiffs() says about the other board ({ other, there, diffs, fwMinor }).
-export function healthLine(s, { sf = null, peer = null } = {}) {
+// { level: 'good' | 'info' | 'warn' | 'bad', text } for status reply `s`, with margin the link margin to judge (dB, e.g.
+// linkMargin() over several polls; null: unknown) and peer what peerDiffs() says about the other board
+// ({ other, there, diffs, fwMinor }).
+export function healthLine(s, { margin = null, peer = null } = {}) {
   const health = Array.isArray(s.health) ? s.health : [];
   const other = s.role === 'house' ? 'gate' : 'house';
   const line = (level, text) => ({ level, text });
-  if (s.role !== 'house' && s.role !== 'gate') return line('info', 'Role not set: choose house or gate under Config, save, then reboot.');
   if (s.reboot_pending) return line('warn', 'A saved role waits for a reboot: Config → Reboot.');
+  if (s.role !== 'house' && s.role !== 'gate') return line('info', 'Role not set: choose house or gate under Config, save, then reboot.');
   if (s.key_set === false) return line('bad', 'No link key: write the same key to both boards under Security.');
   if (s.radio_ok === false) return line('bad', 'The radio isn’t working: reboot the board; if it stays down, the board needs checking.');
 
@@ -51,6 +54,9 @@ export function healthLine(s, { sf = null, peer = null } = {}) {
       const what = diffs.map((d) => d.name).join(', ');
       return line('bad', `The link can’t verify: ${what} differ${diffs.length === 1 ? 's' : ''} from the ${other} (see Other board). Make them match.`);
     }
+    if (peer?.fwMinor) {
+      return line('bad', `No link to the ${other}, and its firmware differs (${s.fw} here, ${peer.there.fw} there): update both boards.`);
+    }
     return line('bad', `No link to the ${other}: check it has power and its antenna, and that both boards have the same key and radio settings; then Tools → Ping.`);
   }
 
@@ -62,9 +68,8 @@ export function healthLine(s, { sf = null, peer = null } = {}) {
 
   if (peer?.fwMinor) return line('warn', `Firmware differs from the ${other} (${s.fw} here, ${peer.there.fw} there): update both.`);
   if (peer?.diffs?.length) return line('warn', `Settings differ from the ${other} as last seen (${peer.diffs.map((d) => d.name).join(', ')}): check Other board.`);
-  const margin = isNum(sf) ? linkMargin(s, sf) : null;
   if (isNum(margin) && margin < FAIR_DB) {
-    return line('warn', `Link weak: ${fmt1(margin)} dB above the floor on the latest frames. Run Tools → Site survey; raise sf on both boards if it stays under ${FAIR_DB} dB.`);
+    return line('warn', `Link weak: ${fmt1(margin)} dB above the floor on recent frames. Run Tools → Site survey; raise sf on both boards if it stays under ${FAIR_DB} dB.`);
   }
   if (s.supply === false) return line('warn', 'The board is running on its LiPo: its supply (VIN) is off.');
   if (s.hang_stage) return line('warn', `The last reset was the watchdog: the board hung in ${words(s.hang_stage)}. Report it with the log.`);

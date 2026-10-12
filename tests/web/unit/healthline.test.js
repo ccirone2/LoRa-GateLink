@@ -20,6 +20,8 @@ test('setup problems come first: role, a pending reboot, the key, the radio', ()
   assert.match(txt(house({ reboot_pending: true, key_set: false })), /waits for a reboot/);
   assert.equal(lvl(house({ key_set: false, link_up: false })), 'bad');
   assert.match(txt(house({ key_set: false, link_up: false })), /^No link key/);
+  // A fresh board with its role saved: the reboot, not the role, is what's missing.
+  assert.match(txt({ role: 'unset', reboot_pending: true }), /waits for a reboot/);
   assert.match(txt(gate({ radio_ok: false, health: ['radio', 'link'] })), /radio isn’t working/);
 });
 
@@ -35,6 +37,8 @@ test('link down: what differs from the other board, else where to look', () => {
   assert.match(txt(down), /^No link to the gate: check it has power/);
   const peer = { other: 'gate', there: { fw: '0.13.8' }, diffs: [{ name: 'key id' }, { name: 'sf' }], fwMinor: false };
   assert.equal(txt(down, { peer }), 'The link can’t verify: key id, sf differ from the gate (see Other board). Make them match.');
+  const fw = { other: 'gate', there: { fw: '0.15.0' }, diffs: [], fwMinor: true };
+  assert.equal(txt(down, { peer: fw }), 'No link to the gate, and its firmware differs (0.13.8 here, 0.15.0 there): update both boards.');
   assert.match(txt(gate({ health: ['link'], link: { verified: false, age_ms: -1 } })), /^No link to the house/);
 });
 
@@ -57,8 +61,9 @@ test('then firmware, settings last seen, a weak link, the supply, a past hang', 
   assert.match(txt(house(), { peer: { other: 'gate', there: {}, diffs: [{ name: 'cr' }], fwMinor: false } }), /Settings differ from the gate as last seen \(cr\)/);
   const weak = house({ link: { ...fx.status_common.link, snr: -5, rssi: -110, noise: -118 } });
   assert.equal(linkMargin(weak, 9), 7.5);
-  assert.match(txt(weak, { sf: 9 }), /^Link weak: 7\.5 dB above the floor/);
-  assert.equal(lvl(weak), 'good'); // no sf known: no margin to judge
+  assert.match(txt(weak, { margin: linkMargin(weak, 9) }), /^Link weak: 7\.5 dB above the floor/);
+  assert.equal(lvl(weak), 'good'); // no margin given: nothing to judge
+  assert.equal(linkMargin(weak, undefined), null);
   assert.match(txt(house({ supply: false })), /on its LiPo/);
   assert.match(txt(gate({ hang_stage: 'console', hang_pc: 4660 })), /hung in console/);
 });

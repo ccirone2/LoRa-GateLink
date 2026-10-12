@@ -3,10 +3,10 @@
 Desired features and ideas. Bugs and test tasks go in [TODO.md](TODO.md); shipped features are in the
 [release notes](https://github.com/ccirone2/LoRa-GateLink/releases).
 
-Items are grouped by area and numbered (N for decided and next, F firmware, C web console, H hardware, B test bench,
-D development environment). Each has a title, why it's wanted, and its cost, risks and open questions. Ids are
-stable: refer to them in pull requests, TODO.md and the threat model, and never reuse one; remove an item once it
-ships (the pull request and release notes describe it) and move it up to **Next** when it's decided. Anything
+Items are grouped by area and numbered (F firmware, C web console, H hardware, B test bench, D development
+environment). Each has a title, why it's wanted, and its cost, risks and open questions; a decision is recorded in
+the item with its date. Ids are stable: refer to them in pull requests, TODO.md and the threat model, and never
+reuse one; remove an item once it ships (the pull request and release notes describe it). Anything
 touching gate behaviour must keep the behavioural invariants in [CLAUDE.md](CLAUDE.md). Hardware stays within about
 $120 per location.
 
@@ -19,7 +19,7 @@ hardened behaviour; the homeowner, installer and developer), then by effort with
 | Rank | Id | Item | Effort | Needs first |
 |---|---|---|---|---|
 | **Tier 1: the gate's real state, safety, never late** | | | | |
-| 1 | N1 | Allow CLOSE without AC while a limit reads | S | |
+| 1 | F20 | Allow CLOSE without AC while a limit reads | S | |
 | 2 | F9 | Reset breadcrumbs and reboot-loop detection | S | |
 | 3 | F12 | Independent closed sensor | M | an input (H1, or gate IN4) |
 | 4 | F14 | Plausibility checks at the gate | M | F9 for the reboot loop |
@@ -57,23 +57,6 @@ hardened behaviour; the homeowner, installer and developer), then by effort with
 | 33 | C4 | Verify the running image | M | |
 | 34 | B6 | Replay field logs in the simulation | M | F1 |
 | 35 | H2 | A different radio board: not now | XL | F11 |
-
-## Next
-
-### N1: Allow CLOSE without AC while a limit reads
-
-`ac-cut-refuses-close`; decided 2026-10-12. Today the gate refuses every command while IN3 reads no AC
-(`RES_NO_POWER`, `role_gate.cpp`), because the opener may be on its last battery reserve and the AES controller
-sharing its inputs is unpowered. So cutting AC keeps an open gate open, and Alarm.com can't close it. CLOSE is the
-secure direction:
-- CLOSE runs as usual when a limit reads: it pulses from open (or to reverse an OPEN), and is `already` at closed.
-- OPEN stays refused without AC, and with no limit reading (`no_power`) both stay refused.
-- A battery too weak to finish the travel leaves the gate `no_power`, which the house already shows as not-closed.
-- No setting to keep the old behaviour (decided 2026-10-12): one behaviour, fewer knobs.
-- Gate only (the house handles the ACK as any other), so a PATCH. Update with it the AC-power invariant in CLAUDE.md,
-  the README's "How it behaves", `docs/hardware.md` (IN3), the `power_sense` help in `web/js/settings.js`, and the
-  threat model. Host tests: CLOSE without AC from open pulses, OPEN refuses, `no_power` refuses both, and the house's
-  resync after a refused OPEN still happens. Bench: the power tests.
 
 ## Firmware
 
@@ -269,6 +252,21 @@ bypasses it; it stops casual USB actuation at the gate box.
 
 `key-extract-physical`, `malicious-firmware-reflash`. An enclosure switch on the gate (IN4, or an H1 input) reported
 in STATUS, shown by the house as needs-attention and logged, so box access is noticed and the key rotated.
+
+### F20: Allow CLOSE without AC while a limit reads
+
+`ac-cut-refuses-close`; decided 2026-10-12. Today the gate refuses every command while IN3 reads no AC
+(`RES_NO_POWER`, `role_gate.cpp`), because the opener may be on its last battery reserve and the AES controller
+sharing its inputs is unpowered. So cutting AC keeps an open gate open, and Alarm.com can't close it. CLOSE is the
+secure direction:
+- CLOSE runs as usual when a limit reads: it pulses from open (or to reverse an OPEN), and is `already` at closed.
+- OPEN stays refused without AC, and with no limit reading (`no_power`) both stay refused.
+- A battery too weak to finish the travel leaves the gate `no_power`, which the house already shows as not-closed.
+- No setting to keep the old behaviour (decided 2026-10-12): one behaviour, fewer knobs.
+- Gate only (the house handles the ACK as any other), so a PATCH. Update with it the AC-power invariant in CLAUDE.md,
+  the README's "How it behaves", `docs/hardware.md` (IN3), the `power_sense` help in `web/js/settings.js`, and the
+  threat model. Host tests: CLOSE without AC from open pulses, OPEN refuses, `no_power` refuses both, and the house's
+  resync after a refused OPEN still happens. Bench: the power tests.
 
 ## Web console
 

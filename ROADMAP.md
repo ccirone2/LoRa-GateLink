@@ -11,6 +11,13 @@ refer to them in pull requests, TODO.md and the threat model, and never reuse on
 pull request and release notes describe it). Anything touching gate behaviour must keep the behavioural invariants in
 [CLAUDE.md](CLAUDE.md). Hardware stays within about $120 per location.
 
+> **Treat every item with cautious skepticism.** These are ideas, not vetted plans: not every item has been checked
+> against the code, the hardware or the threat model, and the figures in them (prices, timings, currents) are
+> estimates. An item's consequences can outweigh its benefit. Before building one, start with its cost and risks:
+> read its **Cost / risk**, check the claims it rests on, work out what it could break (the behavioural invariants,
+> the threat model, both boards in the field, the installer's work), and ask whether a smaller change reaches the
+> same goal. If the risk isn't worth it, say so and record why in the item, or remove it.
+
 ## Priority ranking
 
 Most important first, by what each item does for the goals in CLAUDE.md (Alarm.com sees the gate's real state; robust,

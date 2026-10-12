@@ -17,12 +17,13 @@ pull request and release notes describe it). Anything touching gate behaviour mu
 > read its **Cost / risk**, check the claims it rests on, work out what it could break (the behavioural invariants,
 > the threat model, both boards in the field, the installer's work), and ask whether a smaller change reaches the
 > same goal. If the risk isn't worth it, say so and record why in the item, or remove it.
+> `/implement` builds items this way.
 
 ## Priority ranking
 
-Most important first, by what each item does for the goals in CLAUDE.md (Alarm.com sees the gate's real state; robust,
-hardened behaviour; the homeowner, installer and developer), then by effort within a tier. Effort: **S** days,
-**M** a week or two, **L** several weeks or a MINOR change both boards need, **XL** the largest.
+Most important first, by what each item does for the [goals](README.md#goals) (in order: truth, availability, safety,
+diagnosability; then the homeowner, installer and developer, in that order), then by effort within a tier. Effort:
+**S** days, **M** a week or two, **L** several weeks or a MINOR change both boards need, **XL** the largest.
 
 | Rank | Id | Item | Effort | Needs first |
 |---|---|---|---|---|

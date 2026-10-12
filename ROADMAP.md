@@ -37,34 +37,33 @@ hardened behaviour; the homeowner, installer and developer), then by effort with
 | 7 | D1 | Reproducible, locked Python environment | S | |
 | 8 | F10 | Spot boards that don't match | S | |
 | 9 | C3 | Help the installer aim the antenna | S | |
-| 10 | B4 | See short glitches on the outputs | S | |
-| 11 | B1 | Repeatable RF tests | S | |
-| 12 | F3 | Tell the alarm what kind of trouble it is | M | F9 |
-| 13 | C1 | One-line health verdict for the installer | M | F9, F10 for their lines |
-| 14 | F1 | Keep the event log across resets | M | |
-| 15 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
-| 16 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 17 | F7 | Update the gate's firmware without visiting it | XL | F1, F2, F9 |
+| 10 | B1 | Repeatable RF tests | S | |
+| 11 | F3 | Tell the alarm what kind of trouble it is | M | F9 |
+| 12 | C1 | One-line health verdict for the installer | M | F9, F10 for their lines |
+| 13 | F1 | Keep the event log across resets | M | |
+| 14 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
+| 15 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
+| 16 | F7 | Update the gate's firmware without visiting it | XL | F1, F2, F9 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 18 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 19 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 20 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 21 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 22 | F11 | Firmware ready for a second board | M | |
-| 23 | B2 | Test attacks over real RF | M | B1 |
-| 24 | B3 | Reach the host-only fault paths on the bench | M | |
-| 25 | D2 | Run the bench automatically, safely | M | |
-| 26 | F18 | Stop casual actuation over USB | M | |
-| 27 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 28 | F5 | Change radio settings without stranding the link | L | |
-| 29 | F13 | Work with controllers that pulse | L | |
-| 30 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
+| 17 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 18 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
+| 19 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 20 | C2 | Answer "what happened last night?" | M | F1, F2 |
+| 21 | F11 | Firmware ready for a second board | M | |
+| 22 | B2 | Test attacks over real RF | M | B1 |
+| 23 | B3 | Reach the host-only fault paths on the bench | M | |
+| 24 | D2 | Run the bench automatically, safely | M | |
+| 25 | F18 | Stop casual actuation over USB | M | |
+| 26 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 27 | F5 | Change radio settings without stranding the link | L | |
+| 28 | F13 | Work with controllers that pulse | L | |
+| 29 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 31 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 32 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 33 | C4 | Check a board still runs genuine firmware | M | |
-| 34 | B6 | Turn field incidents into tests | M | F1 |
-| 35 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 30 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 31 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 32 | C4 | Check a board still runs genuine firmware | M | |
+| 33 | B6 | Turn field incidents into tests | M | F1 |
+| 34 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -517,15 +516,6 @@ before the gate's next STATUS) are host-tested only (TODO.md).
 
 **How.** A build flag compiling in fault injection (reset the radio mid-pulse, time a controller edge, replay
 CFG_SETs); the release workflow checks it is off in release binaries. B2 covers the over-the-air ones.
-
-### B4: See short glitches on the outputs
-
-**Goal.** Glitches on D5 and the K1/K2 outputs through resets and boots can be seen and ruled out (the open D5 item in
-TODO.md).
-
-**Today.** A meter can't show a brief pulse.
-
-**How.** A ~$15 USB logic analyzer with sigrok/PulseView.
 
 ### B5: Let the suite check D5, K1 and supply dips
 

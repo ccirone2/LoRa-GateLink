@@ -248,6 +248,7 @@ PRs: #n
 
 Project skills live in `.claude/skills/`:
 
+- `/implement` — build ROADMAP/TODO items end to end, judged against the [goals](../README.md#goals).
 - `/flash` — flash the bench boards (and optionally the GateSim) and restore their config and key.
 - `/release` — run the bench per the release criteria, collect and merge the evidence, then tag and publish the
   release with notes from the merged pull requests.

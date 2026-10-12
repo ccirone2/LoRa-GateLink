@@ -32,9 +32,38 @@ siren sensor.
 
 ## Goals
 
-**Alarm.com always sees the gate's real state.** It comes from the opener's limit outputs, never from the last
-command sent. When the position can't be verified, Alarm.com shows the gate not-closed. User experience and
-robust, hardened behaviour come first: when a feature conflicts with them, they win.
+These settle every design choice, and every [ROADMAP](ROADMAP.md) or [TODO](TODO.md) item is weighed against them
+(the owner set them on 2026-10-12; CLAUDE.md carries a short copy that every agent session reads). When two goals
+conflict, the earlier one wins:
+
+1. **Truth: Alarm.com always sees the gate's real state.** It comes from the opener's limit outputs, never from
+   the last command sent. When the position can't be verified, Alarm.com shows the gate not-closed. A false
+   "closed" is the worst failure GateLink can have.
+2. **Availability: the gate does what the switch asks,** in as many situations as can be done honestly (an AC
+   outage, a position that can't be verified). Availability outranks caution about whether a command is wise,
+   never freshness: a command that is late, repeated or forged must never move the gate.
+3. **Safety: no move the owner didn't just ask for.** Relays are only pulsed and interlocked, and the opener's
+   other controllers (the AES cellular controller, the siren sensor, the local controls) keep working. The
+   behavioural invariants in CLAUDE.md are never traded for a feature.
+4. **Diagnosability: when something goes wrong, the installer can tell what and why,** from the house where
+   possible.
+
+How the goals are applied:
+
+- **Fail toward not-closed, but count nuisance alerts as a cost.** A homeowner who learns to ignore alerts defeats
+  the alarm. Cutting false alerts is worth doing when it never risks a false closed.
+- **Audiences, in order:** the homeowner, then the installer, then the developer. Developer tooling earns its place
+  by keeping bugs away from the homeowner.
+- **Security:** defend fully against a capable RF attacker at the property (an SDR: listen, replay, inject,
+  jam-and-replay). Physical access and supply-chain attacks get cheap mitigations and detection, not heavy
+  engineering.
+- **Complexity is a cost.** Every new state, setting, frame field or tool must pay its way in the goals above.
+  Prefer the smallest change that reaches the goal, and prefer removing code to adding it. Say no to speculative
+  benefit.
+- **Scope:** this site first (one gate, one house), kept documented and generic enough that a capable person could
+  build a second. Nothing is built only for hypothetical other sites. Hardware stays within about $120 per location.
+- **Horizon:** unattended for years, with rare visits to the gate box. Favour self-recovery and diagnosis from the
+  house over work that needs a site visit. Firmware updates are deliberate events, not routine.
 
 The UX has three audiences:
 

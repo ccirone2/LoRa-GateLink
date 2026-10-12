@@ -1519,6 +1519,7 @@ FACTS = [
     Fact("ArduinoJson major", CI, r'"ArduinoJson@(\d+)\.', (Q(C, r"`ArduinoJson` v(\d+)"),)),
     Fact("ruff", "pyproject.toml", r'"ruff==([\d.]+)"', (Q(DEV, r"ruff ([\d.]+)"),)),
     Fact("uv", CI, r"setup-uv@.*\n\s+with:\n\s+version: '([\d.]+)'", (Q(DEV, r"uv ([\d.]+) or newer"),)),
+    Fact("gcovr", CI, r"gcovr==([\d.]+)", (Q(DEV, r"gcovr ([\d.]+)"),)),
     Fact("Node.js", CI, r"node-version: '(\d+)'", (Q(DEV, r"need Node\.js (\d+)"),)),
 ]
 

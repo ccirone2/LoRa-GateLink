@@ -224,7 +224,7 @@ void Board::tick() {
     } else {
       if (!after(w.now, busyUntil)) return;  // still inside a blocking call
       call([&] {
-        kickAt = clockMs;  // GateLink.ino loop(): Watchdog.reset()
+        kickAt = clockMs;  // GateLink.ino loop(): boardKick()
         fnLoop();
       });
     }

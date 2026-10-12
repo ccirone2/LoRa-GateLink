@@ -605,6 +605,7 @@ STI_MEANING = {
     "STI_K2": "K2 on (CLOSE)",
     "STI_IN4": "IN4 (spare)",
     "STI_AC_LOST": "no AC power: IN3 off with `power_sense` on",
+    "STI_REBOOTS": "the gate is in a reboot loop (health `reboots`)",
 }
 MSG_PAYLOAD = {"see roles.h": "STATUS payload, below", "see sendDiag() in role_gate.cpp": "DIAG payload, below"}
 ACK_MEANING = {"RES_OK": "done"}
@@ -1371,6 +1372,9 @@ FACTS = [
     D("STI_AC_LOST", f"{FW}/roles.h",
       Q(PRO, r"bit (\d+) of the STATUS inputs byte", bit),
       Q(C, r"STATUS bit (\d+) = AC lost", bit)),
+    D("STI_REBOOTS", f"{FW}/roles.h",
+      Q(CON, r"`reboots`\s+problem, STATUS bit (\d+);", bit),
+      Q(ARCH, r"on the gate STATUS bit (\d+), so the house", bit)),
     D("STI_IN3", f"{FW}/roles.h", Q(ARCH, r"reported in STATUS bits (\d+)–\d+", bit)),
     D("STI_IN4", f"{FW}/roles.h", Q(ARCH, r"reported in STATUS bits \d+–(\d+)", bit)),
     Fact("RES_OK", f"{FW}/link.h", r"RES_OK = (\d+)", (Q(CON, r"ACK result: (\d+) ok,"),)),

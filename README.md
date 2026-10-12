@@ -154,7 +154,7 @@ Per install (one house end, one gate end); wiring and settings for each part are
 
 ## Build and flash
 
-Needs `arduino-cli` with the SAMD core and five libraries, at the versions CI builds with (also in
+Needs `arduino-cli` with the SAMD core and four libraries, at the versions CI builds with (also in
 [docs/development.md](docs/development.md)):
 
 ```sh

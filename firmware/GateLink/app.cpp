@@ -34,15 +34,16 @@ static const char *resetCauseName(uint8_t rc) {
 }
 
 // Where the loop is, for the watchdog's early warning (appLoop's steps; setup is everything before the first pass).
+// STG_CORE: between passes (loop()'s watchdog kick, the core's USB and serial events).
 enum Stage : uint8_t {
   STG_SETUP = 0, STG_RELAYS, STG_RADIO_RECOVER, STG_HIST_SAVE, STG_CONSOLE, STG_SUPPLY, STG_LINK, STG_ROLE,
-  STG_HISTORY, STG_HEALTH, STG_LED, STG_COUNT, STG_NONE = 0xFF
+  STG_HISTORY, STG_HEALTH, STG_LED, STG_CORE, STG_COUNT, STG_NONE = 0xFF
 };
 static volatile uint8_t stage = STG_SETUP;
 
 static const char *stageName(uint8_t s) {
   static const char *const n[] = { "setup", "relays", "radio_recover", "hist_save", "console", "supply", "link",
-                                   "role", "history", "health", "led" };
+                                   "role", "history", "health", "led", "core" };
   static_assert(sizeof(n) / sizeof(n[0]) == STG_COUNT, "a name per Stage");
   return s < STG_COUNT ? n[s] : "?";
 }
@@ -80,7 +81,7 @@ static void memoBegin(uint8_t rc) {
   bootMs = millis();
   bool kept = memo->magic == MEMO_MAGIC && memo->check == memoCheck();
   bool crash = (rc & (PM_RCAUSE_WDT | PM_RCAUSE_BOD12 | PM_RCAUSE_BOD33)) && !(rc & PM_RCAUSE_POR);
-  resetStreak = !crash ? 0 : kept && !memo->settled && memo->streak < 255 ? memo->streak + 1 : 1;
+  resetStreak = !crash ? 0 : !kept || memo->settled ? 1 : memo->streak < 255 ? memo->streak + 1 : 255;
   if (kept && (rc & PM_RCAUSE_WDT) && memo->stage != STG_NONE) {
     resetStage = memo->stage;
     resetPc = memo->pc;
@@ -90,14 +91,14 @@ static void memoBegin(uint8_t rc) {
 }
 
 void appWatchdogWarning(uint32_t pc) {
-  if (!memo) return;
+  if (!memo) return;  // an interrupt: in case it ever came before appSetup
   memo->stage = stage;
   memo->pc = pc;
   memoSeal();
 }
 
 bool appRebootLoop() {
-  return resetStreak >= REBOOT_LOOP_RESETS && memo && !memo->settled;
+  return resetStreak >= REBOOT_LOOP_RESETS && !memo->settled;
 }
 
 static uint16_t pingId = 0;
@@ -382,6 +383,7 @@ void appLoop() {
   healthPoll(now, up);  // after the roles, which it reads (and nothing there reads it)
   stage = STG_LED;
   updateLed(now);
+  stage = STG_CORE;
   uint32_t took = micros() - start;
   if (took > loopMaxUs) loopMaxUs = took;
 }

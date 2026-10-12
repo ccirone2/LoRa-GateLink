@@ -68,13 +68,13 @@ TEST(watchdog_reset_reports_where_it_hung) {
   resetAndBoot(w, w.gate, PM_RCAUSE_WDT);
   s = w.gate.status();
   CHECK(s["reset_cause"] == "watchdog");
-  CHECK(s["hang_stage"] == "led");  // between passes: the last stage of the one before
+  CHECK(s["hang_stage"] == "core");  // between passes
   CHECK_EQ(s["hang_pc"].as<uint32_t>(), 0x00012345u);
   CHECK_EQ(s["crash_resets"].as<int>(), 1);
   const LogEv *hang = w.gate.last("hang");
   CHECK(hang);
   CHECK_EQ((uint32_t)hang->a, 0x00012345u);
-  CHECK_EQ(hang->b, 10);  // STG_LED
+  CHECK_EQ(hang->b, 11);  // STG_CORE
   CHECK_EQ(w.gate.count("hang"), 1);
 
   // A stall the warning saw that ended: the next loop pass drops the note, so this reset has no hang.
@@ -155,4 +155,22 @@ TEST(deliberate_resets_and_power_cuts_end_a_streak) {
   CHECK_EQ(w.house.status()["crash_resets"].as<int>(), 1);
   CHECK(!hasProblem(w.house, "reboots"));
   w.checkClean();
+}
+
+// A long loop stays a loop: the count stops at 255 rather than wrapping back below the threshold.
+TEST(crash_resets_saturate_at_255) {
+  Site w;
+  w.commission();
+  for (int i = 0; i < 257; i++) {
+    size_t n = w.house.logs.size();
+    w.house.reset(PM_RCAUSE_WDT);
+    CHECK(w.runUntil([&] {
+      for (size_t j = n; j < w.house.logs.size(); j++)
+        if (w.house.logs[j].ev == "boot") return true;
+      return false;
+    }, 3000));
+  }
+  w.run(1000);
+  CHECK_EQ(w.house.status()["crash_resets"].as<int>(), 255);
+  CHECK(hasProblem(w.house, "reboots"));
 }

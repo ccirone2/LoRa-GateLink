@@ -17,7 +17,7 @@ export const PROBLEMS = { starting: 'starting up', radio: 'radio down', link: 'l
   no_power: 'gate has no power', fault: 'gate limit fault', reboots: 'reboot loop' };
 const problems = (bits) => Object.values(PROBLEMS).filter((_, i) => bits & (1 << i)).join(', ');
 // The loop's stages (app.cpp Stage), for `hang`.
-const HANG_STAGES = ['setup', 'relays', 'radio_recover', 'hist_save', 'console', 'supply', 'link', 'role', 'history', 'health', 'led'];
+const HANG_STAGES = ['setup', 'relays', 'radio_recover', 'hist_save', 'console', 'supply', 'link', 'role', 'history', 'health', 'led', 'core'];
 const FAULT_OUT = { 1: 'fault output high: healthy', 0: 'fault output low: needs attention', '-1': 'fault output off (D5 an input again)' };
 
 const state = (v) => (STATES[v] ?? `state ${v}`).replaceAll('_', ' ');

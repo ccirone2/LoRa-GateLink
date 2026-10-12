@@ -34,6 +34,7 @@ static uint16_t lastCmdId = 0;
 static uint8_t lastCmdAck = RES_OK;
 static uint32_t lastStatusAt = 0;
 static int32_t reportedHeartbeat = 0;  // heartbeat_s in our last STATUS
+static bool reportedRebootLoop = false;  // STI_REBOOTS in our last STATUS
 static uint32_t seenSessions = 0;
 static bool settling = true;  // after boot: tracking the inputs silently, see BOOT_SETTLE_MS
 static uint32_t bootAt = 0, steadySince = 0;
@@ -63,9 +64,10 @@ static void sendStatus(uint32_t now) {
   if (settling) return;  // the first one goes out once the inputs have settled
   uint8_t p[ST_LEN];
   p[ST_STATE] = state;
+  reportedRebootLoop = appRebootLoop();
   p[ST_INPUTS] = (in1.active() ? STI_IN1 : 0) | (in2.active() ? STI_IN2 : 0) | (k1.on() ? STI_K1 : 0)
                  | (k2.on() ? STI_K2 : 0) | (in3.active() ? STI_IN3 : 0) | (in4.active() ? STI_IN4 : 0)
-                 | (acPower() ? 0 : STI_AC_LOST) | (appRebootLoop() ? STI_REBOOTS : 0);
+                 | (acPower() ? 0 : STI_AC_LOST) | (reportedRebootLoop ? STI_REBOOTS : 0);
   p[ST_CAUSE] = cause;
   p[ST_RESULT] = lastResult;
   putU16(p + ST_CMD_ID, lastCmdId);
@@ -208,8 +210,10 @@ void gateLoop(uint32_t now) {
   }
 
   // A new heartbeat_s goes out at once: the house sizes its link timeout from it, and waiting for the next
-  // (longer) heartbeat would let its old timeout expire first.
-  if (elapsed(now, lastStatusAt, (uint32_t)cfg.heartbeat_s * 1000) || cfg.heartbeat_s != reportedHeartbeat) {
+  // (longer) heartbeat would let its old timeout expire first. So does the end of a reboot loop (STATUS bit 7): the
+  // house holds its D5 low for it until it hears.
+  if (elapsed(now, lastStatusAt, (uint32_t)cfg.heartbeat_s * 1000) || cfg.heartbeat_s != reportedHeartbeat
+      || appRebootLoop() != reportedRebootLoop) {
     sendStatus(now);
   }
 

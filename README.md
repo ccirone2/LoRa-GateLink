@@ -30,6 +30,21 @@ GATE board
 The opener's OPEN/CLOSE inputs are shared with an AES Prime Edge cellular controller and a
 siren sensor.
 
+## Goals
+
+**Alarm.com always sees the gate's real state.** It comes from the opener's limit outputs, never from the last
+command sent. When the position can't be verified, Alarm.com shows the gate not-closed. User experience and
+robust, hardened behaviour come first: when a feature conflicts with them, they win.
+
+The UX has three audiences:
+
+- **The homeowner** sees only Alarm.com. GateLink should be invisible to them: the switch and contact sensor
+  always tell the truth, and the gate does what the switch asks.
+- **The installer** uses the [web console](#web-console) to set up, configure and diagnose the boards, with
+  no tools beyond a browser and a USB cable.
+- **The developer** works in the terminal and on the bench: `arduino-cli`, `tools/gatelink.py`, the test suites
+  and the bench rig ([docs/development.md](docs/development.md), [docs/bench-testing.md](docs/bench-testing.md)).
+
 ## Repository
 
 | Path | What |

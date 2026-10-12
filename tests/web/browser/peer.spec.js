@@ -52,3 +52,8 @@ test('firmware a PATCH apart matches', async ({ page }) => {
   await houseThenGate(page, { fw: '0.13.9' }, { fw: '0.13.8' });
   await expect(page.locator('#lnkPeer')).toContainText('matches · house fw 0.13.9');
 });
+
+test('a board without a key differs from one with a key', async ({ page }) => {
+  await houseThenGate(page, {}, { keySet: false });
+  await expect(page.locator('#lnkPeer')).toContainText('differs: key id none here,');
+});

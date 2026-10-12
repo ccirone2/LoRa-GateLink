@@ -14,7 +14,7 @@ import * as serial from './js/serial.js';
 import { decodeLog, rawLog } from './js/logdecode.js';
 import { renderWiring, wiringRole, wiringResized } from './js/wiring.js';
 import { applyRole, refreshInfo, refreshStatus, renderStatus, pollStatus, resetPoll, POLL_MS } from './js/status.js';
-import { resetPeer } from './js/peer.js';
+import { rememberBoard, resetPeer } from './js/peer.js';
 import {
   loadConfig, syncRemValue, applyConfig, importConfig, exportConfig, reloadConfig, saveConfig, resetConfig,
   markUnsaved, dirtyCount,
@@ -206,6 +206,7 @@ function init() {
       : 'This board already has a key. Replacing it takes the link down until the other board gets the same key. Continue?')) return;
     await serial.call('key.set', { key: key.hex });
     await refreshInfo();
+    rememberBoard(); // its new key id
     reportKeyWritten(key.id);
   });
   $('btnKeyBackup').onclick = guard(saveBackup);

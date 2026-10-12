@@ -2,7 +2,8 @@
 // ones that keep the link from verifying when they differ, so the boards can't compare them over the air: the page
 // remembers each board's firmware, key id and must-match settings by role whenever it is connected, and with the
 // other one connected says what differs. Connected to the house with the link up, it also asks the gate for its
-// firmware (remote.diag). Kept in this browser only (localStorage): a convenience, never needed.
+// firmware (remote.diag). Kept in this browser only (localStorage): a convenience, never needed. Boards are told apart
+// by role alone, so the other board is whichever this browser saw last in that role (the line says how long ago).
 import { esc, fmtDur } from './util.js';
 import { S } from './state.js';
 import { call } from './serial.js';
@@ -11,46 +12,60 @@ import { MUST_MATCH } from './settings.js';
 const STORE = 'gatelink.boards';
 const ROLES = ['house', 'gate'];
 
+let cache = null; // the parsed store: read once, kept in step by save()
+
 function load() {
+  if (cache) return cache;
   try {
     const v = JSON.parse(localStorage.getItem(STORE));
-    return v && typeof v === 'object' ? v : {};
+    cache = v && typeof v === 'object' ? v : {};
   } catch {
-    return {};
+    cache = {};
   }
+  return cache;
 }
 
 function save(all) {
+  cache = all;
   try {
     localStorage.setItem(STORE, JSON.stringify(all));
-  } catch { /* storage blocked (a private window): nothing to compare against next time */ }
+  } catch { /* storage blocked (a private window): kept for this page only */ }
 }
 
-// The connected board, once its info and config are in (after loadConfig).
+// Compared only once the connected board's own info and config are in (rememberBoard), not while S still holds the
+// previous board's.
+let ready = false;
+
+// The connected board, once its info and config are in: after loadConfig, and again after its key changes.
 export function rememberBoard() {
   if (!S.boardInfo || !ROLES.includes(S.role)) return;
-  const all = load();
+  ready = true;
+  const all = { ...load() };
   const params = Object.fromEntries([...MUST_MATCH].filter((n) => n in S.params).map((n) => [n, S.params[n]]));
   all[S.role] = { fw: S.boardInfo.fw, key_id: S.boardInfo.key_id, params, at: Date.now() };
   save(all);
 }
 
+// The house's question to the gate: DIAG_REQ isn't retried by the link, so ask again (up to 3 times, 30 s apart) while
+// no answer has come.
+const ASK_EVERY_MS = 30000;
+let askedAt = 0, asks = 0, gotGateFw = false;
+export const resetPeer = () => { ready = false; askedAt = 0; asks = 0; gotGateFw = false; };
+
 // The gate's firmware from a remote_diag reply (the house's link to it): only the version, the rest kept as seen.
 export function rememberGateFw(fw) {
   if (S.role !== 'house' || !fw) return;
-  const all = load();
-  all.gate = { ...(all.gate || {}), fw, fwAt: Date.now() };
-  save(all);
+  gotGateFw = true;
+  save({ ...load(), gate: { ...(load().gate || {}), fw, fwAt: Date.now() } });
 }
 
-let askedGate = false;
-export const resetPeer = () => { askedGate = false; };
-
-// Once per connection to the house, when its link is up: the gate's firmware, without a trip to the gate.
+// Connected to the house with its link up: the gate's firmware, without a trip to the gate.
 export function askGateFw(status) {
-  if (askedGate || status.role !== 'house' || !status.link_up) return;
-  askedGate = true;
-  call('remote.diag').catch(() => { askedGate = false; });
+  if (gotGateFw || asks >= 3 || status.role !== 'house' || !status.link_up) return;
+  if (asks && Date.now() - askedAt < ASK_EVERY_MS) return;
+  asks++;
+  askedAt = Date.now();
+  call('remote.diag').catch(() => {});
 }
 
 const minor = (v) => String(v).split('.').slice(0, 2).join('.');
@@ -64,10 +79,11 @@ const show = (name, v) => (PARAM_TEXT[name] ? PARAM_TEXT[name](v) : String(v));
 export function peerDiffs() {
   const other = S.role === 'house' ? 'gate' : S.role === 'gate' ? 'house' : null;
   const there = other ? load()[other] : null;
-  if (!there || !S.boardInfo) return { other, there: null, diffs: [], fwMinor: false };
+  if (!there || !S.boardInfo || !ready) return { other, there: null, diffs: [], fwMinor: false };
   const diffs = [];
+  // key_id: a string, null with no key set, absent before firmware 0.13.8 (not compared then).
   const here = S.boardInfo.key_id, theirs = there.key_id;
-  if (typeof here === 'string' && typeof theirs === 'string' && here !== theirs) diffs.push({ name: 'key id', here, there: theirs });
+  if (here !== undefined && theirs !== undefined && here !== theirs) diffs.push({ name: 'key id', here: here ?? 'none', there: theirs ?? 'none' });
   for (const [name, v] of Object.entries(there.params || {})) {
     if (name in S.params && S.params[name] !== v) diffs.push({ name, here: show(name, S.params[name]), there: show(name, v) });
   }
@@ -78,7 +94,7 @@ export function peerDiffs() {
 // The Status card's line: what differs from the other board, and how old that view is.
 export function peerHtml(verified) {
   const { other, there, diffs, fwMinor } = peerDiffs();
-  if (!other) return '—';
+  if (!other || !ready) return '—';
   if (!there) return `${other} not seen yet: connect it once to compare`;
   if (!there.params) { // only the gate's firmware, from the house's remote.diag
     const fw = `${other} fw ${esc(there.fw)}`;

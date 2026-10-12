@@ -227,8 +227,8 @@ export async function resetConfig() {
   if (!confirm('Erase config and key and restore defaults?')) return;
   await call('config.reset');
   markUnsaved(false); // reset saves the defaults
+  await refreshInfo(); // first: loadConfig remembers the board with its key id, which the reset erased
   await loadConfig();
-  await refreshInfo();
   toast('Defaults restored. Reboot to apply role.');
 }
 

@@ -19,13 +19,14 @@ _Nothing decided yet. Move items here from Ideas._
   whether any of it may affect commands (the opener's own safety inputs stay in charge of entrapment). Gate IN4 is
   the gate's only spare and three ideas below want it too (the tamper switch, and sensing the opener's OPEN/CLOSE
   terminals for a welded contact): pick one, or add inputs.
-- **Finer fault reporting to Alarm.com** (`jamming-hides-state-until-link-timeout`). Since 0.14.0 D5 (`fault_out`) gives the alarm one "gate needs attention"
-  signal for every problem (radio, link, AC, `no_power`, `fault`), alongside the contact sensor still showing them as
-  open. Still open: telling problems apart at the panel (a sensor per class, e.g. AC lost vs link lost), and whether
-  the controller's own power (IN2, the board's supply) should count at the house.
-- **Detect a Shelly that reboots without losing power** (`shelly-reboot-spurious-commands`). IN2 only senses the Shelly's supply; an internal reboot
-  can still produce an IN1 edge. Ideas: watch for the Shelly's relay dropping and coming back within a short
-  window with no matching Alarm.com change, or sense the Shelly's status LED.
+- **Finer fault reporting to Alarm.com** (`jamming-hides-state-until-link-timeout`). Since 0.14.0 D5 (`fault_out`)
+  gives the alarm one "gate needs attention" signal for every problem (radio, link, AC, `no_power`, `fault`),
+  alongside the contact sensor still showing them as open. Still open: telling problems apart at the panel (a sensor
+  per class, e.g. AC lost vs link lost), and whether the controller's own power (IN2, the board's supply) should count
+  at the house.
+- **Detect a Shelly that reboots without losing power** (`shelly-reboot-spurious-commands`). IN2 only senses the
+  Shelly's supply; an internal reboot can still produce an IN1 edge. Ideas: watch for the Shelly's relay dropping and
+  coming back within a short window with no matching Alarm.com change, or sense the Shelly's status LED.
 - **Battery backup and supply monitoring at the gate.** A LiPo on the MKR battery connector would keep the gate
   board reporting through an opener power cut; report its voltage (and the 5 V rail) in STATUS so the house can
   warn before it runs flat. Since 0.11.0 both boards read VIN power good from the charger chip (status `supply`);
@@ -50,13 +51,13 @@ _Nothing decided yet. Move items here from Ideas._
 - **Console lock** (`no-console-authentication-root`). An install-time setting after which state-changing console
   commands (relay.test, config.*, key.set, remote.*, debug.*) need proof of the key, leaving status, logs and history
   open. Reflashing still bypasses it; it stops casual USB actuation at the gate box.
-- **Tamper switch on gate IN4** (`key-extract-physical`, `malicious-firmware-reflash`). An enclosure switch reported in
-  STATUS, shown by the house as needs-attention and logged, so box access is noticed and the key rotated.
+- **Tamper switch on gate IN4** (`key-extract-physical`, `malicious-firmware-reflash`). An enclosure switch reported
+  in STATUS, shown by the house as needs-attention and logged, so box access is noticed and the key rotated.
 - **Plausibility checks at the gate** (`closed-limit-nc-fail-unsafe`, `power-sense-degradation-silent`,
   `reboot-loops`, `relay-held-welded-or-overlapping`). Latch faults that the inputs alone don't show: a closed limit
   that never releases after our OPEN pulse, closed reached without passing between, IN2 or IN3 off while everything
-  else says power is there, repeated resets before the first full loop pass, a shared input held on while our coil
-  is off (that last one needs the opener's OPEN/CLOSE terminals sensed on an input: gate IN4, see the spare inputs).
+  else says power is there, repeated resets before the first full loop pass, a shared input held on while our coil is
+  off (that last one needs the opener's OPEN/CLOSE terminals sensed on an input: gate IN4, see the spare inputs).
 - **Keep the evidence of a replay flood** (`replay-flood-erases-evidence-and-reflects`). A flood of replayed frames
   overwrites the 64-entry event log, and the persistent hourly history (0.14.0) counts MAC failures but not replays.
   Coalesce repeated flood events into one log entry with a count, add replays to the history bucket (a `HLOG_FMT`

@@ -121,11 +121,6 @@ cheap (~$15 or less) or pay for itself by replacing parts.
   inputs, more inputs than IN1–IN4 (they're contended), and a bulk capacitor. Assembled in small batches it should
   cost less than the ~$34 of parts it replaces, and it removes most of the polarity and voltage warnings in
   `docs/hardware.md`. Keep the footprint reusable if the board changes (below).
-- **Latching relays for the house outputs.** The warm-reset blip of house K1/K2 (TODO.md) can't be fixed in firmware
-  because the bootloader holds the pins released ~0.5 s; bistable relays would keep the contact sensor and the
-  controller's input through a reset. House only: a latching relay at the gate would stay closed after a crash,
-  breaking the pulse-only invariant. Open question: what the house shows if it boots to a relay state it can't read
-  back (sense the contacts, or always set them once the first STATUS arrives).
 - **Surge and weather protection at the gate.** The gate box is outdoors on long runs to the opener: TVS or RC on
   the inputs and relay contacts (on the carrier board, or a terminal strip until then), a grounded bulkhead for the
   antenna, a gasketed enclosure with cable glands. Record what was fitted in `docs/hardware.md`.

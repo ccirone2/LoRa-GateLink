@@ -202,7 +202,8 @@ picker and reconnect; `status.js`, `config.js`, `tools.js`, `history.js`, `firmw
 ([key-management.md](key-management.md)); `survey.js` the site survey's verdict, twin of
 `tools/gatelink_client/survey.py` (shared vectors in `tests/tools/fixtures/`; [install.md](install.md)); `wiring.js`
 Install tab; `settings.js` setting groups/help; `logdecode.js` log events as text; `peer.js` the other board as last
-seen; `ui.js` the log view and toasts; `util.js` small helpers; shared state in `state.js`'s `S`).
+seen; `healthline.js` the Status tab's one-line verdict; `ui.js` the log view and toasts; `util.js` small helpers;
+shared state in `state.js`'s `S`).
 Lint and tests: `npm test` (ESLint, `node --test` unit tests of the pure modules, Playwright browser tests of the
 real page against fake boards in `tests/web/fake-serial.js`; `tests/web/README.md`).
 
@@ -230,5 +231,13 @@ Notable pieces:
   and compares the connected board with the other one; connected to the house with the link up it also asks the gate
   for its firmware once (`remote.diag`). A firmware difference in MAJOR.MINOR is flagged (a change both boards need
   together); a PATCH apart matches. Storage failing (a private window) only means nothing to compare.
+- The health line at the top of the Status tab (`healthLine` in `healthline.js`, ROADMAP C1): the most important
+  thing wrong as the connected board sees it, with what to do next, from the status reply, the running `sf` and
+  `peerDiffs()`. Order follows the project's goals: setup (role, key, radio), a reboot loop, the link (naming what
+  differs from the other board when it can't verify), the gate's power and limits, AC, the controller's power,
+  start-up (first half minute only, so a link that never comes is called that), then firmware or settings last seen
+  differing, a weak margin (the median of the last ten polls' latest frames below the survey's fair line: a hint
+  to run the survey), the board's own
+  supply, a past watchdog hang. Pure, unit-tested; the raw link and board counters sit under *Details*.
 
 The naming rule (no install hardware brand names under `web/`) is in CLAUDE.md.

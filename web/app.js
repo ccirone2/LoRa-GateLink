@@ -13,7 +13,7 @@ import { OFFLINE_OK, logLine, logLines, clearLog, toast, hideToast, guard } from
 import * as serial from './js/serial.js';
 import { decodeLog, rawLog } from './js/logdecode.js';
 import { renderWiring, wiringRole, wiringResized } from './js/wiring.js';
-import { applyRole, refreshInfo, refreshStatus, renderStatus, pollStatus, resetPoll, POLL_MS } from './js/status.js';
+import { applyRole, refreshInfo, refreshStatus, renderStatus, pollStatus, resetPoll, showHealthLine, POLL_MS } from './js/status.js';
 import { rememberBoard, resetPeer } from './js/peer.js';
 import {
   loadConfig, syncRemValue, applyConfig, importConfig, exportConfig, reloadConfig, saveConfig, resetConfig,
@@ -32,6 +32,7 @@ import {
 let pollTimer = null;
 
 function setConnected(on) {
+  if (!on) showHealthLine(null);
   $('btnConnect').hidden = on;
   $('btnDisconnect').hidden = !on;
   $('btnIdentify').hidden = !on;

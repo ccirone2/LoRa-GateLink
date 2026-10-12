@@ -94,7 +94,7 @@ are built from the pull requests since the last tag.
    python tools/docgen.py     # reference docs vs the source (--write regenerates the generated tables)
    make -C tests/native       # host tests: link/config, and both boards' firmware in a simulated site (tests/native/README.md)
    make -C tests/native cppcheck tidy coverage   # static analysis and coverage (in Docker on Windows, as the README says)
-   uv run pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks, key backups)
+   uv run pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks, key backups, the bench suite's LiPo check)
    uv run pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI

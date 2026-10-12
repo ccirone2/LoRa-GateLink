@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from gatelink.bench import PROFILE_COMMON, REAL_CTRL_POWER, SIM_TRAVEL_S
+from gatelink.bench import PROFILE_COMMON, REAL_CTRL_POWER, SIM_TRAVEL_S, NoUartTap
 from gatelink.flows import outage
 from gatelink_client.board import BoardError
 from gatelink_client.wire import ACT_OPEN, CAUSE
@@ -29,20 +29,11 @@ RCAUSE_POWER = 0x07  # PM->RCAUSE: POR, BOD12, BOD33 (the boot event's a)
 
 @pytest.fixture(scope="module")
 def lipo(bench):
-    """Which boards have their LiPo plugged in: cut each one's supply for 1.5 s (well past its buck's hold-up) and
-    see whether it reboots. {"gate": bool, "house": bool}."""
-    bench.begin_test("power_lipo_check")
-    bench.baseline()
-    found = {}
-    for site in ("gate", "house"):
-        m = bench.mark()
-        bench.power_cut(site, 1500)
-        time.sleep(5)
-        found[site] = not bench.logs(site, "boot", since=m)
-        if not found[site]:
-            bench.wait_power_return(site, m)
-    bench.facts["LiPos"] = ", ".join(f"{s} {'in' if v else 'out'}" for s, v in found.items())
-    return found
+    """Which boards have their LiPo plugged in (Bench.find_lipos); skips the module without both UART taps."""
+    try:
+        return bench.find_lipos()
+    except NoUartTap as e:
+        pytest.skip(str(e))
 
 
 def require(lipo, **want):

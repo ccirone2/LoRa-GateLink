@@ -176,6 +176,11 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); }
 
 /* Link history (Tools tab) */
 .card.wide { grid-column: 1 / -1; }
+.health-line { font-weight: 600; border-left: 4px solid var(--border); }
+.health-line.good { color: var(--ok); border-left-color: var(--ok); }
+.health-line.warn { color: var(--warn); border-left-color: var(--warn); }
+.health-line.bad { color: var(--bad); border-left-color: var(--bad); }
+details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 4px 0 10px; }
 .tile { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .tile .t-label { font-size: 12px; color: var(--muted); }

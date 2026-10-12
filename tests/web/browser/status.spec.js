@@ -84,3 +84,18 @@ test('a status from older firmware without link or io fields still renders', asy
   await expect(page.locator('#lnkCrc')).toHaveText('—');
   await expect(page.locator('#bHealth')).toHaveText('—');
 });
+
+test('the health line sums up the site, most important first', async ({ page }) => {
+  await openConsole(page);
+  await connect(page);
+  const line = page.locator('#healthLine');
+  await expect(line).toHaveText('All good: link up, gate closed.');
+  await expect(line).toHaveClass(/good/);
+  await pushEvent(page, { event: 'status', status: houseStatus({ link_up: false, health: ['link'] }) });
+  await expect(line).toHaveText(/^No link to the gate/);
+  await expect(line).toHaveClass(/bad/);
+  // The counters behind it are a click away.
+  await expect(page.locator('#lnkTxRx')).toBeHidden();
+  await page.locator('#tab-status details.more summary').first().click();
+  await expect(page.locator('#lnkTxRx')).toBeVisible();
+});

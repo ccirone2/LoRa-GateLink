@@ -6,7 +6,8 @@ import { IO_LABELS, WIRING, renderWiring } from './wiring.js';
 import { updateFwCard, reportFlash } from './firmware.js';
 import { showBoardKey } from './security.js';
 import { PROBLEMS } from './logdecode.js';
-import { askGateFw, peerHtml } from './peer.js';
+import { askGateFw, peerDiffs, peerHtml } from './peer.js';
+import { healthLine } from './healthline.js';
 
 // Status `health` (the problems now) and `fault_out` (D5: true high, false low, null off) as HTML; firmware before
 // 0.14.0 reports neither.
@@ -117,6 +118,9 @@ export function renderStatus(s) {
   $('lnkVerified').innerHTML = l.verified ? '<span class="good">yes</span>' : '<span class="bad">no</span>';
   $('lnkPeer').innerHTML = peerHtml(l.verified);
   askGateFw(s);
+  const hl = healthLine(s, { sf: S.params.sf, peer: peerDiffs() });
+  $('healthLine').textContent = hl.text;
+  $('healthLine').className = `card wide health-line ${hl.level}`;
   $('lnkAge').textContent = heard ? `${fmtDur(l.age_ms)} ago` : 'never';
   $('lnkRssi').textContent = heard ? `${l.rssi} dBm / ${Number(l.snr).toFixed(1)} dB` : '—';
   $('lnkTxRx').textContent = `${l.tx} / ${l.rx}`;

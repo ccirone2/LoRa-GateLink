@@ -38,31 +38,30 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | 7 | C3 | Help the installer aim the antenna | S | |
 | 8 | B1 | Repeatable RF tests | S | |
 | 9 | F3 | Tell the alarm what kind of trouble it is | M | F9 |
-| 10 | C1 | One-line health verdict for the installer | M | F9 for its line |
-| 11 | F1 | Keep the event log across resets | M | |
-| 12 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
-| 13 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 14 | F7 | Update the gate's firmware without visiting it | XL | F1, F2, F9 |
+| 10 | F1 | Keep the event log across resets | M | |
+| 11 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
+| 12 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
+| 13 | F7 | Update the gate's firmware without visiting it | XL | F1, F2, F9 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 15 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 16 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 17 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 18 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 19 | F11 | Firmware ready for a second board | M | |
-| 20 | B2 | Test attacks over real RF | M | B1 |
-| 21 | B3 | Reach the host-only fault paths on the bench | M | |
-| 22 | D2 | Run the bench automatically, safely | M | |
-| 23 | F18 | Stop casual actuation over USB | M | |
-| 24 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 25 | F5 | Change radio settings without stranding the link | L | |
-| 26 | F13 | Work with controllers that pulse | L | |
-| 27 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
+| 14 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 15 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
+| 16 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 17 | C2 | Answer "what happened last night?" | M | F1, F2 |
+| 18 | F11 | Firmware ready for a second board | M | |
+| 19 | B2 | Test attacks over real RF | M | B1 |
+| 20 | B3 | Reach the host-only fault paths on the bench | M | |
+| 21 | D2 | Run the bench automatically, safely | M | |
+| 22 | F18 | Stop casual actuation over USB | M | |
+| 23 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 24 | F5 | Change radio settings without stranding the link | L | |
+| 25 | F13 | Work with controllers that pulse | L | |
+| 26 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 28 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 29 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 30 | C4 | Check a board still runs genuine firmware | M | |
-| 31 | B6 | Turn field incidents into tests | M | F1 |
-| 32 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 27 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 28 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 29 | C4 | Check a board still runs genuine firmware | M | |
+| 30 | B6 | Turn field incidents into tests | M | F1 |
+| 31 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -373,17 +372,6 @@ and the threat model. Host tests: CLOSE without AC from open pulses, OPEN refuse
 house's resync after a refused OPEN still happens. Bench: the power tests.
 
 ## Web console
-
-### C1: One-line health verdict for the installer
-
-**Goal.** The installer sees at a glance whether the site is healthy and, if not, what to do next.
-
-**Today.** The Status tab shows counters and fields that have to be read and interpreted.
-
-**How.** One plain-language line with a next step, e.g. "All good", "Link weak: 6 dB margin, raise SF on both boards",
-"Gate on battery: AC lost 2 h ago", including mismatched boards (the Status card's *Other board*, `peer.js`) and F9
-reboot loops; the current counters move under *Details*. For the installer first: the homeowner never sees
-the console.
 
 ### C2: Answer "what happened last night?"
 

@@ -32,7 +32,8 @@
         "house_opto",
         "shelly",
         "house",
-        "sensor"
+        "sensor",
+        "logic"
       ]
     }
   ],
@@ -395,7 +396,9 @@
         "K1 NC",
         "K2 COM",
         "K2 NO",
-        "K2 NC"
+        "K2 NC",
+        "",
+        "D5 (fault)"
       ],
       "bottom": [
         "USB",
@@ -457,6 +460,29 @@
       "id": "pc",
       "name": "PC (USB)",
       "note": "Runs the e2e suite and the web console",
+      "bench": true
+    },
+    {
+      "id": "logic",
+      "name": "USB logic analyzer",
+      "sub": "8 ch, 24 MHz (fx2lafw)",
+      "note": "Saleae Logic clone, read with sigrok-cli / PulseView (tools/logic.py). Case labels CH1-CH8 = sigrok D0-D7. Unconnected inputs read HIGH",
+      "top": [
+        "GND"
+      ],
+      "left": [
+        "CH1",
+        "CH2",
+        "CH3",
+        "CH4",
+        "CH5",
+        "CH6",
+        "CH7",
+        "CH8"
+      ],
+      "bottom": [
+        "USB"
+      ],
       "bench": true
     }
   ],
@@ -1129,6 +1155,25 @@
       "to": "pc",
       "status": "connected",
       "signal": "COM17",
+      "usb": "powered"
+    },
+    {
+      "from": "house:D5 (fault)",
+      "to": "logic:CH5",
+      "status": "connected",
+      "signal": "Fault output D5 (sigrok D4)"
+    },
+    {
+      "from": "logic:GND",
+      "bus": "gnd_h",
+      "status": "connected",
+      "signal": "Analyzer ground"
+    },
+    {
+      "from": "logic:USB",
+      "to": "pc",
+      "status": "connected",
+      "signal": "USB 0925:3881",
       "usb": "powered"
     }
   ]

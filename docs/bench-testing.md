@@ -39,6 +39,36 @@ GateSim wired to the gate board, the full loop (controller → house → gate �
 On/off settings are toggle switches on the Config tab: flip one, click **Apply** (it takes effect immediately),
 then **Save** to keep it across reboots.
 
+## Logic analyzer
+
+A meter can't show a pulse a few microseconds long; the bench's USB logic analyzer can. It's an 8-channel, 24 MHz
+Saleae Logic clone (USB `0925:3881`), read with [sigrok](https://sigrok.org): PulseView to look at a capture,
+`sigrok-cli` for scripts. On Windows, install both, then give the analyzer the WinUSB driver with Zadig (shipped with
+PulseView; Options → List All Devices, pick `0925 3881`); sigrok's `fx2lafw` driver then loads its firmware on each
+open. Its wiring is in `wiring.json` (today house D5 on CH5, ground on the house ground).
+
+```sh
+python tools/logic.py capture -c D5=CH5 --time 10 --at "1:COM5 reboot"   # D5 through a house reboot
+python tools/logic.py capture -c K1=CH1 -c K2=CH2 --rate 1M --out k.vcd   # then open k.vcd in PulseView
+python tools/logic.py report k.vcd -c K1=CH1 -c K2=CH2 --json
+```
+
+`tools/logic.py` captures, then reports each channel's edges (times from the capture's start) and flags pulses shorter
+than `--glitch-ms` (default 5 ms; exit code 1). `--at SECONDS:ARGS` runs `tools/gatelink.py ARGS` during the capture;
+each action's start and duration are printed, and one whose time falls after the capture ends isn't run.
+
+- **Channels:** the case says CH1–CH8; sigrok numbers them D0–D7 (CH5 = D4). Name them on the command line
+  (`D5=CH5`, or `D5=D4`). An unconnected input reads HIGH.
+- **Logic levels only**: the board's 3.3 V pins (K1 = D1, K2 = D2 drives, D5, the inputs after their optos). Never the
+  24 V gate side or a relay contact. Ground the analyzer to the board you probe.
+- **Address boards by port in `--at`** (`COM5`, from `gatelink.py ports`): `house`/`gate` probe every port to find the
+  role, which took 4–30 s here and smears the timing. A request by port lands on the line ~0.2 s after it starts.
+- `config.set` only changes RAM: to watch a setting through a reboot, `config.save` it first, and save the old value
+  back afterwards.
+- Only one program can hold the analyzer: close PulseView before `tools/logic.py` (`LIBUSB_ERROR_ACCESS` otherwise).
+  It shares the bench's USB hub: up to 4 MHz didn't disturb the boards' ports here; keep long captures at 1 MHz or
+  less unless the timing needs more.
+
 ## New board preflight
 
 Optional, but worth doing before a MKR WAN 1310 goes into the install: one bench board had a weak receiver that

@@ -86,15 +86,15 @@ Severity is after verification: **H**igh, **M**edium, **L**ow. Status says where
 |---|---|---|---|
 | `hello-answer-stamp-deadlock` | After ~24.9 days of steady link, a peer restart's HELLOs were ignored for up to another ~24.9 days (the HELLO answer stamps read as recent under the signed `elapsed()`): link down, sensor open | H | **Fixed** in 0.13.7, with host tests past 25 days (#84) |
 | `backoff-starvation-by-frequent-frames` | Any LoRa frame heard every ~100 ms held all new frames off until their TTL: a cheap, silent DoS | M | **Fixed** in 0.13.7 (link PR) |
-| `jam-and-delay-replay-window` / `withheld-command-fires-late` | A command jammed at the gate and recorded can be replayed later, while still inside the 32-frame window (about 16 minutes of normal traffic): the gate opens at a time the attacker picks, after the house had dropped the command. The receiver can't tell a delayed frame from a retry | H | Open: protocol hardening (CMD carries freshness; ROADMAP) |
+| `jam-and-delay-replay-window` / `withheld-command-fires-late` | A command jammed at the gate and recorded can be replayed later, while still inside the 32-frame window (about 16 minutes of normal traffic): the gate opens at a time the attacker picks, after the house had dropped the command. The receiver can't tell a delayed frame from a retry | H | Open: protocol hardening (CMD carries freshness; ROADMAP F6) |
 | `withheld-gate-frames-replayed` | The same, gate to house: a withheld "closed" STATUS replayed later keeps the sensor closed and the link up while the gate is open | M | **Fixed** in 0.13.9 (#86): the house takes a STATUS only in seq order and its link stays up on STATUS alone. A relay that delays every STATUS, in order, can still hold the house behind by up to its link timeout (`link-loss-concealment-window`) |
-| `challenge-library-session-rebind` | The HELLO challenge is 32 bits and a HELLO_ACK isn't bound to the challenger's session, so answers farmed over weeks can re-verify a superseded peer session, whose recorded commands then replay | M | Open: protocol hardening (128-bit challenge bound to the session, no re-verifying an old session; ROADMAP) |
-| `link-loss-concealment-window` | Jamming (or cutting the gate board's power) during an open–pass–close cycle hides it: the sensor stays closed until the link timeout, 100 s by default | H | Open: a "moved since you last heard" latch in STATUS, reported late rather than never (ROADMAP, with fault reporting) |
-| `jamming-hides-state-until-link-timeout` | Jamming freezes the reported state for up to the link timeout and drops commands | H | Accepted, bounded by the timeout. Shorten `heartbeat_s`/`link_timeout_s` at the install if the window matters; report link loss separately (ROADMAP) |
-| `cleartext-traffic-analysis` | Listeners learn gate state, AC loss, command times, reboots, firmware version | M | Accepted for now. Payload encryption (encrypt-then-MAC, per-direction keys) is on the ROADMAP with the protocol hardening |
-| `session-id-repeat` | A session id repeating under one key (birthday bound, flash replaced or rolled back) lets old frames replay | M | Partly: unique by construction in 0.13.9 (#86), a keyed permutation of the boot count, the draws this boot and 8 random bits, so a rolled-back count repeats an id 1 time in 256. Open: per-session MAC keys with the protocol hardening (ROADMAP) |
+| `challenge-library-session-rebind` | The HELLO challenge is 32 bits and a HELLO_ACK isn't bound to the challenger's session, so answers farmed over weeks can re-verify a superseded peer session, whose recorded commands then replay | M | Open: protocol hardening (128-bit challenge bound to the session, no re-verifying an old session; ROADMAP F6) |
+| `link-loss-concealment-window` | Jamming (or cutting the gate board's power) during an open–pass–close cycle hides it: the sensor stays closed until the link timeout, 100 s by default | H | Open: a "moved since you last heard" latch in STATUS, reported late rather than never (ROADMAP F17) |
+| `jamming-hides-state-until-link-timeout` | Jamming freezes the reported state for up to the link timeout and drops commands | H | Accepted, bounded by the timeout. Shorten `heartbeat_s`/`link_timeout_s` at the install if the window matters. Since 0.14.0 the fault output (D5, `fault_out`) reports link loss to the alarm apart from "open"; telling it apart from other problems is on the ROADMAP (F3) |
+| `cleartext-traffic-analysis` | Listeners learn gate state, AC loss, command times, reboots, firmware version | M | Accepted for now. Payload encryption (encrypt-then-MAC, per-direction keys) is on the ROADMAP with the protocol hardening (F6) |
+| `session-id-repeat` | A session id repeating under one key (birthday bound, flash replaced or rolled back) lets old frames replay | M | Partly: unique by construction in 0.13.9 (#86), a keyed permutation of the boot count, the draws this boot and 8 random bits, so a rolled-back count repeats an id 1 time in 256. Open: per-session MAC keys with the protocol hardening (ROADMAP F6) |
 | `replayed-hello-side-effects` | Replayed HELLOs can delay a held command until it expires | L | Accepted (availability only; the house resyncs the switch) |
-| `replay-flood-erases-evidence-and-reflects` | Floods overwrite the 64-entry log; memo'd seqs are re-ACKed without a limit | L | Open: coalesce flood events, persistent history (ROADMAP) |
+| `replay-flood-erases-evidence-and-reflects` | Floods overwrite the 64-entry log; memo'd seqs are re-ACKed without a limit | L | Partly: the hourly link history is kept in flash since 0.14.0, with MAC failures but not replays. Open: coalesce flood events, count replays in the history, limit re-ACKs (ROADMAP F1) |
 | `pre-auth-parsing-surface` | Malformed frames reaching parsers | L | Mitigated: MAC before parse; fuzzed (`tests/native/fuzz`) |
 | `reflection-direction-confusion`, `protocol-downgrade`, `net-id-sync-word-not-secret` | Reflecting frames, falling back to older formats, relying on net_id or the sync word | L | Mitigated. net_id and the sync word are filters against other users, not security |
 
@@ -103,12 +103,12 @@ Severity is after verification: **H**igh, **M**edium, **L**ow. Status says where
 | Id | Threat | Sev | Status |
 |---|---|---|---|
 | `upstream-controller-trusted` | Anyone who can switch the Shelly (Z-Wave, Alarm.com account, automations) opens the gate: GateLink trusts every switch edge | H | Accepted by design: install checklist (Z-Wave S2 Authenticated, Alarm.com 2FA, least privilege, review automations) |
-| `closed-limit-nc-fail-unsafe` | The closed limit comes from the AUX2 relay's NC contact: an opener-side AUX failure while its 24 V is present reads "closed" | H | Open: install and annual check (gate part-open and on battery: IN2 must read off); plausibility checks in firmware (ROADMAP) |
-| `ac-cut-refuses-close` | Cutting AC (or the IN3 sense) stops remote closing, so the gate can be kept open | M | **Decision needed**: allow CLOSE without AC while a limit reads (ROADMAP) |
-| `shelly-reboot-spurious-commands` | A Shelly reboot with power present can produce a CLOSE then an OPEN | M | Open: Shelly settings at install; detection (ROADMAP) |
-| `power-sense-degradation-silent` | A failing IN2/IN3 opto or wire quietly disables remote control | M | Open: flag implausible power-sense readings (ROADMAP) |
-| `reboot-loops` | Reset loops (brown-out, stuck I2C) leave a board alive but useless, silently | M | Open: count boot loops, report gate reboots to the house (ROADMAP) |
-| `relay-held-welded-or-overlapping` | A relay held too long, both on, or a welded contact on the shared opener inputs | M | Mitigated in firmware (pulse-only, interlock, nothing blocks the loop mid-pulse; host-tested). A weld is invisible: sense the terminal on IN4 (ROADMAP) |
+| `closed-limit-nc-fail-unsafe` | The closed limit comes from the AUX2 relay's NC contact: an opener-side AUX failure while its 24 V is present reads "closed" | H | Open: install and annual check (gate part-open and on battery: IN2 must read off); an independent closed sensor and plausibility checks in firmware (ROADMAP F12, F14) |
+| `ac-cut-refuses-close` | Cutting AC (or the IN3 sense) stops remote closing, so the gate can be kept open | M | Open, decided (2026-10-12): allow CLOSE without AC while a limit reads; OPEN stays refused (ROADMAP F20) |
+| `shelly-reboot-spurious-commands` | A Shelly reboot with power present can produce a CLOSE then an OPEN | M | Open: Shelly settings at install; detection (ROADMAP F16) |
+| `power-sense-degradation-silent` | A failing IN2/IN3 opto or wire quietly disables remote control | M | Open: flag implausible power-sense readings (ROADMAP F14) |
+| `reboot-loops` | Reset loops (brown-out, stuck I2C) leave a board alive but useless, silently | M | Open: count boot loops and report them to the house and on D5 (ROADMAP F9, F3). The house already sees each gate reboot (a new session, `sessions` in the history, the gate's `uptime_s`) |
+| `relay-held-welded-or-overlapping` | A relay held too long, both on, or a welded contact on the shared opener inputs | M | Mitigated in firmware (pulse-only, interlock, nothing blocks the loop mid-pulse; host-tested). A weld is invisible: sense the terminal on an input (ROADMAP F14) |
 | `shared-opener-inputs` | The AES, the siren and local controls move the gate outside GateLink | M | Accepted: GateLink reports these moves (cause external) but can't prevent them |
 | `output-fail-directions` | How each output fails | L | Mitigated. `sensor_invert` 1 makes the sensor fail closed: avoid it |
 
@@ -120,9 +120,9 @@ removes this on this hardware; the controls are physical security, tamper detect
 
 | Id | Threat | Sev | Status |
 |---|---|---|---|
-| `key-extract-physical`, `key-extraction-reflash-swd`, `external-nor-direct-read` | The key read off a board in minutes (a sketch over USB, SWD, or a clip on the flash chip), giving lasting remote control | H | Accepted: locked, tamper-evident enclosures; rotate after any access ([key-management.md](key-management.md)); tamper switch on gate IN4 (ROADMAP) |
-| `malicious-firmware-reflash` | Any image can be flashed with a 1200-baud touch or a double-tap of reset | H | Accepted (no secure boot on the stock bootloader); record `fw` and `flash_id` at commissioning and recheck on visits |
-| `no-console-authentication-root`, `direct-relay-actuation-usb`, `alarm-sensor-tamper-config` | Anyone at a USB port can pulse the gate, change safety settings or the key | H | Open: an install-time console lock (state-changing commands need the key) (ROADMAP). Until then: nothing plugged in, boxes locked |
+| `key-extract-physical`, `key-extraction-reflash-swd`, `external-nor-direct-read` | The key read off a board in minutes (a sketch over USB, SWD, or a clip on the flash chip), giving lasting remote control | H | Accepted: locked, tamper-evident enclosures; rotate after any access ([key-management.md](key-management.md)); tamper switch (ROADMAP F19); a board with secure boot and flash encryption would stop it (ROADMAP H2) |
+| `malicious-firmware-reflash` | Any image can be flashed with a 1200-baud touch or a double-tap of reset | H | Accepted (no secure boot on the stock bootloader; a board with it: ROADMAP H2); record `fw` and `flash_id` at commissioning and recheck on visits |
+| `no-console-authentication-root`, `direct-relay-actuation-usb`, `alarm-sensor-tamper-config` | Anyone at a USB port can pulse the gate, change safety settings or the key | H | Open: an install-time console lock (state-changing commands need the key) (ROADMAP F18). Until then: nothing plugged in, boxes locked |
 | `board-leaves-custody` | A lost, stolen, retired or returned board keeps a working key | M | Open: lifecycle rule (new board means new key; verified wipe), in [key-management.md](key-management.md) |
 | `uart-console-left-enabled`, `debug-commands-in-production`, `unauthenticated-rekey` | Wider console surface | L–M | Install checklist: `uart_console` 0, nothing on USB |
 
@@ -148,10 +148,10 @@ deploy could flash a backdoored image or take the key through the page. Nothing 
 | `pages-malicious-firmware` | A compromised repo or deploy serves a console that flashes a backdoor or steals the key | H | Partly: Pages deploys only after CI passes on `main` (#74). Open: repository rulesets (PRs and CI required on `main`, protected `v*` tags), immutable releases, build provenance attestations. **Repository settings are the owner's decision** |
 | `actions-tag-pinning` | Workflows use actions by tag or branch (`setup-arduino-cli@v2` is a branch), and arduino-cli is unpinned | M | Partly: actions pinned by commit SHA, with Dependabot proposing updates (#74); cloud sessions install arduino-cli by checksum. Open: pin arduino-cli in CI, split the release job's write token |
 | `release-asset-mutable` | A release binary can be replaced, and its `.sha256` shares the same trust root | M | Open: immutable releases, attestations; Pages fails closed without a checksum |
-| `shared-github-io-origin` | The console shares `ccirone2.github.io` (and its Web Serial grants) with the account's other Pages sites | M | **Decision needed**: serve it from its own origin (custom domain or organisation). Until then, Forget the ports after an install visit |
+| `shared-github-io-origin` | The console shares `ccirone2.github.io` (and its Web Serial grants) with the account's other Pages sites | M | Deferred (2026-10-12): serve it from its own origin (custom domain or organisation), maybe eventually (ROADMAP C5). Until then, Forget the ports after an install visit |
 | `arduino-deps-integrity` | Core and libraries pinned by version, not hash | M | Open: hash lock checked in CI; the dependency routine proposes updates as PRs |
 | `agent-tooling-push-path` | Hooks and scheduled agents as a path into `main` | M | Mitigated in part: routines open PRs only; branch rules would enforce it |
-| `tamper-undetectable` | No independent check that a board runs a genuine image | L | Open: read the image back and compare its hash (ROADMAP) |
+| `tamper-undetectable` | No independent check that a board runs a genuine image | L | Open: read the image back and compare its hash (ROADMAP C4) |
 | `board-output-xss`, `local-bin-forged-marker`, `npm-dev-deps`, `python-deps-unpinned`, `ha-token-tls-off`, `bench-wiring-server`, `ci-event-isolation` | Smaller web and bench hygiene items | L | Mostly open (TODO); `ci-event-isolation` handled well |
 
 ## Accepted risks
@@ -163,7 +163,7 @@ deploy could flash a backdoored image or take the key through the page. Nothing 
 - **The controller is trusted.** Whoever controls the Shelly controls the gate; secure the Z-Wave network and the
   Alarm.com account.
 - **The opener's other inputs** are outside GateLink.
-- **Traffic is readable** until payload encryption lands.
+- **Traffic is readable** until payload encryption lands (ROADMAP F6).
 
 ## Install checklist (security)
 

@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GateLink: two Arduino MKR WAN 1310 boards (on MKR Relay Proto Shields) bridge an Alarm.com / 2GIG system (via a Shelly Wave 1 Z-Wave relay) at the house to a LiftMaster CSW24UL gate opener over raw point-to-point LoRa. `firmware/GateLink/` is one Arduino sketch flashed to both boards; the role (house/gate) is stored in flash config. `web/` is a static page that configures/diagnoses a board over USB using the Web Serial API. README.md is the overview and indexes the docs: `docs/architecture.md` (firmware layers and web console in detail), `docs/hardware.md` (wiring, device settings), `docs/protocol.md`, `docs/threat-model.md` (threats by id; update it with link, console, key or release changes), `docs/console.md` (commands, status, log events), `docs/key-management.md`, `docs/config.md` (settings; generated), `docs/bench-testing.md` (bench rules, checklist), `docs/development.md` (workflow, CI, versions, releases).
 
+**Priorities** (README "Goals"): Alarm.com always sees the gate's real state. UX and robust, hardened behaviour come first. There are three audiences: the homeowner sees only Alarm.com, the installer uses the web console, and the developer works in the terminal and on the bench. Weigh every change against all three.
+
 Repo: https://github.com/ccirone2/LoRa-GateLink (public). Web console: https://ccirone2.github.io/LoRa-GateLink/, deployed from `web/` by `.github/workflows/pages.yml` (`gh workflow run pages.yml` redeploys).
 
 ## Commands

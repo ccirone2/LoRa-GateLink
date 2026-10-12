@@ -14,8 +14,9 @@ once its fix is merged and record it in the pull request.
   controller follows K1 off and on (Alarm.com shows it closed for a moment); with it closed the contact sensor
   blips open. Restoring K1/K2 from `.noinit` RAM in `setup()` was tried (2026-10-05) and only shortened the drop to
   ~0.6–0.8 s: the MKR bootloader's double-tap check waits ~0.5 s on every reset except power-on, with the relay pins
-  released, before the firmware starts. Remaining options: a bootloader that skips that wait on watchdog/software
-  resets (it's also what lets a double-tap rescue a board), or latching relays. A power-on reset of the house
+  released, before the firmware starts. Remaining option: a bootloader that skips that wait on watchdog/software
+  resets (it's also what lets a double-tap rescue a board). Latching relays are ruled out: they keep a stale state
+  through a crash or power loss, where a released relay fails toward the safe reading. A power-on reset of the house
   takes the controller down too (shared 12 V), so it's only the warm resets.
 
 
@@ -92,8 +93,7 @@ once its fix is merged and record it in the pull request.
   `tools/gatelink.py survey`) and a checklist skeleton built from hardware.md and the README (wiring checks per
   board, Shelly SW mode, CSW24UL AUX relay settings, power sense checks, the survey, config export and key backup).
   Left, once the install hardware is in hand: walk it on site and correct it, add the Shelly and CSW24UL menu steps
-  as done, the readings at each check and photos, and record the first survey (its numbers also settle the
-  command-retry item under Firmware). Then drop the draft notice.
+  as done, the readings at each check and photos, and record the first survey. Then drop the draft notice.
 
 ## Supply chain
 

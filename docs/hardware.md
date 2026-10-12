@@ -120,7 +120,7 @@ unconnected. See [console.md](console.md). Leave the pins unused and `uart_conso
 ## Spare inputs
 
 IN4 (and IN3 on the house board) are pull-down inputs (contact to 3.3 V) reserved for future use such as a
-beam-break sensor or alarm status (see [ROADMAP.md](../ROADMAP.md)). They're debounced, logged (`input` events),
+beam-break sensor or alarm status (see [ROADMAP.md](../ROADMAP.md), F15). They're debounced, logged (`input` events),
 shown in Status (the gate's are also sent to the house), with `inN_invert` toggles, but don't affect behaviour
 yet. Leave them unwired if unused.
 

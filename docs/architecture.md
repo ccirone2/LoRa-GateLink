@@ -201,8 +201,8 @@ picker and reconnect; `status.js`, `config.js`, `tools.js`, `history.js`, `firmw
 `security.js` the Security tab, with `keys.js` the key ids and encrypted backups
 ([key-management.md](key-management.md)); `survey.js` the site survey's verdict, twin of
 `tools/gatelink_client/survey.py` (shared vectors in `tests/tools/fixtures/`; [install.md](install.md)); `wiring.js`
-Install tab; `settings.js` setting groups/help; `logdecode.js` log events as text; `ui.js` the log view and toasts;
-`util.js` small helpers; shared state in `state.js`'s `S`).
+Install tab; `settings.js` setting groups/help; `logdecode.js` log events as text; `peer.js` the other board as last
+seen; `ui.js` the log view and toasts; `util.js` small helpers; shared state in `state.js`'s `S`).
 Lint and tests: `npm test` (ESLint, `node --test` unit tests of the pure modules, Playwright browser tests of the
 real page against fake boards in `tests/web/fake-serial.js`; `tests/web/README.md`).
 
@@ -224,5 +224,11 @@ Notable pieces:
   change them.
 - Log lines show decoded (`logdecode.js`; a unit test checks it covers every event in `log.cpp`); the downloaded log
   keeps the raw form.
+- *Other board* on the Status tab (`peer.js`, ROADMAP F10): the must-match settings are the ones that stop the link
+  verifying when they differ, so the boards can't compare them over the air. The page remembers each board it
+  connects, by role, in `localStorage` (`gatelink.boards`: firmware, key id, the `MUST_MATCH` settings, when seen),
+  and compares the connected board with the other one; connected to the house with the link up it also asks the gate
+  for its firmware once (`remote.diag`). A firmware difference in MAJOR.MINOR is flagged (a change both boards need
+  together); a PATCH apart matches. Storage failing (a private window) only means nothing to compare.
 
 The naming rule (no install hardware brand names under `web/`) is in CLAUDE.md.

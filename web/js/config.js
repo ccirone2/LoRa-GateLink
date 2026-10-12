@@ -5,6 +5,7 @@ import { toast } from './ui.js';
 import { call, request } from './serial.js';
 import { GROUPS, HELP, MUST_MATCH, SELECTS } from './settings.js';
 import { refreshInfo } from './status.js';
+import { rememberBoard } from './peer.js';
 
 export async function loadConfig() {
   const res = await call('config.get');
@@ -17,6 +18,7 @@ export async function loadConfig() {
   sel.replaceChildren(...S.meta.filter((m) => m.remote).map((m) => new Option(m.name, m.name)));
   if (keep && S.meta.some((m) => m.remote && m.name === keep)) sel.value = keep;
   syncRemValue();
+  rememberBoard();
 }
 
 // Show the selected remote param's range on the value box (the board still validates it).

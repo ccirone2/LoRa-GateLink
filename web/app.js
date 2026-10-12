@@ -14,6 +14,7 @@ import * as serial from './js/serial.js';
 import { decodeLog, rawLog } from './js/logdecode.js';
 import { renderWiring, wiringRole, wiringResized } from './js/wiring.js';
 import { applyRole, refreshInfo, refreshStatus, renderStatus, pollStatus, resetPoll, POLL_MS } from './js/status.js';
+import { resetPeer } from './js/peer.js';
 import {
   loadConfig, syncRemValue, applyConfig, importConfig, exportConfig, reloadConfig, saveConfig, resetConfig,
   markUnsaved, dirtyCount,
@@ -70,6 +71,7 @@ function onEvent(ev) {
 
 serial.hooks.onOpen = async ({ otherBoard, port }) => {
   if (otherBoard) resetToolsView(); // another board: its ping/diag results don't apply
+  resetPeer();
   setConnected(true);
   try {
     await refreshInfo();

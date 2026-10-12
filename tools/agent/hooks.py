@@ -234,7 +234,9 @@ def check_py_syntax(root, rel):
 def check_ruff(root, rel):
     if not (rel.startswith(("tools/", "tests/"))):
         return None
-    cmd = ["ruff"] if shutil.which("ruff") else None
+    # the locked environment's ruff (uv sync), else one on PATH
+    venv = [root / ".venv/Scripts/ruff.exe", root / ".venv/bin/ruff"]
+    cmd = next(([str(p)] for p in venv if p.is_file()), ["ruff"] if shutil.which("ruff") else None)
     if cmd is None:
         return None  # not installed here; CI lints
     r = run([*cmd, "check", "--quiet", rel], root)
@@ -569,7 +571,7 @@ def start_cloud_setup(root):
     """Start tools/agent/cloud_setup.sh in the background (once per machine) and say where it stands."""
     cache = cache_dir()
     done, log = cache / "setup.done", cache / "setup.log"
-    bins = [Path.home() / ".local/bin", cache / "venv/bin"]
+    bins = [Path.home() / ".local/bin", root / ".venv/bin"]
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file:  # later Bash commands in this session get the tools on PATH
         try:
@@ -583,7 +585,7 @@ def start_cloud_setup(root):
         cache.mkdir(parents=True, exist_ok=True)
         pid = spawn(["bash", str(root / "tools/agent/cloud_setup.sh")], root, log)
         (cache / "setup.pid").write_text(str(pid), encoding="utf-8")
-    return (f"GateLink toolchain (arduino-cli, the samd/avr cores and pinned libraries, npm ci, ruff, pytest) is "
+    return (f"GateLink toolchain (arduino-cli, the samd/avr cores and pinned libraries, npm ci, uv sync: ruff, pytest) is "
             f"installing in the background: {log}. Before compiling or running tests, wait for it: "
             f"`until [ -e {done} ]; do sleep 10; done; cat {done}`.")
 

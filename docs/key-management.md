@@ -50,7 +50,7 @@ firmware too), and the tools never generate one. A random key is weak about once
 ## Lifecycle
 
 1. **Generate**, from a source you trust, on a machine you trust:
-   - `python tools/gatelink.py key gen --backup DIR` prints a new key once and writes its encrypted backup into
+   - `uv run tools/gatelink.py key gen --backup DIR` prints a new key once and writes its encrypted backup into
      `DIR`. Nothing else is written unless `--out PATH` is given (e.g. `--out ~/.gatelink_key` on the bench).
    - Or the web console's **Generate**, from a local copy of the page (`python -m http.server 8000 -d web` in a
      checkout you have looked at). The hosted page works too, but a key generated there is only as trustworthy as

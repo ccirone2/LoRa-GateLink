@@ -128,34 +128,36 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0  # the FW_VERSION check measures the branch from where it left its base
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      # The Python environment is pyproject.toml + uv.lock (hashes); --locked fails if the lock is out of date.
+      # uv's version: keep in step with pyproject.toml's required-version and tools/agent/cloud_setup.sh.
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: '0.12.19'
           python-version: '3.12'
-          cache: pip
-          cache-dependency-path: tests/e2e/requirements.txt
-      - name: Install the suite's dependencies and ruff
-        run: pip install ruff==0.16.10 -r tests/e2e/requirements.txt
+          enable-cache: true
+      - name: Install the locked environment (pyproject.toml, uv.lock)
+        run: uv sync --locked
       - name: Byte-compile the e2e suite and tools
-        run: python -m compileall -q tests tools
+        run: uv run --frozen python -m compileall -q tests tools
       - name: Lint (ruff.toml)
-        run: ruff check tests tools
+        run: uv run --frozen ruff check tests tools
       - name: Unit tests for the tools and agent hooks (tests/tools)
-        run: python -m pytest tests/tools -q
+        run: uv run --frozen pytest tests/tools -q
       # Catches import and fixture errors; no test runs (they need the bench).
       - name: Collect the e2e suite
-        run: python -m pytest --collect-only -q -m "" tests/e2e
+        run: uv run --frozen pytest --collect-only -q -m "" tests/e2e
       - name: Firmware, suite and docs agree (enums, log events, console commands)
-        run: python tools/check_contract.py
+        run: uv run --frozen tools/check_contract.py
       # Generated tables current, hand-written reference docs and quoted values in step with the source. Reads the
       # web console's tables through node (on the runner image).
       - name: Reference docs from source (tools/docgen.py)
-        run: python tools/docgen.py
+        run: uv run --frozen tools/docgen.py
       # Every firmware change bumps FW_VERSION (docs/development.md): the stop hook asks, this enforces.
       - name: Firmware changes bump FW_VERSION
         if: github.event_name == 'pull_request'
         env:
           BASE: origin/${{ github.base_ref }}
-        run: python tools/agent/hooks.py check --base "$BASE" --only fw-version
+        run: uv run --frozen tools/agent/hooks.py check --base "$BASE" --only fw-version
 
   # The workflows themselves: actionlint, which also runs shellcheck on every run: block.
   workflows:

@@ -14,14 +14,14 @@ on the house board (driven through Home Assistant). Most of the checklist below 
 [end-to-end suite](../tests/e2e/README.md); the test covering each item is named after it.
 
 The boards can be driven from scripts over USB serial with the same JSON console the web page uses
-([console.md](console.md); `python tools/gatelink.py house status`, or pyserial: `{"id":1,"cmd":"status"}`). With the
+([console.md](console.md); `uv run tools/gatelink.py house status`, or pyserial: `{"id":1,"cmd":"status"}`). With the
 GateSim wired to the gate board, the full loop (controller → house → gate → simulated opener) can be scripted.
 
 ## Bench rules
 
 - **Uploads keep the saved config and key** from 0.5.0 (SPI flash; `ports` shows `cfg spi`). Uploading 0.5.0
   over an older version, a board showing `cfg internal`, or `config.reset` leaves defaults (no role or key,
-  `tx_power` 17; `power_sense`, `ctrl_power_sense` and `ctrl_power_pmic` on, `ctrl_confirm_ms` 500). `python tools/gatelink.py snapshot` before flashing
+  `tx_power` 17; `power_sense`, `ctrl_power_sense` and `ctrl_power_pmic` on, `ctrl_confirm_ms` 500). `uv run tools/gatelink.py snapshot` before flashing
   and `restore` after puts them back (`/flash` in Claude Code does both); the key is read from `~/.gatelink_key`.
   Boards can't read the key back (if `~/.gatelink_key` is lost, `key.set` a fresh one on both boards), so keep an
   encrypted backup (`tools/gatelink.py key backup`, [key-management.md](key-management.md)); `ports`
@@ -48,9 +48,9 @@ PulseView; Options → List All Devices, pick `0925 3881`); sigrok's `fx2lafw` d
 open. Its wiring is in `wiring.json` (today house D5 on CH5, ground on the house ground).
 
 ```sh
-python tools/logic.py capture -c D5=CH5 --time 10 --at "1:COM5 reboot"   # D5 through a house reboot
-python tools/logic.py capture -c K1=CH1 -c K2=CH2 --rate 1M --out k.vcd   # then open k.vcd in PulseView
-python tools/logic.py report k.vcd -c K1=CH1 -c K2=CH2 --json
+uv run tools/logic.py capture -c D5=CH5 --time 10 --at "1:COM5 reboot"   # D5 through a house reboot
+uv run tools/logic.py capture -c K1=CH1 -c K2=CH2 --rate 1M --out k.vcd   # then open k.vcd in PulseView
+uv run tools/logic.py report k.vcd -c K1=CH1 -c K2=CH2 --json
 ```
 
 `tools/logic.py` captures, then reports each channel's edges (times from the capture's start) and flags pulses shorter
@@ -74,11 +74,11 @@ each action's start and duration are printed, and one whose time falls after the
 Optional, but worth doing before a MKR WAN 1310 goes into the install: one bench board had a weak receiver that
 only showed up as occasional CRC errors and lost pongs. Pair the new board with a known-good one:
 
-1. Put the new board in place of one of the bench boards (`python tools/gatelink.py snapshot` first), flash it
+1. Put the new board in place of one of the bench boards (`uv run tools/gatelink.py snapshot` first), flash it
    (`/flash`) and give it that board's role, config and key (`restore`; a new board may come up on another COM
    number, so rename the port in `~/.gatelink_config.json`). If it doesn't show up on USB even after a
    double-tap of reset (Windows lists *Device Descriptor Request Failed*), try another USB port or cable.
-2. Run `python tools/gatelink.py rftest` (5 minutes of pings both ways; `--seconds` to change). Keep the bench
+2. Run `uv run tools/gatelink.py rftest` (5 minutes of pings both ways; `--seconds` to change). Keep the bench
    setup the same between runs: boards side by side, `tx_power` 5, SF9 (the defaults it was calibrated on).
 3. It passes with no CRC errors at either board and at most 1 % of pongs lost (`--max-crc`, `--max-loss`). A
    board's `crc` column counts frames *it* received with a bad CRC, so it names the weak receiver; lost pongs

@@ -1,7 +1,7 @@
 """The link key's lifecycle off the board: key ids, the weak-key rule and encrypted backups ("GLKB v1").
 
 The same format as the web console's (web/js/keys.js); docs/key-management.md describes it. Backups need the
-`cryptography` package (tests/e2e/requirements.txt), imported only when one is made or opened, so everything else
+`cryptography` package (pyproject.toml), imported only when one is made or opened, so everything else
 here (and in tools/gatelink.py) works without it.
 """
 import base64
@@ -82,7 +82,7 @@ def _crypto():
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
         from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     except ImportError:
-        raise BackupError("key backups need the cryptography package: pip install -r tests/e2e/requirements.txt") \
+        raise BackupError("key backups need the cryptography package: run through `uv run` (docs/development.md)") \
             from None
     return hashes, AESGCM, PBKDF2HMAC
 

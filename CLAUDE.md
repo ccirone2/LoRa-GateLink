@@ -16,15 +16,15 @@ Repo: https://github.com/ccirone2/LoRa-GateLink (public). Web console: https://c
 
 ```sh
 arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink   # keep warning-free (grep GateLink[\\/])
-python tools/flash.py <dir>/GateLink.ino.bin house gate   # bench upload, checks the version (/flash)
+uv run tools/flash.py <dir>/GateLink.ino.bin house gate   # bench upload, checks the version (/flash)
 npm ci && npm test                             # web console: ESLint, unit and browser tests
 make -C tests/native                           # host tests (tests/native/README.md)
 make -C tests/native -f fuzz/Makefile fuzz-smoke   # libFuzzer (clang)
-python -m pytest tests/tools -q; ruff check tests tools; python tools/check_contract.py; python tools/docgen.py
-GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -v   # bench suite, hardware required (/bench)
-python tools/gatelink.py ports                 # boards on USB (also: <house|gate|COMx> <cmd> k=v)
-python tools/gatelink.py snapshot | restore    # config before a flash / config + key after
-python tools/logic.py capture -c D5=CH5 --at "1:COM5 reboot"   # logic analyzer (docs/bench-testing.md)
+uv run pytest tests/tools -q; uv run ruff check tests tools; python tools/check_contract.py; python tools/docgen.py
+GATELINK_HA_URL=https://<ha>:8123 uv run pytest tests/e2e -v   # bench suite, hardware required (/bench)
+uv run tools/gatelink.py ports                 # boards on USB (also: <house|gate|COMx> <cmd> k=v)
+uv run tools/gatelink.py snapshot | restore    # config before a flash / config + key after
+uv run tools/logic.py capture -c D5=CH5 --at "1:COM5 reboot"   # logic analyzer (docs/bench-testing.md)
 ```
 
 Extend the host tests (both boards in a simulated site, every invariant below checked each simulated millisecond) with any behaviour change, especially paths the bench can't reach (replays, restarts, wraps, power cuts mid-save, races); `XFAIL_TEST` marks a known open bug. A firmware change that moves a mutation's text must update `tests/native/mutations.json`; `fuzz/crashes/` reproducers must keep crashing until fixed.

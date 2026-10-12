@@ -108,8 +108,10 @@ def test_cloud_setup_pins_match_ci():
     core_lib = re.compile(r"arduino:\w+@[\d.]+|(?:LoRa|Crypto|FlashStorage|ArduinoJson|Adafruit SleepyDog Library)"
                           r"@[\d.]+")
     assert set(core_lib.findall(setup)) == set(core_lib.findall(ci))
-    ruff = re.search(r"RUFF_VERSION=([\d.]+)", setup).group(1)
-    assert f"ruff=={ruff}" in ci
+    uv = re.search(r"UV_VERSION=([\d.]+)", setup).group(1)
+    assert re.search(rf"setup-uv@\w+ # v[\d.]+\n\s+with:\n\s+version: '{re.escape(uv)}'", ci)
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert f'required-version = ">={uv}"' in pyproject
     dev = (ROOT / "docs/development.md").read_text(encoding="utf-8")
     for pin in core_lib.findall(setup):
         name, version = pin.rsplit("@", 1)

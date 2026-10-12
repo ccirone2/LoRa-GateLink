@@ -8,23 +8,24 @@ by hand, and asserts the outcome at every hop. Bench only; there are no unit tes
 ## Prerequisites
 
 - Both boards are flashed and configured with role, shared key and `tx_power` of about 5
-  (`python tools/gatelink.py restore` after flashing).
+  (`uv run tools/gatelink.py restore` after flashing).
 - The GateSim is wired to the gate board and runs the current `tools/GateSim` (the pulse-length checks need its
   `evt release` lines), and the web console is disconnected.
-- `pip install -r tests/e2e/requirements.txt`.
+- The locked Python environment: `uv sync` ([development.md](../../docs/development.md); `uv run` below syncs it
+  too).
 
 ## Running
 
 ```sh
 export GATELINK_HA_URL=https://<home-assistant>:8123    # token read from ~/.ha_token (GATELINK_HA_TOKEN_FILE)
 export GATELINK_HA_CA=<ca.pem>            # optional: verify HA's certificate (by default it isn't checked)
-pytest tests/e2e -v                       # about 30 min; boards found by role, simulator on COM10 (this bench's port: set --sim-port)
-pytest tests/e2e -m soak --cycles 20      # repeated open/close cycles with latency stats
-GATELINK_KEY=<32 hex> pytest tests/e2e -k wrong_key   # wrong-key test, opt-in (marker needs_key; rewrites the gate's saved key)
-GATELINK_KEY=<32 hex> pytest tests/e2e --restore-key -k boards_and_link   # put the shared key back on both boards
-pytest tests/e2e -m longsoak --soak-minutes 120   # hours-long run, outages and opener faults mixed in
-pytest tests/e2e -m rf --rf-cycles 5      # marginal link (2 dBm, SF12); see "Real RF" below
-pytest tests/e2e -m power                 # real power cuts through the power rig, LiPo in or out; see "Power rig" below
+uv run pytest tests/e2e -v                       # about 30 min; boards found by role, simulator on COM10 (this bench's port: set --sim-port)
+uv run pytest tests/e2e -m soak --cycles 20      # repeated open/close cycles with latency stats
+GATELINK_KEY=<32 hex> uv run pytest tests/e2e -k wrong_key   # wrong-key test, opt-in (marker needs_key; rewrites the gate's saved key)
+GATELINK_KEY=<32 hex> uv run pytest tests/e2e --restore-key -k boards_and_link   # put the shared key back on both boards
+uv run pytest tests/e2e -m longsoak --soak-minutes 120   # hours-long run, outages and opener faults mixed in
+uv run pytest tests/e2e -m rf --rf-cycles 5      # marginal link (2 dBm, SF12); see "Real RF" below
+uv run pytest tests/e2e -m power                 # real power cuts through the power rig, LiPo in or out; see "Power rig" below
 ```
 
 Other options: `--house-port` / `--gate-port` (default: found by role), `GATELINK_SIM_PORT`,

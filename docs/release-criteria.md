@@ -32,6 +32,9 @@ Each kind needs everything the smaller kinds need.
 | `install_rf` | MAJOR | By hand: TODO.md "Real RF" done at the install site (`-m rf` there, ping and RSSI from the web console) |
 | `install_full_power` | MAJOR | By hand: TODO.md "Full power at the install" done (`tx_power` 17 saved on both boards for days, no resets or `radio_faults`) |
 
+The suite commands here are written as pytest runs them, as the evidence records them; run each in the locked
+environment, `uv run pytest ...` ([development.md](development.md)).
+
 The power runs find out by themselves whether each LiPo is in (summary fact "LiPos") and run the tests for that
 state; a run with one LiPo in and one out counts for neither. The 17 dBm run doesn't stand in for `full_suite`,
 nor the reverse. A 24-hour long soak also meets `longsoak_60m`.
@@ -43,7 +46,7 @@ web console disconnected); `GATELINK_KEY` is the key in `~/.gatelink_key`.
 
 | Part | Release bench | Notes |
 |---|---|---|
-| House board | MKR WAN 1310 …183013 | USB serial number tail; `python tools/gatelink.py ports` shows it |
+| House board | MKR WAN 1310 …183013 | USB serial number tail; `uv run tools/gatelink.py ports` shows it |
 | Gate board | MKR WAN 1310 …0C301C | Never …191117: weak receiver, CRC errors and lost pongs ([bench-testing.md](bench-testing.md#new-board-preflight)) |
 | Opener | GateSim Uno, running the current `tools/GateSim` | Wired to the gate board; carries the power rig (CH1 gate 24 V feed, CH3 house 12 V rail) |
 | Controller | The real Shelly Wave 1, driven through Home Assistant | SW input in follow mode (preflight checks it) |

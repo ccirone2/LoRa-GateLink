@@ -25,7 +25,7 @@ description: Look for bugs and simplifications in one area a night; fix one, pro
    code, and code that a simpler form would make clearer without changing behaviour. Check `TODO.md` first: a known item is not a new finding.
 3. **Prove before fixing.** A bug counts only with a test that fails on `main`: the host tests
    (`make -C tests/native`, including the system tests' invariant monitors), the web tests (`npm test`) or the
-   tools tests (`python -m pytest tests/tools -q`). Write the test, see it fail, fix, see it pass, run the area's
+   tools tests (`uv run pytest tests/tools -q`). Write the test, see it fail, fix, see it pass, run the area's
    whole suite. A simplification needs the existing tests to cover what it touches (add one if not) and must not
    change behaviour.
 4. **One pull request** for the most valuable proven item, titled `[routine] Fix: ...` or `[routine] Simplify:

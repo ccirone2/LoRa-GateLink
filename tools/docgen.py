@@ -1504,7 +1504,7 @@ FACTS = [
     Fact("e2e simulator travel", BENCH, r"SIM_TRAVEL_S = (\d+)", (Q(E2E, r"simulator travel (\d+) s"),)),
     Fact("soak loop_max_us limit", "tests/e2e/test_soak.py", r"LOOP_MAX_US = ([\d_]+)",
          (Q(ARCH, r"the soak fails it past (\d+) s", lambda v: v / 1e6),)),
-    # Toolchain versions: CI is the source; the docs and the release workflow must say the same
+    # Toolchain versions: CI (pyproject.toml for ruff) is the source; the docs and the release workflow must agree
     Fact("arduino:samd core", CI, r"arduino:samd@([\d.]+)",
          (Q(DEV, r"\| `arduino:samd` core \| ([\d.]+) \|"),
           Q(REL, r"arduino:samd@([\d.]+)"),
@@ -1517,7 +1517,8 @@ FACTS = [
             Q(R, rf'"{re.escape(lib)}@([\d.]+)"')))
       for lib, label in LIBS),
     Fact("ArduinoJson major", CI, r'"ArduinoJson@(\d+)\.', (Q(C, r"`ArduinoJson` v(\d+)"),)),
-    Fact("ruff", CI, r"ruff==([\d.]+)", (Q(DEV, r"ruff==([\d.]+)"),)),
+    Fact("ruff", "pyproject.toml", r'"ruff==([\d.]+)"', (Q(DEV, r"ruff ([\d.]+)"),)),
+    Fact("uv", CI, r"setup-uv@.*\n\s+with:\n\s+version: '([\d.]+)'", (Q(DEV, r"uv ([\d.]+) or newer"),)),
     Fact("Node.js", CI, r"node-version: '(\d+)'", (Q(DEV, r"need Node\.js (\d+)"),)),
 ]
 

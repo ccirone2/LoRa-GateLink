@@ -29,7 +29,7 @@ Retiring one: delete its file and its row above in the same pull request, then d
 ## Rules for every routine
 
 - **Small and proven.** At most one pull request per run, on one subject. Every code change comes with a test that
-  fails without it (`make -C tests/native`, `npm test`, `python -m pytest tests/tools -q`); every doc change cites
+  fails without it (`make -C tests/native`, `npm test`, `uv run pytest tests/tools -q`); every doc change cites
   the code that proves it. Verify as `docs/development.md` says for the areas touched, as far as the cloud allows.
 - **Never merge, release, tag, or push to `main`.** Branch `claude/routine-<name>-<yyyymmdd>`; the pull request
   title starts `[routine]` and its body says what was checked, what changed and how it was verified. The user

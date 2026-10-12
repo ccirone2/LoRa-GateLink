@@ -21,3 +21,6 @@ web/firmware/
 node_modules/
 tests/web/test-results/
 tests/web/report/
+
+# The locked Python environment (uv sync)
+.venv/

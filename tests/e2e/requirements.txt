@@ -1,3 +1,0 @@
-pyserial>=3.5
-pytest>=9.1.1
-cryptography>=50.0.1  # tools/gatelink.py key: encrypted key backups (imported only there)

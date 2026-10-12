@@ -22,8 +22,24 @@ difference:
 When updating one, change it here and in `.github/workflows/ci.yml` and `release.yml`.
 
 The web console is plain JS (ES modules) with no build step; its lint and tests need Node.js 22 and `npm ci`
-(`package.json`). The bench tools need Python 3 with
-`pip install -r tests/e2e/requirements.txt`.
+(`package.json`).
+
+The Python tools, their tests and the bench suite share one environment, locked with hashes so every machine and CI
+run the same versions: `pyproject.toml` lists the dependencies (ruff 0.16.10 in its `dev` group) and `uv.lock` pins
+them. Install uv 0.12.19 or newer ([docs.astral.sh/uv](https://docs.astral.sh/uv/); `pyproject.toml` refuses an
+older one), then:
+
+```sh
+uv sync                        # builds .venv from uv.lock (Python 3.12, from .python-version; uv fetches it if needed)
+uv run pytest tests/tools -q   # any command, run in that environment (syncing it first)
+uv add 'pkg>=1.2'              # a new dependency; `uv add --dev` for tooling. Both update uv.lock: commit it
+uv lock --upgrade-package pkg  # a newer version within the bounds (Dependabot proposes these weekly)
+```
+
+`uv run` is how the commands in these docs are meant to be run; with `.venv` activated they also run as written
+(`pytest ...`, `python tools/...`). The tools that use only the standard library (`docgen.py`, `check_contract.py`,
+`release_evidence.py`, `fw_size.py`, `bench-wiring/serve.py`, the agent hooks) run under any Python 3.10 or newer
+too; `gatelink.py` and `flash.py` need the environment (pyserial), and so does `logic.py` for its `--at` actions.
 
 ## Other commands
 
@@ -31,12 +47,12 @@ The routine ones (compile, flash, tests, the bench suite, `tools/gatelink.py` es
 [CLAUDE.md](../CLAUDE.md). The rest:
 
 ```sh
-arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COMx firmware/GateLink   # plain upload (python tools/flash.py bounds the waits)
+arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COMx firmware/GateLink   # plain upload (uv run tools/flash.py bounds the waits)
 arduino-cli compile --fqbn arduino:avr:uno --warnings all tools/GateSim   # bench opener simulator (tools/GateSim/README.md)
 python -m http.server 8000 -d web              # serve the web console at http://localhost:8000 (Chrome/Edge; not from file://)
-GATELINK_HA_URL=https://<ha>:8123 pytest tests/e2e -m power   # real power cuts through the power rig (LiPo in or out; tests chosen per state)
-python tools/gatelink.py house hist --csv f.csv   # link quality history (hourly buckets) as CSV
-python tools/gatelink.py rftest                # radio preflight for a new MKR board (bench-testing.md)
+GATELINK_HA_URL=https://<ha>:8123 uv run pytest tests/e2e -m power   # real power cuts through the power rig (LiPo in or out; tests chosen per state)
+uv run tools/gatelink.py house hist --csv f.csv   # link quality history (hourly buckets) as CSV
+uv run tools/gatelink.py rftest                # radio preflight for a new MKR board (bench-testing.md)
 python tools/bench-wiring/serve.py             # the bench wiring record at http://localhost:8001 (never another server)
 ```
 
@@ -73,19 +89,20 @@ are built from the pull requests since the last tag.
    ```sh
    arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink   # no warnings in GateLink/
    npm ci && npm test         # web console: lint, unit tests, browser tests (tests/web/README.md)
-   ruff check tests tools     # pip install ruff==0.16.10 (the version CI pins); rules in ruff.toml
-   python tools/check_contract.py   # firmware enums, log events and console commands vs the suite and docs
+   uv run ruff check tests tools     # rules in ruff.toml
+   uv run tools/check_contract.py   # firmware enums, log events and console commands vs the suite and docs
    python tools/docgen.py     # reference docs vs the source (--write regenerates the generated tables)
    make -C tests/native       # host tests: link/config, and both boards' firmware in a simulated site (tests/native/README.md)
    make -C tests/native cppcheck tidy coverage   # static analysis and coverage (in Docker on Windows, as the README says)
-   python -m pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks, key backups)
-   pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
+   uv run pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks, key backups)
+   uv run pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI
    compiles the firmware and GateSim (failing on warnings in project files) and checks the firmware's size budget
    (`tools/fw_size.py`: 160 KB flash, 24 KB static RAM; raising it is a decision for the pull request), runs the host
-   unit tests, lints and tests the web console (ESLint, `node --test`, Playwright), byte-compiles and lints the
-   Python (`ruff check tests tools`), runs the tools' unit tests (`tests/tools`), collects the e2e suite (`pytest
+   unit tests, lints and tests the web console (ESLint, `node --test`, Playwright), installs the locked Python
+   environment (`uv sync --locked`, which fails if `uv.lock` is out of step with `pyproject.toml`), byte-compiles and
+   lints the Python (`uv run ruff check tests tools`), runs the tools' unit tests (`tests/tools`), collects the e2e suite (`pytest
    --collect-only`, which catches import and fixture errors without the bench), checks the docs against the source
    (`check_contract.py`, `docgen.py`), fails a pull request that changes the firmware without bumping `FW_VERSION`,
    lints the workflows (actionlint, with shellcheck), runs cppcheck and clang-tidy (`firmware/GateLink/.clang-tidy`)
@@ -95,8 +112,8 @@ are built from the pull requests since the last tag.
    after each release build, to bundle its `.bin`, and by hand with `gh workflow run pages.yml`).
 
 CI's actions are pinned by commit SHA and its runners by image (`ubuntu-24.04`); Dependabot
-(`.github/dependabot.yml`) proposes action, npm and Python updates weekly, and the nightly deps-check routine
-covers the Arduino cores and libraries, arduino-cli and ruff.
+(`.github/dependabot.yml`) proposes action, npm and Python (`uv.lock`, ruff included) updates weekly, and the nightly deps-check routine
+covers the Arduino cores and libraries, arduino-cli, uv and gcovr.
 
 ## Test suites
 

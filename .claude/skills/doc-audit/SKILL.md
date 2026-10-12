@@ -13,7 +13,7 @@ code lacks is a finding to report, not a reason to change firmware here). Work o
    python tools/check_contract.py          # enums, log events, console commands: firmware vs suite vs docs/console.md
    python tools/docgen.py                  # generated tables current; fields, pins, quoted defaults and constants
    python tools/agent/hooks.py paths CLAUDE.md README.md docs/*.md .claude/skills/*/SKILL.md .claude/routines/*.md
-   python -m pytest tests/tools -q         # includes the agent tooling checks (skills, routines, hooks, links)
+   uv run pytest tests/tools -q         # includes the agent tooling checks (skills, routines, hooks, links)
    ```
 2. **Read against the code**, one area per pass, checking every concrete claim (a name, number, default, pin,
    timing, file, command or option) with grep or by reading the code it describes:
@@ -35,6 +35,6 @@ code lacks is a finding to report, not a reason to change firmware here). Work o
 3. **Fix** what's wrong in the plainest words that are true. Keep `CLAUDE.md` short (a test fails it past 16 KB):
    detail belongs in `docs/`, a layer's in `docs/architecture.md`. No "Shelly" or "Alarm.com" under `web/`.
    Anything you can't settle from the code (intent unclear, behaviour that looks like a bug) goes to `TODO.md` or the pull request body as a question, not into the docs as a guess.
-4. **Verify:** the step 1 commands pass, and `node --check` / `ruff check tests tools` if you touched code.
+4. **Verify:** the step 1 commands pass, and `node --check` / `uv run ruff check tests tools` if you touched code.
 5. **Open one pull request** titled `Docs: ...`, listing each correction with the code that proves it
    (file:line). Nothing changed: no pull request; say what was checked.

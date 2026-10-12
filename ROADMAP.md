@@ -34,36 +34,35 @@ hardened behaviour; the homeowner, installer and developer), then by effort with
 | 5 | F17 | Tell the alarm about a move it missed | M | best with F6 (one frame change) |
 | 6 | F6 | Keep the link private and commands fresh | L | decide F8's addressing with it |
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
-| 7 | D1 | Reproducible, locked Python environment | S | |
-| 8 | F10 | Spot boards that don't match | S | |
-| 9 | C3 | Help the installer aim the antenna | S | |
-| 10 | B1 | Repeatable RF tests | S | |
-| 11 | F3 | Tell the alarm what kind of trouble it is | M | F9 |
-| 12 | C1 | One-line health verdict for the installer | M | F9, F10 for their lines |
-| 13 | F1 | Keep the event log across resets | M | |
-| 14 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
-| 15 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 16 | F7 | Update the gate's firmware without visiting it | XL | F1, F2, F9 |
+| 7 | F10 | Spot boards that don't match | S | |
+| 8 | C3 | Help the installer aim the antenna | S | |
+| 9 | B1 | Repeatable RF tests | S | |
+| 10 | F3 | Tell the alarm what kind of trouble it is | M | F9 |
+| 11 | C1 | One-line health verdict for the installer | M | F9, F10 for their lines |
+| 12 | F1 | Keep the event log across resets | M | |
+| 13 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
+| 14 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
+| 15 | F7 | Update the gate's firmware without visiting it | XL | F1, F2, F9 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 17 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 18 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 19 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 20 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 21 | F11 | Firmware ready for a second board | M | |
-| 22 | B2 | Test attacks over real RF | M | B1 |
-| 23 | B3 | Reach the host-only fault paths on the bench | M | |
-| 24 | D2 | Run the bench automatically, safely | M | |
-| 25 | F18 | Stop casual actuation over USB | M | |
-| 26 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 27 | F5 | Change radio settings without stranding the link | L | |
-| 28 | F13 | Work with controllers that pulse | L | |
-| 29 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
+| 16 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 17 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
+| 18 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 19 | C2 | Answer "what happened last night?" | M | F1, F2 |
+| 20 | F11 | Firmware ready for a second board | M | |
+| 21 | B2 | Test attacks over real RF | M | B1 |
+| 22 | B3 | Reach the host-only fault paths on the bench | M | |
+| 23 | D2 | Run the bench automatically, safely | M | |
+| 24 | F18 | Stop casual actuation over USB | M | |
+| 25 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 26 | F5 | Change radio settings without stranding the link | L | |
+| 27 | F13 | Work with controllers that pulse | L | |
+| 28 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 30 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 31 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 32 | C4 | Check a board still runs genuine firmware | M | |
-| 33 | B6 | Turn field incidents into tests | M | F1 |
-| 34 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 29 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 30 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 31 | C4 | Check a board still runs genuine firmware | M | |
+| 32 | B6 | Turn field incidents into tests | M | F1 |
+| 33 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -536,17 +535,6 @@ resets.
 **How.** Load a board's exported log (the F1 journal) and link history into the host simulation.
 
 ## Development environment
-
-### D1: Reproducible, locked Python environment
-
-**Goal.** The tools and suites run with the same Python dependencies on every machine and in CI, pinned with hashes
-(closes `python-deps-unpinned`, TODO.md bench hygiene).
-
-**Today.** `tests/e2e/requirements.txt` has lower bounds only, installed with pip.
-
-**How.** Move to uv: a `pyproject.toml` and `uv.lock` for `tests/e2e`, `tests/tools` and `tools/`, used as
-`uv run pytest` and `uv run tools/gatelink.py`, with `astral-sh/setup-uv` in CI. Update `docs/development.md`, the
-skills and `tools/agent/cloud_setup.sh` with it.
 
 ### D2: Run the bench automatically, safely
 

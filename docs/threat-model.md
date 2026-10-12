@@ -152,7 +152,7 @@ deploy could flash a backdoored image or take the key through the page. Nothing 
 | `arduino-deps-integrity` | Core and libraries pinned by version, not hash | M | Open: hash lock checked in CI; the dependency routine proposes updates as PRs |
 | `agent-tooling-push-path` | Hooks and scheduled agents as a path into `main` | M | Mitigated in part: routines open PRs only; branch rules would enforce it |
 | `tamper-undetectable` | No independent check that a board runs a genuine image | L | Open: read the image back and compare its hash (ROADMAP C4) |
-| `board-output-xss`, `local-bin-forged-marker`, `npm-dev-deps`, `python-deps-unpinned`, `ha-token-tls-off`, `bench-wiring-server`, `ci-event-isolation` | Smaller web and bench hygiene items | L | Mostly open (TODO); `ci-event-isolation` handled well |
+| `board-output-xss`, `local-bin-forged-marker`, `npm-dev-deps`, `python-deps-unpinned`, `ha-token-tls-off`, `bench-wiring-server`, `ci-event-isolation` | Smaller web and bench hygiene items | L | Mostly open (TODO); `ci-event-isolation` handled well; `python-deps-unpinned` fixed (`uv.lock`, with hashes, used by CI and the bench) |
 
 ## Accepted risks
 

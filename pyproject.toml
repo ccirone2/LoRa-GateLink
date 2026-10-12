@@ -1,0 +1,19 @@
+# The Python environment for the tools (tools/), their unit tests (tests/tools) and the bench suite (tests/e2e),
+# locked with hashes in uv.lock. `uv sync` builds it in .venv; `uv run <command>` runs in it (syncing first).
+# Not a package: nothing here is built or installed. docs/development.md says how to add or update a dependency.
+[project]
+name = "gatelink-tools"
+version = "0"
+requires-python = ">=3.10"
+dependencies = [
+    "pyserial>=3.5",
+    "pytest>=9.1.1",
+    "cryptography>=50.0.1",  # tools/gatelink.py key: encrypted key backups (imported only there)
+]
+
+[dependency-groups]
+dev = ["ruff==0.16.10"]  # the version CI uses; rules in ruff.toml
+
+[tool.uv]
+package = false
+required-version = ">=0.12.19"

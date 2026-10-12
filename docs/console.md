@@ -236,7 +236,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 ## Example
 
 ```sh
-python tools/gatelink.py ports                 # boards, roles, firmware, link
-python tools/gatelink.py house status
-python tools/gatelink.py gate relay.test k=1 ms=500
+uv run tools/gatelink.py ports                 # boards, roles, firmware, link
+uv run tools/gatelink.py house status
+uv run tools/gatelink.py gate relay.test k=1 ms=500
 ```

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Capture board outputs with the USB logic analyzer and report their edges and glitches.
 
-    python tools/logic.py capture -c D5=CH5 [-c K1=CH1 ...] [--time 10] [--at "2:house reboot"] [--out run.vcd]
-    python tools/logic.py report run.vcd [-c D5=CH5 ...]
+    uv run tools/logic.py capture -c D5=CH5 [-c K1=CH1 ...] [--time 10] [--at "2:house reboot"] [--out run.vcd]
+    uv run tools/logic.py report run.vcd [-c D5=CH5 ...]
 
 The bench analyzer is an 8-channel fx2lafw clone read with sigrok-cli (docs/bench-testing.md, "Logic analyzer").
 `-c NAME=CHn` names a channel by its case label (CH1-CH8); `NAME=Dn` uses sigrok's numbering (D0-D7, = CHn-1).

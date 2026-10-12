@@ -43,7 +43,7 @@ of its own is reported and ignored, and without Python the checks are skipped.
 | File | Check |
 |---|---|
 | `web/**/*.js`, `tests/web/**/*.js`, `eslint.config.js` | `node --check`, then ESLint on that file (when `npm ci` has been run) |
-| `*.py` | Compiles; `ruff check` under `tools/` and `tests/` (when ruff is installed) |
+| `*.py` | Compiles; `ruff check` under `tools/` and `tests/` (the `.venv` one from `uv sync`, else ruff on `PATH`; skipped when neither) |
 | `*.json` | Parses |
 | `.github/workflows/*.yml` | Parses (when PyYAML is installed) |
 | `*.md` | Relative links resolve; `tools/docgen.py` still agrees (the docs against the source) |
@@ -81,7 +81,7 @@ committed). `/hooks` lists what's loaded; `claude --debug` logs each run.
 
 Claude Code on the web clones the repo into a fresh Linux VM. The SessionStart hook installs the toolchain there
 in the background (`tools/agent/cloud_setup.sh`: arduino-cli by checksum, the cores and libraries CI pins, `npm ci`,
-ruff and pytest in a venv), logging to `~/.cache/gatelink/setup.log` and writing `~/.cache/gatelink/setup.done`
+uv by checksum and `uv sync --locked`: ruff, pytest and the tools' dependencies in `.venv`), logging to `~/.cache/gatelink/setup.log` and writing `~/.cache/gatelink/setup.done`
 with what succeeded. The environment's network access must reach `downloads.arduino.cc` and `github.com` (the
 default "Trusted" list covers npm and PyPI only; add them, or use full access). To have the toolchain cached
 instead of installed on every start, set the cloud environment's setup script to `bash tools/agent/cloud_setup.sh`;

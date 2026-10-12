@@ -137,14 +137,14 @@ arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 firmware/GateLink   #
 
 Or flash a release binary (check it first: `sha256sum -c GateLink-vX.Y.Z.bin.sha256`): `arduino-cli upload --fqbn arduino:samd:mkrwan1310 -p COM5 --input-file GateLink-vX.Y.Z.bin`
 (from the [latest release](https://github.com/ccirone2/LoRa-GateLink/releases/latest)).
-`python tools/flash.py GateLink-vX.Y.Z.bin COM5` (needs pyserial) does the same with every wait bounded, and checks the board
+`uv run tools/flash.py GateLink-vX.Y.Z.bin COM5` (needs uv: docs/development.md) does the same with every wait bounded, and checks the board
 comes back reporting that version.
 Without any tools, use the web console's **Tools → Firmware update** (below).
 
 Flash the same firmware to both boards. From 0.5.0 the config and key are kept in the board's SPI flash chip
 and **survive firmware uploads**; settings a new firmware doesn't know are dropped and new ones take their
 defaults. Upgrading from an older version erases them once (they lived in program flash), so export config from
-the web page first and re-apply after, or use `python tools/gatelink.py snapshot` / `restore`. **Factory
+the web page first and re-apply after, or use `uv run tools/gatelink.py snapshot` / `restore`. **Factory
 reset** in the web console (`config.reset`) erases the saved config and key.
 
 ## Web console

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Upload a GateLink .bin to boards over their USB bootloader, one at a time, and check each came back on it.
 
-    python tools/flash.py build/GateLink.ino.bin house gate     # by role (the boards' running firmware answers)
-    python tools/flash.py build/GateLink.ino.bin COM5           # by port
-    python tools/flash.py build/GateLink.ino.bin COM19          # a board already in its bootloader (PID 0x0059)
+    uv run tools/flash.py build/GateLink.ino.bin house gate     # by role (the boards' running firmware answers)
+    uv run tools/flash.py build/GateLink.ino.bin COM5           # by port
+    uv run tools/flash.py build/GateLink.ino.bin COM19          # a board already in its bootloader (PID 0x0059)
 
 What `arduino-cli upload` does, with every wait bounded: the 1200-baud touch (DTR off) that resets the board into
 its SAM-BA bootloader, waiting for the bootloader's own port (it often gets a new COM number), bossac with a timeout,
@@ -150,7 +150,7 @@ def flash_one(target, image, version, bossac, timeout, log=print):
     app = wait_for(back, 30)
     if not app:
         raise FlashError("the board didn't come back on USB within 30 s after the upload (bossac verified it); "
-                         "replug it, then check with `python tools/gatelink.py ports`")
+                         "replug it, then check with `uv run tools/gatelink.py ports`")
     info = wait_for(lambda: _info(app), 15, step=1)
     if not info:
         raise FlashError(f"{app} doesn't answer `info` after the upload")

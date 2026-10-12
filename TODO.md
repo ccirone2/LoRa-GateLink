@@ -35,8 +35,6 @@ once its fix is merged and record it in the pull request.
   - Not covered on the bench: `openSyncWindow` never shortening a window, the `settleUntil` floor, and a controller
     that toggles on SW edges (a scenario with `in1_invert` would do). The host system tests cover them since the
     host simulation; keep the bench gap only if a real-hardware angle remains.
-  - `tests/e2e/requirements.txt` has no upper bounds (`pytest>=8`; the conftest relies on
-    `hookimpl(wrapper=True)`). Pin them (see the threat model's bench hygiene item for hashes).
 
 - [ ] **USB serial ports hang after uploads.** On 2026-10-05, twice after an upload every USB serial port on the
   bench (both boards and the FTDI adapter) stopped opening until the USB hub was replugged. Uploading one board at
@@ -105,10 +103,9 @@ once its fix is merged and record it in the pull request.
 - [ ] **Repository settings** (threat model `pages-malicious-firmware`, `release-asset-mutable`,
   `agent-tooling-push-path`; owner's decision). A ruleset on `main` (pull request and CI required, no force push), a
   protected `v*` tag pattern, immutable releases, and build provenance attestations for release binaries.
-- [ ] **Bench hygiene** (threat model, low). Home Assistant TLS verified by default (`ha-token-tls-off`), Python
-  dependencies locked with hashes (`python-deps-unpinned`), a Host check in `tools/bench-wiring/serve.py`
-  (`bench-wiring-server`), a content security policy in `web/index.html` and numeric coercion of `hist.get` fields
-  (`board-output-xss`).
+- [ ] **Bench hygiene** (threat model, low). Home Assistant TLS verified by default (`ha-token-tls-off`), a Host
+  check in `tools/bench-wiring/serve.py` (`bench-wiring-server`), a content security policy in `web/index.html` and
+  numeric coercion of `hist.get` fields (`board-output-xss`).
 
 ## Housekeeping
 

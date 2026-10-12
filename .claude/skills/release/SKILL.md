@@ -22,14 +22,14 @@ without it. Versioning and the notes template: `docs/development.md` ("Versionin
    tag), whether CI passed on this commit, and which criteria are still open: that is the bench plan. If CI
    didn't pass on `main`, stop: fix it first.
 2. **Flash both boards with this `main`** (`/flash`, from this checkout, no local changes under `firmware/`).
-   `python tools/gatelink.py ports` must show both boards on X.Y.Z, key set, and the bench boards from the matrix
+   `uv run tools/gatelink.py ports` must show both boards on X.Y.Z, key set, and the bench boards from the matrix
    in `docs/release-criteria.md` (house `usb ...183013`, gate `usb ...0C301C`; never ...191117). Re-upload the
    GateSim if `tools/GateSim` changed since the last release.
 3. **Run the bench** for the release kind, from this checkout, with the web console disconnected
    (`GATELINK_HA_URL` set as in `tests/e2e/README.md`; `GATELINK_KEY` from `~/.gatelink_key`). Every release:
    ```sh
-   GATELINK_KEY=$(cat ~/.gatelink_key) pytest tests/e2e -v    # ~30 min
-   pytest tests/e2e -m soak --cycles 20
+   GATELINK_KEY=$(cat ~/.gatelink_key) uv run pytest tests/e2e -v    # ~30 min
+   uv run pytest tests/e2e -m soak --cycles 20
    ```
    MINOR and MAJOR also (ask the user to plug the LiPos in or out between the power runs; the run reports the
    state it found in its "LiPos" fact). Before the 17 dBm run, have the user confirm both boards are fed from the
@@ -37,15 +37,15 @@ without it. Versioning and the notes template: `docs/development.md` ("Versionin
    tool can't tell the supplies apart. Never pass `-k`, `--ignore`, `--lf` or `--sw` to a criterion run (only to a
    rerun): such a run doesn't count.
    ```sh
-   pytest tests/e2e -m power                                  # both LiPos out
-   pytest tests/e2e -m power                                  # both LiPos in
-   pytest tests/e2e -m longsoak --soak-minutes 60
-   GATELINK_KEY=$(cat ~/.gatelink_key) pytest tests/e2e -v --tx-power 17
+   uv run pytest tests/e2e -m power                                  # both LiPos out
+   uv run pytest tests/e2e -m power                                  # both LiPos in
+   uv run pytest tests/e2e -m longsoak --soak-minutes 60
+   GATELINK_KEY=$(cat ~/.gatelink_key) uv run pytest tests/e2e -v --tx-power 17
    ```
-   MAJOR also `pytest tests/e2e -m longsoak --soak-minutes 1440`, and the install checks (real RF and full power
+   MAJOR also `uv run pytest tests/e2e -m longsoak --soak-minutes 1440`, and the install checks (real RF and full power
    at the site, TODO.md), which the user records by hand in the evidence file's install notes.
    Long runs go in the background; check on them rather than waiting. If one scenario fails in an otherwise
-   clean run, it may be rerun once on its own with the same options (`pytest tests/e2e -k <name>`, plus `-m
+   clean run, it may be rerun once on its own with the same options (`uv run pytest tests/e2e -k <name>`, plus `-m
    <marker>` for an opt-in group) after adding a TODO.md item that names it as flaky; more than one failure, or a
    failed rerun, means finding the cause (and likely a new version).
 4. **Collect the evidence** on a branch:

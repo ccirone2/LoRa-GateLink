@@ -39,9 +39,9 @@ does a disconnect. **Copy report** puts a plain-text report on the clipboard for
 **Command line** (needs Python and pyserial; close the web console first):
 
 ```sh
-python tools/gatelink.py survey                        # the only board on USB, or the house if both are
-python tools/gatelink.py survey gate --seconds 300     # from the gate, for 5 minutes
-python tools/gatelink.py survey COM5 --json survey-house.json
+uv run tools/gatelink.py survey                        # the only board on USB, or the house if both are
+uv run tools/gatelink.py survey gate --seconds 300     # from the gate, for 5 minutes
+uv run tools/gatelink.py survey COM5 --json survey-house.json
 ```
 
 `--interval` sets the seconds between pings (default 2) and `--seconds` the length (default 120); Ctrl+C stops
@@ -158,7 +158,7 @@ the web console (it works without a board) before powering up.
 
 ### Record
 
-- [ ] Config → **Export JSON** on each board (or `python tools/gatelink.py snapshot`).
+- [ ] Config → **Export JSON** on each board (or `uv run tools/gatelink.py snapshot`).
 - [ ] The key: check the stored copy is the one written to these boards (the link verified with it), and that it is
   kept somewhere safe. If it's ever lost, `key.set` a fresh one on both boards.
 - [ ] The survey report (copied text or `--json` file) with the exports.

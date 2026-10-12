@@ -1,17 +1,17 @@
 """Command-line access to GateLink boards over their USB JSON console (docs/console.md).
 
-    python tools/gatelink.py ports                      # every board: port, role, firmware, key, link
-    python tools/gatelink.py house status               # one console request; target = house | gate | COMx
-    python tools/gatelink.py gate relay.test k=1 ms=500 # arguments as key=value (values parsed as JSON)
-    python tools/gatelink.py snapshot                   # save every board's config before flashing
-    python tools/gatelink.py restore                    # after flashing: config + key back, reboot, wait for link
-    python tools/gatelink.py house hist --csv link.csv  # link quality history (every bucket) as CSV
-    python tools/gatelink.py rftest                     # radio preflight for a new board (5 min of pings)
-    python tools/gatelink.py key gen --backup DIR       # new link key: printed once, plus an encrypted backup
-    python tools/gatelink.py key backup FILE            # ~/.gatelink_key as an encrypted backup (GLKB v1)
-    python tools/gatelink.py key restore FILE [--out P] # a backup's key, printed or written to P
-    python tools/gatelink.py key id                     # the id of the key in ~/.gatelink_key
-    python tools/gatelink.py survey [house|gate|COMx]   # site survey from one board: link margin both ways
+    uv run tools/gatelink.py ports                      # every board: port, role, firmware, key, link
+    uv run tools/gatelink.py house status               # one console request; target = house | gate | COMx
+    uv run tools/gatelink.py gate relay.test k=1 ms=500 # arguments as key=value (values parsed as JSON)
+    uv run tools/gatelink.py snapshot                   # save every board's config before flashing
+    uv run tools/gatelink.py restore                    # after flashing: config + key back, reboot, wait for link
+    uv run tools/gatelink.py house hist --csv link.csv  # link quality history (every bucket) as CSV
+    uv run tools/gatelink.py rftest                     # radio preflight for a new board (5 min of pings)
+    uv run tools/gatelink.py key gen --backup DIR       # new link key: printed once, plus an encrypted backup
+    uv run tools/gatelink.py key backup FILE            # ~/.gatelink_key as an encrypted backup (GLKB v1)
+    uv run tools/gatelink.py key restore FILE [--out P] # a backup's key, printed or written to P
+    uv run tools/gatelink.py key id                     # the id of the key in ~/.gatelink_key
+    uv run tools/gatelink.py survey [house|gate|COMx]   # site survey from one board: link margin both ways
 
 From firmware 0.5.0 the config and key live in the board's SPI flash chip and survive uploads (`ports` shows
 `cfg spi`); older firmware, or a board whose chip doesn't answer (`cfg internal`), loses them on every upload.
@@ -27,7 +27,7 @@ shows it) and encrypted backups in the web console's format. Passphrases are ask
 the command line; the plaintext key is only printed, or written where --out says.
 
 Uses the console client shared with the e2e suite (tools/gatelink_client), so needs pyserial; key backups also
-need the cryptography package (both in tests/e2e/requirements.txt).
+need the cryptography package (both in the locked environment: pyproject.toml, `uv sync`).
 """
 import argparse
 import csv

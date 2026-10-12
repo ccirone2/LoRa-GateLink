@@ -36,6 +36,16 @@ export function showHealthLine(hl) {
   $('healthLine').className = `card wide health-line ${hl ? hl.level : ''}`;
 }
 
+// Status `reset_cause`, with (from 0.15.0) a run of crash resets and where a watchdog reset found the loop hung.
+export function resetHtml(s) {
+  const cause = esc((s.reset_cause ?? '—').replaceAll('_', ' '));
+  const n = Number(s.crash_resets) || 0;
+  const run = n > 1 ? ` <span class="bad">· ${n} crash resets in a row</span>` : '';
+  const pc = (Number(s.hang_pc) >>> 0).toString(16).padStart(8, '0');
+  const hang = s.hang_stage ? ` <span class="bad">· hung in ${esc(String(s.hang_stage).replaceAll('_', ' '))} (pc 0x${pc})</span>` : '';
+  return cause + run + hang;
+}
+
 // Tab title: the gate state first, so a background tab still shows it.
 export function updateTitle(gate) {
   const parts = [gate, S.role !== 'unset' && cap(S.role), 'GateLink'].filter(Boolean);
@@ -158,7 +168,7 @@ export function renderStatus(s) {
   $('bRole').textContent = s.reboot_pending ? `${s.role} (reboot to apply saved role)` : s.role;
   $('bFw').textContent = s.fw;
   $('bUp').textContent = fmtDur(s.uptime_ms);
-  $('bReset').textContent = (s.reset_cause ?? '—').replaceAll('_', ' ');
+  $('bReset').innerHTML = resetHtml(s);
   $('bSupply').innerHTML = s.supply === undefined || s.supply === null ? '—'
     : s.supply ? '<span class="good">ok</span>' : '<span class="bad">lost · on battery</span>';
   const nf = Number(s.radio_faults) || 0;

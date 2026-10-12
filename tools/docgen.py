@@ -1282,8 +1282,7 @@ ARCH = "docs/architecture.md"
 R, E2E, SET = "README.md", "tests/e2e/README.md", "web/js/settings.js"
 CI, REL, BENCH = ".github/workflows/ci.yml", ".github/workflows/release.yml", "tests/e2e/gatelink/bench.py"
 LIBS = (("LoRa", "`LoRa` (sandeepmistry)"), ("Crypto", "`Crypto` (rweather)"),
-        ("FlashStorage", "`FlashStorage` (cmaglie)"), ("ArduinoJson", "`ArduinoJson`"),
-        ("Adafruit SleepyDog Library", "`Adafruit SleepyDog Library`"))
+        ("FlashStorage", "`FlashStorage` (cmaglie)"), ("ArduinoJson", "`ArduinoJson`"))
 NUM = r"(\d+(?:\.\d+)?)"
 
 
@@ -1305,10 +1304,10 @@ FACTS = [
     D("STATUS_TTL_MS", f"{FW}/role_gate.cpp",
       Q(PRO, r"STATUS: `heartbeat_s` capped at (\d+) s", s),
       Q(ARCH, r"STATUS's TTL is `heartbeat_s` capped at (\d+) s", s)),
-    Fact("watchdog", None, r"Watchdog\.enable\((\d+)\)",
-         (Q(C, r"Hardware watchdog is (\d+) s", s),
-          Q(CON, r"come to the (\d+) s watchdog", s),
-          Q(R, r"the firmware froze for (\d+) s", s))),
+    Fact("watchdog", None, r"WDT_CONFIG_PER_(\d+)K",
+         (Q(C, r"Hardware watchdog is (\d+) s"),
+          Q(CON, r"come to the (\d+) s watchdog"),
+          Q(R, r"the firmware froze for (\d+) s"))),
     Fact("LED breathing period", None, r"ledBump\(now % (\d+), 0,", (Q(R, rf"Dim breathing \({NUM} s\)", s),)),
     Fact("supply poll", f"{FW}/supply.cpp", r"POLL_MS = (\d+);", (Q(ARCH, r"polled every (\d+) ms before the roles"),)),
     # Link
@@ -1675,7 +1674,7 @@ def check_macro_quotes(repo):
 
 
 # snake_case names the docs may use that aren't in the source: Claude Code tool parameters (the skills).
-OTHER_NAMES = {"run_in_background"}
+OTHER_NAMES = {"run_in_background", "radio_recover", "hist_save"}  # the latter: app.cpp stageName (status hang_stage)
 
 
 def known_names(repo):

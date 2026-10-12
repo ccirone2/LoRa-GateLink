@@ -14,8 +14,10 @@ const CMD_HOLD = { 0: 'held command sent after all: the gate’s session answere
   2: 'held command dropped: the gate restarted (it may have run it)' };
 // The board's health problems (health.h Problem), in bit order: status `health` names them, log `health` b has the bits.
 export const PROBLEMS = { starting: 'starting up', radio: 'radio down', link: 'link down', ac: 'no AC power at the gate',
-  no_power: 'gate has no power', fault: 'gate limit fault' };
+  no_power: 'gate has no power', fault: 'gate limit fault', reboots: 'reboot loop' };
 const problems = (bits) => Object.values(PROBLEMS).filter((_, i) => bits & (1 << i)).join(', ');
+// The loop's stages (app.cpp Stage), for `hang`.
+const HANG_STAGES = ['setup', 'relays', 'radio_recover', 'hist_save', 'console', 'supply', 'link', 'role', 'history', 'health', 'led'];
 const FAULT_OUT = { 1: 'fault output high: healthy', 0: 'fault output low: needs attention', '-1': 'fault output off (D5 an input again)' };
 
 const state = (v) => (STATES[v] ?? `state ${v}`).replaceAll('_', ' ');
@@ -63,6 +65,7 @@ const DECODE = {
   supply: (a) => (a < 0 ? 'charger not answering: board supply unknown' : a ? 'board supply good' : 'board supply lost: running on the LiPo'),
   cmd_hold: (a, b) => `${CMD_HOLD[a] ?? `command hold ${a}`} (session ${hex(b)})`,
   health: (a, b) => `${FAULT_OUT[a] ?? `fault output ${a}`}${b ? ` (${problems(b)})` : ''}`,
+  hang: (a, b) => `the watchdog reset the board: the loop hung in ${(HANG_STAGES[b] ?? `stage ${b}`).replaceAll('_', ' ')} (pc 0x${hex(a)})`,
 };
 
 export const KNOWN_EVENTS = Object.keys(DECODE);

@@ -115,6 +115,7 @@ void Board::load() {
   sym(dl, "node_status", fnStatus);
   sym(dl, "node_role", fnRole);
   sym(dl, "node_log", fnLog);
+  sym(dl, "node_watchdog_warning", fnWatchdogWarning);
 }
 
 static void dropOutputs(Board &b) {
@@ -135,6 +136,7 @@ void Board::powerOn() {
   dropOutputs(*this);
   state = BOOTLOADER;
   resetCause = PM_RCAUSE_POR;
+  for (int i = 0; i < 4; i++) keep[i] = serial[i] ^ (boots * 0x9E3779B9u);  // RAM after power-on: garbage
   bootAt = w.now + 30;
   busyUntil = w.now;
   w.trace.add(w.now, name + ": power on");
@@ -175,6 +177,12 @@ template <class F> auto Board::call(F f) -> decltype(f()) {
     ~Done() { b.busyUntil = after(b.clockMs, b.w.now) ? b.clockMs : b.w.now; }
   } done{ *this };
   return f();
+}
+
+void Board::watchdogWarning(uint32_t pc) {
+  if (state != RUN) throw Failure(name + ": a watchdog warning on a board that isn't running");
+  call([&] { fnWatchdogWarning(pc); });
+  w.trace.add(w.now, name + fmt(": watchdog early warning (pc 0x%08x)", pc));
 }
 
 void Board::block(uint32_t us) {
@@ -381,6 +389,10 @@ void boardReset() {
 }
 uint32_t boardFreeRam() {
   return 10000;
+}
+static_assert(sizeof(Board::keep) == 4 * BOARD_KEEP_WORDS, "Board::keep is boardKeep()");
+uint32_t *boardKeep() {
+  return cur->keep;
 }
 
 // --- radio.h: an SX1276 per board on the shared channel ----------------------------------------------------------

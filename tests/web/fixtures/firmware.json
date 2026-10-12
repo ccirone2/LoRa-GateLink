@@ -45,7 +45,8 @@
   },
   "status_common": {
     "fw": "0.13.8", "reboot_pending": false, "uptime_ms": 3723000, "radio_ok": true, "radio_faults": 0,
-    "reset_cause": "power_on", "supply": true, "cfg_loaded": true, "cfg_store": "spi", "key_set": true, "free_ram": 9120,
+    "reset_cause": "power_on", "crash_resets": 0, "hang_stage": null, "hang_pc": null, "supply": true, "cfg_loaded": true,
+    "cfg_store": "spi", "key_set": true, "free_ram": 9120,
     "usb_cut": 0, "loop_max_us": 1350, "fault_out": null, "health": [],
     "link": { "verified": true, "age_ms": 1200, "rssi": -61, "snr": 9.5, "fei": -1450, "tx": 140, "rx": 152, "retries": 1,
       "giveups": 0, "mac_fail": 0, "replay": 0, "sessions": 1, "lbt_defers": 2, "lbt_forced": 0, "crc_err": 0, "noise": -118 }
@@ -56,7 +57,8 @@
     "armed": true, "ctrl": false, "ctrl_power": true, "sync_window": false, "resyncing": false, "cmd_id": 4711,
     "cmd_pending": false, "cmd_result": -1,
     "remote": { "uptime_s": 3600, "rssi": -60, "snr": 9, "heartbeat_s": 30, "travel_timeout_s": 60, "open_limit": false,
-      "close_limit": true, "k1": false, "k2": false, "in3": true, "in4": false, "ac_power": true, "retries": 0, "giveups": 0,
+      "close_limit": true, "k1": false, "k2": false, "in3": true, "in4": false, "ac_power": true, "reboot_loop": false,
+      "retries": 0, "giveups": 0,
       "crc_err": 0, "noise": -117 }
   },
   "status_gate": {

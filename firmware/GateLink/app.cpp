@@ -14,6 +14,7 @@
 #include "console.h"
 #include "history.h"
 #include "health.h"
+#include "crc32.h"
 
 Input in1, in2, in3, in4;
 Relay k1, k2;
@@ -30,6 +31,73 @@ static const char *resetCauseName(uint8_t rc) {
   if (rc & PM_RCAUSE_EXT) return "reset_pin";
   if (rc & PM_RCAUSE_SYST) return "software";
   return "unknown";
+}
+
+// Where the loop is, for the watchdog's early warning (appLoop's steps; setup is everything before the first pass).
+enum Stage : uint8_t {
+  STG_SETUP = 0, STG_RELAYS, STG_RADIO_RECOVER, STG_HIST_SAVE, STG_CONSOLE, STG_SUPPLY, STG_LINK, STG_ROLE,
+  STG_HISTORY, STG_HEALTH, STG_LED, STG_COUNT, STG_NONE = 0xFF
+};
+static volatile uint8_t stage = STG_SETUP;
+
+static const char *stageName(uint8_t s) {
+  static const char *const n[] = { "setup", "relays", "radio_recover", "hist_save", "console", "supply", "link",
+                                   "role", "history", "health", "led" };
+  static_assert(sizeof(n) / sizeof(n[0]) == STG_COUNT, "a name per Stage");
+  return s < STG_COUNT ? n[s] : "?";
+}
+
+// The reset memo, in RAM that resets other than power-on keep (boardKeep): what the next boot needs to know about
+// this one. Checked by a CRC, so after a power-on (or a bootloader that touched it) it reads as no memo.
+struct ResetMemo {
+  uint32_t magic;
+  uint8_t streak;   // watchdog or brown-out resets in a row, each within REBOOT_SETTLE_MS of the boot before
+  uint8_t settled;  // this boot has run REBOOT_SETTLE_MS
+  uint8_t stage;    // the early warning's: the loop's stage then (STG_NONE: no warning pending)
+  uint8_t pad;
+  uint32_t pc;      // the early warning's: the program counter it interrupted
+  uint32_t check;   // CRC-32 of the above
+};
+static_assert(sizeof(ResetMemo) == 4 * BOARD_KEEP_WORDS, "the reset memo fills the kept RAM");
+#define MEMO_MAGIC 0x6D656D6FUL
+static ResetMemo *memo;
+static uint8_t resetStreak;   // as the memo had it at boot (0 after a deliberate reset or power-on)
+static uint8_t resetStage = STG_NONE;  // after a watchdog reset with an early warning: where it hung
+static uint32_t resetPc;
+static uint32_t bootMs;  // millis() at boot
+
+static uint32_t memoCheck() {
+  return crc32(memo, offsetof(ResetMemo, check));
+}
+
+static void memoSeal() {
+  memo->check = memoCheck();
+}
+
+// At boot: read what the last boot left and start this one's.
+static void memoBegin(uint8_t rc) {
+  memo = (ResetMemo *)boardKeep();
+  bootMs = millis();
+  bool kept = memo->magic == MEMO_MAGIC && memo->check == memoCheck();
+  bool crash = (rc & (PM_RCAUSE_WDT | PM_RCAUSE_BOD12 | PM_RCAUSE_BOD33)) && !(rc & PM_RCAUSE_POR);
+  resetStreak = !crash ? 0 : kept && !memo->settled && memo->streak < 255 ? memo->streak + 1 : 1;
+  if (kept && (rc & PM_RCAUSE_WDT) && memo->stage != STG_NONE) {
+    resetStage = memo->stage;
+    resetPc = memo->pc;
+  }
+  *memo = ResetMemo{ MEMO_MAGIC, resetStreak, 0, STG_NONE, 0, 0, 0 };
+  memoSeal();
+}
+
+void appWatchdogWarning(uint32_t pc) {
+  if (!memo) return;
+  memo->stage = stage;
+  memo->pc = pc;
+  memoSeal();
+}
+
+bool appRebootLoop() {
+  return resetStreak >= REBOOT_LOOP_RESETS && memo && !memo->settled;
 }
 
 static uint16_t pingId = 0;
@@ -123,6 +191,14 @@ void appFillStatus(JsonObject o) {
   o["radio_ok"] = radioOk();
   o["radio_faults"] = radioFaults();
   o["reset_cause"] = resetCauseName(resetCause);
+  o["crash_resets"] = resetStreak;
+  if (resetStage == STG_NONE) {
+    o["hang_stage"] = nullptr;
+    o["hang_pc"] = nullptr;
+  } else {
+    o["hang_stage"] = stageName(resetStage);
+    o["hang_pc"] = resetPc;
+  }
   if (supplyKnown()) o["supply"] = supplyGood();
   else o["supply"] = nullptr;
   o["cfg_loaded"] = cfgLoaded;
@@ -231,6 +307,7 @@ void appSetup(uint8_t rc, const uint32_t serial[4]) {
   // waits without a timeout) and the radio, and a hang in any of them must reset the board, not leave it stuck
   // until power cycles.
   resetCause = rc;
+  memoBegin(rc);
   consoleBegin();
   cfgLoaded = configLoad();
   bootCount = configCountBoot();
@@ -248,6 +325,7 @@ void appSetup(uint8_t rc, const uint32_t serial[4]) {
   in3.begin(PIN_IN3, cfg.in3_invert);
   in4.begin(PIN_IN4, cfg.in4_invert);
   logEvent(EV_BOOT, resetCause, activeRole);
+  if (resetStage != STG_NONE) logEvent(EV_HANG, resetPc, resetStage);
   logEvent(EV_CFG, configSource(), configDropped());
   healthBegin();  // fault_out: D5 LOW until the role has decided
   histBegin(bootCount);  // the history kept in the flash
@@ -264,24 +342,45 @@ void appSetup(uint8_t rc, const uint32_t serial[4]) {
 void appLoop() {
   uint32_t start = micros();
   uint32_t now = millis();
+  // A stall the early warning caught that ended without a reset: drop its note, so a later reset that the warning
+  // didn't see (interrupts off) isn't blamed on it.
+  if (*(volatile uint8_t *)&memo->stage != STG_NONE) {
+    memo->stage = STG_NONE;
+    memo->pc = 0;
+    memoSeal();
+  }
+  if (!memo->settled && elapsed(now, bootMs, REBOOT_SETTLE_MS)) {
+    memo->settled = 1;  // the next crash reset starts a streak over
+    memoSeal();
+  }
+  stage = STG_RELAYS;
   k1.update(now);
   k2.update(now);
   // A radio that faulted or didn't start is re-initialised here, never while a relay pulses: LoRa.begin() stops the
   // loop ~0.5 s, and Relay::update couldn't end the pulse meanwhile (nor start one waiting out the interlock).
+  stage = STG_RADIO_RECOVER;
   if (radioRecoverDue() && !appRelaysPulsing()) radioRecover();
   // Likewise a completed history bucket's write to the flash (~0.5 s, the radio restarted): it waits for the pulse.
+  stage = STG_HIST_SAVE;
   if (histSaveDue() && !appRelaysPulsing()) histSave();
+  stage = STG_CONSOLE;
   consolePoll();
+  stage = STG_SUPPLY;
   supplyPoll(now);  // before the roles: the house's controller power sense reads it
   bool up = false;
   if (activeRole != ROLE_UNSET) {
+    stage = STG_LINK;
     linkPoll(now);
+    stage = STG_ROLE;
     if (activeRole == ROLE_HOUSE) houseLoop(now);
     else gateLoop(now);
     up = appLinkUp(now);
+    stage = STG_HISTORY;
     histPoll(now, up);
   }
+  stage = STG_HEALTH;
   healthPoll(now, up);  // after the roles, which it reads (and nothing there reads it)
+  stage = STG_LED;
   updateLed(now);
   uint32_t took = micros() - start;
   if (took > loopMaxUs) loopMaxUs = took;

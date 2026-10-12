@@ -1,5 +1,6 @@
 // The board's health and the fault output on D5 (health.h).
 #include "health.h"
+#include "app.h"
 #include "config.h"
 #include "link.h"
 #include "log.h"
@@ -18,12 +19,13 @@ static int8_t driven = -1;  // D5 as driven: 1 HIGH, 0 LOW, -1 an input (fault_o
 #define STAMP_CAP_MS 0x40000000UL
 
 static uint8_t evaluate(bool linkUp) {
-  bool decided = false, ac = true;
+  bool decided = false, ac = true, reboots = appRebootLoop();
   uint8_t gs = GS_UNKNOWN;
   if (activeRole == ROLE_HOUSE) {
     decided = houseDecided();
     ac = !houseGateAcLost();
     gs = houseGateState();
+    reboots = reboots || houseGateRebootLoop();
   } else if (activeRole == ROLE_GATE) {
     decided = gateDecided();
     ac = gateAcPresent();
@@ -36,6 +38,7 @@ static uint8_t evaluate(bool linkUp) {
   if (!ac) p |= PROB_AC;
   if (gs == GS_NO_POWER) p |= PROB_NO_POWER;
   if (gs == GS_FAULT) p |= PROB_FAULT;
+  if (reboots) p |= PROB_REBOOTS;
   return p;
 }
 
@@ -86,7 +89,7 @@ uint8_t healthProblems() {
 }
 
 const char *healthName(uint8_t bit) {
-  static const char *const n[] = { "starting", "radio", "link", "ac", "no_power", "fault" };
+  static const char *const n[] = { "starting", "radio", "link", "ac", "no_power", "fault", "reboots" };
   static_assert(sizeof(n) / sizeof(n[0]) == PROBLEM_COUNT, "a name per Problem");
   return bit < PROBLEM_COUNT ? n[bit] : "?";
 }

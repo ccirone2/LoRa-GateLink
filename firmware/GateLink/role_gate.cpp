@@ -65,7 +65,7 @@ static void sendStatus(uint32_t now) {
   p[ST_STATE] = state;
   p[ST_INPUTS] = (in1.active() ? STI_IN1 : 0) | (in2.active() ? STI_IN2 : 0) | (k1.on() ? STI_K1 : 0)
                  | (k2.on() ? STI_K2 : 0) | (in3.active() ? STI_IN3 : 0) | (in4.active() ? STI_IN4 : 0)
-                 | (acPower() ? 0 : STI_AC_LOST);
+                 | (acPower() ? 0 : STI_AC_LOST) | (appRebootLoop() ? STI_REBOOTS : 0);
   p[ST_CAUSE] = cause;
   p[ST_RESULT] = lastResult;
   putU16(p + ST_CMD_ID, lastCmdId);

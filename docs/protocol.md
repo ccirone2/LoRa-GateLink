@@ -212,6 +212,7 @@ ACK result codes (`AckResult`; a gap is a retired code, never reused):
 | 4 | 0x10 | `STI_IN3` | AC power sense |
 | 5 | 0x20 | `STI_IN4` | IN4 (spare) |
 | 6 | 0x40 | `STI_AC_LOST` | no AC power: IN3 off with `power_sense` on (since 0.7.0) |
+| 7 | 0x80 | `STI_REBOOTS` | 0.15.0: the gate is in a reboot loop (appRebootLoop) (since 0.15.0) |
 
 Enums in STATUS (also the `status` reply's names):
 

@@ -127,7 +127,7 @@ The UX has three audiences:
 | AC power lost (gate IN3 off) | The opener runs on its battery, so a limit that still reads is trusted and the house shows the real state. Commands are refused (gate log `cmd_refused`; house shows *refused: no AC power*) and the Shelly is resynced to the gate at once. With no limit reading (moving, or the opener's battery dead too) the gate reports `no_power` instead of `between`: its position can't be verified, so the house shows not-closed (contact sensor open, K1 energized, the Shelly on). When AC returns everything follows the limits again |
 | Shelly loses power (house IN2 off) | Its relay drops, but that edge is never sent as a command (house log `ctrl_power 0`, then `ctrl` with b=1); the house board's own supply (`ctrl_power_pmic`, the same 12 V through its buck) drops ~0.2 s before the relay, where the IN2 opto lags it by ~1.7 s and misses short dips; a switch-OFF still waits `ctrl_confirm_ms` (0.5 s) before it becomes a CLOSE, and is discarded if power drops meanwhile; a switch-ON (OPEN) is sent at once, since a power loss can't cause it. When power returns the Shelly comes back at the K1 level and that edge is logged `sync` |
 | House board reboots | Never commands the gate from the Shelly's level at power-up; waits for gate status first |
-| Something needs attention (link lost, no AC or `no_power`/`fault` at the gate, a radio down) | With `fault_out` on, D5 drops once the problem has lasted `fault_hold_s` (default 10 s), so a second sensor tells Alarm.com "gate needs attention" apart from "open"; it comes back as soon as the problem clears. A dead or rebooting board reads as a fault too. Off by default ([docs/hardware.md](docs/hardware.md#fault-output-d5)) |
+| Something needs attention (link lost, no AC or `no_power`/`fault` at the gate, a radio down, a board stuck rebooting) | With `fault_out` on, D5 drops once the problem has lasted `fault_hold_s` (default 10 s), so a second sensor tells Alarm.com "gate needs attention" apart from "open"; it comes back as soon as the problem clears. A dead or rebooting board reads as a fault too, and three crash resets in a row (watchdog or brown-out, each within an hour of the last) hold it there until the board has run an hour. Off by default ([docs/hardware.md](docs/hardware.md#fault-output-d5)) |
 
 Gate relays are **only ever pulsed** (default 500 ms), never held, so the other devices on the
 opener's inputs keep working. Gate state always comes from the opener's limit outputs (and its power sense),
@@ -159,7 +159,7 @@ Needs `arduino-cli` with the SAMD core and five libraries, at the versions CI bu
 
 ```sh
 arduino-cli core install arduino:samd@1.8.14
-arduino-cli lib install "LoRa@0.8.0" "Crypto@0.4.0" "FlashStorage@1.0.0" "ArduinoJson@7.4.3"   "Adafruit SleepyDog Library@1.8.4"
+arduino-cli lib install "LoRa@0.8.0" "Crypto@0.4.0" "FlashStorage@1.0.0" "ArduinoJson@7.4.3"
 arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink
 arduino-cli upload  --fqbn arduino:samd:mkrwan1310 -p COM5 firmware/GateLink   # your port
 ```

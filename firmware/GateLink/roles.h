@@ -38,6 +38,7 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 #define STI_IN3 0x10      // AC power sense
 #define STI_IN4 0x20
 #define STI_AC_LOST 0x40  // 0.7.0
+#define STI_REBOOTS 0x80  // 0.15.0: the gate is in a reboot loop (appRebootLoop)
 
 // DIAG payload layout (gate -> house, answering DIAG_REQ; built by sendDiag, parsed by consoleEventDiag)
 #define DIAG_FW 0        // u8 x3: major, minor, patch
@@ -74,6 +75,7 @@ void houseLinkRestarted();  // our link started over (a key or radio setting): d
 bool houseDecided();
 uint8_t houseGateState();
 bool houseGateAcLost();
+bool houseGateRebootLoop();  // the gate's latest STATUS says it is in a reboot loop
 
 void gateBegin();
 void gateLoop(uint32_t now);

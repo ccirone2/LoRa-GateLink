@@ -6,6 +6,7 @@ import { IO_LABELS, WIRING, renderWiring } from './wiring.js';
 import { updateFwCard, reportFlash } from './firmware.js';
 import { showBoardKey } from './security.js';
 import { PROBLEMS } from './logdecode.js';
+import { askGateFw, peerHtml } from './peer.js';
 
 // Status `health` (the problems now) and `fault_out` (D5: true high, false low, null off) as HTML; firmware before
 // 0.14.0 reports neither.
@@ -114,6 +115,8 @@ export function renderStatus(s) {
   const l = s.link || {}; // absent from a malformed or foreign status: render what's there
   const heard = l.age_ms >= 0;
   $('lnkVerified').innerHTML = l.verified ? '<span class="good">yes</span>' : '<span class="bad">no</span>';
+  $('lnkPeer').innerHTML = peerHtml(l.verified);
+  askGateFw(s);
   $('lnkAge').textContent = heard ? `${fmtDur(l.age_ms)} ago` : 'never';
   $('lnkRssi').textContent = heard ? `${l.rssi} dBm / ${Number(l.snr).toFixed(1)} dB` : '—';
   $('lnkTxRx').textContent = `${l.tx} / ${l.rx}`;

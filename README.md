@@ -230,7 +230,9 @@ table and notes for each board; works without a board connected).
    until a key is set, so a fresh or reset board can never be commanded. Boards can't read the key back and config
    export doesn't include it, so the backup is the only copy; see [docs/key-management.md](docs/key-management.md)
    (generating from a local copy of the page or with `tools/gatelink.py key gen`, and when to replace the key).
-5. With both powered, Status on either board should show *Peer verified: yes* within a few seconds.
+5. With both powered, Status on either board should show *Peer verified: yes* within a few seconds. If it doesn't,
+   *Other board* (once this page has seen both boards) lists what differs: the key id, firmware or a setting that
+   must match.
 6. Tools → Ping to check RSSI/SNR. At the install site run Tools → **Site survey**
    ([docs/install.md](docs/install.md)) and aim for *good* or *fair* (≥10 dB margin above the SF's sensitivity);
    raise `sf` (and/or `tx_power`) on **both** boards if the link is marginal.

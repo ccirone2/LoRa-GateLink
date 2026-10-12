@@ -9,7 +9,18 @@ behaviour must keep the behavioural invariants in [CLAUDE.md](CLAUDE.md).
 
 ## Next
 
-_Nothing decided yet. Move items here from Ideas._
+- **Allow CLOSE without AC while a limit reads** (`ac-cut-refuses-close`; decided 2026-10-12). Today the gate refuses
+  every command while IN3 reads no AC (`RES_NO_POWER`, `role_gate.cpp`), because the opener may be on its last
+  battery reserve and the AES controller sharing its inputs is unpowered. So cutting AC keeps an open gate open, and
+  Alarm.com can't close it. CLOSE is the secure direction:
+  - CLOSE runs as usual when a limit reads: it pulses from open (or to reverse an OPEN), and is `already` at closed.
+  - OPEN stays refused without AC, and with no limit reading (`no_power`) both stay refused.
+  - A battery too weak to finish the travel leaves the gate `no_power`, which the house already shows as not-closed.
+  - Open question: a setting to keep the old behaviour? Proposed: no, one behaviour and fewer knobs.
+  - Gate only (the house handles the ACK as any other), so a PATCH. Update with it the AC-power invariant in
+    CLAUDE.md, the README's "How it behaves", `docs/hardware.md` (IN3), the `power_sense` help in
+    `web/js/settings.js`, and the threat model. Host tests: CLOSE without AC from open pulses, OPEN refuses,
+    `no_power` refuses both, and the house's resync after a refused OPEN still happens. Bench: the power tests.
 
 ## Ideas
 
@@ -62,11 +73,10 @@ _Nothing decided yet. Move items here from Ideas._
   overwrites the 64-entry event log, and the persistent hourly history (0.14.0) counts MAC failures but not replays.
   Coalesce repeated flood events into one log entry with a count, add replays to the history bucket (a `HLOG_FMT`
   bump), and limit how often a memo'd seq is re-ACKed.
-- **Allow CLOSE without AC while a limit reads?** (`ac-cut-refuses-close`). Today every command is refused without
-  AC, so cutting AC keeps the gate open. CLOSE is the secure direction. Decide, maybe behind a setting.
 - **Verify the running image** (`tamper-undetectable`). Flashing already checks what it wrote (the web console's
   SAM-BA CRC, bossac's verify); this is a check of a board at any later visit: read the application back over the
   bootloader and compare it with the release's image, from the tools and the web console.
 - **Serve the console from its own origin** (`shared-github-io-origin`). A custom domain or a separate organisation,
-  so other Pages sites of the account can't use its Web Serial grants. Needs the owner's domain or account.
+  so other Pages sites of the account can't use its Web Serial grants. Needs the owner's domain or account. Deferred
+  (2026-10-12): maybe eventually.
 

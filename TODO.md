@@ -30,7 +30,7 @@ once its fix is merged and record it in the pull request.
     start from the UART `boot` event or `sim.restart` instead), `test_history.py` (`sleep(62)` against a 60 s
     bucket; poll until the bucket rolls), and the `sleep(2)`/`sleep(3)` before negative assertions (derive them from
     the profile).
-  - The checks after every test cover K2 but not K1: add one comparing house K1 with the gate state, allowing for
+  - The checks after every test cover K2 but not K1 (wiring K1 to the suite is ROADMAP B5): add one comparing house K1 with the gate state, allowing for
     `holdingTravel` and the sync window.
   - Not covered on the bench: `openSyncWindow` never shortening a window, the `settleUntil` floor, and a controller
     that toggles on SW edges (a scenario with `in1_invert` would do). The host system tests cover them since the
@@ -54,7 +54,7 @@ once its fix is merged and record it in the pull request.
   (2026-10-11), each reading as status `fault_out` reported: 0.01 V with `fault_out` off, 3.31 V healthy; 0.01 V
   `fault_hold_s` (10 s) after a link loss (house) or an AC loss (both boards), and 3.31 V again within a second of the
   link's first STATUS or AC's return; through a house `reboot`, LOW from 128 ms into the sketch until it armed (~5 s).
-  The suite has no D5 check (it needs a wire from D5 to something it reads, e.g. a GateSim input). On the logic
+  The suite has no D5 check (it needs a wire from D5 to something it reads, e.g. a GateSim input; ROADMAP B5). On the logic
   analyzer (house, `tools/logic.py`, 1 and 4 MHz, 2026-10-11), through a `reboot` with `fault_out` saved on: D5 falls at
   the reset, comes back HIGH for 1 µs 3 µs later (both runs alike), then reads LOW until the house arms (4.5–4.9 s) and
   rises cleanly; no edge when it becomes an output. Too short for a relay module or the alarm loop, but a fast opto
@@ -68,10 +68,11 @@ once its fix is merged and record it in the pull request.
   during one pulse (four queued, the fifth refused and taken from the house's resend after the pulse, all within the
   house's 10 s write timeout); and a switch flipped back between a CLOSE's ACK and the gate's next STATUS, at SF9 on
   the real controller. Each needs a debug hook or a rig (a radio reset line, replayed CFG_SETs, a timed relay on the
-  controller's input).
-- [ ] **SPI flash on both boards.** 0.5.0 keeps config in the on-board SPI flash. Check `info` `flash_id` and
-  `cfg_store` `spi` on both bench boards and on any replacement board (an unexpected chip falls back to
-  program flash, which uploads erase).
+  controller's input; ROADMAP B3).
+- [ ] **SPI flash on the install boards.** 0.5.0 keeps config in the on-board SPI flash. Both bench boards report
+  `cfg_store` `spi` and `flash_id` `ef4015` (v0.14.0 release evidence, `docs/releases/v0.14.0.md`). Left: check `info`
+  on the install pair and on any replacement board (an unexpected chip falls back to program flash, which uploads
+  erase).
 
 - [ ] **Real RF.** `test_rf.py` (`-m rf`) passes at the bench with antennas on: SF12, 2 dBm, 3 cycles. Still to
   do: run it with an attenuator or the antennas off, and at the install site, and check ping/RSSI there from the
@@ -111,10 +112,11 @@ once its fix is merged and record it in the pull request.
 
 - [ ] **Back up the bench link key.** It was rotated on 2026-09-30 so the wrong-key test could run, and is only in
   `~/.gatelink_key` (not in the repo; boards can't read it back). Make the encrypted backup with
-  `python tools/gatelink.py key backup <dir>` and keep its passphrase in the password manager; after flashing
-  0.13.8, check `python tools/gatelink.py ports` shows the same key id on both boards as `key id` does for the
+  `python tools/gatelink.py key backup <dir>` and keep its passphrase in the password manager; then
+  check `python tools/gatelink.py ports` shows the same key id on both boards as `key id` does for the
   file ([docs/key-management.md](docs/key-management.md)). The install pair gets its own key, generated there.
-- [ ] **Create the nightly routines** defined in `.claude/routines/` on claude.ai (`/schedule` from the CLI, one per
-  file, each with the two-line prompt in its README), and give the cloud environment network access to
-  `downloads.arduino.cc` and `github.com` so `tools/agent/cloud_setup.sh` can install the toolchain
-  ([docs/agent-tooling.md](docs/agent-tooling.md)). Watch the first week's pull requests and tune the routine files.
+- [ ] **Nightly routines: network access and the first week.** The routines in `.claude/routines/` run (#102,
+  #103 opened on 2026-10-12). The cloud environment still can't reach `downloads.arduino.cc` (DNS lookup fails, so
+  `tools/agent/cloud_setup.sh` installs no cores or libraries and routines can't compile): give it network access to
+  `downloads.arduino.cc` and `github.com` ([docs/agent-tooling.md](docs/agent-tooling.md)). Watch the first week's
+  pull requests and tune the routine files.

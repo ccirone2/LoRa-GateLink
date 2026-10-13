@@ -1118,6 +1118,19 @@ TEST(gate_state_without_ac_open_refused_close_runs) {
   CHECK(rf3.ok);
   CHECK(poll(w, [&] { return w.house.status()["cmd_result"].as<int>() == RES_NO_POWER_; }, 2000, 10));
   CHECK_EQ(countSince(w.gate, "pulse", g2), 0);
+  // Both limits reading (fault: the position can't be verified): CLOSE refused as well.
+  w.opener.force[0] = w.opener.force[1] = 1;
+  CHECK(poll(w, [&] { return w.gate.status()["gate"] == "fault"; }, 3000));
+  w.run(MISMATCH_MS + 5000);
+  size_t g4 = w.gate.logs.size(), h4 = w.house.logs.size();
+  w.user(true);
+  w.run(3000);
+  w.user(false);
+  Found cs4 = waitFor(w, w.house, "cmd_sent", h4, 5000, ACT_CLOSE_);
+  CHECK(cs4.ok);
+  CHECK(waitFor(w, w.gate, "cmd_refused", g4, 2000, ACT_CLOSE_, cs4.e.b).ok);
+  CHECK_EQ(countSince(w.gate, "pulse", g4), 0);
+  w.opener.force[0] = w.opener.force[1] = -1;
   // AC back: commands go through again.
   w.opener.ac = w.opener.battery = true;
   CHECK(poll(w, [&] { return w.house.status()["remote"]["ac_power"] == true; }, 3000));

@@ -1417,7 +1417,7 @@ TEST(robustness_pulldown_dead_open_limit_opto_never_reads_open) {
 }
 
 // [pull-down] [ac-power]
-TEST(robustness_pulldown_dead_ac_sense_opto_refuses_commands) {
+TEST(robustness_pulldown_dead_ac_sense_opto_refuses_open) {
   World w;
   Guard g{ w };
   w.commission();
@@ -1435,7 +1435,7 @@ TEST(robustness_pulldown_dead_ac_sense_opto_refuses_commands) {
   CHECK(hs["remote"]["ac_power"] == false);
   CHECK(hs["gate"] == "closed");
   CHECK(w.sensorClosed());
-  // A command is refused without a pulse, and the controller is put back at once
+  // OPEN is refused without a pulse, and the controller is put back at once
   w.user(true);
   Found ref = waitFor(r, w.gate, "cmd_refused", g0, 2000, ACT_OPEN_);
   CHECK(ref.ok);
@@ -1446,6 +1446,17 @@ TEST(robustness_pulldown_dead_ac_sense_opto_refuses_commands) {
   CHECK_EQ(countSince(w.gate, "pulse", g0), 0);
   CHECK_EQ(presses(w), 0);
   CHECK_EQ(r.n(GK1) + r.n(GK2), 0);
+  // Opened by someone else: CLOSE runs, since a limit reads (as with the AC really lost). On the way no limit reads,
+  // so the gate reports no_power; closed again at the end.
+  w.extPress(true, 300);
+  CHECK(r.until([&] { return w.opener.atOpen() && w.houseSees() == GS_OPEN_; }, 15000));
+  r.run(5000);
+  size_t g1 = w.gate.logs.size();
+  w.user(false);
+  CHECK(waitFor(r, w.gate, "pulse", g1, 2000, 2).ok);
+  CHECK(r.until([&] { return w.opener.atClosed() && w.houseSees() == GS_CLOSED_ && w.sensorClosed(); }, 20000));
+  CHECK_EQ(countSince(w.gate, "cmd_refused", g1), 0);
+  CHECK_EQ(r.n(GK1), 0);
   // The whole opto board unpowered (every input dark): no_power, shown not-closed
   w.opener.force[0] = w.opener.force[1] = 0;
   CHECK(waitFor(r, w.house, "gate_state", h0, 5000, GS_NO_POWER_).ok);

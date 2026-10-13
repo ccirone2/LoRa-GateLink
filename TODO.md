@@ -98,6 +98,11 @@ once its fix is merged and record it in the pull request.
   board, Shelly SW mode, CSW24UL AUX relay settings, power sense checks, the survey, config export and key backup).
   Left, once the install hardware is in hand: walk it on site and correct it, add the Shelly and CSW24UL menu steps
   as done, the readings at each check and photos, and record the first survey. Then drop the draft notice.
+- [ ] **Troubleshooting: a limit that never reads may be unset limits.** On a real install the opener's AUX limit
+  relays only switch once the CSW24UL's travel limits have been learned, so a limit input that never goes active (at
+  either end of the travel) may mean the limits aren't set, not a wiring fault. Say so in the help text where an
+  installer would look: `docs/install.md`'s limit checks, `docs/hardware.md`, and the web console's I/O card or
+  wiring notes (`web/js/wiring.js`) and the health line for a gate stuck `no_power`/`between`.
 
 ## Supply chain
 

@@ -105,7 +105,7 @@ def test_architecture_doc_covers_every_firmware_source():
 def test_cloud_setup_pins_match_ci():
     setup = (ROOT / "tools/agent/cloud_setup.sh").read_text(encoding="utf-8")
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    core_lib = re.compile(r"arduino:\w+@[\d.]+|(?:LoRa|Crypto|FlashStorage|ArduinoJson|Adafruit SleepyDog Library)"
+    core_lib = re.compile(r"arduino:\w+@[\d.]+|(?:LoRa|Crypto|FlashStorage|ArduinoJson)"
                           r"@[\d.]+")
     assert set(core_lib.findall(setup)) == set(core_lib.findall(ci))
     uv = re.search(r"UV_VERSION=([\d.]+)", setup).group(1)

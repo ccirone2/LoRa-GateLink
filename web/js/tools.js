@@ -4,6 +4,7 @@ import { $, esc, cap, fmtDur } from './util.js';
 import { S } from './state.js';
 import { toast } from './ui.js';
 import { call } from './serial.js';
+import { rememberGateFw } from './peer.js';
 import { fmtFei } from './status.js';
 import { analyze, noiseFromStatus, sampleFromPong, surveyText, tableRows, TABLE_HEAD } from './survey.js';
 
@@ -282,6 +283,7 @@ export function onToolsEvent(ev) {
       break;
     case 'remote_diag': {
       clearTimeout(diagTimer);
+      rememberGateFw(ev.fw);
       const c = ev.counters;
       $('diagOut').textContent =
         `fw ${ev.fw} · up ${fmtDur(ev.uptime_s * 1000)}\n` +

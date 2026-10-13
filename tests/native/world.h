@@ -65,6 +65,7 @@ struct Board {
   size_t (*fnStatus)(char *, size_t) = nullptr;
   int32_t (*fnRole)() = nullptr;
   void (*fnLog)(uint8_t, int32_t, int32_t) = nullptr;
+  void (*fnWatchdogWarning)(uint32_t) = nullptr;
 
   State state = OFF;
   uint32_t bootAt = 0;      // BOOTLOADER: when setup() runs
@@ -76,6 +77,7 @@ struct Board {
   uint32_t clockMs = 0, clockUs = 0, busyUntil = 0;
   bool wdtBite = false;  // the watchdog would have reset it: done once the call into the firmware returns
   uint32_t kickAt = 0;  // last watchdog reset (board millis)
+  uint32_t keep[4] = {};  // boardKeep() (BOARD_KEEP_WORDS): kept across reset(), garbage after powerOn()
   uint64_t prng = 1;    // random()
   uint64_t rng = 1;     // radioRandom32()
   uint32_t stuckRng = 0;  // nonzero: radioRandom32() returns this every time (a dead entropy source)
@@ -142,6 +144,7 @@ struct Board {
   void powerOn();              // power-on reset
   void powerOff();             // dead: outputs drop, radio off
   void reset(uint8_t rcause);  // watchdog / software / reset pin: outputs drop for the bootloader's ~0.5 s
+  void watchdogWarning(uint32_t pc);  // the watchdog's early warning interrupts the loop at pc (call reset() after)
   bool running() const { return state == RUN; }
   void tick();                 // one world millisecond: boot or run one loop pass
   void block(uint32_t us);     // the firmware waited (delay, flash, radio init)

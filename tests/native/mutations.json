@@ -743,8 +743,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "                 | (acPower() ? 0 : STI_AC_LOST);",
-    "replace": "                 | (in3.active() ? 0 : STI_AC_LOST);"
+    "find": "                 | (acPower() ? 0 : STI_AC_LOST) |",
+    "replace": "                 | (in3.active() ? 0 : STI_AC_LOST) |"
    }
   ]
  },
@@ -1659,8 +1659,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (elapsed(now, lastStatusAt, (uint32_t)cfg.heartbeat_s * 1000) || cfg.heartbeat_s != reportedHeartbeat) {",
-    "replace": "  if (now >= lastStatusAt + (uint32_t)cfg.heartbeat_s * 1000 || cfg.heartbeat_s != reportedHeartbeat) {"
+    "find": "  if (elapsed(now, lastStatusAt, (uint32_t)cfg.heartbeat_s * 1000) || cfg.heartbeat_s != reportedHeartbeat",
+    "replace": "  if (now >= lastStatusAt + (uint32_t)cfg.heartbeat_s * 1000 || cfg.heartbeat_s != reportedHeartbeat"
    }
   ]
  },

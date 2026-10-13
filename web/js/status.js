@@ -6,6 +6,8 @@ import { IO_LABELS, WIRING, renderWiring } from './wiring.js';
 import { updateFwCard, reportFlash } from './firmware.js';
 import { showBoardKey } from './security.js';
 import { PROBLEMS } from './logdecode.js';
+import { askGateFw, peerDiffs, peerHtml } from './peer.js';
+import { healthLine, linkMargin } from './healthline.js';
 
 // Status `health` (the problems now) and `fault_out` (D5: true high, false low, null off) as HTML; firmware before
 // 0.14.0 reports neither.
@@ -16,6 +18,32 @@ export function healthHtml(s) {
   const d5 = s.fault_out === true ? '<span class="good">D5 high</span>'
     : s.fault_out === false ? '<span class="bad">D5 low</span>' : 'D5 off';
   return `${now} · ${d5}`;
+}
+
+// The health line's link margin: the median of the latest polls' (about 20 s), so one frame near the line doesn't
+// flip the verdict every poll.
+const MARGIN_POLLS = 10;
+let margins = [];
+const median = (v) => {
+  const s = v.filter((x) => typeof x === 'number').sort((a, b) => a - b);
+  return s.length ? s[Math.floor((s.length - 1) / 2)] : null;
+};
+
+// The health line; null clears it (disconnected, or the board stopped answering).
+export function showHealthLine(hl) {
+  if (!hl) margins = [];
+  $('healthLine').textContent = hl ? hl.text : '—';
+  $('healthLine').className = `card wide health-line ${hl ? hl.level : ''}`;
+}
+
+// Status `reset_cause`, with (from 0.15.0) a run of crash resets and where a watchdog reset found the loop hung.
+export function resetHtml(s) {
+  const cause = esc((s.reset_cause ?? '—').replaceAll('_', ' '));
+  const n = Number(s.crash_resets) || 0;
+  const run = n > 1 ? ` <span class="bad">· ${n} crash resets in a row</span>` : '';
+  const pc = (Number(s.hang_pc) >>> 0).toString(16).padStart(8, '0');
+  const hang = s.hang_stage ? ` <span class="bad">· hung in ${esc(String(s.hang_stage).replaceAll('_', ' '))} (pc 0x${pc})</span>` : '';
+  return cause + run + hang;
 }
 
 // Tab title: the gate state first, so a background tab still shows it.
@@ -92,6 +120,7 @@ export async function pollStatus() {
   const stale = pollMisses >= 2;
   document.body.classList.toggle('offline', stale);
   $('devline').textContent = stale ? `${devline} · not responding` : devline;
+  if (stale) showHealthLine(null);
 }
 
 export const resetPoll = () => { pollMisses = 0; };
@@ -114,6 +143,12 @@ export function renderStatus(s) {
   const l = s.link || {}; // absent from a malformed or foreign status: render what's there
   const heard = l.age_ms >= 0;
   $('lnkVerified').innerHTML = l.verified ? '<span class="good">yes</span>' : '<span class="bad">no</span>';
+  const pd = peerDiffs();
+  $('lnkPeer').innerHTML = peerHtml(l.verified, pd);
+  askGateFw(s);
+  margins.push(linkMargin(s, S.params.sf));
+  if (margins.length > MARGIN_POLLS) margins.shift();
+  showHealthLine(healthLine(s, { margin: median(margins), peer: pd }));
   $('lnkAge').textContent = heard ? `${fmtDur(l.age_ms)} ago` : 'never';
   $('lnkRssi').textContent = heard ? `${l.rssi} dBm / ${Number(l.snr).toFixed(1)} dB` : '—';
   $('lnkTxRx').textContent = `${l.tx} / ${l.rx}`;
@@ -133,7 +168,7 @@ export function renderStatus(s) {
   $('bRole').textContent = s.reboot_pending ? `${s.role} (reboot to apply saved role)` : s.role;
   $('bFw').textContent = s.fw;
   $('bUp').textContent = fmtDur(s.uptime_ms);
-  $('bReset').textContent = (s.reset_cause ?? '—').replaceAll('_', ' ');
+  $('bReset').innerHTML = resetHtml(s);
   $('bSupply').innerHTML = s.supply === undefined || s.supply === null ? '—'
     : s.supply ? '<span class="good">ok</span>' : '<span class="bad">lost · on battery</span>';
   const nf = Number(s.radio_faults) || 0;

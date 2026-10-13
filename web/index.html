@@ -40,6 +40,7 @@
     <!-- STATUS -->
     <section id="tab-status" class="tab active" role="tabpanel" aria-labelledby="tabbtn-status">
       <div class="grid">
+        <div id="healthLine" class="card wide health-line" role="status" aria-live="polite">—</div>
         <div class="card hero">
           <div class="label">Gate</div>
           <div id="gateState" class="gate-state">—</div>
@@ -52,9 +53,12 @@
           <div class="label">Link</div>
           <div class="kv" data-role="house" title="Down once nothing is heard from the gate for the link timeout: the contact sensor then fails open"><span>Link</span><b id="lnkUp">—</b></div>
           <div class="kv"><span>Peer verified</span><b id="lnkVerified">—</b></div>
+          <div class="kv" title="The other board as this page last saw it connected: its key id, firmware and the settings that must match"><span>Other board</span><b id="lnkPeer">—</b></div>
           <div class="kv"><span>Last frame</span><b id="lnkAge">—</b></div>
           <div class="kv"><span>RSSI / SNR (here)</span><b id="lnkRssi">—</b></div>
           <div class="kv" data-role="house"><span>RSSI / SNR (at gate)</span><b id="lnkRemoteRssi">—</b></div>
+          <details class="more">
+          <summary>Details</summary>
           <div class="kv"><span>TX / RX</span><b id="lnkTxRx">—</b></div>
           <div class="kv"><span>Retries / give-ups</span><b id="lnkRetry">—</b></div>
           <div class="kv"><span>MAC fail / replays</span><b id="lnkBad">—</b></div>
@@ -62,6 +66,7 @@
           <div class="kv"><span>CRC errors</span><b id="lnkCrc">—</b></div>
           <div class="kv" title="Smoothed background RF level on the channel; a rise means local interference"><span>Noise floor</span><b id="lnkNoise">—</b></div>
           <div class="kv" title="The peer's carrier against ours, i.e. the two boards' crystal offset. A few hundred Hz is normal"><span>Frequency error</span><b id="lnkFei">—</b></div>
+          </details>
         </div>
         <div class="card">
           <div class="label">I/O</div>
@@ -89,8 +94,11 @@
           <div class="kv"><span>Radio</span><b id="bRadio">—</b></div>
           <div class="kv" title="What this board counts as needing attention now, and the fault output on D5 (fault_out): high while healthy, low once a problem has lasted fault_hold_s, low after a restart until the board has started up"><span>Health / fault output</span><b id="bHealth">—</b></div>
           <div class="kv" data-role="gate" title="After boot the first report to the house waits until the gate inputs have been steady for 3 s (at most 10 s)"><span>Inputs settling</span><b id="bSettling">—</b></div>
+          <details class="more">
+          <summary>Details</summary>
           <div class="kv" title="Whether a saved config was found at boot, where it lives, and the flash chip's id (000000 = chip not answering)"><span>Config at boot</span><b id="bCfg">—</b></div>
           <div class="kv" title="Free RAM: bytes between the heap's high-water mark and the stack. USB lines lost: console lines dropped since boot"><span>Free RAM / USB lines lost</span><b id="bMem">—</b></div>
+          </details>
         </div>
       </div>
     </section>

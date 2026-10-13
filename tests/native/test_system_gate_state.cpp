@@ -16,6 +16,7 @@ enum { CAUSE_NONE_ = 0, CAUSE_LORA_ = 1, CAUSE_EXTERNAL_ = 2 };  // roles.h Caus
 enum { ACT_OPEN_ = 1, ACT_CLOSE_ = 2 };                          // roles.h Action
 enum { MSG_STATUS_ = 5 };                                        // link.h MsgType
 enum { RES_NO_POWER_ = 4 };                                      // link.h AckResult
+const uint32_t MISMATCH_MS = 75000;                              // mismatch_timeout_s default
 const int ANY = INT_MIN;
 
 // The site, failing the test (not aborting the run) on a monitor breach. world.cpp hands the breaches of a World to an
@@ -1034,7 +1035,7 @@ TEST(gate_state_ac_lost_limit_still_trusted) {
 }
 
 // [ac-power]
-TEST(gate_state_commands_refused_without_ac) {
+TEST(gate_state_without_ac_open_refused_close_runs) {
   Site w;
   w.commission();
   w.opener.ac = false;
@@ -1064,7 +1065,9 @@ TEST(gate_state_commands_refused_without_ac) {
   CHECK_EQ(rs.e.a, 0);
   CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, 3000));
   w.run(5000);
-  // CLOSE from open (opened on battery by someone else): refused too, even with the open limit reading.
+  // CLOSE from open (opened on battery by someone else) runs: cutting the AC mustn't keep the gate open. On the way
+  // no limit reads, so the gate reports no_power (the house shows not-closed); closed again once it gets there, no
+  // cause either way (into and out of no_power).
   w.extPress(true, 300);
   CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 10000));
   waitBoth(w, GS_OPEN_, 2000);
@@ -1074,25 +1077,62 @@ TEST(gate_state_commands_refused_without_ac) {
   w.user(false);
   Found cs2 = waitFor(w, w.house, "cmd_sent", h1, 2000, ACT_CLOSE_);
   CHECK(cs2.ok);
-  Found rf2 = waitFor(w, w.gate, "cmd_refused", g1, 2000);
-  CHECK(rf2.ok);
-  CHECK_EQ(rf2.e.a, ACT_CLOSE_);
-  CHECK_EQ(rf2.e.b, cs2.e.b);
-  CHECK_EQ(watch(w, 2000, [&] { return !w.gate.coil(1) && !w.gate.coil(2); }), 0);
-  CHECK_EQ(countSince(w.gate, "pulse", g1), 0);
-  CHECK(w.opener.atOpen());
-  CHECK(w.house.status()["cmd_result"].as<int>() == RES_NO_POWER_);
-  // AC back: commands go through again.
-  w.opener.ac = true;
-  CHECK(poll(w, [&] { return w.house.status()["remote"]["ac_power"] == true; }, 3000));
-  CHECK(w.runUntil([&] { return w.alarmSwitch(); }, 5000));  // resynced to the open gate
-  w.run(5000);
-  size_t g2 = w.gate.logs.size();
-  w.user(false);
-  Found p = waitFor(w, w.gate, "pulse", g2, 3000, 2);
+  Found p = waitFor(w, w.gate, "pulse", g1, 2000, 2);
   CHECK(p.ok);
-  CHECK_EQ(countSince(w.gate, "cmd_refused", g2), 0);
-  CHECK(waitFor(w, w.gate, "gate_state", g2, 10000, GS_CLOSED_).ok);
+  CHECK(poll(w, [&] { return w.house.status()["cmd_result"].as<int>() == 0; }, 2000, 10));
+  Found np = waitFor(w, w.gate, "gate_state", g1, 3000, GS_NO_POWER_);
+  CHECK(np.ok);
+  CHECK_EQ(np.e.b, CAUSE_NONE_);
+  CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 15000));
+  Found cl = waitFor(w, w.gate, "gate_state", g1, 2000, GS_CLOSED_);
+  CHECK(cl.ok);
+  CHECK_EQ(cl.e.b, CAUSE_NONE_);
+  waitBoth(w, GS_CLOSED_, 2000);
+  CHECK(w.runUntil([&] { return !w.alarmSwitch() && w.sensorClosed(); }, MISMATCH_MS + 5000));
+  w.run(5000);
+  CHECK(!w.alarmSwitch());
+  CHECK_EQ(countSince(w.gate, "cmd_refused", g1), 0);
+  CHECK_EQ(countSince(w.gate, "pulse", g1), 1);
+  CHECK_EQ(countSince(w.house, "cmd_sent", h1), 1);
+  CHECK_STR(str(w.gate.status(), "last_result"), "reached");
+  // Dead opener (no limit reads): no_power, and CLOSE is refused too.
+  w.opener.battery = false;
+  CHECK(poll(w, [&] { return w.house.status()["gate"] == "no_power"; }, 5000));
+  w.run(MISMATCH_MS + 5000);
+  CHECK(w.alarmSwitch());  // following the house's not-closed
+  size_t g2 = w.gate.logs.size(), h2 = w.house.logs.size();
+  w.user(false);
+  Found cs3 = waitFor(w, w.house, "cmd_sent", h2, 2000, ACT_CLOSE_);
+  CHECK(cs3.ok);
+  Found rf3 = waitFor(w, w.gate, "cmd_refused", g2, 2000, ACT_CLOSE_, cs3.e.b);
+  CHECK(rf3.ok);
+  CHECK(poll(w, [&] { return w.house.status()["cmd_result"].as<int>() == RES_NO_POWER_; }, 2000, 10));
+  CHECK_EQ(countSince(w.gate, "pulse", g2), 0);
+  // Both limits reading (fault: the position can't be verified): CLOSE refused as well.
+  w.opener.force[0] = w.opener.force[1] = 1;
+  CHECK(poll(w, [&] { return w.gate.status()["gate"] == "fault"; }, 3000));
+  w.run(MISMATCH_MS + 5000);
+  size_t g4 = w.gate.logs.size(), h4 = w.house.logs.size();
+  w.user(true);
+  w.run(3000);
+  w.user(false);
+  Found cs4 = waitFor(w, w.house, "cmd_sent", h4, 5000, ACT_CLOSE_);
+  CHECK(cs4.ok);
+  CHECK(waitFor(w, w.gate, "cmd_refused", g4, 2000, ACT_CLOSE_, cs4.e.b).ok);
+  CHECK_EQ(countSince(w.gate, "pulse", g4), 0);
+  w.opener.force[0] = w.opener.force[1] = -1;
+  // AC back: commands go through again.
+  w.opener.ac = w.opener.battery = true;
+  CHECK(poll(w, [&] { return w.house.status()["remote"]["ac_power"] == true; }, 3000));
+  waitBoth(w, GS_CLOSED_, 5000);
+  CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, 5000));
+  w.run(5000);
+  size_t g3 = w.gate.logs.size();
+  w.user(true);
+  Found p3 = waitFor(w, w.gate, "pulse", g3, 3000, 1);
+  CHECK(p3.ok);
+  CHECK_EQ(countSince(w.gate, "cmd_refused", g3), 0);
+  CHECK(waitFor(w, w.gate, "gate_state", g3, 15000, GS_OPEN_).ok);
 }
 
 // [ac-power] [cause]

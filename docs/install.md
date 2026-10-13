@@ -118,8 +118,9 @@ the web console (it works without a board) before powering up.
 - [ ] `in1_invert`–`in4_invert` off.
 - [ ] Status on the gate board: *closed* at the close limit, *open* at the open limit, *between* while it moves;
   the I/O card shows IN1 (open limit) and IN2 (closed limit) lit at their limits.
-- [ ] AC power sense (`power_sense` on): unplug the AC supply: the I/O card shows IN3 (AC power) off, and commands are refused
-  (the house shows *refused: no AC power*); plug it back. If IN3 isn't wired, turn `power_sense` off.
+- [ ] AC power sense (`power_sense` on): unplug the AC supply: the I/O card shows IN3 (AC power) off, and OPEN is refused
+  (the house shows *refused: no AC power*) while CLOSE still runs on the opener's battery; plug it back. If IN3 isn't
+  wired, turn `power_sense` off.
 - [ ] Tools → Relay test, with someone watching the gate: K1 opens it, K2 closes it.
 
 ### House board

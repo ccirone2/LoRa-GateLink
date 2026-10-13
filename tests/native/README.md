@@ -62,7 +62,7 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
   (sectors 0–19), which survives resets, with every erase and program in `flashOps` and faults to inject
   (`cutNextProgram`: a write torn by a power cut; `failPrograms`: writes that fail; `flashPresent`).
 - **Monitors** (`World::monitor`, `World::onLog`) check the invariants all the time: gate relays pulsed only, never
-  both, 100 ms interlock, no pulse without AC; every command traced to a user action and every gate pulse to a command or
+  both, 100 ms interlock, without AC no OPEN pulse and CLOSE only while one limit reads; every command traced to a user action and every gate pulse to a command or
   a relay test, at most once per command; gate state only from its limits; the contact sensor closed only while the house
   knows the gate closed with the link up, and never lagging the real gate past the link timeout; `no_power`/`fault`
   shown as not-closed; no loop near the watchdog; no flash access while a gate relay pulses; the fault output D5 driven only with `fault_out` on, LOW after a boot
@@ -124,7 +124,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `cause` | `lora` only while our pulse's target is being reached; `timeout` at the opposite limit; else `external` | `gate_state` |
 | `boot-settle` | The gate's first STATUS waits for steady inputs (`BOOT_SETTLE_MS`, at most 10 s); a boot has no cause | `gate_state` |
 | `between-hold` | A move into `between` is held `BETWEEN_HOLD_MS` (`BOOT_SETTLE_MS` out of `no_power`) | `gate_state` |
-| `ac-power` | Without AC (IN3) commands are refused `RES_NO_POWER`; a limit is trusted; none reads `no_power` | `gate_state` |
+| `ac-power` | Without AC (IN3) OPEN is refused `RES_NO_POWER`, CLOSE runs only while one limit reads; a limit is trusted; none reads `no_power` | `gate_state` |
 | `spare-before-state` | `updateSpareInputs` runs before `readState()` in `gateLoop` | `gate_state` |
 | `k1-mirror` | House K1 makes the controller follow the real gate | `house_sync` |
 | `travel-hold` | While the gate is `between`, K1 holds the limit it left until the other or the travel timeout | `house_sync` |

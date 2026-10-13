@@ -45,7 +45,8 @@ and `firmware/GateLink/pins.h` in sync.
   active.
 - **Gate IN3 = AC power sense** (`power_sense`, default on). An opto channel across the 120 VAC → 24 V supply
   (the one feeding the AES controller) drives IN3; the CSW24UL has battery backup and keeps running without AC.
-  IN3 off → OPEN/CLOSE commands are acknowledged as refused without pulsing, and STATUS reports AC lost (status
+  IN3 off → OPEN is acknowledged as refused without pulsing, CLOSE runs while a limit reads (from 0.15.1: cutting
+  the AC mustn't keep the gate open; with no limit reading it's refused too), and STATUS reports AC lost (status
   `ac_power`). A limit that still reads is trusted; with none reading the gate reads `no_power` instead of
   `between`, since the opener's battery may be dead too (its AUX limit relays drop without power). Moves into or
   out of `no_power` have cause none. With `power_sense` on, a move into `between` is reported only after 0.5 s

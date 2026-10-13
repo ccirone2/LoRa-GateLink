@@ -36,8 +36,8 @@ def test_power_loss_at_rest(rig):
 
 
 def test_ac_loss_limits_trusted(rig):
-    """AC lost, opener on battery: the closed limit is still trusted (house unchanged), commands are refused and
-    the controller is put back; AC return changes nothing."""
+    """AC lost, opener on battery: the closed limit is still trusted (house unchanged), OPEN is refused and the
+    controller is put back; AC return changes nothing."""
     rig.expect_commands(1)
     m = rig.mark()
     rig.sim.ac(False)
@@ -59,6 +59,36 @@ def test_ac_loss_limits_trusted(rig):
     rig.wait_gate("closed", ac_power=True, timeout=5)
     rig.wait_house(10, gate="closed", io__k2=True, remote__ac_power=True)
     rig.expect_no("gate", "gate_state", seconds=1, since=m)
+
+
+def test_ac_loss_close_runs(rig):
+    """AC lost with the gate open: CLOSE still runs on the opener's battery (0.15.1, ROADMAP F20: cutting the AC
+    mustn't keep the gate open). No limit reads on the way (no_power, the house shows not-closed); closed is
+    reported with no cause, and the house shows closed."""
+    rig.expect_commands(2)
+    m = rig.mark()
+    rig.ctrl.on()
+    rig.wait_log("gate", "gate_state", a=GS["open"], since=m, timeout=SIM_TRAVEL_S + 10)
+    rig.wait_ctrl(True, timeout=30)
+    rig.sim.ac(False)
+    rig.wait_gate("open", ac_power=False, timeout=5)
+    # K1 followed the gate to open: an IN1 edge inside that sync window is the controller following, not a command.
+    rig.wait_house(10, "sync window closed", gate="open", sync_window=False, resyncing=False)
+
+    m2 = rig.mark()
+    rig.ctrl.off()
+    rig.wait_log("house", "cmd_sent", a=ACT_CLOSE, since=m2, timeout=10)
+    rig.wait_log("gate", "pulse", a=2, since=m2, timeout=5)
+    rig.wait_log("gate", "gate_state", a=GS["no_power"], b=CAUSE["none"], since=m2, timeout=5)
+    rig.wait_log("gate", "gate_state", a=GS["closed"], b=CAUSE["none"], since=m2, timeout=SIM_TRAVEL_S + 5)
+    rig.wait_gate("closed", last_result="reached", target="", ac_power=False, timeout=5)
+    rig.wait_house(10, gate="closed", io__k2=True, io__k1=False)
+    rig.wait_ctrl(False, timeout=45)
+    rig.expect_no("gate", "cmd_refused", since=m)
+
+    rig.sim.ac(True)
+    rig.wait_gate("closed", ac_power=True, timeout=5)
+    rig.wait_house(10, gate="closed", io__k2=True, resyncing=False)
 
 
 def test_ac_loss_mid_travel(rig):

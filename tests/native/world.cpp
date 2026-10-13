@@ -1059,6 +1059,9 @@ void World::onLog(Board &b, const LogEv &e) {
 }
 
 void World::monitor() {
+  // One limit reading (not fault); the stamp is dropped once old, so it can't wrap into the future.
+  if (opener.in(1) != opener.in(2)) limitAt = now | 1;
+  else if (limitAt && (int32_t)(now - limitAt) > 1000) limitAt = 0;
   // Gate relays: pulsed only, never both, never one within INTERLOCK_MS (100) of the other releasing.
   for (int k = 0; k < 2; k++) {
     CoilTrack &c = gk[k], &o = gk[1 - k];
@@ -1073,8 +1076,12 @@ void World::monitor() {
       uint32_t testMs = 0;
       bool test = recentRelayTest(*this, 1, k + 1, now, 300, &testMs);
       c.maxMs = limits.pulseMaxMs ? limits.pulseMaxMs : (test ? testMs : (uint32_t)gate.get("pulse_ms")) + 25;
-      // As the gate sees it: IN3 (which a test may force), not the mains itself.
-      if (!test && gate.get("power_sense") && !opener.in(3)) violate(fmt("gate K%d pulsed without AC power (IN3 off)", k + 1));
+      // Without AC (as the gate sees it: IN3, which a test may force, not the mains itself) OPEN never pulses, and
+      // CLOSE only while a limit reads (the gate's state lags the inputs by its debounce, and the pulse may wait out
+      // the interlock).
+      bool limit = limitAt && (int32_t)(now - limitAt) <= (int32_t)gate.get("debounce_ms") + 100 + 5;
+      if (!test && gate.get("power_sense") && !opener.in(3) && (k == 0 || !limit))
+        violate(fmt("gate K%d pulsed without AC power (IN3 off)%s", k + 1, k ? " and no limit reading" : ""));
     } else if (!on && c.on) {
       c.on = false;
       c.offAt = now;

@@ -62,7 +62,7 @@ export function healthLine(s, { margin = null, peer = null } = {}) {
 
   if (s.gate === 'no_power') return line('bad', 'The gate opener has no power and no limit reads: check the opener and its battery. The alarm shows the gate not closed meanwhile.');
   if (s.gate === 'fault') return line('bad', 'Both gate limits read at once: check the limit wiring. The alarm shows the gate not closed meanwhile.');
-  if (health.includes('ac')) return line('warn', 'The gate is on its battery: AC power lost. Opening is refused until it’s back (closing still works); check the opener’s mains supply.');
+  if (health.includes('ac')) return line('warn', 'The gate is on its battery: AC power lost. Commands still work while a limit reads; check the opener’s mains supply.');
   if (s.role === 'house' && s.ctrl_power === false) return line('warn', 'The controller has no power: its switch is ignored until power returns.');
   if (starting) return startingLine(s);
 

@@ -1115,16 +1115,18 @@ TEST(house_sync_siren_override_mid_travel_resyncs_at_once) {
 
 // [resync] [check-soon]
 TEST(house_sync_no_power_refusal_resyncs_at_once) {
-  // Without AC the gate refuses the user's OPEN (ACK no_power) and nothing moves. The house resyncs on the pass after
-  // it hears the refusal, not mismatch_timeout_s later.
+  // Without AC and with no limit reading (no_power: the opener may be dead) the gate refuses the user's CLOSE (ACK
+  // no_power) and nothing moves. The house resyncs on the pass after it hears the refusal, not mismatch_timeout_s
+  // later.
   Site w;
   w.commission();
-  w.opener.ac = false;
-  CHECK(poll(w, [&] { return w.house.status()["remote"]["ac_power"] == false; }, 3000));
-  w.run(1000);
+  w.opener.ac = w.opener.battery = false;
+  CHECK(poll(w, [&] { return w.house.status()["gate"] == "no_power"; }, 5000));
+  CHECK(w.runUntil([&] { return w.alarmSwitch(); }, 3000));  // following the house's not-closed
+  w.run(SYNC_MS + 2000);
   size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
-  w.user(true);
-  Found cs = waitFor(w, w.house, "cmd_sent", h0, 1000, ACT_OPEN_);
+  w.user(false);
+  Found cs = waitFor(w, w.house, "cmd_sent", h0, 2000, ACT_CLOSE_);
   CHECK(cs.ok);
   Found rf = waitFor(w, w.gate, "cmd_refused", g0, 2000);
   CHECK(rf.ok);
@@ -1136,15 +1138,14 @@ TEST(house_sync_no_power_refusal_resyncs_at_once) {
   }, 2000));
   Found rs = waitFor(w, w.house, "resync", h0, 3000);
   CHECK(rs.ok);
-  CHECK_EQ(rs.e.a, 0);
+  CHECK_EQ(rs.e.a, 1);
   CHECK_IN(rs.e.at - ackEnd, 0, 2);
   CHECK_EQ(w.house.status()["cmd_result"].as<int>(), RES_NO_POWER_);
-  CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, 1200));
-  CHECK(!w.house.coil(1));
+  CHECK(w.runUntil([&] { return w.alarmSwitch(); }, 1200));
+  CHECK(w.house.coil(1));
   w.run(5000);
-  CHECK(!w.alarmSwitch());
-  CHECK(w.sensorClosed());
-  CHECK(w.opener.atClosed());
+  CHECK(w.alarmSwitch());
+  CHECK(!w.sensorClosed());
   CHECK_EQ(countSince(w.house, "resync", h0), 1);
   CHECK_EQ(countSince(w.house, "cmd_sent", h0), 1);
   CHECK_EQ(countSince(w.gate, "pulse", g0), 0);

@@ -124,7 +124,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `cause` | `lora` only while our pulse's target is being reached; `timeout` at the opposite limit; else `external` | `gate_state` |
 | `boot-settle` | The gate's first STATUS waits for steady inputs (`BOOT_SETTLE_MS`, at most 10 s); a boot has no cause | `gate_state` |
 | `between-hold` | A move into `between` is held `BETWEEN_HOLD_MS` (`BOOT_SETTLE_MS` out of `no_power`) | `gate_state` |
-| `ac-power` | Without AC (IN3) OPEN is refused `RES_NO_POWER`, CLOSE runs only while one limit reads; a limit is trusted; none reads `no_power` | `gate_state` |
+| `ac-power` | Without AC (IN3) a command runs only while one limit reads or our target is set (a reversal), else `RES_NO_POWER`; a limit is trusted; none reads `no_power` | `gate_state` |
 | `spare-before-state` | `updateSpareInputs` runs before `readState()` in `gateLoop` | `gate_state` |
 | `k1-mirror` | House K1 makes the controller follow the real gate | `house_sync` |
 | `travel-hold` | While the gate is `between`, K1 holds the limit it left until the other or the travel timeout | `house_sync` |
@@ -146,7 +146,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 
 ## Mutation testing (`mutations.json`, `tools/mutate.py`)
 
-A test that can't fail proves nothing. `mutations.json` lists 151 ways to break the invariants above, each an exact
+A test that can't fail proves nothing. `mutations.json` lists 153 ways to break the invariants above, each an exact
 text edit to the firmware (`find` must occur once) with the invariant it breaks, why, and the tests that killed it
 (`killed_by`). `tools/mutate.py` applies each to a scratch copy of `firmware/GateLink`, rebuilds the host tests
 against it (`make FW=`) and runs its `killed_by` tests, then, if they all pass, the whole suite: a mutation is

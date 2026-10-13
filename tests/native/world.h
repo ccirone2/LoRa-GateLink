@@ -314,6 +314,7 @@ struct World {
   } gk[2];
   uint32_t k2WrongSince = 0;
   uint32_t limitAt = 0;  // the last time exactly one of the gate's limits read active (0: over 1 s ago)
+  uint32_t gatePulseAt = 0;  // the last gate relay pulse's start (0: over travel_timeout_s ago)
   int houseView = GS_UNKNOWN_;  // the house's idea of the gate (its gate_state log)
   uint32_t houseViewAt = 0;
   int gateView = GS_UNKNOWN_;

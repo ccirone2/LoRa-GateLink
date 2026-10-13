@@ -27,7 +27,6 @@ namespace {
 enum { CAUSE_NONE_ = 0, CAUSE_LORA_ = 1, CAUSE_EXTERNAL_ = 2 };  // roles.h Cause
 enum { ACT_OPEN_ = 1, ACT_CLOSE_ = 2 };                          // roles.h Action
 enum : uint8_t { MSG_HELLO_ = 1, MSG_HELLO_ACK_ = 2, MSG_ACK_ = 3, MSG_CMD_ = 4, MSG_STATUS_ = 5 };  // link.h
-const int RES_NO_POWER_ = 4;
 const int ANY = INT_MIN;
 const uint32_t F32 = 0;            // world time 2^32 (= 0): millis() wraps
 const uint32_t F31 = 0x80000000u;  // 2^31: a stamp taken just before reads as in the future once this passes it
@@ -1417,7 +1416,7 @@ TEST(robustness_pulldown_dead_open_limit_opto_never_reads_open) {
 }
 
 // [pull-down] [ac-power]
-TEST(robustness_pulldown_dead_ac_sense_opto_refuses_open) {
+TEST(robustness_pulldown_dead_ac_sense_opto_reads_ac_lost) {
   World w;
   Guard g{ w };
   w.commission();
@@ -1435,28 +1434,18 @@ TEST(robustness_pulldown_dead_ac_sense_opto_refuses_open) {
   CHECK(hs["remote"]["ac_power"] == false);
   CHECK(hs["gate"] == "closed");
   CHECK(w.sensorClosed());
-  // OPEN is refused without a pulse, and the controller is put back at once
+  // Commands still run while a limit reads, as with the AC really lost. On the way no limit reads, so the gate
+  // reports no_power; at the other limit at the end.
   w.user(true);
-  Found ref = waitFor(r, w.gate, "cmd_refused", g0, 2000, ACT_OPEN_);
-  CHECK(ref.ok);
-  Found rs = waitFor(r, w.house, "resync", h0, 3000, 0);
-  CHECK(rs.ok);
-  CHECK(r.until([&] { return !w.alarmSwitch(); }, RESYNC_MS + 500));
-  CHECK(w.house.status()["cmd_result"] == RES_NO_POWER_);
-  CHECK_EQ(countSince(w.gate, "pulse", g0), 0);
-  CHECK_EQ(presses(w), 0);
-  CHECK_EQ(r.n(GK1) + r.n(GK2), 0);
-  // Opened by someone else: CLOSE runs, since a limit reads (as with the AC really lost). On the way no limit reads,
-  // so the gate reports no_power; closed again at the end.
-  w.extPress(true, 300);
-  CHECK(r.until([&] { return w.opener.atOpen() && w.houseSees() == GS_OPEN_; }, 15000));
+  CHECK(waitFor(r, w.gate, "pulse", g0, 2000, 1).ok);
+  CHECK(r.until([&] { return w.opener.atOpen() && w.houseSees() == GS_OPEN_; }, 20000));
   r.run(5000);
   size_t g1 = w.gate.logs.size();
   w.user(false);
   CHECK(waitFor(r, w.gate, "pulse", g1, 2000, 2).ok);
   CHECK(r.until([&] { return w.opener.atClosed() && w.houseSees() == GS_CLOSED_ && w.sensorClosed(); }, 20000));
-  CHECK_EQ(countSince(w.gate, "cmd_refused", g1), 0);
-  CHECK_EQ(r.n(GK1), 0);
+  CHECK_EQ(countSince(w.gate, "cmd_refused", g0), 0);
+  CHECK_EQ(countSince(w.gate, "pulse", g0), 2);
   // The whole opto board unpowered (every input dark): no_power, shown not-closed
   w.opener.force[0] = w.opener.force[1] = 0;
   CHECK(waitFor(r, w.house, "gate_state", h0, 5000, GS_NO_POWER_).ok);

@@ -683,34 +683,31 @@
  {
   "name": "gate_state_a1_commands_are_refused_without",
   "invariant": "ac-power",
-  "why": "A1: without AC, OPEN is refused only when no limit reads (pulsed on battery with a limit reading)",
+  "why": "A1: without AC, OPEN is refused even with a limit reading (the owner's command dropped while the opener could run it on its battery)",
   "killed_by": [
-   "gate_state_without_ac_open_refused_close_runs",
-   "robustness_pulldown_dead_ac_sense_opto_refuses_open",
-   "robustness_chaos_seed_1",
-   "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
-   "robustness_chaos_seed_3",
-   "robustness_chaos_toggling_controller_seed_4"
+   "gate_state_without_ac_commands_run_while_a_limit_reads",
+   "gate_state_without_ac_reversal_mid_travel_runs",
+   "robustness_pulldown_dead_ac_sense_opto_reads_ac_lost"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (!acPower() && (action == ACT_OPEN || (state != GS_OPEN && state != GS_CLOSED))) {\n    logEvent(EV_CMD_REFUSED, action, id);",
-    "replace": "  if (!acPower() && state == GS_NO_POWER) {\n    logEvent(EV_CMD_REFUSED, action, id);"
+    "find": "  if (!acPower() && state != GS_OPEN && state != GS_CLOSED && (state != GS_NO_POWER || target == GS_UNKNOWN)) {",
+    "replace": "  if (!acPower() && (action == ACT_OPEN || (state != GS_OPEN && state != GS_CLOSED))) {"
    }
   ]
  },
  {
   "name": "gate_state_a1b_close_refused_without_ac",
   "invariant": "ac-power",
-  "why": "A1b (F20): CLOSE refused without AC even with a limit reading, so cutting the AC keeps an open gate open",
+  "why": "A1b: every command refused without AC even with a limit reading, so cutting the AC keeps an open gate open",
   "killed_by": [
-   "gate_state_without_ac_open_refused_close_runs"
+   "gate_state_without_ac_commands_run_while_a_limit_reads"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (!acPower() && (action == ACT_OPEN || (state != GS_OPEN && state != GS_CLOSED))) {",
+    "find": "  if (!acPower() && state != GS_OPEN && state != GS_CLOSED && (state != GS_NO_POWER || target == GS_UNKNOWN)) {",
     "replace": "  if (!acPower()) {"
    }
   ]
@@ -718,15 +715,30 @@
  {
   "name": "gate_state_a1c_close_from_fault_without_ac",
   "invariant": "ac-power",
-  "why": "A1c (F20): without AC, CLOSE is refused only in no_power, so it pulses from fault (both limits reading: position unknown)",
+  "why": "A1c: without AC, commands are refused only in no_power, so they pulse from fault (both limits reading: position unknown)",
   "killed_by": [
-   "gate_state_without_ac_open_refused_close_runs"
+   "gate_state_without_ac_commands_run_while_a_limit_reads"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (!acPower() && (action == ACT_OPEN || (state != GS_OPEN && state != GS_CLOSED))) {",
-    "replace": "  if (!acPower() && (action == ACT_OPEN || state == GS_NO_POWER)) {"
+    "find": "  if (!acPower() && state != GS_OPEN && state != GS_CLOSED && (state != GS_NO_POWER || target == GS_UNKNOWN)) {",
+    "replace": "  if (!acPower() && state == GS_NO_POWER && target == GS_UNKNOWN) {"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_a1d_reversal_refused_without_ac",
+  "invariant": "ac-power",
+  "why": "A1d: without AC, a reversal while our pulse is under way (no limit reads mid-travel: no_power) is refused, so the gate finishes the move the owner just reversed",
+  "killed_by": [
+   "gate_state_without_ac_reversal_mid_travel_runs"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (!acPower() && state != GS_OPEN && state != GS_CLOSED && (state != GS_NO_POWER || target == GS_UNKNOWN)) {",
+    "replace": "  if (!acPower() && state != GS_OPEN && state != GS_CLOSED) {"
    }
   ]
  },
@@ -736,7 +748,7 @@
   "why": "A2: swapped order in readState: without AC the state is no_power even with a limit reading",
   "killed_by": [
    "gate_state_ac_lost_limit_still_trusted",
-   "gate_state_without_ac_open_refused_close_runs",
+   "gate_state_without_ac_commands_run_while_a_limit_reads",
    "gate_state_no_power_transitions_have_no_cause"
   ],
   "edits": [
@@ -1765,9 +1777,9 @@
  {
   "name": "robustness_m9_acpower_also_counts_reading",
   "invariant": "pull-down",
-  "why": "M9: acPower() also counts a reading limit as AC present, so a dead IN3 opto no longer refuses commands while a limit reads.",
+  "why": "M9: acPower() also counts a reading limit as AC present, so a dead IN3 opto reads as AC present (ac_power true, no STATUS bit 6) while a limit reads, hiding the fault.",
   "killed_by": [
-   "robustness_pulldown_dead_ac_sense_opto_refuses_open",
+   "robustness_pulldown_dead_ac_sense_opto_reads_ac_lost",
    "robustness_chaos_seed_1",
    "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
    "robustness_chaos_seed_3",
@@ -1973,7 +1985,7 @@
   "invariant": "resync",
   "why": "M17: applyOutputs drives K1 to its target even during a resync, which cuts the resync pulse short: K1 is back 1 ms later, too short for the controller to see, so a controller out of step stays out of step.",
   "killed_by": [
-   "gate_state_without_ac_open_refused_close_runs",
+   "gate_state_without_ac_commands_run_while_a_limit_reads",
    "gate_state_deaf_opener_stays_closed_until_travel_timeout",
    "gate_state_ignored_pulse_keeps_reporting_the_limit",
    "gate_state_override_to_the_far_limit_resyncs_the_controller_at_once",
@@ -1994,7 +2006,7 @@
    "house_sync_siren_override_mid_travel_resyncs_at_once",
    "house_sync_toggle_controller_never_turns_sync_into_commands",
    "house_sync_window_boundary_inside_is_sync_outside_is_a_command",
-   "robustness_pulldown_dead_ac_sense_opto_refuses_open",
+   "robustness_pulldown_dead_ac_sense_opto_reads_ac_lost",
    "robustness_pulldown_dead_controller_power_opto_blocks_commands",
    "robustness_quiet_26_days_mismatch_resynced_as_soon_as_the_link_returns",
    "robustness_restart_both_boards_reboot_together",

@@ -171,7 +171,7 @@ ACK result codes (`AckResult`; a gap is a retired code, never reused):
 | 0 | `RES_OK` | done |
 | 1 | `RES_ALREADY` | command matched current state; no pulse |
 | 2 | `RES_BAD` | malformed / rejected |
-| 4 | `RES_NO_POWER` | no AC power (IN3 power sense): OPEN, or CLOSE with no limit reading; no pulse |
+| 4 | `RES_NO_POWER` | no AC power (IN3 power sense) and no limit reading (nor our pulse under way); no pulse |
 | 5 | `RES_NOT_SAVED` | `CFG_SET` applied, but the flash save failed: reverts at the next reboot |
 
 <!-- docgen:messages end -->

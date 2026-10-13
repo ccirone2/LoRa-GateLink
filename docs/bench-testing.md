@@ -118,9 +118,11 @@ rather than a simulated outage; the Shelly's real 12 V removed (unless the suite
 - Override: jumper gate IN1 (open), turn house IN1 off (CLOSE) → gate reports `timeout` after `travel_timeout_s`,
   house log shows `resync`. *e2e: `test_opener_ignores_command`*
 - AC power sense: with the gate closed, release gate IN3 → gate stays `closed`, `ac_power` false, house unchanged;
-  turn house IN1 on (OPEN) → gate log `cmd_refused`, no `pulse`, house *Last command* shows *refused: no AC power*,
-  and the Shelly is resynced; from open, turn it off (CLOSE) → it pulses and the gate closes on its battery. Also release the closed limit → gate `no_power` (`cause none`), house K2 releases and K1
-  energizes. Re-jumper → state follows the limits again. *e2e: `test_ac_loss_limits_trusted`, `test_ac_loss_close_runs`,
+  turn house IN1 on (OPEN) → it pulses and the gate opens on its battery (`no_power` on the way, `cause none`); turn
+  it off (CLOSE) → it pulses and the gate closes. Also release the closed limit → gate `no_power` (`cause none`), house
+  K2 releases and K1 energizes; a CLOSE then → gate log `cmd_refused`, no `pulse`, house *Last command* shows *refused:
+  no AC power, position unknown*, and the Shelly is resynced. Re-jumper → state follows the limits again. *e2e:
+  `test_ac_loss_limits_trusted`, `test_ac_loss_commands_run`,
   `test_power_loss_at_rest`, `test_power_loss_mid_travel`.*
   Manual: turn the gate's `power_sense` toggle off and Apply (or from the house: Tools → remote setting
   `power_sense` = 0) → IN3 is ignored. *e2e: `test_options.py`*

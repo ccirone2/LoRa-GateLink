@@ -62,7 +62,7 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
   (sectors 0–19), which survives resets, with every erase and program in `flashOps` and faults to inject
   (`cutNextProgram`: a write torn by a power cut; `failPrograms`: writes that fail; `flashPresent`).
 - **Monitors** (`World::monitor`, `World::onLog`) check the invariants all the time: gate relays pulsed only, never
-  both, 100 ms interlock, without AC no OPEN pulse and CLOSE only while one limit reads; every command traced to a user action and every gate pulse to a command or
+  both, 100 ms interlock, without AC a pulse only while one limit reads or one of ours is under way, and a command refused only without AC and with no position to trust (availability); every command traced to a user action and every gate pulse to a command or
   a relay test, at most once per command; gate state only from its limits; the contact sensor closed only while the house
   knows the gate closed with the link up, and never lagging the real gate past the link timeout; `no_power`/`fault`
   shown as not-closed; no loop near the watchdog; no flash access while a gate relay pulses; the fault output D5 driven only with `fault_out` on, LOW after a boot

@@ -687,7 +687,12 @@
   "killed_by": [
    "gate_state_without_ac_commands_run_while_a_limit_reads",
    "gate_state_without_ac_reversal_mid_travel_runs",
-   "robustness_pulldown_dead_ac_sense_opto_reads_ac_lost"
+   "robustness_pulldown_dead_ac_sense_opto_reads_ac_lost",
+   "robustness_chaos_seed_1",
+   "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
+   "robustness_chaos_seed_3",
+   "robustness_chaos_toggling_controller_seed_4",
+   "robustness_chaos_seed_8"
   ],
   "edits": [
    {
@@ -702,7 +707,12 @@
   "invariant": "ac-power",
   "why": "A1b: every command refused without AC even with a limit reading, so cutting the AC keeps an open gate open",
   "killed_by": [
-   "gate_state_without_ac_commands_run_while_a_limit_reads"
+   "gate_state_without_ac_commands_run_while_a_limit_reads",
+   "robustness_chaos_seed_1",
+   "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
+   "robustness_chaos_seed_3",
+   "robustness_chaos_toggling_controller_seed_4",
+   "robustness_chaos_seed_8"
   ],
   "edits": [
    {
@@ -732,7 +742,10 @@
   "invariant": "ac-power",
   "why": "A1d: without AC, a reversal while our pulse is under way (no limit reads mid-travel: no_power) is refused, so the gate finishes the move the owner just reversed",
   "killed_by": [
-   "gate_state_without_ac_reversal_mid_travel_runs"
+   "gate_state_without_ac_reversal_mid_travel_runs",
+   "robustness_chaos_seed_2_gate_board_on_the_mains_psu",
+   "robustness_chaos_toggling_controller_seed_4",
+   "robustness_chaos_seed_8"
   ],
   "edits": [
    {

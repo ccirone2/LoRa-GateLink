@@ -298,6 +298,7 @@ struct World {
     uint32_t pulseMaxMs = 0;          // 0: the gate's pulse_ms + slack; a relay.test may run longer
     uint32_t sensorGraceMs = 3000;    // house K2 may lag the gate leaving its closed limit by this much
     bool provenance = true;           // every command traced to a user action
+    bool refusals = true;             // every refused command had a reason the gate could see
     bool sensorTruth = true;
     bool notClosedDisplay = true;
     bool faultOut = true;             // D5: never HIGH before the board has decided, nor past a fault's hold
@@ -315,6 +316,8 @@ struct World {
   uint32_t k2WrongSince = 0;
   uint32_t limitAt = 0;  // the last time exactly one of the gate's limits read active (0: over 1 s ago)
   uint32_t gatePulseAt = 0;  // the last gate relay pulse's start (0: over travel_timeout_s ago)
+  uint32_t in3OnSince = 0;       // since when the gate's IN3 (AC) has read on (0: off; capped at a minute's age)
+  uint32_t oneLimitSince = 0;    // since when exactly one of its limits has read (0: none or both; capped likewise)
   int houseView = GS_UNKNOWN_;  // the house's idea of the gate (its gate_state log)
   uint32_t houseViewAt = 0;
   int gateView = GS_UNKNOWN_;

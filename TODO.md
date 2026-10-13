@@ -115,8 +115,8 @@ once its fix is merged and record it in the pull request.
   `python tools/gatelink.py key backup <dir>` and keep its passphrase in the password manager; then
   check `python tools/gatelink.py ports` shows the same key id on both boards as `key id` does for the
   file ([docs/key-management.md](docs/key-management.md)). The install pair gets its own key, generated there.
-- [ ] **Nightly routines: network access and the first week.** The routines in `.claude/routines/` run (#102,
-  #103 opened on 2026-10-12). The cloud environment still can't reach `downloads.arduino.cc` (DNS lookup fails, so
-  `tools/agent/cloud_setup.sh` installs no cores or libraries and routines can't compile): give it network access to
-  `downloads.arduino.cc` and `github.com` ([docs/agent-tooling.md](docs/agent-tooling.md)). Watch the first week's
-  pull requests and tune the routine files.
+- [ ] **Nightly routines: the first week.** The routines in `.claude/routines/` run (#102, #103 opened on
+  2026-10-12), and their cloud environment has full network access since 2026-10-12, so `tools/agent/cloud_setup.sh`
+  can install the cores and libraries. Check the next runs' pull requests say the firmware compile and host tests ran
+  (else `~/.cache/gatelink/setup.done` lists what failed), watch the first week's pull requests and tune the routine
+  files.

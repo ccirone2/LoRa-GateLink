@@ -123,6 +123,7 @@ static void dropOutputs(Board &b) {
   memset(b.out, 0, sizeof(b.out));
   b.led = -1;
   b.radioUp = b.radioBegun = b.radioHeld = b.radioFault = b.radioRestartDue = false;
+  b.rxDone = b.crcErr = b.faults = b.retryAt = 0;  // radio.cpp's RAM
   b.rxq.clear();
   b.rx[0].clear();
   b.rx[1].clear();
@@ -428,7 +429,6 @@ static bool sameChannel(const Board &a, const Board &b) {
   return p.freq == q.freq && p.sf == q.sf && p.bw == q.bw && p.sync == q.sync;
 }
 
-static uint32_t retryAt[2];
 bool radioBegin() {
   Board &b = *cur;
   b.radioBegun = true;
@@ -439,11 +439,11 @@ bool radioBegin() {
   b.block(470000);      // LoRa.begin() on the MKR WAN 1310: delay(200 + 200 + 50) on the module's reset, 2 x 10 ms on the SX1276's
   b.radioUp = b.radioPresent;
   if (!b.radioUp) {
-    if (!retryAt[b.idx]) b.fnLog(EV_RADIO_FAIL, 0, (int32_t)b.faults);
-    retryAt[b.idx] = (b.clockMs + 5000) | 1;
+    if (!b.retryAt) b.fnLog(EV_RADIO_FAIL, 0, (int32_t)b.faults);
+    b.retryAt = (b.clockMs + 5000) | 1;
     return false;
   }
-  retryAt[b.idx] = 0;
+  b.retryAt = 0;
   radioCfgs[&b] = radioCfg(b);
   return true;
 }
@@ -456,7 +456,7 @@ bool radioOk() {
 // As radio.cpp: after a fault, or every 5 s while the radio didn't start, the firmware (appLoop) restarts it here.
 bool radioRecoverDue() {
   Board &b = *cur;
-  return b.radioRestartDue || (!b.radioUp && retryAt[b.idx] && after(b.clockMs, retryAt[b.idx]));
+  return b.radioRestartDue || (!b.radioUp && b.retryAt && after(b.clockMs, b.retryAt));
 }
 void radioRecover() {
   Board &b = *cur;
@@ -803,7 +803,6 @@ World::World(uint32_t start) : now(start), house(*this, 0, "house"), gate(*this,
   if (world) throw Failure("one World at a time");
   world = this;
   radioCfgs.clear();
-  retryAt[0] = retryAt[1] = 0;
   supplyGoodNow[0] = supplyGoodNow[1] = true;
   house.vinNow = gate.vinNow = true;
 }

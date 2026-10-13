@@ -317,7 +317,7 @@ void wrapBoot(uint32_t F) {
   CHECK(rel(boot->at, F) < 0);
   CHECK(rel(w.now, F) > 0);
   // The settle window houseBegin opens (ctrl_settle_ms + sync_window_ms, a few hundred ms into the boot, after the
-  // radio's init) runs its full length across F: commission() returned the millisecond it closed.
+  // radio's init) runs its full length across F: commission() returned within 10 ms of its close.
   CHECK_IN(w.now - boot->at, SETTLE_MS + SYNC_MS, SETTLE_MS + SYNC_MS + 1000);
   JsonDocument h = w.house.status(), gs = w.gate.status();
   CHECK(h["armed"] == true);
@@ -1039,7 +1039,7 @@ TEST(robustness_wrap_2_31_input_supply_returning_reads_closed_not_a_move) {
 // [wrap-safe]: long quiet stretches
 
 // [wrap-safe]
-TEST(robustness_quiet_2_hours_gate_open_nothing_moves) {
+SLOW_TEST(robustness_quiet_2_hours_gate_open_nothing_moves) {
   // Real time, every millisecond: the link stays up on the heartbeats alone, and nothing else happens.
   World w;
   Guard g{ w };
@@ -2062,32 +2062,33 @@ TEST(robustness_controller_slow_boot_after_a_k1_change_inside_its_settle_window_
 // and a few quiet minutes, the Alarm.com switch, K1 and the contact sensor agree with the real gate.
 
 // [chaos]
-TEST(robustness_chaos_seed_1) {
+SLOW_TEST(robustness_chaos_seed_1) {
   chaos(1, 3);
 }
 
 // [chaos]
-TEST(robustness_chaos_seed_2_gate_board_on_the_mains_psu) {
+SLOW_TEST(robustness_chaos_seed_2_gate_board_on_the_mains_psu) {
   // The gate board fed from the opener's mains PSU: every AC loss also takes it down (unless its LiPo is in).
   chaos(2, 3, Shelly::FOLLOW, World::FEED_PSU);
 }
 
 // [chaos]
-TEST(robustness_chaos_seed_3) {
+SLOW_TEST(robustness_chaos_seed_3) {
   chaos(3, 3);
 }
 
 // [chaos] [sync-window]
-TEST(robustness_chaos_toggling_controller_seed_4) {
+SLOW_TEST(robustness_chaos_toggling_controller_seed_4) {
   chaos(4, 2, Shelly::TOGGLE);
 }
 
 // [chaos] [sync-window] [resync]
-TEST(robustness_chaos_seed_8) {
+SLOW_TEST(robustness_chaos_seed_8) {
   // This seed found, at t=7447834, a mismatch resync started 32 ms after the user switched on (the edge still in its
   // 50 ms debounce): that edge, at the resync's target level, ended the resync's sync window early, and the controller
   // following K1's resync pulse (off) was taken as the user, a CLOSE sent for an open gate. See
-  // robustness_resync_window_outlasts_a_matching_edge_so_the_resync_never_commands_the_gate.
+  // robustness_resync_window_outlasts_a_matching_edge_so_the_resync_never_commands_the_gate. (Its timeline moved
+  // since, when commission() began polling the status every 10 ms: the test above replays that case exactly.)
   chaos(8, 3);
 }
 

@@ -4,6 +4,7 @@
 !.claude/skills/
 !.claude/routines/
 build/
+build-cov/
 *.bin
 *.elf
 *.hex

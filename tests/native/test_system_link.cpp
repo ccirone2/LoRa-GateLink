@@ -114,7 +114,7 @@ TEST(link_command_held_on_a_replayed_hello_keeps_its_backoff) {
   int sessions = w.house.status()["link"]["sessions"];
   for (int p : { tx - 1, tx })
     CHECK(w.gate.request("config.set", "\"params\":{\"tx_power\":" + std::to_string(p) + "}")["ok"] == true);
-  CHECK(w.runUntil([&] {
+  CHECK(poll(w, [&] {
     return w.house.status()["link"]["sessions"].as<int>() > sessions && w.gate.status()["link"]["verified"] == true;
   }, 20000));
   w.run(5000);

@@ -9,10 +9,13 @@ struct TestCase {
   const char *name;
   void (*fn)();
   const char *xfail;  // known failure (reason); the run fails if it unexpectedly passes
+  bool slow;          // runs first, so parallel processes (--queue) don't end the run waiting on it
 };
 std::vector<TestCase> &registry();
 struct Reg {
-  Reg(const char *n, void (*f)(), const char *xfail = nullptr) { registry().push_back({ n, f, xfail }); }
+  Reg(const char *n, void (*f)(), const char *xfail = nullptr, bool slow = false) {
+    registry().push_back({ n, f, xfail, slow });
+  }
 };
 // Called before and after every test (each program registers what it needs to reset).
 struct TestHooks {
@@ -23,15 +26,15 @@ struct Failure : std::runtime_error {
 };
 std::string where(const char *file, int line, const std::string &what);
 
-#define TEST(name) \
+#define TEST_REG_(name, ...) \
   static void name(); \
-  static Reg reg_##name(#name, name); \
+  static Reg reg_##name(#name, name, __VA_ARGS__); \
   static void name()
+#define TEST(name) TEST_REG_(name, nullptr)
+// A test that takes many times longer than the rest (simulated hours).
+#define SLOW_TEST(name) TEST_REG_(name, nullptr, true)
 // A test that documents a known bug (TODO.md item): it must fail until the fix lands.
-#define XFAIL_TEST(name, reason) \
-  static void name(); \
-  static Reg reg_##name(#name, name, reason); \
-  static void name()
+#define XFAIL_TEST(name, reason) TEST_REG_(name, reason)
 #define CHECK(c) \
   do { \
     if (!(c)) throw Failure(where(__FILE__, __LINE__, "CHECK(" #c ")")); \

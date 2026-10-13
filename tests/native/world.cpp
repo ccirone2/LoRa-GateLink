@@ -853,19 +853,20 @@ void World::commission(const std::function<void(Board &)> &configure, bool settl
     b->reset(PM_RCAUSE_SYST);
   }
   CHECK(runUntil([&] { return house.running() && gate.running(); }, 2000));
-  CHECK(runUntil([&] { return house.status()["link"]["verified"] == true && gate.status()["link"]["verified"] == true; },
-                 10000));
-  CHECK(runUntil([&] { return house.status()["gate"] != "unknown"; }, 15000));
+  // Every 10 ms: read every millisecond, these status conditions were most of each test's run time.
+  CHECK(poll(*this, [&] { return house.status()["link"]["verified"] == true && gate.status()["link"]["verified"] == true; },
+             10000, 10));
+  CHECK(poll(*this, [&] { return house.status()["gate"] != "unknown"; }, 15000, 10));
   // The gate logs gate_state only on a change, not the state it settles on at boot: start gateSees() from its status.
   static const char *const names[] = { "unknown", "closed", "open", "between", "fault", "no_power" };
   std::string gs = gate.status()["gate"] | "unknown";
   for (int i = 0; i < 6; i++)
     if (gs == names[i]) gateView = i;
   if (settle) {
-    CHECK(runUntil([&] {
+    CHECK(poll(*this, [&] {
       JsonDocument s = house.status();
       return s["armed"] == true && s["sync_window"] == false;
-    }, 20000));
+    }, 20000, 10));
   }
 }
 
@@ -915,6 +916,15 @@ bool World::runUntil(const std::function<bool()> &cond, uint32_t maxMs) {
     step();
   }
   return cond();
+}
+
+bool poll(World &w, const std::function<bool()> &cond, uint32_t maxMs, uint32_t every) {
+  uint32_t start = w.now;
+  for (;;) {
+    if (cond()) return true;
+    if ((int32_t)(w.now - start) >= (int32_t)maxMs) return false;
+    w.run(every);
+  }
 }
 
 void World::user(bool on) {

@@ -98,7 +98,7 @@ TEST(watchdog_reset_reports_where_it_hung) {
 
 // [fault-out] Three crash resets in a row are a reboot loop: `reboots` on the board, in its STATUS, at the house, and
 // D5 low at both once it has lasted fault_hold_s. It clears once a boot has run REBOOT_SETTLE_MS (1 h).
-TEST(gate_reboot_loop_reaches_the_house_and_clears_after_an_hour) {
+SLOW_TEST(gate_reboot_loop_reaches_the_house_and_clears_after_an_hour) {
   Site w;
   w.commission(faultOutOn);
   resetAndBoot(w, w.gate, PM_RCAUSE_WDT);
@@ -110,7 +110,7 @@ TEST(gate_reboot_loop_reaches_the_house_and_clears_after_an_hour) {
   resetAndBoot(w, w.gate, PM_RCAUSE_WDT);
   CHECK_EQ(w.gate.status()["crash_resets"].as<int>(), 3);
   CHECK(hasProblem(w.gate, "reboots"));
-  CHECK(w.runUntil([&] { return w.house.status()["remote"]["reboot_loop"] == true; }, 15000));
+  CHECK(poll(w, [&] { return w.house.status()["remote"]["reboot_loop"] == true; }, 15000));
   CHECK(hasProblem(w.house, "reboots"));
   w.run(HOLD_MS + 100);
   CHECK_EQ(w.house.faultOut(), 0);
@@ -122,7 +122,7 @@ TEST(gate_reboot_loop_reaches_the_house_and_clears_after_an_hour) {
   w.run(SETTLE_MS - (w.now - boot->at) + 100);
   CHECK(!hasProblem(w.gate, "reboots"));
   CHECK_EQ(w.gate.faultOut(), 1);
-  CHECK(w.runUntil([&] { return w.house.status()["remote"]["reboot_loop"] == false; }, 70000));
+  CHECK(poll(w, [&] { return w.house.status()["remote"]["reboot_loop"] == false; }, 70000));
   CHECK(!hasProblem(w.house, "reboots"));
   CHECK_EQ(w.house.faultOut(), 1);
 

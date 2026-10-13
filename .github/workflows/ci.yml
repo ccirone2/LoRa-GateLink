@@ -51,7 +51,9 @@ jobs:
         run: python3 tools/fw_size.py build.log
       # link.cpp and config.cpp on the host, against the Crypto library installed above.
       - name: Host unit tests (tests/native)
-        run: make -C tests/native CRYPTO="$HOME/Arduino/libraries/Crypto/src"
+        run: |
+          make -C tests/native -j"$(nproc)" CRYPTO="$HOME/Arduino/libraries/Crypto/src" bins
+          make -C tests/native CRYPTO="$HOME/Arduino/libraries/Crypto/src"
       - name: Compile GateSim (no warnings in project files)
         run: |
           arduino-cli compile --fqbn arduino:avr:uno --warnings all tools/GateSim 2>&1 | tee sim.log
@@ -86,7 +88,7 @@ jobs:
       - name: Install gcovr
         run: pip install gcovr==7.0
       - name: Coverage
-        run: make -C tests/native coverage MIN_LINES=85
+        run: make -C tests/native -j"$(nproc)" coverage MIN_LINES=85
       - name: Report
         if: always()
         run: |

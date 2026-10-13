@@ -14,7 +14,8 @@ Nothing here talks to hardware; the bench suite in `tests/e2e` remains the end-t
 
 ```sh
 make -C tests/native                    # builds and runs both; exit status 1 on a failure
-make -C tests/native run-systests       # just the simulated site (JOBS parallel shards, default nproc)
+make -C tests/native -j8 bins && make -C tests/native   # the same, compiled in parallel first (as CI does)
+make -C tests/native run-systests       # just the simulated site (JOBS parallel processes, default nproc)
 make -C tests/native build/tests && tests/native/build/tests retries        # one test (name substring)
 make -C tests/native build/systests build/node.so && tests/native/build/systests travel
 ```
@@ -73,7 +74,7 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
   `b.reset(...)`, `w.drop = ...`, `b.request("relay.test", "\"k\":1")`) and check pins (`b.coil(k)`, `w.sensorClosed()`,
   `b.faultOut()` for D5),
   the opener, log events (`b.logs`, `b.count`, `b.last`, `b.waitLog`), console replies and `b.status()` (it's slow: don't
-  call it every millisecond in `runUntil`). Name the invariants a test covers in a comment above it, e.g.
+  call it every millisecond: `poll(w, cond, maxMs)` checks a condition every 50 ms). Name the invariants a test covers in a comment above it, e.g.
   `// [interlock] [pulse-only]`. `w.trace.dump()` prints what happened; it is printed anyway when a test fails.
 
 ## Link and config tests (`tests`)
@@ -102,7 +103,10 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
 
 A test is `TEST(name) { ... }` with `CHECK`, `CHECK_EQ` and `CHECK_IN`. `XFAIL_TEST(name, reason)` marks a known bug
 (an open TODO item): the test must fail, and the run fails once it passes, so whoever fixes the bug flips it to
-`TEST`. Both programs take a name substring to run some of the tests.
+`TEST`. `SLOW_TEST(name)` marks one that takes many times longer than the rest (simulated hours: the chaos runs): the
+slow ones start first, so the parallel processes finish together. Both programs take a name substring to run some of
+the tests; `make run-systests` starts `JOBS` processes sharing one queue file (`--queue=FILE`, emptied first), each
+taking the next test from it, and fails if no test ran.
 
 ## Invariant tags
 
@@ -154,7 +158,7 @@ against it (`make FW=`) and runs its `killed_by` tests, then, if they all pass, 
 python3 tools/mutate.py --libs /libs --jobs 4                 # all of them: a few minutes per mutation per job
 python3 tools/mutate.py --invariant interlock --libs /libs     # one invariant
 python3 tools/mutate.py --list                                # the catalog
-make -C tests/native run JOBS=4 T=interlock                   # the system tests in 4 parallel shards (T= filters)
+make -C tests/native run JOBS=4 T=interlock                   # the system tests in 4 parallel processes (T= filters)
 ```
 
 `tests/tools/test_mutate.py` (CI) checks that every mutation still applies to the firmware as it is, so a firmware
@@ -167,7 +171,7 @@ tests miss, gets an entry here with a test that kills it.
 ```sh
 make -C tests/native cppcheck              # cppcheck: warning, performance, portability (every firmware file)
 make -C tests/native tidy                  # clang-tidy with firmware/GateLink/.clang-tidy (the host-built files)
-make -C tests/native coverage MIN_LINES=85 # a --coverage build in build-cov, the tests, then gcovr on the firmware
+make -C tests/native coverage MIN_LINES=85 # a --coverage build in build-cov (no sanitizers), the tests, then gcovr
 ```
 
 CI's `static` and `coverage` jobs run these. clang-tidy's checks are the bug-finding families (bugprone, the

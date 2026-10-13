@@ -99,8 +99,8 @@ void clear60(Board &b) {
 void reboot(World &w, Board &b, uint8_t cause = PM_RCAUSE_SYST) {
   b.reset(cause);
   CHECK(w.runUntil([&] { return b.running(); }, 2000));
-  CHECK(w.runUntil([&] { return w.house.running() && w.gate.running() && b.status()["link"]["verified"] == true; },
-                   15000));
+  CHECK(poll(w, [&] { return w.house.running() && w.gate.running() && b.status()["link"]["verified"] == true; },
+              15000));
 }
 
 void put16(uint8_t *p, uint16_t v) {

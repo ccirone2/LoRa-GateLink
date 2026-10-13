@@ -1,7 +1,12 @@
 // Test runner: runs the registered tests (all, or those named on the command line) and exits 1 on any failure.
 #include "testing.h"
+#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
+#include <unistd.h>
+#include <algorithm>
 #include <chrono>
 
 std::vector<TestCase> &registry() {
@@ -26,17 +31,38 @@ std::string where(const char *file, int line, const std::string &what) {
   return std::string(base ? base + 1 : file) + ":" + std::to_string(line) + ": " + what;
 }
 
+// The next test's position in a queue file shared by the processes running the tests: the count taken so far, under
+// an exclusive lock (an empty file is 0). A queue that fails ends the run loudly rather than losing tests.
+static size_t takeFromQueue(int fd) {
+  unsigned n = 0;
+  bool ok = flock(fd, LOCK_EX) == 0 && pread(fd, &n, sizeof(n), 0) >= 0;
+  unsigned next = n + 1;
+  ok = ok && pwrite(fd, &next, sizeof(next), 0) == (ssize_t)sizeof(next);
+  flock(fd, LOCK_UN);
+  if (!ok) {
+    perror("test queue");
+    exit(2);
+  }
+  return n;
+}
+
 // Arguments: name substrings (a test runs if its name contains any of them; none = every test), --exact (the names
-// must match whole), --shard=I/N (every Nth test from the Ith, so N processes can share the run).
+// must match whole), --queue=FILE (processes given the same empty FILE share the run: each takes the next test from
+// it, slow ones first, until none are left).
 int main(int argc, char **argv) {
   std::vector<const char *> names;
   bool exact = false;
-  unsigned shard = 0, shards = 1;
+  int queue = -1;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--exact")) exact = true;
-    else if (sscanf(argv[i], "--shard=%u/%u", &shard, &shards) == 2 && shards && shard < shards) continue;
-    else if (!strncmp(argv[i], "--", 2)) {
-      fprintf(stderr, "unknown option %s (name substrings, --exact, --shard=I/N)\n", argv[i]);
+    else if (!strncmp(argv[i], "--queue=", 8)) {
+      queue = open(argv[i] + 8, O_RDWR | O_CREAT, 0644);
+      if (queue < 0) {
+        perror(argv[i] + 8);
+        return 2;
+      }
+    } else if (!strncmp(argv[i], "--", 2)) {
+      fprintf(stderr, "unknown option %s (name substrings, --exact, --queue=FILE)\n", argv[i]);
       return 2;
     } else names.push_back(argv[i]);
   }
@@ -46,10 +72,15 @@ int main(int argc, char **argv) {
       if (exact ? !strcmp(name, n) : strstr(name, n) != nullptr) return true;
     return false;
   };
+  std::vector<const TestCase *> todo;
+  for (const TestCase &t : registry())
+    if (wanted(t.name)) todo.push_back(&t);
+  std::stable_partition(todo.begin(), todo.end(), [](const TestCase *t) { return t->slow; });
   int failed = 0, run = 0;
-  unsigned index = 0;
-  for (const TestCase &t : registry()) {
-    if (!wanted(t.name) || index++ % shards != shard) continue;
+  for (size_t i = 0;; i++) {
+    size_t next = queue >= 0 ? takeFromQueue(queue) : i;
+    if (next >= todo.size()) break;
+    const TestCase &t = *todo[next];
     run++;
     auto started = std::chrono::steady_clock::now();
     std::string err;
@@ -82,6 +113,7 @@ int main(int argc, char **argv) {
       }
     } else if (err.empty()) {
       printf("ok    %s%s\n", t.name, took);
+      if (!t.slow && secs >= 15) printf("      over 15 s: if it always is, mark it SLOW_TEST to start it first\n");
     } else {
       printf("FAIL  %s%s\n      %s\n", t.name, took, err.c_str());
       failed++;

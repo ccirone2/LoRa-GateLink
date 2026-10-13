@@ -36,22 +36,27 @@ SYS_OBJS := $(SYS_SRCS:%.cpp=$(BUILD)/%.o)
 
 # ASan in GCC 12 can loop on DEADLYSIGNAL at startup under kernels with vm.mmap_rnd_bits = 32 (Docker Desktop's
 # WSL2 kernel): run with address randomization off when setarch may do that.
-# Parallel system test shards (make JOBS=1 for one process); T= a test name substring to run only those.
+# Parallel system test processes (make JOBS=1 for one); T= a test name substring to run only those.
 JOBS ?= $(shell nproc 2>/dev/null || echo 1)
 NORAND := $(shell setarch $$(uname -m) -R true 2>/dev/null && echo setarch $$(uname -m) -R)
 HEADERS := $(wildcard *.h stubs/*.h $(FW)/*.h)
 
-.PHONY: run run-tests run-systests run-fuzz-replay coverage cppcheck tidy clean
+.PHONY: bins run run-tests run-systests run-fuzz-replay coverage cppcheck tidy clean
 run: run-tests run-systests run-fuzz-replay
+# The test programs, to build with -j before `run` (which is best run without: run-systests is parallel already).
+bins: $(BUILD)/tests $(BUILD)/systests $(BUILD)/node.so
 run-tests: $(BUILD)/tests
 	$(NORAND) $(BUILD)/tests
-# The system tests run in JOBS processes, each a shard of them (--shard=I/N); their outputs are shown in turn.
+# The system tests run in JOBS processes sharing one queue (--queue: each takes the next test, the slow ones
+# first); their outputs are shown in turn.
 run-systests: $(BUILD)/systests $(BUILD)/node.so
-	@rm -f $(BUILD)/systests.*.out; rc=0; pids=; for i in $$(seq 0 $$(($(JOBS) - 1))); do \
-	  $(NORAND) $(BUILD)/systests --shard=$$i/$(JOBS) $(T) > $(BUILD)/systests.$$i.out 2>&1 & pids="$$pids $$!"; \
+	@rm -f $(BUILD)/systests.*.out; : > $(BUILD)/systests.queue; rc=0; pids=; for i in $$(seq 0 $$(($(JOBS) - 1))); do \
+	  $(NORAND) $(BUILD)/systests --queue=$(BUILD)/systests.queue $(T) > $(BUILD)/systests.$$i.out 2>&1 & \
+	  pids="$$pids $$!"; \
 	done; for p in $$pids; do wait $$p || rc=1; done; \
 	cat $(BUILD)/systests.*.out; grep -h 'tests, ' $(BUILD)/systests.*.out | \
-	  awk '{t += $$1; f += $$3} END {print "systests: " t " tests, " f " failed in " NR " shards"}'; exit $$rc
+	  awk '{t += $$1; f += $$3} END {print "systests: " t " tests, " f " failed in " NR " shards"; exit (t == 0)}' || rc=1; \
+	  exit $$rc
 # Every input in fuzz/corpus must run clean, and every reproducer in fuzz/crashes must still crash.
 run-fuzz-replay:
 	$(MAKE) -f fuzz/Makefile CXX="$(CXX)" CRYPTO="$(CRYPTO)" JSON="$(JSON)" BUILD="$(BUILD)" replay
@@ -67,6 +72,11 @@ $(BUILD)/node.so: $(NODE_OBJS)
 
 $(BUILD)/%.o: %.cpp $(HEADERS) $(FW)/link.cpp link_node.inc | $(BUILD)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+# The tests' own bodies (test_*.cpp: thousands of lines of lambdas) at -O0: -O1 took about three times as long to
+# compile them (test_system_robustness.cpp alone 40 s), saving more than the few seconds the chaos runs' per-step
+# helpers lose unoptimized; world.cpp and the firmware stay at -O1.
+$(BUILD)/test_%.o: CXXFLAGS += -O0
 
 $(BUILD)/config.o: $(FW)/config.cpp $(HEADERS) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
@@ -101,9 +111,15 @@ cppcheck:
 # Checks and exceptions: $(FW)/.clang-tidy.
 tidy:
 	$(TIDY) --quiet $(TIDY_SRCS) -- -std=gnu++17 -DHOST_BUILD -Istubs -I. -I$(FW) -isystem $(CRYPTO) -isystem $(JSON)
-# COVERAGE=1 build in $(BUILD)-cov, the tests run, then gcovr on the firmware (MIN_LINES=n fails below n %).
+# COVERAGE=1 build in a fresh $(BUILD)-cov (no stale objects or counters), the tests run, then gcovr on the firmware
+# (MIN_LINES=n fails below n %). Without the sanitizers: `run` has them, and they made this run about nine times slower
+# (and add branches of their own).
+COV := BUILD=$(BUILD)-cov COVERAGE=1 SAN=
 coverage:
-	$(MAKE) BUILD=$(BUILD)-cov COVERAGE=1 run-tests run-systests
+	rm -rf $(BUILD)-cov
+	$(MAKE) $(COV) bins
+	$(MAKE) $(COV) run-tests
+	$(MAKE) $(COV) run-systests
 	gcovr -r ../.. --gcov-object-directory $(CURDIR) --filter '$(abspath $(FW))/' -j $(JOBS) --print-summary \
 	  --txt $(BUILD)-cov/coverage.txt --json-summary $(BUILD)-cov/coverage.json \
 	  $(if $(MIN_LINES),--fail-under-line $(MIN_LINES)) $(BUILD)-cov

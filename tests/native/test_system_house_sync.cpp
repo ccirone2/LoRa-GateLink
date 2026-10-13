@@ -63,16 +63,6 @@ Found waitFor(World &w, Board &b, const char *ev, size_t from, uint32_t maxMs, i
   return f;
 }
 
-// Checks `cond` every `every` ms (for conditions that read a board's status, which is expensive).
-bool poll(World &w, const std::function<bool()> &cond, uint32_t maxMs, uint32_t every = 50) {
-  uint32_t start = w.now;
-  for (;;) {
-    if (cond()) return true;
-    if ((int32_t)(w.now - start) >= (int32_t)maxMs) return false;
-    w.run(every);
-  }
-}
-
 // Steps `ms`, checking `ok` after every step; returns the world time it first failed (0 = never).
 uint32_t watch(World &w, uint32_t ms, const std::function<bool()> &ok) {
   uint32_t bad = 0;

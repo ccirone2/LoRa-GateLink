@@ -1700,7 +1700,7 @@ def known_names(repo):
         names |= set(re.findall(r"^\s*def (test_\w+)", repo.text(rel), re.M))
     for rel in repo.glob("tests/native/*.cpp"):  # host tests, and the system test groups (test_system_<group>.cpp)
         names.add(Path(rel).stem.removeprefix("test_system_"))
-        names |= set(re.findall(r"^(?:XFAIL_)?TEST\((\w+)", repo.text(rel), re.M))
+        names |= set(re.findall(r"^(?:XFAIL_|SLOW_)?TEST\((\w+)", repo.text(rel), re.M))
     for rel in repo.glob("tests/native/mutations.json"):  # the mutation catalog's names and keys
         for m in json.loads(repo.text(rel)):
             names |= {m["name"], *m}

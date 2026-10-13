@@ -338,5 +338,9 @@ struct World {
 
 extern World *world;
 
+// Runs until cond holds (at most maxMs), checking it every `every` ms: for conditions that read a board's status(),
+// too slow to read every millisecond.
+bool poll(World &w, const std::function<bool()> &cond, uint32_t maxMs, uint32_t every = 50);
+
 // The shared link key (16 bytes) commission() gives both boards.
 extern const uint8_t TEST_KEY[16];

@@ -69,9 +69,11 @@ def test_ac_loss_close_runs(rig):
     m = rig.mark()
     rig.ctrl.on()
     rig.wait_log("gate", "gate_state", a=GS["open"], since=m, timeout=SIM_TRAVEL_S + 10)
-    rig.wait_house(10, gate="open", resyncing=False)
+    rig.wait_ctrl(True, timeout=30)
     rig.sim.ac(False)
     rig.wait_gate("open", ac_power=False, timeout=5)
+    # K1 followed the gate to open: an IN1 edge inside that sync window is the controller following, not a command.
+    rig.wait_house(10, "sync window closed", gate="open", sync_window=False, resyncing=False)
 
     m2 = rig.mark()
     rig.ctrl.off()

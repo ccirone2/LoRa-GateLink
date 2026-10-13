@@ -46,7 +46,7 @@ test('the gate’s state and power, the controller, start-up', () => {
   assert.match(txt(house({ gate: 'no_power', health: ['no_power'] })), /^The gate opener has no power/);
   assert.match(txt(house({ gate: 'fault', health: ['fault'] })), /^Both gate limits/);
   assert.equal(lvl(gate({ health: ['ac'], ac_power: false })), 'warn');
-  assert.match(txt(gate({ health: ['ac'] })), /on its battery/);
+  assert.match(txt(gate({ health: ['ac'] })), /on its battery.*Opening is refused.*closing still works/);
   assert.match(txt(house({ ctrl_power: false })), /controller has no power/);
   assert.match(txt(house({ health: ['starting'] })), /waiting for the gate’s first report/);
   assert.match(txt(gate({ health: ['starting'] })), /inputs are settling/);

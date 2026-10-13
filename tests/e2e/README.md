@@ -63,7 +63,8 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
 - **Power rig.** Relays on GateSim D7 and D9 switch the boards' supplies (wiring: `tools/bench-wiring`; commands:
   `tools/GateSim/README.md`): CH1 the gate buck's 24 V feed, CH3 the house 12 V rail (controller, IN2 opto, house
   buck). The LiPos are plugged in or out by hand. CH2 (D8) repeats house K1 to the controller's SW input, so K1's
-  own contacts can be sensed on the Uno (D11/D12). `-m power` runs `test_power.py`, which
+  own contacts can be sensed on the Uno (D11/D12). `-m power` runs `test_power.py`, which needs a UART tap on both
+  boards (a board's `boot` is heard only there; without one, every power test is skipped) and
   first gives each board a 1.5 s cut to find out whether its LiPo is in (the summary's "LiPos" line) and runs
   the tests for that state, skipping the others. LiPo out: a cut takes the board down (the gate holds ~0.6 s on
   its buck, the house ~0.1 s), so those tests check boots and recovery. LiPo in: the board rides through, so

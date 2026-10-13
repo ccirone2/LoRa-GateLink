@@ -34,6 +34,10 @@ PROFILE_GATE = {"power_sense": 1, "in1_invert": 0, "in2_invert": 0, "in3_invert"
 _ERRORS = (BoardError, GateSimError, ControllerError, KeyError, TypeError)
 
 
+class NoUartTap(Exception):
+    """A board the power tests need to hear boot has no UART tap."""
+
+
 def _get(d, path):
     for part in path.split("__"):
         if not isinstance(d, dict):
@@ -206,6 +210,28 @@ class Bench:
         self.allow_reboot(site)
         self.timeline.add("test", "action", text=f"power cut {site} {ms} ms", power_cut=site, ms=ms)
         self.sim.cut(site, ms)
+
+    def find_lipos(self):
+        """Which boards have their LiPo plugged in: cut each one's supply for 1.5 s (well past its buck's hold-up) and
+        see whether it reboots. {"gate": bool, "house": bool}. A boot is heard only on the board's UART tap (its USB
+        port is gone until after the event), so without a tap a reboot would read as a LiPo carrying the board, and
+        the ride-through tests' reboot checks could never fail: raise NoUartTap instead."""
+        untapped = [n for n in ("gate", "house") if self.board(n).uart is None]
+        if untapped:
+            raise NoUartTap(f"the power tests need a UART tap on the {' and '.join(untapped)} board: "
+                            "its boot is heard only there (tests/e2e/README.md, UART taps)")
+        self.begin_test("power_lipo_check")
+        self.baseline()
+        found = {}
+        for site in ("gate", "house"):
+            m = self.mark()
+            self.power_cut(site, 1500)
+            time.sleep(5)
+            found[site] = not self.logs(site, "boot", since=m)
+            if not found[site]:
+                self.wait_power_return(site, m)
+        self.facts["LiPos"] = ", ".join(f"{s} {'in' if v else 'out'}" for s, v in found.items())
+        return found
 
     def wait_power_return(self, name, since, timeout=30, profile=True):
         """After a power cut took `name` down: wait for its boot (heard first on its UART tap, before USB is back)

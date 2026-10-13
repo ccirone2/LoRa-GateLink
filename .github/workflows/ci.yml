@@ -37,13 +37,12 @@ jobs:
           path: |
             ~/.arduino15
             ~/Arduino/libraries
-          key: arduino-samd1.8.14-avr1.8.8-LoRa0.8.0-Crypto0.4.0-FlashStorage1.0.0-ArduinoJson7.4.3-SleepyDog1.8.4
+          key: arduino-samd1.8.14-avr1.8.8-LoRa0.8.0-Crypto0.4.0-FlashStorage1.0.0-ArduinoJson7.4.3
       - name: Install cores and libraries
         run: |
           arduino-cli core update-index
           arduino-cli core install arduino:samd@1.8.14 arduino:avr@1.8.8
-          arduino-cli lib install "LoRa@0.8.0" "Crypto@0.4.0" "FlashStorage@1.0.0" "ArduinoJson@7.4.3" \
-            "Adafruit SleepyDog Library@1.8.4"
+          arduino-cli lib install "LoRa@0.8.0" "Crypto@0.4.0" "FlashStorage@1.0.0" "ArduinoJson@7.4.3"
       - name: Compile GateLink (no warnings in project files)
         run: |
           arduino-cli compile --fqbn arduino:samd:mkrwan1310 --warnings all firmware/GateLink 2>&1 | tee build.log

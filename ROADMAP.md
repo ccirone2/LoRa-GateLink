@@ -29,41 +29,38 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 |---|---|---|---|---|
 | **Tier 1: the gate's real state, safety, never late** | | | | |
 | 1 | F20 | Let Alarm.com close the gate during an AC outage | S | |
-| 2 | F9 | Know why a board reset, and catch reboot loops | S | |
-| 3 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
-| 4 | F14 | Catch faults the inputs alone don't show | M | F9 for the reboot loop |
-| 5 | F17 | Tell the alarm about a move it missed | M | best with F6 (one frame change) |
-| 6 | F6 | Keep the link private and commands fresh | L | decide F8's addressing with it |
+| 2 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
+| 3 | F14 | Catch faults the inputs alone don't show | M | |
+| 4 | F17 | Tell the alarm about a move it missed | M | best with F6 (one frame change) |
+| 5 | F6 | Keep the link private and commands fresh | L | decide F8's addressing with it |
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
-| 7 | F10 | Spot boards that don't match | S | |
-| 8 | C3 | Help the installer aim the antenna | S | |
-| 9 | B1 | Repeatable RF tests | S | |
-| 10 | F3 | Tell the alarm what kind of trouble it is | M | F9 |
-| 11 | C1 | One-line health verdict for the installer | M | F9, F10 for their lines |
-| 12 | F1 | Keep the event log across resets | M | |
-| 13 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
-| 14 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 15 | F7 | Update the gate's firmware without visiting it | XL | F1, F2, F9 |
+| 6 | C3 | Help the installer aim the antenna | S | |
+| 7 | B1 | Repeatable RF tests | S | |
+| 8 | F3 | Tell the alarm what kind of trouble it is | M | |
+| 9 | F1 | Keep the event log across resets | M | |
+| 10 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
+| 11 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
+| 12 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 16 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 17 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 18 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 19 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 20 | F11 | Firmware ready for a second board | M | |
-| 21 | B2 | Test attacks over real RF | M | B1 |
-| 22 | B3 | Reach the host-only fault paths on the bench | M | |
-| 23 | D2 | Run the bench automatically, safely | M | |
-| 24 | F18 | Stop casual actuation over USB | M | |
-| 25 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 26 | F5 | Change radio settings without stranding the link | L | |
-| 27 | F13 | Work with controllers that pulse | L | |
-| 28 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
+| 13 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 14 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
+| 15 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 16 | C2 | Answer "what happened last night?" | M | F1, F2 |
+| 17 | F11 | Firmware ready for a second board | M | |
+| 18 | B2 | Test attacks over real RF | M | B1 |
+| 19 | B3 | Reach the host-only fault paths on the bench | M | |
+| 20 | D2 | Run the bench automatically, safely | M | |
+| 21 | F18 | Stop casual actuation over USB | M | |
+| 22 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 23 | F5 | Change radio settings without stranding the link | L | |
+| 24 | F13 | Work with controllers that pulse | L | |
+| 25 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 29 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 30 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 31 | C4 | Check a board still runs genuine firmware | M | |
-| 32 | B6 | Turn field incidents into tests | M | F1 |
-| 33 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 26 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 27 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 28 | C4 | Check a board still runs genuine firmware | M | |
+| 29 | B6 | Turn field incidents into tests | M | F1 |
+| 30 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -103,12 +100,13 @@ settings, and `hist.get` serves only the 96 hourly buckets a boot loads into RAM
 - its link history, and older buckets of either board's history from the flash log, read in batches since each read
   takes the radio off the air ~0.5 s (or keep slimmer buckets in RAM, 68 B now, or 2 h ones: a `config.get` reply
   takes ~5 KB of heap);
-- its full status: health, supply, AC, `loop_max_us` and `free_ram`.
+- its full status: health, supply, AC, `loop_max_us`, `free_ram`, and `crash_resets` with the last hang (`hang_stage`,
+  `hang_pc`; since 0.15.0 the house learns only the gate's reboot loop, STATUS bit 7).
 
 The gate answers only with no command pending and no relay pulsing, and pages are rate-limited.
 
 **Cost / risk.** New message types: a MINOR both boards need together. Update the console contract and the threat
-model (payloads stay readable until F6). F9, F10 and C2 use this data.
+model (payloads stay readable until F6). C2 uses this data.
 
 ### F3: Tell the alarm what kind of trouble it is
 
@@ -117,11 +115,10 @@ rebooting), not only that it needs attention, and covers every problem that leav
 (`jamming-hides-state-until-link-timeout`).
 
 **Today.** Since 0.14.0 D5 (`fault_out`) drives one second 2GIG sensor for radio, link, AC, `no_power` and `fault`
-problems, all alike.
+problems, and since 0.15.0 a reboot loop at either board (health `reboots`), all alike.
 
 **How.**
 - Add a travel timeout (jam): the house already gets `last_result` in STATUS.
-- Add a reboot loop (F9): a board that is alive but useless.
 - A sensor per problem class, e.g. AC lost vs link lost.
 - Hardware: an AQY212EH PhotoMOS (~$2) could replace the relay module, plus $25–35 per extra 2GIG sensor. It needs
   up to 3 mA (5–10 mA recommended) and the SAMD core leaves high drive strength off, so either set it on D5 with
@@ -206,8 +203,8 @@ gate box for an update. The biggest saving in field effort.
 - Pace it so the link keeps working: a ~120 KB image at SF9 / 500 kHz (~7 kbps raw) is ~2.5 minutes before protocol
   overhead.
 
-**Cost / risk.** The most work and the most risk here: a failed update strands a board at the gate. Do F1, F2 and F9
-first so a failed update can be diagnosed. It needs a bootloader stage that copies the staged image into place. Give
+**Cost / risk.** The most work and the most risk here: a failed update strands a board at the gate. Do F1 and F2 first
+so a failed update can be diagnosed. It needs a bootloader stage that copies the staged image into place. Give
 it its own threat-model section, and host-test power cuts mid-copy.
 
 **Open questions.** Does Arduino's SFU loader support this board (not confirmed)?
@@ -224,38 +221,6 @@ house, which the relay shield doesn't have (H1).
 
 **Cost / risk.** A protocol change, so decide the addressing with F6, before 1.0, even if it's built later. Each extra
 gate end costs about $100.
-
-### F9: Know why a board reset, and catch reboot loops
-
-**Goal.** After a watchdog reset the developer can see where the board hung, and a board that keeps resetting (alive
-but useless) is flagged instead of failing silently (`reboot-loops`). A prerequisite for F7.
-
-**Today.** `reset_cause` says only "watchdog", and nothing counts resets.
-
-**How.**
-- Use the SAMD21 watchdog's early-warning interrupt to save the program counter and the current loop stage in
-  `.noinit` RAM, and log them at the next boot (into the F1 journal once it exists). The handler only writes RAM.
-- A reboot-loop counter: N resets within M minutes (or before the first full loop pass) raises the F3 reboot-loop
-  trouble on D5.
-- The gate reports its reboots and breadcrumbs to the house (in STATUS, or through F2).
-
-**Cost / risk.** Small, firmware only.
-
-### F10: Spot boards that don't match
-
-**Goal.** When the two boards differ in firmware or must-match settings, the installer is told what differs, instead
-of facing a link that never verifies or behaves oddly.
-
-**Today.** A mismatch shows up only as its symptoms.
-
-**How.** Split in two (decided 2026-10-12), since the must-match settings (`net_id`, `freq_hz`, `sf`, `bw_hz`, `cr`,
-`sync_word`) are exactly the ones that stop the link when they differ, so a mismatched gate never answers over it:
-- Over the link: the house compares the gate's firmware version (DIAG) with its own and warns, in status and the log,
-  when the STATUS/DIAG layouts differ.
-- In the web console: compare the must-match settings across both boards' configs (both connected in turn, or an
-  exported file), and say "the link can't verify: these differ" next to *Peer verified: no*.
-
-**Cost / risk.** Low; C1 shows it.
 
 ### F11: Firmware ready for a second board
 
@@ -310,7 +275,8 @@ or disabling remote control (`closed-limit-nc-fail-unsafe`, `power-sense-degrada
 
 **How.** Latch a fault for: a closed limit that never releases after our OPEN pulse; closed reached without passing
 between; IN2 or IN3 off while everything else says power is there; a shared input held on while our coil is off (that
-last needs the opener's OPEN/CLOSE terminals sensed on an input: F15, or H1). Reboot loops are F9.
+last needs the opener's OPEN/CLOSE terminals sensed on an input: F15, or H1). Reboot loops are counted since 0.15.0
+(health `reboots`).
 
 ### F15: Put the spare inputs to use
 
@@ -390,16 +356,6 @@ and the threat model. Host tests: CLOSE without AC from open pulses, OPEN refuse
 house's resync after a refused OPEN still happens. Bench: the power tests.
 
 ## Web console
-
-### C1: One-line health verdict for the installer
-
-**Goal.** The installer sees at a glance whether the site is healthy and, if not, what to do next.
-
-**Today.** The Status tab shows counters and fields that have to be read and interpreted.
-
-**How.** One plain-language line with a next step, e.g. "All good", "Link weak: 6 dB margin, raise SF on both boards",
-"Gate on battery: AC lost 2 h ago", including F10 mismatches and F9 reboot loops; the current counters move under
-*Details*. For the installer first: the homeowner never sees the console.
 
 ### C2: Answer "what happened last night?"
 

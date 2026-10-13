@@ -93,7 +93,7 @@ The house shows `no_power`, `fault` and a lost link the way it shows an open gat
 the Alarm.com switch turns on. To have the alarm system report "gate needs attention" separately, either board can
 drive D5 (`fault_out`, off by default): HIGH while the board is healthy, LOW once a problem has lasted `fault_hold_s`
 (default 10 s), and LOW after a reset until the board has started up. The problems each board counts (its radio, the
-link, AC power at the gate, `no_power`, `fault`) are listed in [console.md](console.md#fault-output); status `health`
+link, AC power at the gate, `no_power`, `fault`, a reboot loop) are listed in [console.md](console.md#fault-output); status `health`
 shows them, and log `health` each change of D5.
 
 - **D5 is a 3.3 V logic output good for a few mA.** Drive an opto or a relay module's input with it, never a relay
@@ -104,8 +104,8 @@ shows them, and log `health` each change of D5.
   Since D5 has to be driven HIGH to keep the loop closed, a dead board, a reset, a cut wire or a dead relay module
   opens it too. Name it e.g. "Gate link trouble" in Alarm.com, set to report a trouble or notification rather than an
   intrusion.
-- **Which board:** the house's D5 covers what matters to the alarm (the link, and the gate's AC, `no_power` and
-  `fault` as its STATUS reports them), so most installs wire only the house. At the gate the same output can feed a
+- **Which board:** the house's D5 covers what matters to the alarm (the link, and the gate's AC, `no_power`, `fault`
+  and reboot loop as its STATUS reports them), so most installs wire only the house. At the gate the same output can feed a
   sensor near the opener, which also covers the gate board itself going dead.
 - Set `fault_out` on the board whose D5 is wired; it applies at once. It isn't remote-writable (it's a wiring
   decision); `fault_hold_s` can also be set on the gate from the house. With `fault_out` off, D5 stays an input with

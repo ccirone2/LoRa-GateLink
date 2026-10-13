@@ -86,8 +86,9 @@ response slot plus a random backoff drawn once per frame, measured from the last
 `radioRxDoneCount`, so bad-CRC frames count too); a busy channel holds the frame (slots re-poll, unreliable frames
 wait in a 4-deep queue with responses at the front; full, the tail goes, never the newest response) and after 2× the
 longest frame busy without a break it is sent anyway (`lbt_forced`; a clear reading restarts that count); a frame
-held back past `waitCapMs()` skips the gaps (frames heard every ~60 ms held them shut for good) and waits only for a
-busy channel. Counters: status `link.lbt_defers`/`lbt_forced`.
+held back past `waitCapMs()` no longer waits out the gaps (frames heard every ~60 ms held them shut for good): it goes
+as soon as a frame heard ends (within `CAPPED_SLOT_MS`, 3 ms; mid-gap it would run into the next one) or once its
+backoff has passed after all, and a busy channel still holds it. Counters: status `link.lbt_defers`/`lbt_forced`.
 
 **ACK memo.** Already-accepted retransmits are re-ACKed from an ACK memo, not re-processed; a message answered later
 (`linkAckLater`: the gate's remote config writes during a relay pulse) holds its retransmits quietly until its

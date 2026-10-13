@@ -85,8 +85,9 @@ Every transmission listens before talking: responses go
 after a 25 ms turnaround, new frames after the response slot plus a random backoff, both counted from the end of
 the last frame on the air (any frame heard, also one with a bad CRC). Frames heard more often than that (another
 LoRa network on the same channel and sync word, or someone replaying ours) would hold new frames off for good, so a
-frame held back longer than about twice the longest frame plus the longest backoff skips those gaps and waits only
-for a channel that reads busy (counted in `lbt_forced`). A channel that reads busy without a break for twice the
+frame held back longer than about twice the longest frame plus the longest backoff stops waiting out those gaps: it
+goes as soon as a frame heard ends (mid-gap it would run into the next one), or once the channel has been quiet for
+its backoff after all, and still waits while the channel reads busy (counted in `lbt_forced`). A channel that reads busy without a break for twice the
 longest frame (noise taken for a signal) doesn't hold a frame any longer; a clear reading restarts that count, so a
 frame never goes into the next frame heard. Unreliable frames waiting for a clear channel
 are queued four deep with responses first; when the queue is full the newest new frame is dropped, or with only

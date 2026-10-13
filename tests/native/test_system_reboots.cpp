@@ -174,3 +174,32 @@ TEST(crash_resets_saturate_at_255) {
   CHECK_EQ(w.house.status()["crash_resets"].as<int>(), 255);
   CHECK(hasProblem(w.house, "reboots"));
 }
+
+// radio.cpp's counters and its retry timer are RAM, so a reset starts them over: radio_faults and crc_err count since
+// boot (and history.cpp adds what they grew by to the current bucket), and a radio that fails to start logs
+// radio_fail a=0 on every boot it fails in, not just the first.
+TEST(reset_starts_the_radio_counters_over) {
+  Site w;
+  w.commission();
+  w.gate.radioFault = true;
+  CHECK(w.gate.waitLog("radio_fail", 2000));
+  w.corrupt = [](const AirFrame &f) { return f.from == 1; };
+  w.run(65000);  // past a heartbeat or two, garbled
+  w.corrupt = nullptr;
+  CHECK_EQ(w.gate.status()["radio_faults"].as<int>(), 1);
+  CHECK(w.house.status()["link"]["crc_err"].as<int>() > 0);
+  resetAndBoot(w, w.gate, PM_RCAUSE_SYST);
+  resetAndBoot(w, w.house, PM_RCAUSE_SYST);
+  CHECK_EQ(w.gate.status()["radio_faults"].as<int>(), 0);
+  CHECK_EQ(w.house.status()["link"]["crc_err"].as<int>(), 0);
+
+  w.gate.radioPresent = false;
+  for (int i = 0; i < 2; i++) {
+    size_t n = w.gate.logs.size();
+    resetAndBoot(w, w.gate, PM_RCAUSE_SYST);
+    int fails = 0;
+    for (size_t j = n; j < w.gate.logs.size(); j++)
+      if (w.gate.logs[j].ev == "radio_fail" && w.gate.logs[j].a == 0) fails++;
+    CHECK_EQ(fails, 1);
+  }
+}

@@ -104,7 +104,8 @@ struct Board {
   bool radioRestartDue = false;  // radio.cpp after a fault: down until radioRecover() starts it over
   uint32_t txStart = 0, txEnd = 0;  // the last frame sent (equal: none on the air)
   std::deque<Bytes> rxq;  // at most one frame waits in the FIFO (a newer one overwrites it); empty = bad CRC
-  uint32_t rxDone = 0, crcErr = 0, faults = 0;
+  uint32_t rxDone = 0, crcErr = 0, faults = 0;  // radio.cpp's counters since boot
+  uint32_t retryAt = 0;  // radio.cpp while the radio didn't start: when to try again (0: no failure logged yet)
   int16_t rssi = -60, noise = -118;
   float snr = 9.0f;
 

@@ -20,6 +20,11 @@ EXPORT void node_loop() {
   appLoop();
 }
 
+// GateLink.ino's WDT_Handler: the watchdog's early warning, with the program counter it interrupted.
+EXPORT void node_watchdog_warning(uint32_t pc) {
+  appWatchdogWarning(pc);
+}
+
 // paramSet: range-checked, unsaved, no radio restart.
 EXPORT bool node_param_set(const char *name, int32_t value) {
   const ParamDef *p = paramByName(name);

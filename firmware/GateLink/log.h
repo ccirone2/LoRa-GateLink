@@ -34,6 +34,8 @@ enum LogCode : uint8_t {
                      //     session b answered), 2 dropped (new session b verified: the peer restarted)
   EV_HEALTH,         // fault output D5 changed: a = 1 HIGH (healthy), 0 LOW (needs attention), -1 released (fault_out
                      //   off: an input again); b = the problems then (Problem bits, health.h)
+  EV_HANG,           // at boot, after a watchdog reset its early warning saw coming: a = the program counter the
+                     //   warning interrupted (4 s into the stall), b = the loop's stage then (status hang_stage)
   EV_COUNT
 };
 

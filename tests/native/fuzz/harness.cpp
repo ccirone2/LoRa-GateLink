@@ -124,7 +124,7 @@ bool budgetLeft() { return hal.passes < PASS_BUDGET; }
 bool pass(uint32_t stepMs) {
   if (!budgetLeft()) return false;
   hal.ms += stepMs;
-  hal.kickAt = hal.ms;  // GateLink.ino loop(): Watchdog.reset(), then appLoop()
+  hal.kickAt = hal.ms;  // GateLink.ino loop(): boardKick(), then appLoop()
   hal.passes++;
   appLoop();
   halCheckPass();

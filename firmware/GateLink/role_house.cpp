@@ -101,6 +101,10 @@ bool houseGateAcLost() {
   return haveStatus && (gateInputs & STI_AC_LOST);
 }
 
+bool houseGateRebootLoop() {
+  return haveStatus && (gateInputs & STI_REBOOTS);
+}
+
 static bool k1Target(uint32_t now) {
   if (holdingTravel(now)) return lastEnd != GS_CLOSED;
   return gateState != GS_CLOSED;
@@ -405,6 +409,7 @@ void houseStatus(JsonObject o) {
   g["in3"] = (bool)(gateInputs & STI_IN3);
   g["in4"] = (bool)(gateInputs & STI_IN4);
   g["ac_power"] = !(gateInputs & STI_AC_LOST);
+  g["reboot_loop"] = (bool)(gateInputs & STI_REBOOTS);
   if (gateExt) {
     g["retries"] = gateRetries;
     g["giveups"] = gateGiveups;

@@ -53,7 +53,7 @@ tab). **What it does** is the Config tab's help text.
 | `in2_invert` | 15 | 0–1 | 0 (off) | at once | IN2 (house: controller power; gate: closed limit). Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead. |
 | `in3_invert` | 24 | 0–1 | 0 (off) | at once | IN3 (house: spare; gate: AC power). Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead. |
 | `in4_invert` | 25 | 0–1 | 0 (off) | at once | IN4 (spare on both boards). Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead. |
-| `power_sense` | 26 | 0–1 | 1 (on) | at once, remote | Gate: IN3 watches the AC-powered 24 V supply. Without AC, commands are refused; a limit that still reads (the opener runs on its battery) is trusted, and with none the gate reads “no power” instead of between. Turn off only if IN3 isn’t wired. |
+| `power_sense` | 26 | 0–1 | 1 (on) | at once, remote | Gate: IN3 watches the AC-powered 24 V supply. Without AC, OPEN is refused and CLOSE runs only while a limit reads; a limit that still reads (the opener runs on its battery) is trusted, and with none the gate reads “no power” instead of between. Turn off only if IN3 isn’t wired. |
 
 ## Gate node
 

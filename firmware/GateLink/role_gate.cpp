@@ -242,9 +242,10 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
   // Still at this limit, but our last pulse is heading for the other one: pulse to reverse it.
   bool reversing = target != GS_UNKNOWN && target != want;
-  // Without AC the opener may be on its last battery reserve, and the AES controller sharing the inputs is
-  // unpowered: refuse, even with a limit reading.
-  if (!acPower()) {
+  // Without AC the opener runs on its battery, perhaps its last reserve, and the AES controller sharing its inputs is
+  // unpowered. CLOSE still goes while a limit reads: it's the secure direction, and cutting the AC mustn't keep an
+  // open gate open. OPEN is refused, and with no limit reading (no_power, the opener may be dead) so is CLOSE.
+  if (!acPower() && (action == ACT_OPEN || state == GS_NO_POWER)) {
     logEvent(EV_CMD_REFUSED, action, id);
     lastCmdAck = RES_NO_POWER;
   } else if (state == want && !reversing) {

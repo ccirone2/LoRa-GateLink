@@ -312,6 +312,7 @@ struct World {
     bool reported = false;
   } gk[2];
   uint32_t k2WrongSince = 0;
+  uint32_t limitAt = 0;  // the last time the gate's open or closed limit input read active
   int houseView = GS_UNKNOWN_;  // the house's idea of the gate (its gate_state log)
   uint32_t houseViewAt = 0;
   int gateView = GS_UNKNOWN_;

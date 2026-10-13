@@ -28,39 +28,38 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | Rank | Id | Item | Effort | Needs first |
 |---|---|---|---|---|
 | **Tier 1: the gate's real state, safety, never late** | | | | |
-| 1 | F20 | Let Alarm.com close the gate during an AC outage | S | |
-| 2 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
-| 3 | F14 | Catch faults the inputs alone don't show | M | |
-| 4 | F17 | Tell the alarm about a move it missed | M | best with F6 (one frame change) |
-| 5 | F6 | Keep the link private and commands fresh | L | decide F8's addressing with it |
+| 1 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
+| 2 | F14 | Catch faults the inputs alone don't show | M | |
+| 3 | F17 | Tell the alarm about a move it missed | M | best with F6 (one frame change) |
+| 4 | F6 | Keep the link private and commands fresh | L | decide F8's addressing with it |
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
-| 6 | C3 | Help the installer aim the antenna | S | |
-| 7 | B1 | Repeatable RF tests | S | |
-| 8 | F3 | Tell the alarm what kind of trouble it is | M | |
-| 9 | F1 | Keep the event log across resets | M | |
-| 10 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
-| 11 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 12 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
+| 5 | C3 | Help the installer aim the antenna | S | |
+| 6 | B1 | Repeatable RF tests | S | |
+| 7 | F3 | Tell the alarm what kind of trouble it is | M | |
+| 8 | F1 | Keep the event log across resets | M | |
+| 9 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
+| 10 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
+| 11 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 13 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 14 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 15 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 16 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 17 | F11 | Firmware ready for a second board | M | |
-| 18 | B2 | Test attacks over real RF | M | B1 |
-| 19 | B3 | Reach the host-only fault paths on the bench | M | |
-| 20 | D2 | Run the bench automatically, safely | M | |
-| 21 | F18 | Stop casual actuation over USB | M | |
-| 22 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 23 | F5 | Change radio settings without stranding the link | L | |
-| 24 | F13 | Work with controllers that pulse | L | |
-| 25 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
+| 12 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 13 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
+| 14 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 15 | C2 | Answer "what happened last night?" | M | F1, F2 |
+| 16 | F11 | Firmware ready for a second board | M | |
+| 17 | B2 | Test attacks over real RF | M | B1 |
+| 18 | B3 | Reach the host-only fault paths on the bench | M | |
+| 19 | D2 | Run the bench automatically, safely | M | |
+| 20 | F18 | Stop casual actuation over USB | M | |
+| 21 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 22 | F5 | Change radio settings without stranding the link | L | |
+| 23 | F13 | Work with controllers that pulse | L | |
+| 24 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 26 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 27 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 28 | C4 | Check a board still runs genuine firmware | M | |
-| 29 | B6 | Turn field incidents into tests | M | F1 |
-| 30 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 25 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 26 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 27 | C4 | Check a board still runs genuine firmware | M | |
+| 28 | B6 | Turn field incidents into tests | M | F1 |
+| 29 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -335,25 +334,6 @@ remote.*, debug.*) need proof of the key, leaving status, logs and history open.
 
 **How.** An enclosure switch at the gate (IN4, or an H1 input), reported in STATUS, shown by the house as
 needs-attention and logged.
-
-### F20: Let Alarm.com close the gate during an AC outage
-
-**Goal.** Cutting the AC can't keep an open gate open: Alarm.com can still close it while the opener runs on its
-battery (`ac-cut-refuses-close`; decided 2026-10-12). CLOSE is the secure direction.
-
-**Today.** The gate refuses every command while IN3 reads no AC (`RES_NO_POWER`, `role_gate.cpp`), because the opener
-may be on its last battery reserve and the AES controller sharing its inputs is unpowered.
-
-**How.**
-- CLOSE runs as usual when a limit reads: it pulses from open (or to reverse an OPEN), and is `already` at closed.
-- OPEN stays refused without AC, and with no limit reading (`no_power`) both stay refused.
-- A battery too weak to finish the travel leaves the gate `no_power`, which the house already shows as not-closed.
-- No setting to keep the old behaviour (decided 2026-10-12): one behaviour, fewer knobs.
-
-**Cost / risk.** Gate only (the house handles the ACK as any other), so a PATCH. Update with it the AC-power invariant
-in CLAUDE.md, the README's "How it behaves", `docs/hardware.md` (IN3), the `power_sense` help in `web/js/settings.js`,
-and the threat model. Host tests: CLOSE without AC from open pulses, OPEN refuses, `no_power` refuses both, and the
-house's resync after a refused OPEN still happens. Bench: the power tests.
 
 ## Web console
 

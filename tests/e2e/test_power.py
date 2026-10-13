@@ -379,7 +379,7 @@ def test_gate_supply_cut_rides_through(rig, lipo):
 
 def test_ac_loss_board_on_ac_supply(rig, lipo):
     """The gate board fed from the AC 24 V supply (GateSim `supply psu`) and AC goes: the board rides on its LiPo,
-    the opener on its battery. The closed limit is still trusted (the house shows closed), commands are refused, and
+    the opener on its battery. The closed limit is still trusted (the house shows closed), OPEN is refused, and
     the controller is put back; when AC returns the board's supply does too and nothing moves."""
     require(lipo, gate=True)
     rig.expect_commands(1)

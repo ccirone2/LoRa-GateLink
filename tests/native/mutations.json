@@ -683,15 +683,30 @@
  {
   "name": "gate_state_a1_commands_are_refused_without",
   "invariant": "ac-power",
-  "why": "A1: commands are refused without AC only when no limit reads (pulsed on battery with a limit reading)",
+  "why": "A1: without AC, OPEN is refused only when no limit reads (pulsed on battery with a limit reading)",
   "killed_by": [
-   "gate_state_commands_refused_without_ac"
+   "gate_state_without_ac_open_refused_close_runs"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (!acPower()) {\n    logEvent(EV_CMD_REFUSED, action, id);",
+    "find": "  if (!acPower() && (action == ACT_OPEN || state == GS_NO_POWER)) {\n    logEvent(EV_CMD_REFUSED, action, id);",
     "replace": "  if (!acPower() && state == GS_NO_POWER) {\n    logEvent(EV_CMD_REFUSED, action, id);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_a1b_close_refused_without_ac",
+  "invariant": "ac-power",
+  "why": "A1b (F20): CLOSE refused without AC even with a limit reading, so cutting the AC keeps an open gate open",
+  "killed_by": [
+   "gate_state_without_ac_open_refused_close_runs"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (!acPower() && (action == ACT_OPEN || state == GS_NO_POWER)) {",
+    "replace": "  if (!acPower()) {"
    }
   ]
  },
@@ -701,7 +716,7 @@
   "why": "A2: swapped order in readState: without AC the state is no_power even with a limit reading",
   "killed_by": [
    "gate_state_ac_lost_limit_still_trusted",
-   "gate_state_commands_refused_without_ac",
+   "gate_state_without_ac_open_refused_close_runs",
    "gate_state_no_power_transitions_have_no_cause"
   ],
   "edits": [
@@ -1801,7 +1816,7 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (!acPower()) {",
+    "find": "  if (!acPower() && (action == ACT_OPEN || state == GS_NO_POWER)) {",
     "replace": "  if (!acPower() && state == GS_NO_POWER) {"
    }
   ]
@@ -1957,7 +1972,7 @@
   "invariant": "resync",
   "why": "M17: applyOutputs drives K1 to its target even during a resync, which cuts the resync pulse short: K1 is back 1 ms later, too short for the controller to see, so a controller out of step stays out of step.",
   "killed_by": [
-   "gate_state_commands_refused_without_ac",
+   "gate_state_without_ac_open_refused_close_runs",
    "gate_state_deaf_opener_stays_closed_until_travel_timeout",
    "gate_state_ignored_pulse_keeps_reporting_the_limit",
    "gate_state_override_to_the_far_limit_resyncs_the_controller_at_once",

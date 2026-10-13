@@ -379,8 +379,8 @@ def test_gate_supply_cut_rides_through(rig, lipo):
 
 def test_ac_loss_board_on_ac_supply(rig, lipo):
     """The gate board fed from the AC 24 V supply (GateSim `supply psu`) and AC goes: the board rides on its LiPo,
-    the opener on its battery. The closed limit is still trusted (the house shows closed), OPEN is refused, and
-    the controller is put back; when AC returns the board's supply does too and nothing moves."""
+    the opener on its battery. The closed limit is still trusted (the house shows closed), and OPEN still runs on
+    both batteries; when AC returns the board's supply does too and nothing else moves."""
     require(lipo, gate=True)
     rig.expect_commands(1)
     m = rig.mark()
@@ -390,12 +390,15 @@ def test_ac_loss_board_on_ac_supply(rig, lipo):
     rig.wait_house(10, gate="closed", io__k2=True, remote__ac_power=False)
     m2 = rig.mark()
     rig.ctrl.on()
-    rig.wait_log("gate", "cmd_refused", since=m2, timeout=15)
-    rig.wait_ctrl(False, timeout=PROFILE_COMMON["cmd_ttl_s"] + 45)
+    rig.wait_log("gate", "pulse", a=1, since=m2, timeout=15)
+    rig.wait_gate("open", last_result="reached", ac_power=False, timeout=SIM_TRAVEL_S + 10)
+    rig.wait_house(10, gate="open", io__k2=False)
+    m3 = rig.mark()
     rig.sim.ac(True)
-    rig.wait_gate("closed", ac_power=True, timeout=10)
+    rig.wait_gate("open", ac_power=True, timeout=10)
     no_reboot(rig, "gate", m)
-    rig.expect_no("gate", "pulse", since=m)
+    rig.expect_no("gate", "cmd_refused", since=m)
+    rig.expect_no("gate", "pulse", seconds=2, since=m3)
 
 
 def test_opener_dead_board_on_accessory_supply(rig, lipo):

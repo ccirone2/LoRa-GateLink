@@ -1035,44 +1035,36 @@ TEST(gate_state_ac_lost_limit_still_trusted) {
 }
 
 // [ac-power]
-TEST(gate_state_without_ac_open_refused_close_runs) {
+TEST(gate_state_without_ac_commands_run_while_a_limit_reads) {
   Site w;
   w.commission();
   w.opener.ac = false;
   CHECK(poll(w, [&] { return w.house.status()["remote"]["ac_power"] == false; }, 3000));
   w.run(1000);
-  // OPEN from closed: ACKed no_power, no pulse.
+  // OPEN from closed runs on the opener's battery. On the way no limit reads, so the gate reports no_power (the house
+  // shows not-closed); open once it gets there, no cause either way (into and out of no_power).
   size_t g0 = w.gate.logs.size(), h0 = w.house.logs.size();
-  size_t presses = w.opener.presses[0].size() + w.opener.presses[1].size();
   w.user(true);
   Found cs = waitFor(w, w.house, "cmd_sent", h0, 1000, ACT_OPEN_);
   CHECK(cs.ok);
-  Found rf = waitFor(w, w.gate, "cmd_refused", g0, 2000);
-  CHECK(rf.ok);
-  CHECK_EQ(rf.e.a, ACT_OPEN_);
-  CHECK_EQ(rf.e.b, cs.e.b);
-  CHECK(poll(w, [&] { return w.house.status()["cmd_result"].as<int>() == RES_NO_POWER_; }, 2000, 10));
-  CHECK_EQ(watch(w, 2000, [&] { return !w.gate.coil(1) && !w.gate.coil(2); }), 0);
-  CHECK_EQ(countSince(w.gate, "pulse", g0), 0);
-  CHECK_EQ(w.opener.presses[0].size() + w.opener.presses[1].size(), presses);
-  JsonDocument s = w.gate.status();
-  CHECK_STR(str(s, "gate"), "closed");
-  CHECK_STR(str(s, "target"), "");
-  CHECK_EQ(countSince(w.gate, "gate_state", g0), 0);
-  // The house puts the controller back at once (no move is coming).
-  Found rs = waitFor(w, w.house, "resync", h0, 3000);
-  CHECK(rs.ok);
-  CHECK_EQ(rs.e.a, 0);
-  CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, 3000));
-  w.run(5000);
-  // CLOSE from open (opened on battery by someone else) runs: cutting the AC mustn't keep the gate open. On the way
-  // no limit reads, so the gate reports no_power (the house shows not-closed); closed again once it gets there, no
-  // cause either way (into and out of no_power).
-  w.extPress(true, 300);
-  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 10000));
+  CHECK(waitFor(w, w.gate, "pulse", g0, 2000, 1).ok);
+  CHECK(poll(w, [&] { return w.house.status()["cmd_result"].as<int>() == 0; }, 2000, 10));
+  Found np0 = waitFor(w, w.gate, "gate_state", g0, 3000, GS_NO_POWER_);
+  CHECK(np0.ok);
+  CHECK_EQ(np0.e.b, CAUSE_NONE_);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
+  Found op = waitFor(w, w.gate, "gate_state", g0, 2000, GS_OPEN_);
+  CHECK(op.ok);
+  CHECK_EQ(op.e.b, CAUSE_NONE_);
   waitBoth(w, GS_OPEN_, 2000);
-  CHECK(w.runUntil([&] { return w.alarmSwitch(); }, 2000));
+  CHECK_EQ(countSince(w.gate, "cmd_refused", g0), 0);
+  CHECK_EQ(countSince(w.gate, "pulse", g0), 1);
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0), 1);
+  CHECK(w.alarmSwitch());
+  CHECK(!w.sensorClosed());
+  CHECK_STR(str(w.gate.status(), "last_result"), "reached");
   w.run(5000);
+  // CLOSE from open runs too: cutting the AC mustn't keep the gate open.
   size_t g1 = w.gate.logs.size(), h1 = w.house.logs.size();
   w.user(false);
   Found cs2 = waitFor(w, w.house, "cmd_sent", h1, 2000, ACT_CLOSE_);
@@ -1133,6 +1125,36 @@ TEST(gate_state_without_ac_open_refused_close_runs) {
   CHECK(p3.ok);
   CHECK_EQ(countSince(w.gate, "cmd_refused", g3), 0);
   CHECK(waitFor(w, w.gate, "gate_state", g3, 15000, GS_OPEN_).ok);
+}
+
+// [ac-power]
+TEST(gate_state_without_ac_reversal_mid_travel_runs) {
+  // On battery no limit reads mid-travel (no_power), but while our OPEN is still under way the opener has just run:
+  // the user's CLOSE reverses it, rather than being refused and the gate left open.
+  Site w;
+  w.commission();
+  w.opener.ac = false;
+  CHECK(poll(w, [&] { return w.house.status()["remote"]["ac_power"] == false; }, 3000));
+  w.run(1000);
+  size_t g0 = w.gate.logs.size(), h0 = w.house.logs.size();
+  w.user(true);
+  CHECK(waitFor(w, w.gate, "pulse", g0, 2000, 1).ok);
+  CHECK(waitFor(w, w.gate, "gate_state", g0, 3000, GS_NO_POWER_).ok);
+  w.run(4000);  // past the sync window K1's change to not-closed opened (travel takes 8 s)
+  CHECK(!w.opener.atOpen() && !w.opener.atClosed());
+  size_t g1 = w.gate.logs.size();
+  w.user(false);
+  Found cs = waitFor(w, w.house, "cmd_sent", h0, 2000, ACT_CLOSE_);
+  CHECK(cs.ok);
+  CHECK(waitFor(w, w.gate, "pulse", g1, 2000, 2).ok);
+  CHECK(poll(w, [&] { return w.house.status()["cmd_result"].as<int>() == 0; }, 2000, 10));
+  CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 15000));
+  CHECK(waitFor(w, w.gate, "gate_state", g1, 2000, GS_CLOSED_).ok);
+  waitBoth(w, GS_CLOSED_, 2000);
+  CHECK(w.runUntil([&] { return !w.alarmSwitch() && w.sensorClosed(); }, 5000));
+  CHECK_EQ(countSince(w.gate, "cmd_refused", g0), 0);
+  CHECK(!w.opener.atOpen());
+  CHECK_STR(str(w.gate.status(), "last_result"), "reached");
 }
 
 // [ac-power] [cause]

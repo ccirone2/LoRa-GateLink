@@ -318,6 +318,7 @@ struct World {
   uint32_t gatePulseAt = 0;  // the last gate relay pulse's start (0: over travel_timeout_s ago)
   uint32_t in3OnSince = 0;       // since when the gate's IN3 (AC) has read on (0: off; capped at a minute's age)
   uint32_t oneLimitSince = 0;    // since when exactly one of its limits has read (0: none or both; capped likewise)
+  std::vector<int32_t> refused;  // commands the gate refused this step, for monitor()
   int houseView = GS_UNKNOWN_;  // the house's idea of the gate (its gate_state log)
   uint32_t houseViewAt = 0;
   int gateView = GS_UNKNOWN_;

@@ -1043,18 +1043,7 @@ void World::onLog(Board &b, const LogEv &e) {
       for (const LogEv &h : house.logs) sent |= h.ev == "cmd_sent" && h.b == e.b && h.a == e.a;
       if (!sent) violate(fmt("gate took command %d that the house never sent", e.b));
     } else if (e.ev == "cmd_refused" && limits.refusals) {
-      // Availability: a command is refused only without AC and with no position to trust (no limit reading, and no
-      // pulse of ours under way, or both limits reading). As the gate sees its inputs: past its debounce.
-      uint32_t settle = (uint32_t)gate.get("debounce_ms") + 100 + 5;
-      auto steady = [&](uint32_t since) { return since && now - since > settle; };
-      if (!gate.get("power_sense")) violate(fmt("gate refused command %d with power_sense off", e.b));
-      else if (steady(in3OnSince)) violate(fmt("gate refused command %d with AC present", e.b));
-      else if (steady(oneLimitSince)) violate(fmt("gate refused command %d while a limit read", e.b));
-      else {
-        JsonDocument s = gate.status();
-        if (s["gate"] == "no_power" && !(s["target"] | std::string()).empty())
-          violate(fmt("gate refused command %d while its own pulse was under way", e.b));
-      }
+      refused.push_back(e.b);  // checked in monitor(): this runs inside the gate's loop, where status() can't
     } else if (e.ev == "pulse") {
       if (lastGateCmdRxAt == now && lastGateCmdRx >= 0) {
         if (++pulsesPerCmd[lastGateCmdRx] > 1) violate(fmt("gate pulsed twice for command %d", lastGateCmdRx));
@@ -1084,6 +1073,24 @@ void World::monitor() {
   };
   steadySince(in3OnSince, opener.in(3));
   steadySince(oneLimitSince, opener.in(1) != opener.in(2));
+  // Availability: a command is refused only without AC and with no position to trust (no limit reading, and no pulse
+  // of ours under way, or both limits reading), as the gate sees its inputs: past its debounce, and a loop stall
+  // (a flash save or radio restart, up to ~1 s) that held off its next read.
+  if (!refused.empty() && gate.running()) {
+    uint32_t lag = (uint32_t)gate.get("debounce_ms") + 1200;
+    auto steady = [&](uint32_t since) { return since && now - since > lag; };
+    for (int32_t id : refused) {
+      if (!gate.get("power_sense")) violate(fmt("gate refused command %d with power_sense off", id));
+      else if (steady(in3OnSince)) violate(fmt("gate refused command %d with AC present", id));
+      else if (steady(oneLimitSince)) violate(fmt("gate refused command %d while a limit read", id));
+      else {
+        JsonDocument s = gate.status();
+        if (s["gate"] == "no_power" && !(s["target"] | std::string()).empty())
+          violate(fmt("gate refused command %d while its own pulse was under way", id));
+      }
+    }
+  }
+  refused.clear();
   // Gate relays: pulsed only, never both, never one within INTERLOCK_MS (100) of the other releasing.
   for (int k = 0; k < 2; k++) {
     CoilTrack &c = gk[k], &o = gk[1 - k];

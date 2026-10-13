@@ -112,7 +112,7 @@ are built from the pull requests since the last tag.
 
 CI's actions are pinned by commit SHA and its runners by image (`ubuntu-24.04`); Dependabot
 (`.github/dependabot.yml`) proposes action, npm and Python (`uv.lock`, ruff included) updates weekly, and the nightly deps-check routine
-covers the Arduino cores and libraries, arduino-cli, uv and gcovr.
+covers the Arduino cores and libraries, arduino-cli, uv and gcovr (CI runs gcovr 8.6).
 
 ## Test suites
 

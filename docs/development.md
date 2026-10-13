@@ -17,7 +17,6 @@ difference:
 | `Crypto` (rweather) | 0.4.0 |
 | `FlashStorage` (cmaglie) | 1.0.0 |
 | `ArduinoJson` | 7.4.3 |
-| `Adafruit SleepyDog Library` | 1.8.4 |
 
 When updating one, change it here and in `.github/workflows/ci.yml` and `release.yml`.
 

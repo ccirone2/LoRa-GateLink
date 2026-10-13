@@ -120,8 +120,8 @@ decision.
 The fault output D5 (`fault_out`), polled after the roles: it reads their state through `houseDecided`/`gateDecided`
 and the like, and nothing reads it back. The problems it tracks are bits (`Problem` in `health.h`; status `health`
 names them, log `health` carries them): the role hasn't decided yet since boot, the radio isn't working, the link is
-down, no AC power at the gate, the gate reads `no_power` or `fault`. What D5 does with them is a behavioural
-invariant (CLAUDE.md).
+down, no AC power at the gate, the gate reads `no_power` or `fault`, a reboot loop (this board's, `appRebootLoop`, or
+on the house the gate's, from STATUS bit 7). What D5 does with them is a behavioural invariant (CLAUDE.md).
 
 ## Console: `console.cpp` and `console_io.cpp`
 
@@ -178,14 +178,36 @@ strobe / solid = no role / breathing = link up / heartbeat = no link), spare inp
 called by both roles; reported in STATUS bits 4–5; on the gate IN3 is the AC power sense, IN4 has no behaviour yet);
 house IN2 is the controller power sense (`ctrl_power_sense`, handled in `role_house.cpp`, not reported to the gate),
 the board supply (`supply.cpp`, polled every 5 ms before the roles; status `supply`, log `supply`), the reset cause
-(`PM->RCAUSE`, logged in `boot` a= and reported as `reset_cause`), and the fault output D5 (`health.cpp`, after the
-roles). `activeRole` is latched at boot; `cfg.role` changes only take effect after reboot. Use `activeRole`, not
-`cfg.role`, for runtime behaviour.
+(`PM->RCAUSE`, logged in `boot` a= and reported as `reset_cause`), the reset memo, and the fault output D5
+(`health.cpp`, after the roles). `activeRole` is latched at boot; `cfg.role` changes only take effect after reboot. Use
+`activeRole`, not `cfg.role`, for runtime behaviour.
 
-- `GateLink.ino` only reads the reset cause and chip serial, runs the watchdog and calls `appSetup`/`appLoop`.
-- `board.h` is what needs the chip: kick, reset, free RAM (implemented in `GateLink.ino`, and by the host simulation
-  in `tests/native`, so everything from `app.cpp` down except the radio, flash, charger and console drivers builds
-  on the PC).
+The reset memo (0.15.0, ROADMAP F9) is 16 bytes in RAM that resets other than power-on keep (`boardKeep`), checked by a
+CRC-32 so a power-on's garbage reads as none. It carries two things to the next boot:
+- **Where a watchdog reset hung.** The watchdog's early warning fires 4 s into a pass that hasn't kicked it, 4 s before
+  the reset; its handler (`WDT_Handler` in `GateLink.ino`, then `appWatchdogWarning`) writes only the stacked program
+  counter and `stage` (which step of `appLoop` was running, or `setup`) into the memo. After a watchdog reset the boot
+  reports them (status `hang_stage`/`hang_pc`, log `hang`); any other reset ignores them, and a pass that runs again
+  after a warning (a stall of 4–8 s that ended) drops them, so a later reset the warning never saw (interrupts off)
+  isn't blamed on it. `hang_pc` is looked up in the build's `.elf` (`arm-none-eabi-addr2line`).
+- **Reboot loops.** `crash_resets` counts watchdog and brown-out resets in a row, each within `REBOOT_SETTLE_MS` (1 h)
+  of the boot before; a deliberate reset (software, the reset pin) or a power-on ends the run. Three or more, until
+  this boot has run an hour, is `appRebootLoop()`: health `reboots`, so D5 stays LOW through the loop instead of
+  flickering with each boot, and on the gate STATUS bit 7, so the house (whose D5 is the one usually wired) raises it
+  too. The hour and the count are constants, not settings. A loop of power-on resets (a supply collapsing completely)
+  isn't counted here; at the gate the house sees it as a link that keeps dropping.
+
+The memo lives in an orphan `.noinit` section (NOBITS, so neither loaded nor zeroed; ld places it after `.bss`): the
+core's linker script has none, and the bootloader only uses the bottom of RAM and a stack below 0x20007C00. The
+watchdog is driven directly (8 s, the early warning at 4 s, from a 1.024 kHz GCLK2), not through Adafruit SleepyDog,
+whose `WDT_Handler` turns the watchdog off on an early warning. The 0.5 s double-tap wait in the bootloader runs before
+any of this, on every reset but power-on (TODO.md, the house's warm-reset blip).
+
+- `GateLink.ino` only reads the reset cause and chip serial, runs the watchdog and its early warning, places the kept
+  RAM and calls `appSetup`/`appLoop`.
+- `board.h` is what needs the chip: kick, reset, free RAM, the kept RAM (implemented in `GateLink.ino`, and by the host
+  simulation in `tests/native`, which keeps the words across a reset and fills them with garbage at power-on, so
+  everything from `app.cpp` down except the radio, flash, charger and console drivers builds on the PC).
 - `supply.cpp`: the board's VIN power good, read from the BQ24195L charger over I2C (read-only).
 - `io.cpp`: `Input` (debounced, internal pull-down, active HIGH) and `Relay` (non-blocking pulses, optionally
   delayed; `gapLeft` for the interlock).
@@ -201,8 +223,9 @@ picker and reconnect; `status.js`, `config.js`, `tools.js`, `history.js`, `firmw
 `security.js` the Security tab, with `keys.js` the key ids and encrypted backups
 ([key-management.md](key-management.md)); `survey.js` the site survey's verdict, twin of
 `tools/gatelink_client/survey.py` (shared vectors in `tests/tools/fixtures/`; [install.md](install.md)); `wiring.js`
-Install tab; `settings.js` setting groups/help; `logdecode.js` log events as text; `ui.js` the log view and toasts;
-`util.js` small helpers; shared state in `state.js`'s `S`).
+Install tab; `settings.js` setting groups/help; `logdecode.js` log events as text; `peer.js` the other board as last
+seen; `healthline.js` the Status tab's one-line verdict; `ui.js` the log view and toasts; `util.js` small helpers;
+shared state in `state.js`'s `S`).
 Lint and tests: `npm test` (ESLint, `node --test` unit tests of the pure modules, Playwright browser tests of the
 real page against fake boards in `tests/web/fake-serial.js`; `tests/web/README.md`).
 
@@ -224,5 +247,19 @@ Notable pieces:
   change them.
 - Log lines show decoded (`logdecode.js`; a unit test checks it covers every event in `log.cpp`); the downloaded log
   keeps the raw form.
+- *Other board* on the Status tab (`peer.js`, ROADMAP F10): the must-match settings are the ones that stop the link
+  verifying when they differ, so the boards can't compare them over the air. The page remembers each board it
+  connects, by role, in `localStorage` (`gatelink.boards`: firmware, key id, the `MUST_MATCH` settings, when seen),
+  and compares the connected board with the other one; connected to the house with the link up it also asks the gate
+  for its firmware once (`remote.diag`). A firmware difference in MAJOR.MINOR is flagged (a change both boards need
+  together); a PATCH apart matches. Storage failing (a private window) only means nothing to compare.
+- The health line at the top of the Status tab (`healthLine` in `healthline.js`, ROADMAP C1): the most important
+  thing wrong as the connected board sees it, with what to do next, from the status reply, the running `sf` and
+  `peerDiffs()`. Order follows the project's goals: setup (role, key, radio), a reboot loop, the link (naming what
+  differs from the other board when it can't verify), the gate's power and limits, AC, the controller's power,
+  start-up (first half minute only, so a link that never comes is called that), then firmware or settings last seen
+  differing, a weak margin (the median of the last ten polls' latest frames below the survey's fair line: a hint
+  to run the survey), the board's own
+  supply, a past watchdog hang. Pure, unit-tested; the raw link and board counters sit under *Details*.
 
 The naming rule (no install hardware brand names under `web/`) is in CLAUDE.md.

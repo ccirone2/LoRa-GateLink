@@ -34,6 +34,14 @@ test('decoded lines', () => {
   assert.equal(decodeLog({ ev: 'cfg_remote', a: 99, b: 1 }), 'remote write: param 99 = 1');
   assert.equal(decodeLog({ ev: 'something_new', a: 1, b: 2 }), 'something_new a=1 b=2');
   assert.equal(rawLog({ ev: 'pulse', a: 1, b: 500 }), 'pulse a=1 b=500');
+  assert.equal(decodeLog({ ev: 'hang', a: 0x12345, b: 4 }), 'the watchdog reset the board: the loop hung in console (pc 0x00012345)');
+  assert.equal(decodeLog({ ev: 'hang', a: 1, b: 99 }), 'the watchdog reset the board: the loop hung in stage 99 (pc 0x00000001)');
+});
+
+test('hang stages follow app.cpp', () => {
+  const names = [...fw('app.cpp').match(/stageName[\s\S]*?\[\]\s*=\s*\{([^}]*)\}/)[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(names.map((n, i) => decodeLog({ ev: 'hang', a: 0, b: i }).match(/hung in (.*) \(/)[1]),
+    names.map((n) => n.replaceAll('_', ' ')));
 });
 
 test('health problems follow health.cpp, in bit order', () => {

@@ -81,7 +81,7 @@ tab). **What it does** is the Config tab's help text.
 
 | Setting | Id | Range | Default | Applies | What it does |
 |---|---|---|---|---|---|
-| `fault_out` | 32 | 0–1 | 0 (off) | at once | Use D5 as a “needs attention” output for the alarm system: high while this board is healthy (radio working, link up and, as the gate sees or reports it, AC power present and no limit fault), low otherwise, and low after a restart until the board has started up. A dead board or a cut wire reads as a fault too. 3.3 V, a few mA: wire it to an opto or a relay module input, never a relay coil. Off: D5 stays an unused input. Takes effect at once; set it on each board that has D5 wired. |
+| `fault_out` | 32 | 0–1 | 0 (off) | at once | Use D5 as a “needs attention” output for the alarm system: high while this board is healthy (radio working, link up and, as the gate sees or reports it, AC power present, no limit fault and no reboot loop), low otherwise, and low after a restart until the board has started up. A dead board or a cut wire reads as a fault too. 3.3 V, a few mA: wire it to an opto or a relay module input, never a relay coil. Off: D5 stays an unused input. Takes effect at once; set it on each board that has D5 wired. |
 | `fault_hold_s` | 33 | 0–600 | 10 | at once, remote | How long a problem must last before D5 goes low, so a short dropout or blip doesn’t trip the alarm. Recovery raises D5 at once. 0 = low as soon as a problem appears. |
 
 ## Board

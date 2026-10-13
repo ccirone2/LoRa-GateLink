@@ -107,8 +107,14 @@ ours, i.e. the two boards' crystal offset)), `free_ram` (bytes between the heap'
 `usb_cut` (console lines lost on USB since boot, see above), `loop_max_us` (the longest loop pass since boot, µs:
 how close the loop has come to the 8 s watchdog; a flash save or radio restart takes up to ~1 s), `fault_out` (the
 fault output D5 as driven: true HIGH, false LOW, null while the setting is off; see Fault output, below) and `health`
-(`starting`, `radio`, `link`, `ac`, `no_power`, `fault`: the problems this board counts right now, whether D5 is
-used or not; an empty list when healthy). Both from 0.14.0.
+(`starting`, `radio`, `link`, `ac`, `no_power`, `fault`, `reboots`: the problems this board counts right now,
+whether D5 is used or not; an empty list when healthy). Both from 0.14.0. From 0.15.0 also `crash_resets` (watchdog
+or brown-out resets in a row, each within an hour of the boot before; 0 after a power-on, a software reset or the
+reset pin: three or more and this boot not an hour old yet is the `reboots` problem), and after a watchdog reset
+that its early warning saw coming (4 s into the stall, 4 s before the reset), where the loop hung: `hang_stage`
+(`setup`, or the loop's step: `relays`, `radio_recover`, `hist_save`, `console`, `supply`, `link`, `role`,
+`history`, `health`, `led`, or `core` between passes) and `hang_pc` (the program counter the warning interrupted: look it up in the build's
+`.elf` with `arm-none-eabi-addr2line -f -e GateLink.ino.elf 0x<hang_pc>`); both null otherwise.
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,
@@ -119,7 +125,8 @@ used or not; an empty list when healthy). Both from 0.14.0.
   `link_timeout_eff_s`, `armed`, `ctrl` (controller level), `ctrl_power`, `sync_window`, `resyncing`, `cmd_id`,
   `cmd_pending`, `cmd_result` (ACK result: 0 ok, 1 already, 2 rejected, 4 no AC power; −1 none, −2 gave up)
   and `remote` (the gate's `uptime_s`, `rssi`, `snr`, `heartbeat_s`, `open_limit`, `close_limit`, `k1`, `k2`,
-  `in3`, `in4`, `ac_power` (from gate firmware 0.7.0; true from older gates); from gate firmware 0.4.0 also its `retries`, `giveups`, `crc_err` (running totals, low 16 bits)
+  `in3`, `in4`, `ac_power` (from gate firmware 0.7.0; true from older gates), `reboot_loop` (the gate's `reboots`
+  problem, STATUS bit 7; from gate firmware 0.15.0, false from older gates); from gate firmware 0.4.0 also its `retries`, `giveups`, `crc_err` (running totals, low 16 bits)
   and `noise` (its average since the previous STATUS; null if it had no sample); from gate firmware 0.13.0 also its
   `travel_timeout_s`, which the house then uses for its travel hold).
 
@@ -143,6 +150,7 @@ of D5 with the problems then as bits:
 | 8 | `ac` | the gate's STATUS says AC lost | IN3 off (with `power_sense`) |
 | 16 | `no_power` | the gate reports `no_power` | the gate reads `no_power` |
 | 32 | `fault` | the gate reports `fault` | the gate reads `fault` (both limits) |
+| 64 | `reboots` | in a reboot loop itself, or the gate's STATUS says it is (`remote.reboot_loop`) | in a reboot loop: three watchdog or brown-out resets in a row, each within an hour of the boot before, until a boot has run an hour (status `crash_resets`; from 0.15.0) |
 
 With no role set, `starting`, `radio` and `link` stay listed.
 
@@ -231,7 +239,8 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `cfg` | at boot, config source: 0 defaults, 1 SPI flash, 2 program flash | saved settings dropped (unknown id or out of range) |
 | `supply` | board supply (VIN) power good: 1 good, 0 lost (on the LiPo); at boot −1 if the charger didn't answer | charger status register (REG08) |
 | `cmd_hold` | pending command: 1 held (a HELLO came from an unverified session), 0 sent after all (the verified session answered), 2 dropped (the new session verified: the gate restarted) | that session id |
-| `health` | fault output D5 changed (`fault_out`, see Fault output): 1 HIGH (healthy), 0 LOW (needs attention), −1 released (`fault_out` turned off: an input again) | the problems then, as bits: 1 starting, 2 radio, 4 link, 8 ac, 16 no_power, 32 fault (0 = none) |
+| `health` | fault output D5 changed (`fault_out`, see Fault output): 1 HIGH (healthy), 0 LOW (needs attention), −1 released (`fault_out` turned off: an input again) | the problems then, as bits: 1 starting, 2 radio, 4 link, 8 ac, 16 no_power, 32 fault, 64 reboots (0 = none) |
+| `hang` | at boot, after a watchdog reset its early warning saw coming: the program counter it interrupted (status `hang_pc`) | the loop's stage then: 0 setup, 1 relays, 2 radio_recover, 3 hist_save, 4 console, 5 supply, 6 link, 7 role, 8 history, 9 health, 10 led, 11 core (between passes) (status `hang_stage`) |
 
 ## Example
 

@@ -212,6 +212,11 @@ void boardReset() {
 
 uint32_t boardFreeRam() { return 10000; }
 
+uint32_t *boardKeep() {
+  static uint32_t keep[BOARD_KEEP_WORDS];
+  return keep;
+}
+
 // --- radio.h ----------------------------------------------------------------------------------------------------------
 uint32_t halAirtimeMs(size_t len) {  // SX1276 time on air, as world.cpp (explicit header, CRC on)
   int sf = cfg.sf, bw = cfg.bw_hz, cr = cfg.cr;

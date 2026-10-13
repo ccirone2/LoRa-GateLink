@@ -3,11 +3,19 @@
 #include <ArduinoJson.h>
 
 // The application around the roles: boot, the main loop, PING/PONG, dispatch by role, the status LED and the
-// status report (app.cpp). GateLink.ino only adds the watchdog and the chip registers.
+// status report, the reset memo (app.cpp). GateLink.ino only adds the watchdog and the chip registers.
 void appRelaysBegin();  // first thing at boot: relays (and the LED) off
 // The rest of the boot, once the watchdog runs. resetCause: PM->RCAUSE; serial: the chip's 128-bit serial number.
 void appSetup(uint8_t resetCause, const uint32_t serial[4]);
 void appLoop();  // one pass of the main loop
+// From the watchdog's early-warning interrupt, 4 s into a loop pass that hasn't kicked it (the reset follows at 8 s):
+// notes the interrupted program counter and the loop's stage for the next boot. Only writes RAM.
+void appWatchdogWarning(uint32_t pc);
+// In a reboot loop: REBOOT_LOOP_RESETS watchdog or brown-out resets in a row, each within REBOOT_SETTLE_MS of the
+// boot before, and this boot hasn't run REBOOT_SETTLE_MS yet. Health problem `reboots`; the gate reports it in STATUS.
+bool appRebootLoop();
+#define REBOOT_LOOP_RESETS 3
+#define REBOOT_SETTLE_MS 3600000UL
 
 // Used by the console.
 void appFillStatus(JsonObject o);

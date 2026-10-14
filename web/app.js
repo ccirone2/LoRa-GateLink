@@ -8,7 +8,7 @@
 //               ping.js, remote.js (the gate over the link)
 //   Board tab:  security.js (keys.js: key ids, backups), firmware.js (samba.js: bootloader)
 //   Install tab: wiring.js (tracks pins.h), relay.js
-//   healthline.js the Status tab's verdict   ui.js log view, toasts   state.js shared state   util.js helpers
+//   healthline.js the health line (verdict)  ui.js log view, toasts   state.js shared state   util.js helpers
 import { $ } from './js/util.js';
 import { S } from './js/state.js';
 import { worksOffline, toast, hideToast, guard } from './js/ui.js';
@@ -47,7 +47,7 @@ function setConnected(on) {
 // Unsolicited events from the board, to the cards that wait for them.
 const EVENTS = {
   log: showLogEntry,
-  status: (ev) => renderStatus(ev.status),
+  status: (ev) => renderStatus(ev.status, true),
   pong: (ev) => { surveyPong(ev); onPong(ev); },
   remote_diag: onRemoteEvent,
   remote_set: onRemoteEvent,

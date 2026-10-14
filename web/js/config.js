@@ -6,6 +6,7 @@ import { toast, guard } from './ui.js';
 import { call, request, rebootAndReconnect } from './serial.js';
 import { GROUPS, HELP, MUST_MATCH, SELECTS } from './settings.js';
 import { refreshInfo } from './board.js';
+import { refreshStatus } from './status.js';
 import { rememberBoard } from './peer.js';
 import { fillRemoteParams } from './remote.js';
 
@@ -221,6 +222,7 @@ The ${n} unapplied edit${n === 1 ? '' : 's'} on the Config tab will be lost too.
   markUnsaved(false); // reset saves the defaults
   await refreshInfo(); // first: loadConfig remembers the board with its key id, which the reset erased
   await loadConfig();
+  await refreshStatus(); // the health line, now
   toast('Defaults restored. Reboot to apply role.');
 }
 

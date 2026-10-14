@@ -5,7 +5,7 @@ import { test, expect, openConsole, connect, requests } from './helpers.js';
 test('Generate makes a 32-hex key and Write sends exactly it', async ({ page }) => {
   await openConsole(page, [{ role: 'house', keySet: false }]);
   await connect(page);
-  await expect(page.locator('#keyWarn')).toBeVisible();
+  await expect(page.locator('#healthLine')).toHaveText(/^No link key/);
   await page.locator('#tabbtn-board').click();
   await page.locator('#btnKeyGen').click();
   const key = await page.locator('#keyInput').inputValue();
@@ -13,7 +13,7 @@ test('Generate makes a 32-hex key and Write sends exactly it', async ({ page }) 
   await page.locator('#btnKeySet').click();
   await expect(page.locator('#toast')).toContainText('Key written and saved');
   expect((await requests(page)).find((r) => r.cmd === 'key.set').key).toBe(key);
-  await expect(page.locator('#keyWarn')).toBeHidden();
+  await expect(page.locator('#healthLine')).toHaveText(/^All good/); // at once, not on the next poll
   await expect(page.locator('#secKeySet')).toHaveText('yes');
 });
 

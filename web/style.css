@@ -123,11 +123,14 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .pill { display: inline-block; min-width: 38px; text-align: center; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); }
 .pill.on { background: var(--ok); color: var(--surface); border-color: var(--ok); }
 
-/* Status tab */
-.health-line { font-weight: 600; border-left: 4px solid var(--border); }
+/* The health line, above every tab. Empty (no verdict), it takes no room but stays the live region, like the toast. */
+.health-line { font-weight: 600; border-left: 4px solid var(--border); margin-bottom: 14px; }
 .health-line.good { color: var(--ok); border-left-color: var(--ok); }
 .health-line.warn { color: var(--warn); border-left-color: var(--warn); }
 .health-line.bad { color: var(--bad); border-left-color: var(--bad); }
+.health-line:empty { padding: 0; margin: 0; border: 0; }
+
+/* Status tab */
 details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 .gate-state { font-size: 34px; font-weight: 700; margin: 4px 0 10px; text-transform: capitalize; }
 .gate-state.closed { color: var(--ok); }

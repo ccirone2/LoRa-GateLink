@@ -223,7 +223,8 @@ Plain ES modules, no build step. `web/app.js` starts the page and runs the conne
 each board event); each card's module wires its own controls in its `init…()` and keeps its timers. In `web/js/`:
 `serial.js` transport, picker and reconnect; `board.js` the board's info reply, role, header line and title (cards that
 show info register `onInfo`, since they import `refreshInfo` from it; `serial.js` knows nothing of the tabs);
-`status.js` the Status tab, with `healthline.js` its one-line verdict and `peer.js` the other board as last seen;
+`status.js` the Status tab and the health line above every tab, with `healthline.js` its verdict and `peer.js` the
+other board as last seen;
 `config.js` the Config tab, with `settings.js` setting groups/help; `log.js` the Log tab, with `logdecode.js` log
 events as text. The Link tab: `history.js`, `surveycard.js` (the site survey run; `survey.js` its verdict, twin of
 `tools/gatelink_client/survey.py`, shared vectors in `tests/tools/fixtures/`; [install.md](install.md)), `ping.js`,
@@ -262,7 +263,7 @@ Notable pieces:
   and compares the connected board with the other one; connected to the house with the link up it also asks the gate
   for its firmware once (`remote.diag`). A firmware difference in MAJOR.MINOR is flagged (a change both boards need
   together); a PATCH apart matches. Storage failing (a private window) only means nothing to compare.
-- The health line at the top of the Status tab (`healthLine` in `healthline.js`, ROADMAP C1): the most important
+- The health line above every tab while a board answers (`healthLine` in `healthline.js`, ROADMAP C1): the most important
   thing wrong as the connected board sees it, with what to do next, from the status reply, the running `sf` and
   `peerDiffs()`. Order follows the project's goals: setup (role, key, radio), a reboot loop, the link (naming what
   differs from the other board when it can't verify), the gate's power and limits, AC, the controller's power,

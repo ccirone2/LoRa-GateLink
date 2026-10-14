@@ -17,7 +17,9 @@ test('a healthy site is all good', () => {
 
 test('setup problems come first: role, a pending reboot, the key, the radio', () => {
   assert.match(txt({ role: 'unset' }), /^Role not set/);
-  assert.match(txt(house({ reboot_pending: true, key_set: false })), /waits for a reboot/);
+  assert.match(txt(house({ reboot_pending: true, key_set: false })), /waits for a reboot.*no link key either/);
+  assert.match(txt({ role: 'unset', key_set: false }), /^Role not set.*no link key either/);
+  assert.doesNotMatch(txt(house({ reboot_pending: true })), /link key/);
   assert.equal(lvl(house({ key_set: false, link_up: false })), 'bad');
   assert.match(txt(house({ key_set: false, link_up: false })), /^No link key/);
   // A fresh board with its role saved: the reboot, not the role, is what's missing.

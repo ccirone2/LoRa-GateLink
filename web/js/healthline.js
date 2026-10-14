@@ -1,4 +1,4 @@
-// The one-line health verdict at the top of the Status tab (ROADMAP C1): the most important thing wrong with the site
+// The one-line health verdict above every tab (ROADMAP C1): the most important thing wrong with the site
 // as the connected board sees it, and what to do next. Most important first, by the project's goals: what keeps the
 // alarm from seeing the gate's real state or the gate from moving, then what to diagnose. Pure, so it is unit-tested
 // under Node: healthLine(status, peer) with peer = peerDiffs() (peer.js).
@@ -30,8 +30,10 @@ export function healthLine(s, { margin = null, peer = null } = {}) {
   const health = Array.isArray(s.health) ? s.health : [];
   const other = s.role === 'house' ? 'gate' : 'house';
   const line = (level, text) => ({ level, text });
-  if (s.reboot_pending) return line('warn', 'A saved role waits for a reboot: Config → Reboot.');
-  if (s.role !== 'house' && s.role !== 'gate') return line('info', 'Role not set: choose house or gate under Config, save, then reboot.');
+  // Setup comes first; a missing key is said with it, as nothing else on the page says it while these show.
+  const andKey = s.key_set === false ? ' The board has no link key either: write one under Board.' : '';
+  if (s.reboot_pending) return line('warn', `A saved role waits for a reboot: Config → Reboot.${andKey}`);
+  if (s.role !== 'house' && s.role !== 'gate') return line('info', `Role not set: choose house or gate under Config, save, then reboot.${andKey}`);
   if (s.key_set === false) return line('bad', 'No link key: write the same key to both boards under Board.');
   if (s.radio_ok === false) return line('bad', 'The radio isn’t working: reboot the board; if it stays down, the board needs checking.');
 

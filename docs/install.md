@@ -132,7 +132,7 @@ the web console (it works without a board) before powering up.
 - [ ] K2 NO/COM → the 2GIG contact sensor's terminals; the sensor named "Gate" in Alarm.com (`sensor_invert` if
   it reads the wrong way).
 - [ ] IN2: an opto channel rated for 12 V across the Shelly's 12 V supply, output side from the board's 3.3 V.
-- [ ] Status on the house board: *Controller input* follows the Alarm.com switch, *Controller power* on.
+- [ ] Status on the house board: *IN1 · Controller input* (I/O) follows the Alarm.com switch, *Controller power* on.
 - [ ] Controller power sense (`ctrl_power_sense` on): with the LiPo in, cut the Shelly's 12 V. The house log shows *controller power lost*
   (`ctrl_power 0`) and no command is sent; *Supply* shows *lost · on battery*. Restore it. If IN2 isn't wired, turn
   `ctrl_power_sense` off.

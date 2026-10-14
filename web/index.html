@@ -23,9 +23,6 @@
   <div id="unsupported" class="banner warn" hidden>
     <span id="unsupportedMsg">This page needs the Web Serial API. Use desktop Chrome or Edge, served from https:// or http://localhost.</span>
   </div>
-  <div id="keyWarn" class="banner warn" hidden>
-    No link key set on this board — the radio link stays disabled until you set one under <b>Board</b>.
-  </div>
 
   <nav id="tabs" role="tablist" aria-label="Sections">
     <button id="tabbtn-status" data-tab="status" role="tab" aria-controls="tab-status" aria-selected="true" tabindex="0" class="active">Status</button>
@@ -37,10 +34,11 @@
   </nav>
 
   <main>
+    <!-- The site's verdict, on every tab while a board answers -->
+    <div id="healthLine" class="card health-line" role="status" aria-live="polite"></div>
     <!-- STATUS -->
     <section id="tab-status" class="tab active" role="tabpanel" aria-labelledby="tabbtn-status">
       <div class="grid">
-        <div id="healthLine" class="card wide health-line" role="status" aria-live="polite">—</div>
         <div class="card hero">
           <div class="label">Gate</div>
           <div id="gateState" class="gate-state">—</div>
@@ -74,7 +72,6 @@
         </div>
         <div class="card" data-role="house">
           <div class="label">House bridge</div>
-          <div class="kv"><span>Controller input</span><b id="hCtrl">—</b></div>
           <div class="kv"><span>Controller power</span><b id="hCtrlPower">—</b></div>
           <div class="kv"><span>Commands armed</span><b id="hArmed">—</b></div>
           <div class="kv"><span>Sync window / resync</span><b id="hSync">—</b></div>

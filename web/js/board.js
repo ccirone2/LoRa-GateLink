@@ -17,7 +17,6 @@ export async function refreshInfo() {
   S.boardInfo = info;
   devline = `${info.board} · fw ${info.fw} · ${info.role}`;
   $('devline').textContent = devline;
-  $('keyWarn').hidden = info.key_set;
   infoListeners.forEach((fn) => fn(info));
   applyRole(info.role);
 }
@@ -27,7 +26,6 @@ export function boardGone() {
   S.boardInfo = null;
   devline = '';
   $('devline').textContent = 'not connected';
-  $('keyWarn').hidden = true;
   infoListeners.forEach((fn) => fn(null));
   document.title = 'GateLink Console';
 }

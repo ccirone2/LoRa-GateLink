@@ -1,6 +1,7 @@
 // Compiles link.cpp into namespace LINK_NS (see sim.h). Its headers are included first, outside the namespace, so
 // their include guards keep link.cpp's own #includes from pulling them in again inside it.
 #include <Arduino.h>
+#include <AES.h>
 #include <SHA256.h>
 #include "config.h"
 #include "link_types.h"

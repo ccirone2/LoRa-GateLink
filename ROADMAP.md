@@ -30,36 +30,35 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | **Tier 1: the gate's real state, safety, never late** | | | | |
 | 1 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
 | 2 | F14 | Catch faults the inputs alone don't show | M | |
-| 3 | F17 | Tell the alarm about a move it missed | M | best with F6 (one frame change) |
-| 4 | F6 | Keep the link private and commands fresh | L | |
+| 3 | F17 | Tell the alarm about a move it missed | M | |
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
-| 5 | C3 | Help the installer aim the antenna | S | |
-| 6 | B1 | Repeatable RF tests | S | |
-| 7 | F3 | Tell the alarm what kind of trouble it is | M | |
-| 8 | F1 | Keep the event log across resets | M | |
-| 9 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
-| 10 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 11 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
+| 4 | C3 | Help the installer aim the antenna | S | |
+| 5 | B1 | Repeatable RF tests | S | |
+| 6 | F3 | Tell the alarm what kind of trouble it is | M | |
+| 7 | F1 | Keep the event log across resets | M | |
+| 8 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
+| 9 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
+| 10 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 12 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 13 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 14 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 15 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 16 | F11 | Firmware ready for a second board | M | |
-| 17 | B2 | Test attacks over real RF | M | B1 |
-| 18 | B3 | Reach the host-only fault paths on the bench | M | |
-| 19 | D2 | Run the bench automatically, safely | M | |
-| 20 | F18 | Stop casual actuation over USB | M | |
-| 21 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 22 | F5 | Change radio settings without stranding the link | L | |
-| 23 | F13 | Work with controllers that pulse | L | |
+| 11 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 12 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
+| 13 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 14 | C2 | Answer "what happened last night?" | M | F1, F2 |
+| 15 | F11 | Firmware ready for a second board | M | |
+| 16 | B2 | Test attacks over real RF | M | B1 |
+| 17 | B3 | Reach the host-only fault paths on the bench | M | |
+| 18 | D2 | Run the bench automatically, safely | M | |
+| 19 | F18 | Stop casual actuation over USB | M | |
+| 20 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 21 | F5 | Change radio settings without stranding the link | L | |
+| 22 | F13 | Work with controllers that pulse | L | |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 24 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
-| 25 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 26 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 27 | C4 | Check a board still runs genuine firmware | M | |
-| 28 | B6 | Turn field incidents into tests | M | F1 |
-| 29 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 23 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
+| 24 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 25 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 26 | C4 | Check a board still runs genuine firmware | M | |
+| 27 | B6 | Turn field incidents into tests | M | F1 |
+| 28 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -105,7 +104,7 @@ settings, and `hist.get` serves only the 96 hourly buckets a boot loads into RAM
 The gate answers only with no command pending and no relay pulsing, and pages are rate-limited.
 
 **Cost / risk.** New message types: a MINOR both boards need together. Update the console contract and the threat
-model (payloads stay readable until F6). C2 uses this data.
+model (payloads are encrypted since 0.16.0). C2 uses this data.
 
 ### F3: Tell the alarm what kind of trouble it is
 
@@ -163,29 +162,6 @@ key holder or a buggy change can move the link, with the revert as the only back
 The revert runs only after a failure, so host-test it exhaustively: a lost agreement frame, one board switching alone,
 a reset or power cut at each step, a revert that also fails.
 
-### F6: Keep the link private and commands fresh
-
-**Goal.** Someone listening on 915 MHz can't learn when the gate opens or the mains power is out, and a command can
-never fire later than the owner meant, even if it was jammed and recorded. Closes the open radio threats in the
-[threat model](docs/threat-model.md).
-
-**Today.** Payloads are readable, which is useful to a burglar (`cleartext-traffic-analysis`). A CMD jammed at the gate
-and recorded can still be delivered later inside the replay window (`jam-and-delay-replay-window`,
-`withheld-command-fires-late`). HELLO challenges are 32 bits and not bound to a session
-(`challenge-library-session-rebind`).
-
-**How.** One frame-format change, which the boards refuse to fall back from:
-- Encryption: AES-CTR (the Crypto library has AES), encrypt-then-MAC, with per-direction keys derived per session from
-  the challenge (`session-id-repeat`), so a CTR nonce of session and seq never repeats under one key even if a session
-  id does.
-- Freshness: encryption doesn't stop a late delivery (the frame still decrypts and verifies), so stamp each CMD with
-  the gate's session clock, which the house estimates from STATUS, and have the gate refuse any CMD older than
-  `cmd_ttl_s`.
-- Challenges: 128 bits, bound to the challenger's session, and never re-verify a session superseded since boot.
-
-**Cost / risk.** A MINOR both boards need together. Decide F17's STATUS field in the same change, so the wire format
-changes once before 1.0 (F8's addressing needs no wire change: decided 2026-10-13, in F8).
-
 ### F7: Update the gate's firmware without visiting it
 
 **Goal.** A new firmware reaches the gate board from the house, safely, so the outdoor end never needs a laptop at the
@@ -218,7 +194,7 @@ peer's link state and one gate's role state.
 
 **How.**
 - Give each gate its own node id (a setting) and keep the house's link state per peer: session, replay window,
-  challenge, ACK memo, reliable slots and the gate clock its commands are stamped with (F6).
+  challenge, ACK memo, reliable slots and the gate clock its commands are dated in (0.16.0).
 - Keep the role state per gate as well, and give each gate its own controller input, contact sensor and fault output
   at the house, which the relay shield doesn't have (H1).
 - Give each gate its own key, held by the house beside the others, so a gate box opened exposes only that gate's link
@@ -230,7 +206,7 @@ second gate (README "Goals": this site first).
 
 **Decided 2026-10-13 (`/implement`):** the addressing needs no wire change, so it no longer waits on F6. The frame
 header's `src` and `dst` bytes already address up to 255 nodes, and each gate sends its own STATUS frame, so STATUS
-needs no gate index. F6 keeps the per-node separation by construction (its CTR nonce includes `src` and `dst`, and
+needs no gate index. F6 (0.16.0) keeps the per-node separation by construction (its CTR nonce includes `src` and `dst`, and
 the session permutation already includes the node id). It waits on H1 and on a real second gate, so it moves to
 tier 4.
 
@@ -324,7 +300,8 @@ change, or sense its status LED.
 **How.** A "left closed since you last heard" latch or movement counter in STATUS: when the house sees it advance while
 it showed closed (also on link recovery), it opens K2 for a few seconds (and D5).
 
-**Cost / risk.** A STATUS change: ship it with F6.
+**Cost / risk.** A STATUS field: a MINOR. F6's frame change shipped in 0.16.0 without it, so a house that has it must
+still take a 0.16.0 gate's shorter STATUS.
 
 ### F18: Stop casual actuation over USB
 
@@ -446,7 +423,7 @@ per-location budget), and a calibrated pass line for `rftest`.
 ### B2: Test attacks over real RF
 
 **Goal.** The replay, foreign-traffic, busy-channel and late-delivery defences are proven over real RF, not only in
-the host simulation, including F6's freshness check.
+the host simulation, including the command deadlines (0.16.0).
 
 **Today.** Those paths are exercised only by the host tests.
 

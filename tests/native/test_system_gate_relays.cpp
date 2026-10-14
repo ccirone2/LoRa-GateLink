@@ -11,16 +11,17 @@
 #include <exception>
 #include <set>
 #include "crc32.h"
+#include "framecrypt.h"
 
 namespace {
 
 enum { ACT_OPEN_ = 1, ACT_CLOSE_ = 2 };
 enum { CAUSE_NONE_ = 0, CAUSE_LORA_ = 1, CAUSE_EXTERNAL_ = 2 };
-enum : uint8_t { MSG_HELLO_ACK_ = 2, MSG_ACK_ = 3, MSG_CMD_ = 4, MSG_CFG_SET_ = 10 };
+enum : uint8_t { MSG_HELLO_ = 1, MSG_HELLO_ACK_ = 2, MSG_ACK_ = 3, MSG_CMD_ = 4, MSG_CFG_SET_ = 10 };
 const int32_t INTERLOCK = 100;   // INTERLOCK_MS (role_gate.cpp)
 const int32_t ID_PULSE_MS = 16;  // PARAMS id of pulse_ms (config.cpp)
 // Frame fields (link.cpp: ver|type|net_id|src|dst|session u32|seq u32|payload|tag, little-endian)
-const size_t F_SEQ = 9, F_PAYLOAD = 13;
+const size_t F_SEQ = 9;
 
 uint32_t le32(const Bytes &b, size_t at) {
   return b[at] | (uint32_t)b[at + 1] << 8 | (uint32_t)b[at + 2] << 16 | (uint32_t)b[at + 3] << 24;
@@ -404,7 +405,7 @@ TEST(gate_relays_renumbered_resend_of_a_run_command_pulses_once) {
   std::vector<const AirFrame *> cmds = w.sent(w.house, MSG_CMD_);
   CHECK_EQ(cmds.size(), c0 + 1);
   const uint32_t seq0 = le32(cmds[c0]->b, F_SEQ);
-  CHECK_EQ(le16(cmds[c0]->b, F_PAYLOAD), rx.b);
+  CHECK_EQ(le16(w.plain(cmds[c0]->b), 0), rx.b);
   // A resend with the same seq (re-ACKed from the memo if heard, not run again), and the pulse over.
   CHECK(r.until([&] { return w.sent(w.house, MSG_CMD_).size() >= c0 + 2 && !w.gate.coil(1); }, 3000));
   cmds = w.sent(w.house, MSG_CMD_);
@@ -426,8 +427,8 @@ TEST(gate_relays_renumbered_resend_of_a_run_command_pulses_once) {
   CHECK(r.until([&] { return w.gate.count("cmd_dup") > 0; }, 3000));
   const AirFrame *resend = w.sent(w.house, MSG_CMD_).back();
   CHECK(le32(resend->b, F_SEQ) != seq0);       // renumbered
-  CHECK_EQ(le16(resend->b, F_PAYLOAD), rx.b);  // the same command
-  CHECK_EQ(resend->b[F_PAYLOAD + 2], ACT_OPEN_);
+  CHECK_EQ(le16(w.plain(resend->b), 0), rx.b);  // the same command
+  CHECK_EQ(w.plain(resend->b)[2], ACT_OPEN_);
   CHECK_EQ(w.gate.last("cmd_dup")->a, rx.b);
   CHECK(dropped >= 1);
 
@@ -1216,23 +1217,32 @@ TEST(gate_relays_fifth_remote_write_in_one_pulse_waits_too) {
     return seqs.size();
   };
   CHECK(r.until([&] { return copies() == 1; }, 2000));
-  // Four more: the gate's boot HELLO played to the house (it answers one a second from the verified session), each
-  // answer renumbering the write it still has waiting.
+  // Four more, each HELLO the house answers renumbering the write it still has waiting. It answers one a second from
+  // the verified session (the gate's boot HELLO, played back) and one from all others (a HELLO from a session it
+  // doesn't know, which it also challenges), so they take turns.
+  uint8_t net = 0;
+  for (const AirFrame &f : w.air)
+    if (f.from == w.gate.idx) net = f.b[2];
   for (size_t n = 2; n <= 5; n++) {
     size_t a0 = w.sent(w.house, MSG_HELLO_ACK_).size();
     bool answered = false;
     for (int i = 0; i < 30 && !answered; i++) {
-      if (req(r, w.gate, "debug.replay", "\"hello\":true")["sent"] == true)
-        answered = r.until([&] { return w.sent(w.house, MSG_HELLO_ACK_).size() > a0; }, 200);
-      else
+      if (n % 2) {
+        const uint8_t challenge[16] = { (uint8_t)n, (uint8_t)i };
+        w.inject(w.house, frameSeal(TEST_KEY, MSG_HELLO_, net, 2, 1, 0x5E550000u + n, 1,  // gate (2) to house (1)
+                                    challenge, sizeof(challenge)));
+      } else if (req(r, w.gate, "debug.replay", "\"hello\":true")["sent"] != true) {
         r.run(10);
+        continue;
+      }
+      answered = r.until([&] { return w.sent(w.house, MSG_HELLO_ACK_).size() > a0; }, 200);
     }
     CHECK(answered);
     CHECK(r.until([&] { return copies() == n; }, 1000));
   }
   CHECK(w.gate.coil(2));  // all five heard while K2 is closed
   CHECK_EQ(w.gate.count("cfg_remote"), 0);
-  CHECK(r.until([&] { return !w.gate.coil(2); }, 1000));
+  CHECK(r.until([&] { return !w.gate.coil(2); }, 3000));
   Pulse p = r.last(2);
   CHECK_EQ(p.on, t0);
   CHECK_IN(p.len(), 4000, 4001);

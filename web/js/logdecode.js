@@ -10,7 +10,7 @@ const ROLES = { 0: 'unset', 1: 'house', 2: 'gate' };
 const CFG_SOURCES = { 0: 'defaults (nothing saved)', 1: 'the flash chip', 2: 'program flash' };
 const RADIO_FAIL = { 0: 'radio failed to initialise', 1: 'radio TX fault, re-initialised', 2: 'radio reset itself, re-initialised',
   3: 'radio initialised on retry' };
-const CMD_HOLD = { 0: 'held command sent after all: the gate’s session answered', 1: 'command held: HELLO from an unverified gate session',
+const CMD_HOLD = { 0: 'held command sent after all: the gate’s session answered', 1: 'command held: HELLO from an unverified gate session', 3: 'command waiting for the gate’s first status report (it just restarted)',
   2: 'held command dropped: the gate restarted (it may have run it)' };
 // The board's health problems (health.h Problem), in bit order: status `health` names them, log `health` b has the bits.
 export const PROBLEMS = { starting: 'starting up', radio: 'radio down', link: 'link down', ac: 'no AC power at the gate',
@@ -47,7 +47,7 @@ const DECODE = {
   tx_giveup: (a, b) => `gave up sending ${type(a)} (seq ${b >>> 0}): no acknowledgement`,
   cmd_sent: (a, b) => `${action(a)} command sent (#${b})`,
   cmd_suppressed: (a, b) => `${action(a)} not sent: the gate is already ${state(b)}`,
-  cmd_dropped: (a, b) => `${action(a)} command dropped (#${b}): not acknowledged in time, or the link restarted`,
+  cmd_dropped: (a, b) => `${action(a)} command dropped (#${b}): not acknowledged in time, the link restarted, or the gate just restarted and hasn’t reported yet`,
   cmd_rx: (a, b) => `${action(a)} command received (#${b})`,
   cmd_dup: (a) => `repeated command #${a} ignored`,
   cmd_refused: (a, b) => `${action(a)} command refused (#${b}): no AC power at the gate and no limit reading`,
@@ -65,6 +65,7 @@ const DECODE = {
   supply: (a) => (a < 0 ? 'charger not answering: board supply unknown' : a ? 'board supply good' : 'board supply lost: running on the LiPo'),
   cmd_hold: (a, b) => `${CMD_HOLD[a] ?? `command hold ${a}`} (session ${hex(b)})`,
   health: (a, b) => `${FAULT_OUT[a] ?? `fault output ${a}`}${b ? ` (${problems(b)})` : ''}`,
+  cmd_late: (a, b) => (b < 0 ? `command #${a} refused: its deadline lies too far ahead (${-b} ms) of this gate’s clock` : `command #${a} refused: ${b} ms past its deadline (delayed or played back)`),
   hang: (a, b) => `the watchdog reset the board: the loop hung in ${(HANG_STAGES[b] ?? `stage ${b}`).replaceAll('_', ' ')} (pc 0x${hex(a)})`,
 };
 

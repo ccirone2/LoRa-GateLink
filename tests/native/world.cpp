@@ -11,6 +11,7 @@
 #include "board.h"
 #include "console_io.h"
 #include "extflash.h"
+#include "framecrypt.h"
 #include "log.h"
 #include "radio.h"
 #include "supply.h"
@@ -642,6 +643,7 @@ void supplyBegin() {
 }
 void supplyPoll(uint32_t now) {
   Board &b = *cur;
+  if (b.preLinkUs) b.block(b.preLinkUs);
   if (!b.pmicKnown || !after(now, b.pmicPollAt + 5)) return;
   b.pmicPollAt = now;
   if (b.pmicGood == supplyGoodNow[b.idx]) return;
@@ -984,6 +986,10 @@ std::vector<const AirFrame *> World::sent(const Board &from, uint8_t type) const
   return out;
 }
 
+Bytes World::plain(const Bytes &frame) const {
+  return framePlain(TEST_KEY, frame);
+}
+
 // --- monitors ------------------------------------------------------------------------------------------------------
 // A console relay.test of relay k on that board, asked for at most `within` ms before `at`.
 static bool recentRelayTest(World &w, int board, int k, uint32_t at, uint32_t within, uint32_t *ms = nullptr) {
@@ -1029,7 +1035,11 @@ void World::onLog(Board &b, const LogEv &e) {
       uint32_t window = (uint32_t)house.get("debounce_ms") + (uint32_t)house.get("ctrl_confirm_ms") + 100;
       bool found = false;
       for (UserCmd &u : userCmds) {
-        if (u.used || u.on != on || after(u.at, now + 1) || after(now, u.at + window)) continue;
+        // One that waited for the gate's clock (cmd_hold a=3, after the switch) may go up to cmd_ttl_s later.
+        uint32_t wait = 0;
+        for (const LogEv &h : house.logs)
+          if (h.ev == "cmd_hold" && h.a == 3 && after(h.at, u.at)) wait = (uint32_t)house.get("cmd_ttl_s") * 1000;
+        if (u.used || u.on != on || after(u.at, now + 1) || after(now, u.at + window + wait)) continue;
         u.used = found = true;
         break;
       }

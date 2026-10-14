@@ -1,10 +1,11 @@
 #pragma once
 #include <Arduino.h>
 
-// Authenticated point-to-point link over LoRa.
+// Authenticated, encrypted point-to-point link over LoRa.
 //
 // Frame: ver | type | net_id | src | dst | session(u32) | seq(u32) | payload | tag(8)
-// tag = HMAC-SHA256(key, header+payload) truncated to 8 bytes.
+// The payload is encrypted (AES-128-CTR, a key derived from the link key, the counter from the header), then
+// tag = HMAC-SHA256(key, header+encrypted payload) truncated to 8 bytes.
 //
 // Replay protection without persistent seq counters: each node picks a new session
 // id at boot and at every link restart (from the boot counter, see drawSession() in
@@ -16,10 +17,10 @@
 // dropped, until it is known whether the peer restarted (see link.cpp, MSG_HELLO).
 
 enum MsgType : uint8_t {
-  MSG_HELLO = 1,      // challenge u32
-  MSG_HELLO_ACK = 2,  // challenge u32
+  MSG_HELLO = 1,      // challenge u8 x16
+  MSG_HELLO_ACK = 2,  // challenge u8 x16: the HELLO's
   MSG_ACK = 3,        // acked seq u32, result u8
-  MSG_CMD = 4,        // cmd_id u16, action u8                (reliable, house->gate)
+  MSG_CMD = 4,        // cmd_id u16, action u8, deadline u48 (the gate's clock, ms)   (reliable, house->gate)
   MSG_STATUS = 5,     // see roles.h                          (reliable, gate->house)
   MSG_PING = 6,       // ping_id u16
   MSG_PONG = 7,       // ping_id u16, rssi i16, snr i8
@@ -27,6 +28,8 @@ enum MsgType : uint8_t {
   MSG_DIAG = 9,       // see sendDiag() in role_gate.cpp      (gate->house)
   MSG_CFG_SET = 10,   // param id u8, value i32               (reliable, house->gate)
 };
+
+#define LINK_OVERHEAD 21  // a frame's header and tag around its payload (link.cpp HDR_LEN + TAG_LEN)
 
 enum Slot : uint8_t { SLOT_CMD = 0, SLOT_STATUS, SLOT_CFG, SLOT_COUNT };
 
@@ -38,6 +41,7 @@ enum AckResult : uint8_t {
   // 3 was RES_BUSY (never produced); the numbering is part of the wire format
   RES_NO_POWER = 4,  // no AC power (IN3 power sense) and no limit reading (nor our pulse under way); no pulse
   RES_NOT_SAVED = 5,  // CFG_SET applied, but the flash save failed: reverts at the next reboot
+  RES_LATE = 6,       // CMD past its deadline by the gate's clock (or too far ahead of it); no pulse
 };
 
 struct RxMsg {
@@ -93,6 +97,8 @@ inline void putU16(uint8_t *p, uint16_t v) { p[0] = v; p[1] = v >> 8; }
 inline void putU32(uint8_t *p, uint32_t v) { p[0] = v; p[1] = v >> 8; p[2] = v >> 16; p[3] = v >> 24; }
 inline uint16_t getU16(const uint8_t *p) { return p[0] | (p[1] << 8); }
 inline uint32_t getU32(const uint8_t *p) { return p[0] | (p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
+inline void putU48(uint8_t *p, uint64_t v) { putU32(p, (uint32_t)v); putU16(p + 4, (uint16_t)(v >> 32)); }
+inline uint64_t getU48(const uint8_t *p) { return getU32(p) | (uint64_t)getU16(p + 4) << 32; }
 
 // Signed elapsed-time check: safe across millis() wrap, and when t was stamped slightly after `now` (handlers
 // called from linkPoll use millis(), the loop's `now` is older).

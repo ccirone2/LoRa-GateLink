@@ -23,7 +23,7 @@ FUZZ_FLAGS ?=
 
 TARGETS := fuzz_frames fuzz_console fuzz_config
 FW_SRCS := app link role_gate role_house io log history histlog health console config
-CRYPTO_SRCS := Crypto Hash SHA256
+CRYPTO_SRCS := Crypto Hash SHA256 BlockCipher AESCommon AES128
 HARNESS := hal harness
 HEADERS := $(wildcard fuzz/*.h stubs/*.h $(FW)/*.h)
 

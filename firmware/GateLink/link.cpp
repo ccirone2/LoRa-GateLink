@@ -2,11 +2,14 @@
 #include "config.h"
 #include "radio.h"
 #include "log.h"
+#include <AES.h>
 #include <SHA256.h>
 
-#define PROTO_VER 1
+#define PROTO_VER 2  // 1 until 0.15.x: payloads in the clear, 32-bit challenges
 #define HDR_LEN 13
 #define TAG_LEN 8
+#define CHALLENGE_LEN 16
+static_assert(HDR_LEN + TAG_LEN == LINK_OVERHEAD, "link.h LINK_OVERHEAD");
 #define MAX_PAYLOAD 100
 #define MAX_FRAME (HDR_LEN + MAX_PAYLOAD + TAG_LEN)
 #define HELLO_INTERVAL_MS 1000
@@ -65,8 +68,10 @@ static bool peerOk;
 static uint32_t peerSession;
 static uint32_t peerLastSeq;
 static uint32_t peerWindow;  // bit i set = peerLastSeq - i already accepted
-static uint32_t challenge;
+static uint8_t challenge[CHALLENGE_LEN];  // ours, waiting to be answered (while challengeSet)
+static bool challengeSet;
 static uint32_t challengeAt;
+static uint32_t challengeNo;  // challenges drawn this session
 static uint32_t lastHelloAt;
 static uint32_t helloGap;  // this round's HELLO interval, randomized
 static uint8_t helloRound;  // HELLOs since the last verified session: the interval doubles, up to ~8 s
@@ -93,7 +98,8 @@ static Lbt txqLbt;  // the queue's head
 
 static uint8_t lastFrame[MAX_FRAME];
 static uint8_t lastFrameLen;
-static uint8_t bootHello[HDR_LEN + 4 + TAG_LEN];  // debug: our first HELLO since boot (an old session's after a link restart)
+// debug: our first HELLO since boot (an old session's after a link restart)
+static uint8_t bootHello[HDR_LEN + CHALLENGE_LEN + TAG_LEN];
 static uint8_t bootHelloLen;
 static uint32_t lastAirAt;  // end of our last TX or RX
 static uint32_t rxDoneSeen;  // radioRxDoneCount() when last looked at
@@ -106,10 +112,48 @@ static void computeTag(const uint8_t *buf, size_t len, uint8_t *tag) {
   h.finalizeHMAC(cfg.key, sizeof(cfg.key), tag, TAG_LEN);
 }
 
-static bool tagEqual(const uint8_t *a, const uint8_t *b) {
+static bool bytesEqual(const uint8_t *a, const uint8_t *b, uint8_t len) {
   uint8_t d = 0;
-  for (int i = 0; i < TAG_LEN; i++) d |= a[i] ^ b[i];
+  for (uint8_t i = 0; i < len; i++) d |= a[i] ^ b[i];
   return d == 0;
+}
+
+// Payloads are encrypted with AES-128 in counter mode, then the tag covers the header and the ciphertext
+// (encrypt-then-MAC). The cipher key is the link key's HMAC of a label, so it is apart from the MAC key, and it is
+// derived again whenever the link key changes (compared each time: a frame is never encrypted under an old key and
+// tagged under the new one). The counter block is the header's src, dst, session and seq, then the block number:
+// distinct for every frame while session ids don't repeat (the node ids keep the two directions apart, and the gates
+// of a house that served several, ROADMAP F8), so no keystream is used twice. Type and length stay visible.
+// AESTiny128 keeps only the 16-byte key and expands it as it goes (a little slower per block) rather than the 176-byte
+// schedule: RAM is the scarcer.
+static const char CIPHER_LABEL[] = "GateLink payload v1";
+static AESTiny128 cipher;
+static uint8_t cipherKeyOf[sizeof(cfg.key)];  // the link key the cipher was derived from
+static bool cipherSet;
+
+// Not inlined, so its SHA256 isn't on cryptPayload's stack each frame (linkPoll's deepest path runs through it).
+static void __attribute__((noinline)) deriveCipher() {
+  uint8_t k[16];
+  SHA256 h;
+  h.resetHMAC(cfg.key, sizeof(cfg.key));
+  h.update(CIPHER_LABEL, sizeof(CIPHER_LABEL) - 1);
+  h.finalizeHMAC(cfg.key, sizeof(cfg.key), k, sizeof(k));
+  cipher.setKey(k, sizeof(k));
+  memset(k, 0, sizeof(k));
+  memcpy(cipherKeyOf, cfg.key, sizeof(cfg.key));
+  cipherSet = true;
+}
+
+static void cryptPayload(uint8_t *frame, uint8_t len) {
+  if (!cipherSet || memcmp(cipherKeyOf, cfg.key, sizeof(cfg.key)) != 0) deriveCipher();
+  uint8_t block[16] = {}, stream[16];
+  memcpy(block, frame + 3, 10);  // src, dst, session, seq
+  uint8_t *p = frame + HDR_LEN;
+  for (uint16_t off = 0; off < len; off += 16) {
+    block[15] = off / 16;
+    cipher.encryptBlock(stream, block);
+    for (uint8_t i = 0; i < 16 && off + i < len; i++) p[off + i] ^= stream[i];
+  }
 }
 
 static uint8_t buildFrame(uint8_t type, const uint8_t *payload, uint8_t len, uint8_t *out, uint32_t *seqOut) {
@@ -123,6 +167,7 @@ static uint8_t buildFrame(uint8_t type, const uint8_t *payload, uint8_t len, uin
   putU32(out + 5, mySession);
   putU32(out + 9, seq);
   if (len) memcpy(out + HDR_LEN, payload, len);
+  cryptPayload(out, len);
   computeTag(out, HDR_LEN + len, out + HDR_LEN + len);
   if (seqOut) *seqOut = seq;
   return HDR_LEN + len + TAG_LEN;
@@ -255,21 +300,36 @@ void linkSend(uint8_t type, const uint8_t *payload, uint8_t len) {
   q.len = n;
 }
 
+// 128 bits, so answers recorded over weeks (old HELLOs replayed to make us challenge, and the peer's answers recorded)
+// never come to match one we send later, which would re-verify a superseded session and let its recorded frames
+// through. Drawn as the link key's HMAC of our session, a count and radio noise: distinct for every challenge, and
+// unpredictable without the key even if the noise were poor.
+static const char CHALLENGE_LABEL[] = "GateLink challenge v1";
+
+static void drawChallenge(uint32_t now) {
+  uint8_t in[12];
+  putU32(in, mySession);
+  putU32(in + 4, ++challengeNo);
+  putU32(in + 8, radioRandom32());
+  SHA256 h;
+  h.resetHMAC(cfg.key, sizeof(cfg.key));
+  h.update(CHALLENGE_LABEL, sizeof(CHALLENGE_LABEL) - 1);
+  h.update(in, sizeof(in));
+  h.finalizeHMAC(cfg.key, sizeof(cfg.key), challenge, CHALLENGE_LEN);
+  challengeSet = true;
+  challengeAt = now;
+}
+
 // False if it's too soon after the last one (unless forced).
 static bool sendHello(uint32_t now, bool force) {
   if (!force && helloSent && now - lastHelloAt < helloGap) return false;
-  if (challenge == 0 || now - challengeAt > CHALLENGE_LIFE_MS) {
-    do { challenge = radioRandom32(); } while (challenge == 0);
-    challengeAt = now;
-  }
-  uint8_t p[4];
-  putU32(p, challenge);
-  linkSend(MSG_HELLO, p, 4);
+  if (!challengeSet || now - challengeAt > CHALLENGE_LIFE_MS) drawChallenge(now);
+  linkSend(MSG_HELLO, challenge, CHALLENGE_LEN);
   lastHelloAt = now;
   // Random, and at least a few frames long, so two boards retrying at once can't stay in step. Doubling, so
   // a board whose peer is off for hours doesn't keep the channel busy.
   uint32_t base = HELLO_INTERVAL_MS << (helloRound < 3 ? helloRound : 3);
-  helloGap = base + 4 * radioAirtimeMs(HDR_LEN + 4 + TAG_LEN) + random(0, base);
+  helloGap = base + 4 * radioAirtimeMs(HDR_LEN + CHALLENGE_LEN + TAG_LEN) + random(0, base);
   if (helloRound < 3) helloRound++;
   helloSent = true;
   return true;
@@ -310,6 +370,7 @@ static void reframePending(uint32_t now) {
     if (q.frame[1] == MSG_HELLO_ACK) continue;
     uint8_t len = q.len - HDR_LEN - TAG_LEN;
     uint8_t payload[MAX_PAYLOAD];
+    cryptPayload(q.frame, len);  // back to the plain payload, under its old seq
     memcpy(payload, q.frame + HDR_LEN, len);
     q.len = buildFrame(q.frame[1], payload, len, q.frame, nullptr);
   }
@@ -388,7 +449,8 @@ void linkBegin(RxHandler rx, AckHandler ack) {
   drawSession();
   peerOk = false;
   peerSession = 0;
-  challenge = 0;
+  challengeSet = false;
+  challengeNo = 0;
   helloSent = false;
   helloRound = 0;
   helloKnownAt = helloOtherAt = 0;
@@ -497,7 +559,7 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
   uint8_t tag[TAG_LEN];
   size_t body = len - TAG_LEN;
   computeTag(buf, body, tag);
-  if (!tagEqual(tag, buf + body)) {
+  if (!bytesEqual(tag, buf + body, TAG_LEN)) {
     stats.macFail++;
     logEvent(EV_MAC_FAIL, buf[1], rssi);
     return;
@@ -508,9 +570,10 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
   uint32_t seq = getU32(buf + 9);
   const uint8_t *payload = buf + HDR_LEN;
   uint8_t plen = body - HDR_LEN;
+  cryptPayload(buf, plen);  // authentic: decrypt in place
 
   if (type == MSG_HELLO) {
-    if (plen < 4) return;
+    if (plen < CHALLENGE_LEN) return;
     // HELLOs aren't covered by the replay window (a restarted peer's must get through), so a recorded one is acted
     // on too. Answering costs airtime and renumbers our pending frames: do it at most once a second per kind.
     bool known = peerSession != 0 && session == peerSession;
@@ -528,7 +591,7 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
       cmdHeld = true;
       logEvent(EV_CMD_HOLD, 1, (int32_t)session);
     }
-    linkSend(MSG_HELLO_ACK, payload, 4);
+    linkSend(MSG_HELLO_ACK, payload, CHALLENGE_LEN);
     reframePending(now);
     // A session we haven't verified: the peer restarted, or an old HELLO is being replayed. Challenge it
     // (once the peer is back in RX), but keep the verified session until the new one answers, so a replayed
@@ -540,9 +603,9 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
     // The challenge stays current until answered, which while verified can be long after the last HELLO carrying
     // it: an answer recorded back then (and kept from us) mustn't count later. Sending a HELLO already replaces a
     // challenge over CHALLENGE_LIFE_MS old, and holding a command sends one at once; this covers the rest.
-    if (plen < 4 || challenge == 0 || getU32(payload) != challenge) return;
+    if (plen < CHALLENGE_LEN || !challengeSet || !bytesEqual(payload, challenge, CHALLENGE_LEN)) return;
     if (now - lastHelloAt >= CHALLENGE_LIFE_MS) return;  // unsigned, as above: an old HELLO never reads as recent
-    challenge = 0;
+    challengeSet = false;
     stats.lastRxAt = now;
     stats.lastRssi = rssi;
     stats.lastSnr = snr;

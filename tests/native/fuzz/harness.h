@@ -53,7 +53,11 @@ struct Peer {
   uint32_t seq = 0;  // the last seq used
   uint32_t boardSession = 0;
   bool haveChallenge = false;
-  uint32_t challenge = 0, prevChallenge = 0;  // the board's latest HELLO challenges
+  uint8_t challenge[16] = {}, prevChallenge[16] = {};  // the board's latest HELLO challenges
+  uint64_t clock = 1000000;  // ours (a gate's, in the STATUS we send a house board): ms, never wraps
+  uint32_t clockSeen = 0;    // hal.ms when it was last moved on
+  uint64_t boardClock = 0;   // a gate board's, from its latest STATUS (commands' deadlines are in it)
+  uint32_t boardClockAt = 0;  // hal.ms then
   bool haveSeq[16] = {};
   uint32_t lastSeq[16] = {};  // the board's latest frame per type
   std::vector<Bytes> sent;    // our frames, for replays (the last 32)
@@ -63,14 +67,15 @@ extern Peer peer;
 
 // Look at what the board sent since the last call (called by pass()).
 void peerScan();
-// Build an authenticated frame from the peer: header for this board, HMAC-SHA256 tag (truncated to 8 bytes) with
-// the board's current key, as link.cpp computeTag.
+// Build an authenticated frame from the peer: header for this board, the payload encrypted and the tag computed
+// with the board's current key (framecrypt.h, as docs/protocol.md specifies).
 Bytes peerFrame(uint8_t type, const uint8_t *payload, size_t len, uint32_t session, uint32_t seq);
+uint64_t peerBoardClock();  // a gate board's clock now, from its latest STATUS
 void deliver(const Bytes &frame, int16_t rssi = -60, float snr = 9.0f);  // into the board's receive queue
 void sendAuth(uint8_t type, const uint8_t *payload, size_t len);  // from our session, next seq
 void answerChallenge();  // HELLO_ACK echoing the board's latest challenge
 void ackLast(uint8_t type, uint8_t result);  // ACK the board's latest frame of a type
-// A STATUS payload (roles.h layout, 26 bytes): gate closed, AC on, heartbeat 30 s, travel 60 s.
+// A STATUS payload (roles.h layout, ST_LEN bytes): heartbeat 30 s, travel 60 s, our clock.
 Bytes statusPayload(uint8_t state, uint8_t inputs);
 
 // Console

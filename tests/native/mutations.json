@@ -1390,8 +1390,8 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "    if (acked && result == RES_NO_POWER) checkSoon = true;",
-    "replace": "    if (!acked && result == RES_NO_POWER) checkSoon = true;"
+    "find": "    if (acked && (result == RES_NO_POWER || result == RES_LATE)) checkSoon = true;",
+    "replace": "    if (!acked && (result == RES_NO_POWER || result == RES_LATE)) checkSoon = true;"
    }
   ]
  },
@@ -1915,15 +1915,15 @@
  {
   "name": "robustness_m23_gate_longer_sends_status",
   "invariant": "restarts",
-  "why": "M23: the gate no longer sends a STATUS at once when a new house session appears, so a rebooted house waits for the next heartbeat.",
+  "why": "M23: the gate no longer sends a STATUS at once when the house's session is verified, so a rebooted house waits for the next heartbeat.",
   "killed_by": [
    "robustness_restart_house_reset_before_the_users_edge_never_commands_from_the_boot_level"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "    haveCmd = false;\n    sendStatus(now);\n",
-    "replace": "    haveCmd = false;\n"
+    "find": "    houseSession = linkPeerSession();\n    sendStatus(now);\n",
+    "replace": "    houseSession = linkPeerSession();\n"
    }
   ]
  },
@@ -2585,6 +2585,172 @@
     "file": "histlog.cpp",
     "find": "  return extFlashAnswers();",
     "replace": "  return false;"
+   }
+  ]
+ },
+ {
+  "name": "freshness_f1_deadline_never_checked",
+  "invariant": "freshness",
+  "why": "F1: the gate never checks a command's deadline, so a command kept from it and played back later still pulses (withheld-command-fires-late).",
+  "killed_by": [
+   "link_withheld_command_played_back_later_is_refused",
+   "robustness_quiet_2_32_ms_then_a_withheld_command_played_back_is_refused"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (late > slack || late < -(int64_t)CMD_AHEAD_MAX_MS) {",
+    "replace": "  if (false && late > slack) {"
+   }
+  ]
+ },
+ {
+  "name": "freshness_f2_deadline_read_by_a_32_bit_clock",
+  "invariant": "freshness",
+  "why": "F2: the deadline is compared in 32 bits, as millis() counts, so a command played back 2^32 ms (49.7 days) after it was kept reads as current again.",
+  "killed_by": [
+   "robustness_quiet_2_32_ms_then_a_withheld_command_played_back_is_refused"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  int64_t late = (int64_t)(gateClock(now) - getU48(m.payload + CMD_DEADLINE));",
+    "replace": "  int64_t late = (int32_t)(uint32_t)(gateClock(now) - getU48(m.payload + CMD_DEADLINE));"
+   }
+  ]
+ },
+ {
+  "name": "freshness_f3_command_sent_undated",
+  "invariant": "freshness",
+  "why": "F3: with no clock for the gate's session (it just restarted) the house sends the command at once, dated from nothing, instead of waiting for the gate's first STATUS.",
+  "killed_by": [
+   "link_command_before_a_restarted_gates_first_status_waits_for_it"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  bool dated = gateClockNow(now, clock);",
+    "replace": "  bool dated = gateClockNow(now, clock) || (clock = 0, true);"
+   }
+  ]
+ },
+ {
+  "name": "freshness_f4_clock_of_another_gate_session",
+  "invariant": "freshness",
+  "why": "F4: the house dates commands by a clock learned in an earlier gate session (before the gate rebooted), not the one it has verified.",
+  "killed_by": [
+   "link_command_before_a_restarted_gates_first_status_waits_for_it"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (!clockSession || clockSession != linkPeerSession()) return false;",
+    "replace": "  if (!clockSession) return false;"
+   }
+  ]
+ },
+ {
+  "name": "link_auth_l1_challenge_compared_in_32_bits",
+  "invariant": "link-auth",
+  "why": "L1: a HELLO_ACK need only match the first 4 bytes of the 16-byte challenge, as before 0.16.0, so answers recorded over weeks can come to match one (challenge-library-session-rebind).",
+  "killed_by": [
+   "a_hello_ack_must_echo_the_whole_challenge"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "!bytesEqual(payload, challenge, CHALLENGE_LEN)) return;",
+    "replace": "!bytesEqual(payload, challenge, 4)) return;"
+   }
+  ]
+ },
+ {
+  "name": "link_auth_l2_cipher_key_derived_once",
+  "invariant": "link-auth",
+  "why": "L2: the cipher key is derived once and not again when the link key changes, so frames are encrypted under the old key and tagged under the new: authentic to the peer, but garbage.",
+  "killed_by": [
+   "a_new_key_encrypts_and_tags_alike_without_a_restart"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "  if (!cipherSet || memcmp(cipherKeyOf, cfg.key, sizeof(cfg.key)) != 0) deriveCipher();",
+    "replace": "  if (!cipherSet) deriveCipher();"
+   }
+  ]
+ },
+ {
+  "name": "freshness_f5_clock_origin_not_random",
+  "invariant": "freshness",
+  "why": "F5: every boot's clock starts from the same origin, so a command a house dated in the gate's previous boot (kept from seeing the restart) runs once the new clock reads its deadline as current.",
+  "killed_by": [
+   "link_command_dated_in_the_gates_previous_boot_is_refused"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  clockOrigin = ((uint64_t)radioRandom32() << 15 ^ radioRandom32()) & ((1ULL << 47) - 1);",
+    "replace": "  clockOrigin = 0;"
+   }
+  ]
+ },
+ {
+  "name": "freshness_f6_clock_reading_aged_unsigned",
+  "invariant": "freshness",
+  "why": "F6: the clock reading's age is read unsigned, so one the STATUS handler stamped a millisecond after the loop's now reads ~49.7 days old and is thrown away: commands wait for a clock that never comes.",
+  "killed_by": [
+   "link_commands_dated_when_the_status_handler_runs_after_the_loops_now"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (clockSession && elapsed(now, clockAt, CLOCK_MAX_AGE_MS)) clockSession = 0;",
+    "replace": "  if (clockSession && now - clockAt >= CLOCK_MAX_AGE_MS) clockSession = 0;"
+   }
+  ]
+ },
+ {
+  "name": "freshness_f7_slack_without_airtime",
+  "invariant": "freshness",
+  "why": "F7: the deadline slack leaves out the STATUS's and the command's airtime, so at SF12/125 kHz a resend late in cmd_ttl_s is refused.",
+  "killed_by": [
+   "link_command_resent_late_in_its_ttl_at_sf12_still_runs"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  int64_t slack = CMD_LATE_SLACK_MS + radioAirtimeMs(LINK_OVERHEAD + ST_LEN) + radioAirtimeMs(LINK_OVERHEAD + CMD_LEN);",
+    "replace": "  int64_t slack = CMD_LATE_SLACK_MS;"
+   }
+  ]
+ },
+ {
+  "name": "freshness_f8_every_clock_reading_taken",
+  "invariant": "freshness",
+  "why": "F8: the house takes every STATUS's clock reading, also a resent one seconds behind, and dates the next commands that early.",
+  "killed_by": [
+   "link_a_resent_status_doesnt_set_the_houses_reckoning_back"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  if (!gateClockNow(now, held) || (int64_t)(clock - held) >= -(int64_t)((uint32_t)(now - clockAt) / CLOCK_DRIFT)) {",
+    "replace": "  if (true || !gateClockNow(now, held)) {"
+   }
+  ]
+ },
+ {
+  "name": "freshness_f9_no_status_after_own_link_restart",
+  "invariant": "freshness",
+  "why": "F9: the gate reports only when the house's session is new, not when its own link restarted and verified the house again, so the house can't date commands until the next heartbeat.",
+  "killed_by": [
+   "link_command_right_after_the_gates_link_restart_runs"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (verified && (!houseVerified || linkPeerSession() != houseSession)) {",
+    "replace": "  if (verified && linkPeerSession() != houseSession) {"
    }
   ]
  }

@@ -18,7 +18,6 @@
 namespace {
 
 enum { MSG_STATUS_ = 5 };                // link.h MsgType
-enum { F_PAYLOAD = 13 };                 // link.cpp HDR_LEN: the payload's offset in a frame
 enum { ST_STATE_ = 0, ST_INPUTS_ = 1 };  // roles.h STATUS layout
 enum { STI_AC_LOST_ = 0x40 };            // roles.h ST_INPUTS bit
 // health.h Problem bits (log `health` b)
@@ -119,7 +118,8 @@ std::string health(Board &b) {
 uint32_t statusArrival(const World &w, uint32_t at, bool acLost) {
   for (const AirFrame &f : w.air) {
     if (f.from != w.gate.idx || f.type() != MSG_STATUS_ || (int32_t)(f.start - at) < 0 || f.dropped) continue;
-    if (f.b.size() > F_PAYLOAD + ST_INPUTS_ && ((f.b[F_PAYLOAD + ST_INPUTS_] & STI_AC_LOST_) != 0) == acLost) return f.end;
+    Bytes p = w.plain(f.b);
+    if (p.size() > ST_INPUTS_ && ((p[ST_INPUTS_] & STI_AC_LOST_) != 0) == acLost) return f.end;
   }
   return 0;
 }

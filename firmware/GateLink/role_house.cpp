@@ -29,13 +29,25 @@ static uint32_t gateUptime = 0;
 static int16_t gateRssi = 0;  // RSSI measured at the gate
 static int8_t gateSnr = 0;
 static uint16_t gateHeartbeat = 0;  // gate heartbeat_s, from its STATUS
-static uint16_t gateTravel = 0;  // gate travel_timeout_s, from its STATUS (0 = gate before 0.13.0: use ours)
-static bool gateExt = false;  // its STATUS carries the link counters and noise (0.4.0 on)
+static uint16_t gateTravel = 0;  // gate travel_timeout_s, from its STATUS (0 = none yet: use ours)
 static uint16_t gateRetries = 0, gateGiveups = 0, gateCrc = 0;
 static int8_t gateNoise = 0;  // dBm, 0 = no sample
 static bool haveStatus = false;
 // The last STATUS taken: its gate session and seq (only later ones count), and when (the link's liveness).
 static uint32_t statusSession = 0, statusSeq = 0, statusAt = 0;
+// The gate's clock (ST_CLOCK), which commands carry their deadline in, as of a STATUS taken from it: the reading and
+// when it was taken here (millis() in the handler, so it can be a little later than the loop's `now`: compared
+// signed). Only for the gate session it came from (clockSession; 0 = none): the clock starts over when the gate boots.
+static uint32_t clockSession = 0, clockAt = 0;
+static uint64_t clockGate = 0;
+// A STATUS resent (its first frames lost) carries the clock of when it was built, so it reads behind, by seconds. A
+// reading replaces the one in use if it puts the gate's clock later, or earlier by no more than the crystals can have
+// drifted apart since (CLOCK_DRIFT: 100 ppm), so this board's crystal running a little fast against the gate's is
+// followed while a resent STATUS isn't taken. No reading for CLOCK_MAX_AGE_MS (a dead link: the gate reports every
+// heartbeat_s, an hour at most) and the clock isn't used: the crystals may have drifted apart by most of the slack.
+#define CLOCK_DRIFT 10000  // 1/100 ppm
+#define CLOCK_MAX_AGE_MS 10800000UL
+static bool clockWait = false;  // the pending command is waiting for the gate's clock (sendCommand)
 static uint8_t lastEnd = GS_UNKNOWN;  // last limit reached (OPEN/CLOSED), held while BETWEEN
 static uint32_t betweenSince = 0;
 
@@ -54,7 +66,7 @@ static uint32_t mismatchSince = 0;
 static bool checkSoon = false;  // boot, power return, command refused or overridden: resync at once if out of step
 static bool k1WasPulsing = false;
 static bool ctrlPower = true;
-static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms (CLOSE only, see below)
+static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms (CLOSE only, see below) or the gate's clock
 static uint32_t pendingAt = 0;
 
 static uint16_t cmdId = 0;
@@ -105,6 +117,14 @@ bool houseGateRebootLoop() {
   return haveStatus && (gateInputs & STI_REBOOTS);
 }
 
+// The gate's clock now, as far as its STATUS tells: false with no reading from its current session (it just restarted,
+// or its link did, and hasn't reported yet), or none for CLOCK_MAX_AGE_MS (capStamps).
+static bool gateClockNow(uint32_t now, uint64_t &clock) {
+  if (!clockSession || clockSession != linkPeerSession()) return false;
+  clock = clockGate + (int64_t)(int32_t)(now - clockAt);  // under CLOCK_MAX_AGE_MS old: signed is safe
+  return true;
+}
+
 static bool k1Target(uint32_t now) {
   if (holdingTravel(now)) return lastEnd != GS_CLOSED;
   return gateState != GS_CLOSED;
@@ -146,7 +166,8 @@ static void applyOutputs(uint32_t now) {
   }
 }
 
-static void sendCommand(uint8_t action) {
+// False while the command waits for the gate's clock (below): call it again next pass.
+static bool sendCommand(uint8_t action, uint32_t now) {
   uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
   // Don't suppress while an opposite command is queued, or ACKed but not yet reported in a STATUS, or the gate is
   // still heading the other way (switch flipped off and straight back on before the gate left its limit).
@@ -154,19 +175,44 @@ static void sendCommand(uint8_t action) {
                   || (gateTarget != GS_UNKNOWN && gateTarget != want);
   if (linkUp && gateState == want && !opposing) {
     logEvent(EV_CMD_SUPPRESSED, action, gateState);
-    return;
+    return true;
   }
+  // Without the gate's clock for its session there is nothing to date the command in, and one it couldn't date could be
+  // played back to it later: the gate restarted and hasn't reported yet (BOOT_SETTLE_MS, a few seconds), or a link
+  // restarted and hasn't verified the gate again. So it waits, for up to cmd_ttl_s from the switch, and loses that
+  // much of its lifetime; never dated by then, it is dropped like one never ACKed, and the controller put back.
+  uint32_t ttl = (uint32_t)cfg.cmd_ttl_s * 1000;
+  uint64_t clock;
+  bool dated = gateClockNow(now, clock);
+  if (clockWait || !dated) {
+    uint32_t waited = now - pendingAt;
+    ttl = waited < ttl ? ttl - waited : 0;
+  }
+  if (!dated && ttl) {
+    if (!clockWait) logEvent(EV_CMD_HOLD, 3, (int32_t)linkPeerSession());
+    clockWait = true;
+    return false;
+  }
+  clockWait = false;
   cmdId++;
+  mismatchSince = 0;
+  if (!ttl) {
+    cmdResult = -2;
+    checkSoon = true;
+    logEvent(EV_CMD_DROPPED, action, cmdId);
+    return true;
+  }
   cmdAction = action;
   cmdResult = -1;
   cmdUnreported = false;
-  uint8_t p[3];
+  uint8_t p[CMD_LEN];
   putU16(p, cmdId);
   p[2] = action;
-  linkSendReliable(SLOT_CMD, MSG_CMD, p, 3, (uint32_t)cfg.cmd_ttl_s * 1000);
-  mismatchSince = 0;
+  putU48(p + CMD_DEADLINE, clock + ttl);  // the gate refuses it after that, as this board gives it up
+  linkSendReliable(SLOT_CMD, MSG_CMD, p, CMD_LEN, ttl);
   checkSoon = false;  // a boot's or power return's check is for the old level, not the user's new one
   logEvent(EV_CMD_SENT, action, cmdId);
+  return true;
 }
 
 // Controller powered: IN2 on (ctrl_power_sense) and the board's supply good (ctrl_power_pmic).
@@ -210,6 +256,7 @@ static void capStamps(uint32_t now) {
   if (mismatchSince && elapsed(now, mismatchSince, STAMP_CAP_MS)) mismatchSince = (now - STAMP_CAP_MS) | 1;
   if (elapsed(now, betweenSince, STAMP_CAP_MS)) betweenSince = now - STAMP_CAP_MS;
   if (statusAt && elapsed(now, statusAt, STAMP_CAP_MS)) statusAt = (now - STAMP_CAP_MS) | 1;  // else it reads as fresh
+  if (clockSession && elapsed(now, clockAt, CLOCK_MAX_AGE_MS)) clockSession = 0;
 }
 
 void houseLoop(uint32_t now) {
@@ -249,6 +296,7 @@ void houseLoop(uint32_t now) {
       if (armed) {
         pendingAction = shellyLevel ? ACT_OPEN : ACT_CLOSE;
         pendingAt = now;
+        clockWait = false;
       }
     }
   }
@@ -258,8 +306,7 @@ void houseLoop(uint32_t now) {
   // ctrl_confirm_ms, while an OPEN (relay on), which no power loss can produce, goes at once.
   if (pendingAction && ((!cfg.ctrl_power_sense && !cfg.ctrl_power_pmic) || pendingAction == ACT_OPEN
                         || elapsed(now, pendingAt, cfg.ctrl_confirm_ms))) {
-    sendCommand(pendingAction);
-    pendingAction = 0;
+    if (sendCommand(pendingAction, now)) pendingAction = 0;
   }
 
   // Resync the Shelly to the real gate if they disagree for too long
@@ -301,7 +348,7 @@ void houseLoop(uint32_t now) {
 }
 
 static void handleStatus(const RxMsg &m, uint32_t now) {
-  if (m.len < ST_LEN_V1) {
+  if (m.len < ST_LEN) {  // every gate that can verify our link (frame format 2, 0.16.0 on) sends all of it
     linkAck(m.seq, RES_BAD);
     return;
   }
@@ -317,6 +364,12 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   statusSession = session;
   statusSeq = m.seq;
   statusAt = now | 1;
+  uint64_t clock = getU48(m.payload + ST_CLOCK), held;
+  if (!gateClockNow(now, held) || (int64_t)(clock - held) >= -(int64_t)((uint32_t)(now - clockAt) / CLOCK_DRIFT)) {
+    clockSession = session;
+    clockGate = clock;
+    clockAt = now;
+  }
   cmdUnreported = false;
   uint8_t prevState = gateState;
   uint8_t prevResult = gateResult;
@@ -329,16 +382,13 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   gateSnr = (int8_t)m.payload[ST_SNR];
   gateTarget = m.payload[ST_TARGET];
   gateHeartbeat = getU16(m.payload + ST_HEARTBEAT);
-  gateTravel = m.len >= ST_LEN ? getU16(m.payload + ST_TRAVEL) : 0;
-  PeerReport r = { gateRssi, gateSnr, m.len >= ST_LEN_V2, 0, 0, 0, 0, 0 };
-  gateExt = r.ext;
-  if (r.ext) {
-    r.retries = gateRetries = getU16(m.payload + ST_RETRIES);
-    r.giveups = gateGiveups = getU16(m.payload + ST_GIVEUPS);
-    r.crcErr = gateCrc = getU16(m.payload + ST_CRC);
-    r.noiseAvg = gateNoise = (int8_t)m.payload[ST_NOISE];
-    r.noiseMax = (int8_t)m.payload[ST_NOISE_MAX];
-  }
+  gateTravel = getU16(m.payload + ST_TRAVEL);
+  PeerReport r = { gateRssi, gateSnr, 0, 0, 0, 0, 0 };
+  r.retries = gateRetries = getU16(m.payload + ST_RETRIES);
+  r.giveups = gateGiveups = getU16(m.payload + ST_GIVEUPS);
+  r.crcErr = gateCrc = getU16(m.payload + ST_CRC);
+  r.noiseAvg = gateNoise = (int8_t)m.payload[ST_NOISE];
+  r.noiseMax = (int8_t)m.payload[ST_NOISE_MAX];
   histPeer(r);
   bool first = !haveStatus;
   haveStatus = true;
@@ -371,9 +421,10 @@ void houseOnAck(Slot slot, uint8_t, bool acked, uint8_t result) {
   if (slot == SLOT_CMD) {
     cmdResult = acked ? result : -2;
     if (!acked) logEvent(EV_CMD_DROPPED, cmdAction, cmdId);
-    // Refused without a pulse (no AC at the gate): the Shelly shows a move that won't happen. Put it back as soon
-    // as nothing else is in the way, as for an overridden command, instead of after mismatch_timeout_s.
-    if (acked && result == RES_NO_POWER) checkSoon = true;
+    // Refused without a pulse (no AC at the gate, or past its deadline there): the Shelly shows a move that won't
+    // happen. Put it back as soon as nothing else is in the way, as for an overridden command, instead of after
+    // mismatch_timeout_s.
+    if (acked && (result == RES_NO_POWER || result == RES_LATE)) checkSoon = true;
     // Pulsed: until its STATUS says where the gate is heading, an opposite command must not be suppressed.
     if (acked && result == RES_OK) cmdUnreported = true;
   } else if (slot == SLOT_CFG) {
@@ -410,7 +461,7 @@ void houseStatus(JsonObject o) {
   g["in4"] = (bool)(gateInputs & STI_IN4);
   g["ac_power"] = !(gateInputs & STI_AC_LOST);
   g["reboot_loop"] = (bool)(gateInputs & STI_REBOOTS);
-  if (gateExt) {
+  if (haveStatus) {
     g["retries"] = gateRetries;
     g["giveups"] = gateGiveups;
     g["crc_err"] = gateCrc;

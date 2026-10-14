@@ -17,7 +17,7 @@ FLAGS := -std=gnu++17 -g -O1 -DHOST_BUILD $(SAN) $(if $(COVERAGE),--coverage)
 WNO := -Wno-maybe-uninitialized
 # Third-party headers as system headers: their warnings (ArduinoJson trips GCC 13 maybe-uninitialized) aren't ours.
 CXXFLAGS := $(FLAGS) -Wall -Wextra -Werror $(WNO) -Istubs -I. -I$(FW) -isystem $(CRYPTO) -isystem $(JSON)
-CRYPTO_SRCS := Crypto Hash SHA256
+CRYPTO_SRCS := Crypto Hash SHA256 BlockCipher AESCommon AES128
 
 # --- tests: link and config ------------------------------------------------------------------------------------
 SRCS := testing.cpp sim.cpp link_house.cpp link_gate.cpp test_link.cpp test_config.cpp test_histlog.cpp
@@ -64,7 +64,7 @@ run-fuzz-replay:
 $(BUILD)/tests: $(OBJS) $(LIB_OBJS)
 	$(CXX) $(FLAGS) -o $@ $^
 
-$(BUILD)/systests: $(SYS_OBJS)
+$(BUILD)/systests: $(SYS_OBJS) $(LIB_OBJS)
 	$(CXX) $(FLAGS) -rdynamic -o $@ $^ -ldl
 
 $(BUILD)/node.so: $(NODE_OBJS)

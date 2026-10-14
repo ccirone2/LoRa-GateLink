@@ -106,6 +106,9 @@ struct Board {
   std::deque<Bytes> rxq;  // at most one frame waits in the FIFO (a newer one overwrites it); empty = bad CRC
   uint32_t rxDone = 0, crcErr = 0, faults = 0;  // radio.cpp's counters since boot
   uint32_t retryAt = 0;  // radio.cpp while the radio didn't start: when to try again (0: no failure logged yet)
+  // Time each loop pass spends before linkPoll (in supplyPoll, the step before it): 0 here, but on the board a pass
+  // takes a millisecond or more, so what linkPoll's handlers stamp with millis() is later than the loop's `now`.
+  uint32_t preLinkUs = 0;
   int16_t rssi = -60, noise = -118;
   float snr = 9.0f;
 
@@ -290,6 +293,7 @@ struct World {
   void airSend(const Bytes &frame, int from = -1);  // a frame on the air from a transmitter of our own
   void inject(Board &to, const Bytes &frame) { to.rxq.clear(), to.rxq.push_back(frame); }
   std::vector<const AirFrame *> sent(const Board &from, uint8_t type) const;
+  Bytes plain(const Bytes &frame) const;  // a frame's payload, decrypted with TEST_KEY (framecrypt.h)
   uint32_t airtimeMs(size_t len, int sf = 9, int bwHz = 500000, int cr = 5) const;
 
   // Monitors: the behavioural invariants, checked every millisecond. A breach is recorded (and traced); tests end

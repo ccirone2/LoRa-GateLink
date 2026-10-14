@@ -1,7 +1,8 @@
 # Link key management
 
 Both boards share one 128-bit link key. Every LoRa frame carries an HMAC-SHA256 tag made with it (truncated to
-8 bytes; [protocol.md](protocol.md)), so a board acts only on frames from a board holding the same key. Without a
+8 bytes; [protocol.md](protocol.md)), so a board acts only on frames from a board holding the same key, and its
+payload is encrypted under a key derived from it (since 0.16.0), so only such a board can read it. Without a
 key the link is off, so a fresh or reset board can never be commanded.
 
 The key is write-only: `key.set` stores it in the board's SPI flash, and no console command reads it back. This

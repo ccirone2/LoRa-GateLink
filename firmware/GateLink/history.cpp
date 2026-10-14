@@ -219,17 +219,12 @@ void histPeer(const PeerReport &r) {
     if (r.rssi < b.peerRssiMin) b.peerRssiMin = r.rssi;
     if (b.peerSnrMin == INT8_MAX || r.snr < b.peerSnrMin) b.peerSnrMin = clamp8(r.snr);
   }
-  if (!r.ext) {
-    peerPrev = false;
-    return;
-  }
   if (r.noiseAvg != 0 && b.peerNoiseN < 0xFFFF) {
     b.peerNoiseSum += r.noiseAvg;
     b.peerNoiseN++;
     if (r.noiseMax > b.peerNoiseMax) b.peerNoiseMax = r.noiseMax;
   }
-  // The first report after our boot (or from older gate firmware) only sets the baseline: its totals cover the
-  // gate's whole uptime.
+  // The first report after our boot only sets the baseline: its totals cover the gate's whole uptime.
   uint16_t dr = grew16(r.retries, pPeerRetries), dg = grew16(r.giveups, pPeerGiveups), dc = grew16(r.crcErr, pPeerCrc);
   if (peerPrev) {
     add16(b.peerRetries, dr);

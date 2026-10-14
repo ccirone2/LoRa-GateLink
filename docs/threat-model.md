@@ -52,14 +52,23 @@ The repository is public: every attacker knows the frame format, the defaults an
 ## What GateLink guarantees today
 
 - **No forged frames.** Every frame carries HMAC-SHA256 truncated to 64 bits, checked (in constant time) before any
-  payload is parsed. Without the key no command, state or config write can be forged (`frame-forgery`: low).
+  payload is decrypted or parsed. Without the key no command, state or config write can be forged (`frame-forgery`:
+  low).
+- **Payloads are private** (0.16.0). They are encrypted (AES-128-CTR under a key derived from the link key,
+  encrypt-then-MAC): a listener sees message types, lengths and times, not the gate's state, the AC, the command or
+  any setting (`cleartext-traffic-analysis`: low).
 - **No replay of frames that were already delivered.** Each boot draws a fresh session id (unique by construction
   from the boot counter while it works, 0.13.9) and a random starting seq. A peer's session counts only once it has echoed a fresh challenge, and from then on only seqs above that,
   each once (32-frame window). Delivered frames can't be replayed, within a session or across reboots
   (`recorded-frame-replay`: low).
-  - The exceptions are commands that were **withheld** (jammed at the gate and recorded) and replayed later, and a
-    **library of recorded challenge answers**. Both are open; see below. A withheld gate STATUS no longer counts
-    (0.13.9).
+  - Frames **withheld** (jammed at the receiver and recorded) and delivered later aren't stopped by the window, so
+    the messages that matter are checked for it: a withheld gate STATUS changes nothing (0.13.9), and a withheld
+    command is past its deadline in the gate's clock (0.16.0). Challenges are 128 bits (0.16.0), so a library of
+    recorded answers never matches one.
+- **No late commands** (0.16.0). Every command carries a deadline in the gate's own clock (when the house sent it
+  plus `cmd_ttl_s`, which the house reckons from STATUS); the gate refuses one past it by more than 2 s plus a
+  STATUS's and a command's time on the air, so no command moves the gate later than that, however it was delayed
+  (`withheld-command-fires-late`: low).
 - **No duplicate pulses** for one command, whatever is lost or restarted. The gate de-duplicates by command id, and
   a command pending across a gate restart is dropped, not resent.
 - **Fail-safe outputs.** Relays drop on any reset. The gate's inputs are pulled down, so a dead opto or cut wire
@@ -69,8 +78,8 @@ The repository is public: every attacker knows the frame format, the defaults an
 
 It does **not** guarantee:
 
-- **Confidentiality.** Payloads and message types are plain text, and frame lengths are distinct
-  (`cleartext-traffic-analysis`: medium).
+- **Hiding when things happen.** Message types and frame lengths are in the clear, and STATUS goes on every change:
+  a listener can tell that a command went and that the gate's state changed, not which (`cleartext-traffic-analysis`).
 - **Availability under jamming.** It can only fail safe and make the jamming visible (`rf-jamming-dos`,
   `jamming-hides-state-until-link-timeout`).
 - **Anything against someone with access to a board.**
@@ -86,13 +95,14 @@ Severity is after verification: **H**igh, **M**edium, **L**ow. Status says where
 |---|---|---|---|
 | `hello-answer-stamp-deadlock` | After ~24.9 days of steady link, a peer restart's HELLOs were ignored for up to another ~24.9 days (the HELLO answer stamps read as recent under the signed `elapsed()`): link down, sensor open | H | **Fixed** in 0.13.7, with host tests past 25 days (#84) |
 | `backoff-starvation-by-frequent-frames` | Any LoRa frame heard every ~100 ms held all new frames off until their TTL: a cheap, silent DoS | M | **Fixed** in 0.13.7 (link PR) |
-| `jam-and-delay-replay-window` / `withheld-command-fires-late` | A command jammed at the gate and recorded can be replayed later, while still inside the 32-frame window (about 16 minutes of normal traffic): the gate opens at a time the attacker picks, after the house had dropped the command. The receiver can't tell a delayed frame from a retry | H | Open: protocol hardening (CMD carries freshness; ROADMAP F6) |
+| `jam-and-delay-replay-window` / `withheld-command-fires-late` | A command jammed at the gate and recorded could be replayed later, while still inside the 32-frame window (about 16 minutes of normal traffic, or as long as the gate is kept from hearing the house): the gate opened at a time the attacker picked, after the house had dropped the command. The receiver can't tell a delayed frame from a retry | H | **Fixed** in 0.16.0: a command carries a deadline in the gate's 64-bit clock (from STATUS) and is refused more than 2 s (plus two frames' airtime) past it (`RES_LATE`, log `cmd_late`), host-tested to 2^32 ms. Each boot's clock starts from a random origin, so a deadline a house dated in the gate's previous boot (kept from seeing the restart: found in the security review) is refused too. A remote config write carries none (`withheld-config-write`) |
+| `withheld-config-write` | A remote config write jammed at the gate and recorded, played back later inside the window, sets a value the installer chose before (after the console reported it failed): it can undo a later write | L | Accepted (0.16.0): only installer-chosen values, rarely written; recheck the gate's settings (`remote.diag`) after a write that failed |
 | `withheld-gate-frames-replayed` | The same, gate to house: a withheld "closed" STATUS replayed later keeps the sensor closed and the link up while the gate is open | M | **Fixed** in 0.13.9 (#86): the house takes a STATUS only in seq order and its link stays up on STATUS alone. A relay that delays every STATUS, in order, can still hold the house behind by up to its link timeout (`link-loss-concealment-window`) |
-| `challenge-library-session-rebind` | The HELLO challenge is 32 bits and a HELLO_ACK isn't bound to the challenger's session, so answers farmed over weeks can re-verify a superseded peer session, whose recorded commands then replay | M | Open: protocol hardening (128-bit challenge bound to the session, no re-verifying an old session; ROADMAP F6) |
+| `challenge-library-session-rebind` | The HELLO challenge was 32 bits, so answers farmed over weeks (stale HELLOs replayed to make a board challenge, the live peer's answers recorded) could re-verify a superseded peer session, whose recorded frames (STATUS, commands) then replayed | M | **Fixed** in 0.16.0: 128-bit challenges, the link key's HMAC of the session, a count and radio noise. Binding the answer to the challenger's session and refusing a superseded session would add nothing with 128 bits: not done |
 | `link-loss-concealment-window` | Jamming (or cutting the gate board's power) during an open–pass–close cycle hides it: the sensor stays closed until the link timeout, 100 s by default | H | Open: a "moved since you last heard" latch in STATUS, reported late rather than never (ROADMAP F17) |
 | `jamming-hides-state-until-link-timeout` | Jamming freezes the reported state for up to the link timeout and drops commands | H | Accepted, bounded by the timeout. Shorten `heartbeat_s`/`link_timeout_s` at the install if the window matters. Since 0.14.0 the fault output (D5, `fault_out`) reports link loss to the alarm apart from "open"; telling it apart from other problems is on the ROADMAP (F3) |
-| `cleartext-traffic-analysis` | Listeners learn gate state, AC loss, command times, reboots, firmware version | M | Accepted for now. Payload encryption (encrypt-then-MAC, per-direction keys) is on the ROADMAP with the protocol hardening (F6) |
-| `session-id-repeat` | A session id repeating under one key (birthday bound, flash replaced or rolled back) lets old frames replay | M | Partly: unique by construction in 0.13.9 (#86), a keyed permutation of the boot count, the draws this boot and 8 random bits, so a rolled-back count repeats an id 1 time in 256. Open: per-session MAC keys with the protocol hardening (ROADMAP F6) |
+| `cleartext-traffic-analysis` | Listeners learned gate state, AC loss, commands, settings, reboots, firmware version | L | Mitigated in 0.16.0: payloads encrypted (AES-128-CTR, encrypt-then-MAC, the counter from `src`, `dst`, session and seq). Left: message types, lengths and times (a command went, the state changed) and reboots (HELLOs); padding to one length wouldn't hide them while STATUS goes on every change |
+| `session-id-repeat` | A session id repeating under one key (birthday bound, flash replaced or rolled back) lets old frames replay, and would reuse a keystream | M | Partly: unique by construction in 0.13.9 (#86), a keyed permutation of the boot count, the draws this boot and 8 random bits, so a rolled-back count repeats an id 1 time in 256. Rolling the flash back needs a board in hand, which gives the key anyway, so per-session keys (once proposed with the protocol hardening) weren't built (0.16.0) |
 | `replayed-hello-side-effects` | Replayed HELLOs can delay a held command until it expires | L | Accepted (availability only; the house resyncs the switch) |
 | `replay-flood-erases-evidence-and-reflects` | Floods overwrite the 64-entry log; memo'd seqs are re-ACKed without a limit | L | Partly: the hourly link history is kept in flash since 0.14.0, with MAC failures but not replays. Open: coalesce flood events, count replays in the history, limit re-ACKs (ROADMAP F1) |
 | `pre-auth-parsing-surface` | Malformed frames reaching parsers | L | Mitigated: MAC before parse; fuzzed (`tests/native/fuzz`) |
@@ -163,7 +173,7 @@ deploy could flash a backdoored image or take the key through the page. Nothing 
 - **The controller is trusted.** Whoever controls the Shelly controls the gate; secure the Z-Wave network and the
   Alarm.com account.
 - **The opener's other inputs** are outside GateLink.
-- **Traffic is readable** until payload encryption lands (ROADMAP F6).
+- **When things happen is visible.** Payloads are encrypted, but types, lengths and times aren't.
 
 ## Install checklist (security)
 

@@ -8,7 +8,7 @@ GateLink: two Arduino MKR WAN 1310 boards (on MKR Relay Proto Shields) bridge an
 
 **Goals** (README "Goals" has the reasoning). Weigh every change and every ROADMAP/TODO item against them; when they conflict, the earlier wins. 1. **Truth**: Alarm.com always sees the gate's real state (its limits, never our last command); unverifiable = not-closed; a false closed is the worst failure. 2. **Availability**: the gate does what the switch asks wherever that can be done honestly, but a late, repeated or forged command never moves it. 3. **Safety**: no move the owner didn't just ask for; the invariants below are never traded. 4. **Diagnosability**, from the house where possible. Fail toward not-closed, but nuisance alerts are a cost. Audiences: homeowner (sees only Alarm.com) > installer (web console) > developer (terminal, bench). Defend fully against an RF attacker with an SDR; physical and supply-chain attacks get cheap mitigations. Complexity is a cost: the smallest change, prefer removing code, nothing speculative. This site first, reproducible by others; unattended for years with rare gate visits; ~$120 hardware per location.
 
-Repo: https://github.com/ccirone2/LoRa-GateLink (public). Web console: https://ccirone2.github.io/LoRa-GateLink/, deployed from `web/` by `.github/workflows/pages.yml` (`gh workflow run pages.yml` redeploys).
+Repo: https://github.com/ccirone2/LoRa-GateLink (public). Web console: https://ccirone2.github.io/LoRa-GateLink/, deployed from `web/` by `.github/workflows/pages.yml`.
 
 ## Commands
 
@@ -43,7 +43,7 @@ Rules and checklist: `docs/bench-testing.md`. Never skip these:
 
 Layers, bottom up. **Before changing a layer, read its section in `docs/architecture.md`** (design, measured numbers, approaches tried and abandoned) and update it with the code.
 - `radio.cpp`: LoRa lib in polling mode, RX continuous, async TX with a deadline. The loop must never block (no lib `parsePacket()`, RX-single, blocking `endPacket()` or waiting for TX-done).
-- `link.cpp`: HMAC-tagged frames; per-boot sessions verified by a HELLO challenge, then a replay window; reliable `Slot`s with retry/TTL; listen-before-talk. Session ids never repeat under one key; reliable messages must be idempotent (CMDs by `lastCmdId`). Off while `cfg.key_set == 0`.
+- `link.cpp`: AES-CTR payloads, HMAC tags; per-boot sessions verified by a 128-bit HELLO challenge, then a replay window; reliable `Slot`s with retry/TTL; listen-before-talk. Session ids never repeat under one key; reliable messages must be idempotent (CMDs by `lastCmdId`). A CMD carries a deadline in the gate's 64-bit clock (from STATUS): never run past it. Off while `cfg.key_set == 0`.
 - `role_gate.cpp` / `role_house.cpp`: the state machines (invariants below); STATUS/DIAG layouts in `roles.h`, kept in sync with their parsers.
 - `history.cpp` / `histlog.cpp` (link history, in SPI flash) and `health.cpp` (fault output D5): diagnostics only; nothing may read them to decide.
 - `console.cpp` / `console_io.cpp`: newline-delimited JSON over USB (and Serial1), one request per port per loop pass. The web console (and its fake board, `tests/web/fake-serial.js`), the e2e suite and `tools/gatelink_client/` parse it: change them with it, `log.cpp`, `roles.h` and `docs/console.md` (`tools/check_contract.py` checks).

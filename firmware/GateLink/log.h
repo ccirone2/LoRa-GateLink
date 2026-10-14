@@ -31,11 +31,13 @@ enum LogCode : uint8_t {
                      //   b = saved settings dropped (unknown or out of range)
   EV_SUPPLY,         // a = board supply (VIN) power good, -1 = charger not answering (at boot only), b = REG08
   EV_CMD_HOLD,       // a = 1 command held (HELLO from an unverified session b), 0 sent after all (verified
-                     //     session b answered), 2 dropped (new session b verified: the peer restarted)
+                     //     session b answered), 2 dropped (new session b verified: the peer restarted), 3 waiting
+                     //     for the gate's clock (house: no STATUS yet from gate session b, at most cmd_ttl_s)
   EV_HEALTH,         // fault output D5 changed: a = 1 HIGH (healthy), 0 LOW (needs attention), -1 released (fault_out
                      //   off: an input again); b = the problems then (Problem bits, health.h)
   EV_HANG,           // at boot, after a watchdog reset its early warning saw coming: a = the program counter the
                      //   warning interrupted (4 s into the stall), b = the loop's stage then (status hang_stage)
+  EV_CMD_LATE,       // a = cmd id, b = ms past its deadline (negative: a deadline too far ahead); refused, no pulse
   EV_COUNT
 };
 

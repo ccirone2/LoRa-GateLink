@@ -15,19 +15,28 @@ the SF's sensitivity; raise `sf` (and/or `tx_power`) on **both** boards if the l
 
 ## Framing
 
-Frame: `ver | type | net_id | src | dst | session | seq | payload | tag`, tag = HMAC-SHA256 (shared
-128-bit key) truncated to 8 bytes. Node addresses are fixed by role (house = 1, gate = 2). The radio link is
-off until a key is set, so a fresh or reset board can never be commanded. Generating, backing up, checking (key
-ids) and replacing the key: [key-management.md](key-management.md).
+Frame: `ver | type | net_id | src | dst | session | seq | payload | tag`. The payload is encrypted with AES-128 in
+counter mode, then tag = HMAC-SHA256 (shared 128-bit key) of the header and the encrypted payload, truncated to 8
+bytes (encrypt-then-MAC). The cipher key is the first 16 bytes of HMAC-SHA256(key, `GateLink payload v1`), so it is
+apart from the MAC key; the counter block is the header's `src`, `dst`, `session` and `seq` (bytes 3–12), six zero
+bytes and the block number (one byte), distinct for every frame while session ids don't repeat, so no keystream is
+used twice. `ver` is 2 since 0.16.0 (1 before: payloads in the clear, 32-bit challenges); a board drops frames of
+another version, so both boards must run 0.16.0 or later to link. Node addresses are fixed by role (house = 1,
+gate = 2). The radio link is off until a key is set, so a fresh or reset board can never be commanded. Generating,
+backing up, checking (key ids) and replacing the key: [key-management.md](key-management.md).
 
 ## Sessions and replay protection
 
 Each board picks a new session id at boot and at every link restart (a new key or radio setting), and a random
-starting seq; a peer's session is accepted only after it echoes a fresh challenge (HELLO / HELLO_ACK), and only seq
+starting seq; a peer's session is accepted only after it echoes a fresh 128-bit challenge (HELLO / HELLO_ACK), and only seq
 numbers above that HELLO_ACK's are accepted, each once, so recorded frames can't be replayed — even across reboots. A
 32-frame sliding window tolerates reordering between retried messages. A HELLO from an unknown session (a restarted peer, or a replayed old one) is challenged, but the
 verified session stays in place until the new one answers. A challenge is good for 10 s after the last HELLO that
-carried it, so an answer recorded earlier can't be played back later.
+carried it, so an answer recorded earlier can't be played back later. A challenge is the link key's HMAC of the
+challenger's session, a count and radio noise (16 bytes of it): distinct for every challenge and unpredictable
+without the key. With 32 bits (before 0.16.0), answers recorded over weeks (old HELLOs replayed to make a board
+challenge, and the live peer's answers recorded) could come to match a later challenge, re-verify a superseded
+session and let its recorded frames through.
 
 That only holds while session ids never repeat under one key, so since 0.13.9 they are unique by construction
 (before, they were random: by the birthday bound, even odds of a repeat within ~77,000 sessions). The id is a
@@ -50,11 +59,33 @@ HELLOs can't be checked against the replay window (a restarted peer's must get t
 acted on: it is answered, and pending frames are renumbered. Each board answers at most one HELLO a second from the
 verified session and one from all other sessions, so replayed HELLOs can't keep pushing pending messages back.
 
-The frame payloads aren't encrypted: someone listening learns the message types, the gate state and when mains
-power is lost. They can't forge frames, or replay frames that were delivered. Two gaps remain, both on the
-[threat model](threat-model.md)'s open list: a command **withheld** from the gate (jammed there and recorded) can
-still be delivered later while inside the replay window, and a library of recorded challenge answers could in time
-re-verify an old session. (A withheld STATUS can't: the house takes STATUS only in seq order, from 0.13.9.)
+Someone listening learns the message types, frame lengths and times, not the payloads: that the gate's state
+changed, not to what, nor why (a move or the mains power). They can't forge frames, or replay frames that were
+delivered. A frame **withheld** (jammed at its receiver and recorded) and delivered later is taken if its seq is
+still inside the replay window, so each message type that matters is checked for that: the house takes STATUS
+only in seq order (0.13.9), and a command carries a deadline (below).
+
+## Command deadlines
+
+Every CMD carries a deadline in the gate's clock: when the house sent it plus the house's `cmd_ttl_s`, the time the
+house gives it up. The clock is milliseconds, 64 bits (48 in the frames), from an origin each boot draws at random
+(47 bits), so it never wraps and a deadline reckoned in another boot's clock lands nowhere near this one's. The gate
+refuses a command past its deadline by more than 2 s (`CMD_LATE_SLACK_MS`) plus a STATUS's and a command's time on
+the air (the house's reckoning lags by the one, the command takes the other to arrive: a few ms at SF9 / 500 kHz,
+seconds at SF12 / 125 kHz), or with one further ahead than the longest `cmd_ttl_s` allows (122 s): ACKed
+`RES_LATE`, log `cmd_late`, no pulse. So a command jammed at the gate and recorded, played back later, never moves
+it, however long its seq stays inside the window (before 0.16.0 it could fire whenever the attacker chose while the
+gate heard fewer than 32 frames from the house).
+
+The house learns the gate's clock from STATUS, which carries it (`ST_CLOCK`). A STATUS that was resent (its first
+frames lost) carries the clock of when it was built, seconds behind, so a reading replaces the one in use only if it
+puts the gate's clock later, or earlier by no more than the crystals can have drifted apart since (100 ppm); none for
+3 hours (a dead link) leaves it unknown. The reading is kept for the gate session it came from. With none for the
+verified gate session (the gate just restarted and waits for its inputs to settle, a few seconds, or a link restarted)
+a command can't be dated: it waits (log `cmd_hold` a=3) for up to `cmd_ttl_s` from the switch, losing that much of its
+lifetime, and is dropped after it (log `cmd_dropped`, the controller put back), never sent undated. The gate reports
+as soon as its link has verified the house, a new session or its own restarted, so the wait is short. A remote config
+write carries no deadline: a withheld one can only set a value the installer chose, after it was reported failed.
 
 ## Reliable delivery
 
@@ -153,10 +184,10 @@ both boards updated together; say so in the release notes. The tables below are 
 
 | Type | Message | Payload | Direction | Reliable |
 |---|---|---|---|---|
-| 1 | `MSG_HELLO` | challenge u32 | either | no |
-| 2 | `MSG_HELLO_ACK` | challenge u32 | either | no |
+| 1 | `MSG_HELLO` | challenge u8 x16 | either | no |
+| 2 | `MSG_HELLO_ACK` | challenge u8 x16: the HELLO's | either | no |
 | 3 | `MSG_ACK` | acked seq u32, result u8 | either | no |
-| 4 | `MSG_CMD` | cmd_id u16, action u8 | house → gate | yes |
+| 4 | `MSG_CMD` | cmd_id u16, action u8, deadline u48 (the gate's clock, ms) | house → gate | yes |
 | 5 | `MSG_STATUS` | STATUS payload, below | gate → house | yes |
 | 6 | `MSG_PING` | ping_id u16 | either | no |
 | 7 | `MSG_PONG` | ping_id u16, rssi i16, snr i8 | either | no |
@@ -173,6 +204,7 @@ ACK result codes (`AckResult`; a gap is a retired code, never reused):
 | 2 | `RES_BAD` | malformed / rejected |
 | 4 | `RES_NO_POWER` | no AC power (IN3 power sense) and no limit reading (nor our pulse under way); no pulse |
 | 5 | `RES_NOT_SAVED` | `CFG_SET` applied, but the flash save failed: reverts at the next reboot |
+| 6 | `RES_LATE` | CMD past its deadline by the gate's clock (or too far ahead of it); no pulse |
 
 <!-- docgen:messages end -->
 
@@ -181,7 +213,7 @@ ACK result codes (`AckResult`; a gap is a retired code, never reused):
 
 ### STATUS payload (gate → house)
 
-26 bytes, little-endian. **Since**: the gate firmware that added the field (— = every version); an older gate's shorter STATUS still works.
+32 bytes, little-endian. **Since**: the gate firmware that added the field (— = every version); a gate older than a field leaves it off, and the house still takes its STATUS, back to 0.16.0 (frame format 2: an older gate can't link at all).
 
 | Offset | Size | Type | Field | Meaning | Since |
 |---|---|---|---|---|---|
@@ -201,6 +233,7 @@ ACK result codes (`AckResult`; a gap is a retired code, never reused):
 | 22 | 1 | i8 | `ST_NOISE` | gate noise floor since its previous STATUS, dBm (0 = no sample) | 0.4.0 |
 | 23 | 1 | i8 | `ST_NOISE_MAX` | its peak | 0.4.0 |
 | 24 | 2 | u16 | `ST_TRAVEL` | gate `travel_timeout_s`: the house holds K1 through a travel for as long | 0.13.0 |
+| 26 | 6 | u48 | `ST_CLOCK` | the gate's clock (ms, from a random origin each boot): commands' deadlines are in it | 0.16.0 |
 
 `ST_INPUTS` bits:
 
@@ -243,6 +276,10 @@ Enums in STATUS (also the `status` reply's names):
 <!-- docgen:diag end -->
 
 ### History
+
+Since 0.16.0 the frame format is 2 (encrypted payloads, 128-bit challenges, deadlines on commands): a board drops
+frames from a board on an older version, so the house needs the whole STATUS, now 32 bytes with the gate's clock at
+the end. The notes below are about gates before 0.16.0, which can't link with a 0.16.0 house.
 
 Since 0.13.0, STATUS is 26 bytes: it ends with the gate's `travel_timeout_s`, and the house holds K1 through a travel
 for that long instead of its own setting (only the gate's copy can be changed remotely, so the two could

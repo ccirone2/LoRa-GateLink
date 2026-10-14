@@ -10,20 +10,24 @@
 //     AUTH     type, flags, [delta i8 | seq u32], [session u32], [rssi u8, snr u8], len (u8 % 109), payload
 //              flags: bits 0-1 seq (0 next, 1 the last again, 2 next + delta, 3 seq given), 2 session given,
 //              3 bad tag, 4 src/dst swapped, 5 rssi/snr given, 6 don't wait for the board (the next frame may
-//              overwrite it in the FIFO)
+//              overwrite it in the FIFO), 7 payload as given (else a CMD of at least 3 bytes gets a deadline 10 s
+//              ahead of the gate board's clock, and a STATUS of at least 26 bytes our clock, as the boards send)
 //     RAW      flags, len, bytes (unauthenticated; flags bit 0: with a valid header, so it fails at the MAC)
 //     TIME     ms u16
 //     PINS     bits 0-3 IN1..IN4, bit 4 board supply lost (charger power good off)
 //     CONSOLE  flags (bit 0 UART, bit 1 with crc, bits 2-7 template), template arguments (see consoleTemplate)
 //     ACK      which (bits 0-6: frame type, bit 7: seq offset follows), [offset i8], result
-//     RESTART  session u32 (0: ours + 1), seq u32, challenge u32: the peer restarts and sends a HELLO
+//     RESTART  session u32 (0: ours + 1), seq u32, challenge u32 (repeated to 16 bytes): the peer restarts and
+//              sends a HELLO
 //     ANSWER   flags (bit 0: the previous challenge, bit 1: first wait up to 3 s for a new HELLO): HELLO_ACK
 //     REPLAY   which (bit 7: one of the board's own frames back to it, else one of ours), verbatim
 //     CRCERR   a frame heard with a bad CRC
 //     RADIO    flags (bit 0 module absent, bit 1 channel jammed, bit 2 noise u8 follows, bit 3 the radio resets now)
 #include <stdio.h>
+#include <string.h>
 #include <string>
 #include "harness.h"
+#include "../framecrypt.h"
 #include "config.h"
 #include "link.h"
 #include "log.h"
@@ -67,6 +71,13 @@ static bool opAuth(Reader &r) {
     snr = (int8_t)r.u8() * 0.25f;
   }
   Bytes payload = r.bytes(r.u8() % 109);  // MAX_PAYLOAD 100: a little past it is dropped unread
+  if (!(flags & 0x80) && type == MSG_CMD && payload.size() >= 3) {
+    if (payload.size() < CMD_LEN) payload.resize(CMD_LEN);
+    putU48(&payload[CMD_DEADLINE], peerBoardClock() + 10000);
+  } else if (!(flags & 0x80) && type == MSG_STATUS && payload.size() >= ST_CLOCK) {
+    if (payload.size() < ST_LEN) payload.resize(ST_LEN);
+    putU48(&payload[ST_CLOCK], peer.clock);
+  }
   Bytes f = peerFrame(type, payload.data(), payload.size(), session, seq);
   if (flags & 8) f.back() ^= 0x5A;
   if (flags & 0x10) std::swap(f[3], f[4]);
@@ -80,7 +91,7 @@ static bool opRaw(Reader &r) {
   uint8_t flags = r.u8();
   Bytes f = r.bytes(r.u8());
   if ((flags & 1) && f.size() >= 13) {
-    f[0] = 1;
+    f[0] = FRAME_VER;
     f[2] = (uint8_t)cfg.net_id;
     f[3] = peerNodeId();
     f[4] = myNodeId();
@@ -166,23 +177,24 @@ static bool opRestart(Reader &r) {
   uint32_t s = r.u32(), q = r.u32(), c = r.u32();
   peer.session = s ? s : peer.session + 1;
   peer.seq = q;
-  uint8_t p[4];
-  putU32(p, c ? c : 0xC0FFEE01);
-  sendAuth(MSG_HELLO, p, 4);
+  uint8_t p[16];
+  for (int i = 0; i < 16; i += 4) putU32(p + i, c ? c : 0xC0FFEE01);
+  sendAuth(MSG_HELLO, p, sizeof(p));
   return true;
 }
 
 static bool opAnswer(Reader &r) {
   uint8_t flags = r.u8();
   if (flags & 2) {
-    uint32_t c = peer.challenge, end = hal.ms + 3000;
+    uint8_t c[16];
+    memcpy(c, peer.challenge, sizeof(c));
+    uint32_t end = hal.ms + 3000;
     bool had = peer.haveChallenge;
-    while ((int32_t)(hal.ms - end) < 0 && (!peer.haveChallenge || (had && peer.challenge == c)) && pass(1)) {
+    while ((int32_t)(hal.ms - end) < 0 && (!peer.haveChallenge || (had && !memcmp(peer.challenge, c, sizeof(c))))
+           && pass(1)) {
     }
   }
-  uint8_t p[4];
-  putU32(p, (flags & 1) ? peer.prevChallenge : peer.challenge);
-  sendAuth(MSG_HELLO_ACK, p, 4);
+  sendAuth(MSG_HELLO_ACK, (flags & 1) ? peer.prevChallenge : peer.challenge, sizeof(peer.challenge));
   return true;
 }
 

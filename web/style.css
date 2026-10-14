@@ -94,8 +94,8 @@ main { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .tab.active { display: block; }
 /* Disconnected: the status cards still show the last values; dim them so they don't read as live. */
 body.offline #tab-status .grid { opacity: .55; }
-/* The wiring check is the connected board's: nothing to show without one. */
-body.offline #wiringCheck { display: none; }
+/* The setup checklist and the wiring check are the connected board's: nothing to show without one. */
+body.offline #setupCard, body.offline #wiringCheck { display: none; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; min-width: 0; }
@@ -253,6 +253,13 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 .log .err { color: var(--bad); }
 
 /* Install tab */
+#setupCard { margin-bottom: 14px; }
+.setup { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.setup li { display: flex; gap: 8px; align-items: baseline; }
+.setup .tick { flex: none; width: 1.2em; text-align: center; font-weight: 700; color: var(--muted); }
+.setup li.done .tick { color: var(--ok); }
+/* Read out, not shown (the tick says it on screen). */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .seg button { border: none; border-radius: 0; }
 .seg button + button { border-left: 1px solid var(--border); }

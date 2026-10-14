@@ -45,6 +45,9 @@ test('a survey pings for the chosen time, one at a time, and judges both directi
   await expect(rows.nth(0).locator('td')).toHaveText(['at the house', '60', '-92.0 / -92.0 dBm', '6.5 / 6.5 dB', '38.5 / 38.5 dB']);
   await expect(rows.nth(1).locator('td')).toHaveText(['at the gate', '60', '-95.0 / -95.0 dBm', '3.0 / 3.0 dB', '15.5 / 15.5 dB']);
   await expect(page.locator('#surveyAdvice li')).toHaveText(['Plenty of margin: nothing to change.']);
+  // A survey run to the end ticks the setup checklist's survey step (on the next status).
+  await page.clock.runFor(2500);
+  await expect(page.locator('#setupList li').nth(4)).toHaveClass('done');
   // The ping card is back as it was, and saw the survey's pongs.
   await expect(page.locator('#pingAuto')).toBeChecked();
   await expect(page.locator('#btnPing')).toBeEnabled();

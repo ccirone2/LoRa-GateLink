@@ -232,8 +232,9 @@ events as text. The Link tab: `history.js`, `surveycard.js` (the site survey run
 `remote.js` (the gate's diagnostics and remote writes, from the house). The Board tab: `security.js` the link key card
 (and the replay self-test under *Developer*), with `keys.js` the key ids and encrypted backups
 ([key-management.md](key-management.md)); `firmware.js` + `samba.js`; factory reset (wired by `config.js`). The
-Install tab: `wiring.js` (it imports nothing of the page: `tools/docgen.py` reads its tables in node) and `relay.js`
-(the wiring check's relay test; `status.js` fills its inputs). Links to the tabs the console had before (`#tools`,
+Install tab: `wiring.js` (it imports nothing of the page: `tools/docgen.py` reads its tables in node), `relay.js`
+(the wiring check's relay test; `status.js` fills its inputs) and `checklist.js` (the setup steps, ticked from each
+status; pure, unit-tested). Links to the tabs the console had before (`#tools`,
 `#security`) open their successors. `ui.js` holds the log view (every module writes to it), toasts and the
 click guard; `util.js` small helpers; shared state is `state.js`'s `S`. Controls marked `data-offline` stay usable
 without a board; connecting enables, and disconnecting disables, every other control in `main`.

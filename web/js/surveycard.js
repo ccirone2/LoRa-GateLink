@@ -148,6 +148,14 @@ async function copySurvey() {
   }
 }
 
+// The verdict of the last survey that ran to the end, while the radio settings it ran at are still the board's (null:
+// none, one is running, it was stopped early, or sf, bw_hz or tx_power changed since).
+export function surveyVerdict() {
+  const r = survey;
+  if (!r || r.running || r.stopped || Object.entries(r.settings).some(([k, v]) => S.params[k] !== v)) return null;
+  return r.result?.verdict ?? null;
+}
+
 // A pong event: the running survey's answer, if it waits for one.
 export const surveyPong = (ev) => survey?.pongWait?.(ev);
 

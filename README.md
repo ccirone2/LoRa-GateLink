@@ -217,7 +217,8 @@ board the gate's diagnostics and settings over LoRa), **Log** (live events and t
 **Config** (all parameters, with toggle switches for on/off settings; apply/save, reboot, export/import JSON),
 **Board** (generate, back up and write the link key; key ids; firmware update; factory reset; the replay self-test
 under *Developer*), **Install** (field wiring diagram, terminal table and notes for each board, which work without a
-board connected; and a wiring check: the connected board's inputs and a relay test).
+board connected; and, for the connected board, a setup checklist and a wiring check: its inputs and a relay test).
+Without Web Serial (a phone) the page opens on Install.
 
 ### First-time setup
 

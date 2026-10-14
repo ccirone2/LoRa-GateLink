@@ -1,5 +1,5 @@
 // The Install tab works without a board, per role, and fits a phone.
-import { test, expect, openConsole } from './helpers.js';
+import { test, expect, openConsole, connect } from './helpers.js';
 
 test('wiring per board, from the WIRING table', async ({ page }) => {
   await openConsole(page, [], { hash: 'install' });
@@ -30,3 +30,16 @@ for (const [old, now] of [['tools', 'link'], ['security', 'board']]) {
     await expect(page.locator(`#tabbtn-${now}`)).toHaveAttribute('aria-selected', 'true');
   });
 }
+
+test('the setup checklist ticks what the connected board reports', async ({ page }) => {
+  await openConsole(page, [{ role: 'house', keySet: false }], { hash: 'install' });
+  await expect(page.locator('#setupCard')).toBeHidden(); // no board yet
+  await connect(page);
+  const items = page.locator('#setupList li');
+  await expect(items).toHaveCount(5);
+  await expect(items.nth(0)).toHaveClass('done'); // role
+  await expect(items.nth(1)).not.toHaveClass('done'); // no key
+  await expect(items.nth(1)).toContainText('· Board');
+  await expect(items.nth(2)).toContainText('The gate board connected here once');
+  await expect(items.nth(4)).not.toHaveClass('done'); // no survey this session
+});

@@ -1,62 +1,21 @@
-// The Tools tab's radio and relay cards: ping and RSSI chart, the site survey, the gate's diagnostics and remote
-// writes, relay tests, the replay test.
-import { $, esc, cap, fmtDur } from './util.js';
-import { S } from './state.js';
-import { toast } from './ui.js';
-import { call } from './serial.js';
-import { rememberGateFw } from './peer.js';
-import { fmtFei } from './status.js';
-import { analyze, noiseFromStatus, sampleFromPong, surveyText, tableRows, TABLE_HEAD } from './survey.js';
-
-const rssiHist = [];
-// DIAG over LoRa is best effort; give up on the reply after this long.
-const DIAG_TIMEOUT_MS = 10000;
-let diagTimer = null;
-// A ping is one unacknowledged frame each way; at SF12 the round trip takes a few seconds.
-const PING_TIMEOUT_MS = 8000;
-let pingWait = null;
-let pingTimer = null;
-
-export async function ping() {
-  await call('radio.ping');
-  if (pingWait) return; // timed from the oldest unanswered ping, or auto-ping would never time out
-  if (!$('pingAuto').checked) $('pingRtt').textContent = 'waiting…';
-  pingWait = setTimeout(() => {
-    pingWait = null;
-    $('pingRtt').textContent = 'no reply';
-  }, PING_TIMEOUT_MS);
-}
-
-export function setAutoPing(on) {
-  clearInterval(pingTimer);
-  if (on) pingTimer = setInterval(() => ping().catch(() => {}), 3000);
-}
-
-function drawRssi() {
-  const svg = $('rssiChart');
-  if (!rssiHist.length) { svg.innerHTML = ''; $('rssiRange').textContent = ''; return; }
-  const all = rssiHist.flatMap((p) => [p.here, p.peer]).filter(Number.isFinite);
-  if (!all.length) { svg.innerHTML = ''; $('rssiRange').textContent = ''; return; }
-  const lo = Math.min(...all) - 3, hi = Math.max(...all) + 3;
-  const x = (i) => (rssiHist.length === 1 ? 150 : (i / (rssiHist.length - 1)) * 300);
-  const y = (v) => 85 - ((v - lo) / (hi - lo || 1)) * 80;
-  const line = (k, color) =>
-    `<polyline stroke="var(${color})" points="${rssiHist.map((p, i) => (Number.isFinite(p[k]) ? `${x(i)},${y(p[k])}` : '')).join(' ')}"/>`;
-  svg.innerHTML = line('here', '--chart-here') + line('peer', '--chart-peer');
-  $('rssiRange').textContent = `${Math.round(lo + 3)} … ${Math.round(hi - 3)} dBm`;
-}
-
-// ---------- Site survey ----------
-// Pings the other board for a few minutes, one ping at a time, and judges the margin both ways (survey.js; the CLI's
+// The site survey card: runs the survey and shows it; the verdict itself is survey.js's.
+// Pings the other board for a few minutes, one ping at a time, and judges the margin both ways (the CLI's
 // `gatelink.py survey` does the same). The firmware reports a pong only for its latest ping, so the ping card's
 // buttons pause meanwhile, and auto-ping resumes after.
+import { $, esc, cap } from './util.js';
+import { S } from './state.js';
+import { toast, guard } from './ui.js';
+import { call } from './serial.js';
+import { PING_TIMEOUT_MS, pausePing } from './ping.js';
+import { analyze, noiseFromStatus, sampleFromPong, surveyText, tableRows, TABLE_HEAD } from './survey.js';
+
 const SURVEY_INTERVAL_MS = 2000;
 const NOISE_EVERY_MS = 10000; // the noise floors the samples are judged against are re-read this often
 let survey = null; // the run in progress, or the last one (its results stay up, also after a disconnect)
 
 const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 
-export function toggleSurvey() {
+function toggleSurvey() {
   return survey?.running ? finishSurvey(survey, 'stopped') : startSurvey();
 }
 
@@ -68,15 +27,12 @@ async function startSurvey() {
     running: true, role: S.role, fw: S.boardInfo?.fw ?? '?', time: new Date(), samples: [], stopped: null,
     settings: { sf: S.params.sf, bw_hz: S.params.bw_hz, tx_power: S.params.tx_power },
     durationMs: Number($('surveyMins').value) * 60000, startedAt: Date.now(), elapsedMs: 0,
-    noise: noiseFromStatus(status), noiseAt: Date.now(), autoPing: $('pingAuto').checked,
+    noise: noiseFromStatus(status), noiseAt: Date.now(),
     pongWait: null, pongTimer: null, wake: null, napTimer: null, ticker: null, result: null,
     lastId: null, // the previous ping's ping_id, once a pong has shown the board's numbering
   };
   survey = r;
-  if (r.autoPing) {
-    $('pingAuto').checked = false;
-    setAutoPing(false);
-  }
+  pausePing(true);
   surveyControls(true);
   r.ticker = setInterval(() => surveyProgress(r), 1000);
   renderSurvey(r);
@@ -133,10 +89,7 @@ function finishSurvey(r, stopped, resume = true) {
   r.wake?.();
   r.pongWait?.(null);
   surveyControls(false);
-  if (resume && r.autoPing && S.port) {
-    $('pingAuto').checked = true;
-    setAutoPing(true);
-  }
+  pausePing(false, resume);
   renderSurvey(r);
   const v = r.result.verdict ?? 'no result';
   if (!stopped) toast(`Site survey done: ${v}.`);
@@ -145,7 +98,7 @@ function finishSurvey(r, stopped, resume = true) {
 }
 
 function surveyControls(running) {
-  for (const id of ['btnPing', 'pingAuto', 'surveyMins']) $(id).disabled = running || !S.port;
+  $('surveyMins').disabled = running || !S.port;
   $('btnSurvey').textContent = running ? 'Stop survey' : 'Start survey';
   $('btnSurvey').classList.toggle('primary', !running);
   $('surveyProgress').hidden = !running;
@@ -182,7 +135,7 @@ function renderSurvey(r) {
   $('surveyAdvice').innerHTML = r.running ? '' : a.advice.map((t) => `<li>${esc(t)}</li>`).join('');
 }
 
-export async function copySurvey() {
+async function copySurvey() {
   const r = survey;
   if (!r || r.running || !r.samples.length) return toast('Nothing to copy yet: run a survey first.', 'err');
   const text = surveyText({ time: r.time, board: { role: r.role, fw: r.fw }, settings: r.settings,
@@ -195,13 +148,11 @@ export async function copySurvey() {
   }
 }
 
-// Results that belong to one board.
-export function resetToolsView() {
-  rssiHist.length = 0;
-  drawRssi();
-  for (const id of ['pingRtt', 'pingHere', 'pingPeer']) $(id).textContent = '—';
-  $('diagOut').textContent = '—';
-  $('remResult').textContent = '';
+// A pong event: the running survey's answer, if it waits for one.
+export const surveyPong = (ev) => survey?.pongWait?.(ev);
+
+// Another board connected: the last survey was of the other board's link.
+export function resetSurvey() {
   if (survey) finishSurvey(survey, 'another board connected', false);
   survey = null;
   $('surveyBody').hidden = true;
@@ -209,92 +160,12 @@ export function resetToolsView() {
   $('btnSurveyCopy').disabled = true;
 }
 
-// The board is going: nothing more will answer these.
-export function stopTools() {
+// The board is going: end the run, keeping what it found.
+export function stopSurvey() {
   if (survey) finishSurvey(survey, 'board disconnected', false);
-  clearInterval(pingTimer);
-  clearTimeout(diagTimer);
-  clearTimeout(pingWait);
-  pingWait = null;
-  $('pingAuto').checked = false;
 }
 
-export async function relayTest(k) {
-  const ms = Number($('relayMs').value);
-  if (!Number.isInteger(ms) || ms < 50 || ms > 5000) return toast('Pulse length must be 50–5000 ms.', 'err');
-  if (S.role === 'gate' && !confirm(`This will pulse the opener ${k === 1 ? 'OPEN' : 'CLOSE'} input and move the gate. Continue?`)) return;
-  await call('relay.test', { k, ms });
-  toast(`K${k} pulsed for ${ms} ms.`);
-}
-
-export async function remoteDiag() {
-  clearTimeout(diagTimer);
-  $('diagOut').textContent = 'waiting for gate…';
-  // Armed before the request: the remote_diag event clears it, however soon it arrives.
-  diagTimer = setTimeout(() => {
-    $('diagOut').textContent = `No reply from gate within ${DIAG_TIMEOUT_MS / 1000} s. Check the link and try again.`;
-  }, DIAG_TIMEOUT_MS);
-  try {
-    await call('remote.diag');
-  } catch (e) {
-    clearTimeout(diagTimer);
-    $('diagOut').textContent = `Failed: ${e.message}`;
-    throw e;
-  }
-}
-
-export async function remoteSet() {
-  const name = $('remParam').value;
-  const raw = $('remValue').value.trim();
-  const value = Number(raw);
-  if (raw === '' || !Number.isInteger(value)) {
-    $('remResult').textContent = 'Enter an integer value.';
-    return;
-  }
-  $('remResult').textContent = 'sending…';
-  try {
-    await call('remote.set', { name, value });
-  } catch (e) {
-    // e.g. "busy" while the previous remote set is still pending, or an out-of-range value.
-    $('remResult').textContent = e.message === 'busy' ? 'Busy: the previous remote set is still pending; wait for its result.' : `Not sent: ${e.message}`;
-    throw e;
-  }
-}
-
-export async function replay() {
-  await call('debug.replay');
-  toast('Replay sent. Check the other board’s replay counter (Status → Link).');
-}
-
-// The events these cards wait for.
-export function onToolsEvent(ev) {
-  switch (ev.event) {
-    case 'pong':
-      survey?.pongWait?.(ev);
-      clearTimeout(pingWait);
-      pingWait = null;
-      $('pingRtt').textContent = `${ev.rtt_ms} ms`;
-      $('pingHere').textContent = `${ev.rssi} dBm / ${Number(ev.snr).toFixed(1)} dB`;
-      $('pingPeer').textContent = ev.peer_rssi === undefined ? '—' : `${ev.peer_rssi} dBm / ${Number(ev.peer_snr).toFixed(1)} dB`;
-      $('pingFei').textContent = fmtFei(ev.fei);
-      rssiHist.push({ here: Number(ev.rssi), peer: Number(ev.peer_rssi) }); // NaN = missing, left out of the chart
-      if (rssiHist.length > 60) rssiHist.shift();
-      drawRssi();
-      break;
-    case 'remote_diag': {
-      clearTimeout(diagTimer);
-      rememberGateFw(ev.fw);
-      const c = ev.counters;
-      $('diagOut').textContent =
-        `fw ${ev.fw} · up ${fmtDur(ev.uptime_s * 1000)}\n` +
-        `tx ${c.tx} rx ${c.rx} retries ${c.retries} giveups ${c.giveups} mac_fail ${c.mac_fail} replay ${c.replay}\n` +
-        Object.entries(ev.params).map(([k, v]) => `${k}=${v}`).join('  ');
-      break;
-    }
-    case 'remote_set':
-      $('remResult').textContent = ev.ok ? 'Gate accepted and saved the value.'
-        : ev.applied ? 'Gate applied the value but couldn’t save it; it reverts when the gate reboots.'
-        : ev.acked ? 'Gate rejected the value.' : 'No reply from gate.';
-      break;
-  }
+export function initSurvey() {
+  $('btnSurvey').onclick = guard(toggleSurvey);
+  $('btnSurveyCopy').onclick = copySurvey;
 }

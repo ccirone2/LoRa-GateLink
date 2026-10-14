@@ -1,7 +1,7 @@
 // Formatting and chart helpers (web/js/util.js).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fmtDur, fmtNum, cmpVer, niceScale, wrapText, esc } from '../../../web/js/util.js';
+import { fmtDur, fmtFei, fmtNum, cmpVer, niceScale, wrapText, esc } from '../../../web/js/util.js';
 
 test('durations', () => {
   assert.equal(fmtDur(-1), 'never');
@@ -34,4 +34,10 @@ test('chart scales give round ticks covering the range', () => {
 test('word wrap and escaping', () => {
   assert.deepEqual(wrapText('MKR WAN 1310 + Relay Proto Shield', 16), ['MKR WAN 1310 +', 'Relay Proto', 'Shield']);
   assert.equal(esc('<a href="x">&</a>'), '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;');
+});
+
+test('frequency error: signed Hz, with the crystal offset in ppm once the carrier is known', () => {
+  assert.equal(fmtFei(null, 915e6), '—');
+  assert.equal(fmtFei(457.6, 915e6), '+458 Hz (0.50 ppm)');
+  assert.equal(fmtFei(-120), '-120 Hz');
 });

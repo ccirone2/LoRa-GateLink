@@ -82,7 +82,7 @@ const WIRING_LAYOUT = {
 };
 let wiringNarrow = false;
 
-export function renderWiring(r) {
+function renderWiring(r) {
   wiringShown = r;
   const W = WIRING[r];
   document.querySelectorAll('[data-wiring]').forEach((b) => b.classList.toggle('active', b.dataset.wiring === r));
@@ -130,10 +130,20 @@ export function renderWiring(r) {
 }
 
 // The Install tab resized: switch between the wide and the phone layout when crossing 600 px.
-export function wiringResized(width) {
+function wiringResized(width) {
   if (!width || (width < 600) === wiringNarrow) return; // 0 = Install tab hidden
   wiringNarrow = width < 600;
   renderWiring(wiringShown);
 }
 
-export const wiringRole = () => wiringShown;
+// A board with this role connected: show its wiring. (Imports nothing of the page: docgen reads this module in node.)
+export function showWiringFor(role) {
+  if (WIRING[role]) renderWiring(role);
+}
+
+// The Install tab: the house board's wiring until a board with a role connects; the buttons switch.
+export function initWiring() {
+  renderWiring(wiringShown);
+  document.querySelectorAll('[data-wiring]').forEach((b) => b.addEventListener('click', () => renderWiring(b.dataset.wiring)));
+  new ResizeObserver(([e]) => wiringResized(e.contentRect.width)).observe(document.querySelector('.wiring'));
+}

@@ -1,9 +1,10 @@
 // The Tools tab's link history card: the board's hourly link record (hist.get, docs/console.md#link-history),
 // fetched page by page, drawn as one SVG of stacked panels on a shared time axis so one crosshair and tooltip serve
 // them all. The here/peer colours (--chart-here/--chart-peer) were chosen with a colour-blind palette check.
-import { $, esc, fmtDur, fmtNum, sum, niceScale } from './util.js';
+import { $, esc, fmtDur, fmtNum, sum, niceScale, download } from './util.js';
 import { S } from './state.js';
-import { request } from './serial.js';
+import { toast, guard } from './ui.js';
+import { call, request } from './serial.js';
 import { SNR_FLOOR } from './survey.js'; // SX127x demodulation limit per SF, dB
 
 // The board's hourly link record (hist.get, docs/console.md#link-history), fetched page by page. Buckets count
@@ -15,7 +16,7 @@ let histAt = -1; // bucket (index into hist.buckets) under the crosshair, -1 = n
 let histLayout = null;
 let histNote = null; // the card's text before any history is loaded
 
-export async function loadHistory() {
+async function loadHistory() {
   if (histNote === null) histNote = $('histNote').textContent;
   const buckets = [];
   let from = null, res;
@@ -354,7 +355,7 @@ function renderHistTable() {
     + `</tbody>${peer ? `<caption class="muted small" style="caption-side: bottom; text-align: left">Pairs “a + b”: here + ${peerName}.</caption>` : ''}`;
 }
 
-export function historyCsv() {
+function historyCsv() {
   const fields = Object.keys(hist.buckets[0]);
   const pad = (v) => String(v).padStart(2, '0');
   const stamp = (ms) => {
@@ -365,11 +366,21 @@ export function historyCsv() {
     ...hist.buckets.map((b) => [stamp(histStart(b)), ...fields.map((f) => (b[f] === null ? '' : b[f]))].join(','))].join('\n') + '\n';
 }
 
-export const historyRole = () => hist?.role;
-export const historyLoaded = () => !!hist?.buckets.length;
+const historyLoaded = () => !!hist?.buckets.length;
 
-// Pointer, keyboard and resize handling for the chart.
+// The card's buttons; pointer, keyboard and resize handling for the chart.
 export function initHistory() {
+  $('btnHistLoad').onclick = guard(async () => {
+    await loadHistory();
+    $('btnHistLoad').textContent = 'Refresh';
+  });
+  $('btnHistCsv').onclick = () => historyLoaded() && download(`gatelink-${hist.role}-link-history.csv`, historyCsv(), 'text/csv');
+  $('btnHistClear').onclick = guard(async () => {
+    if (!confirm('Empty this board’s link history and start recording again from now?')) return;
+    await call('hist.clear');
+    await loadHistory();
+    toast('Link history cleared.');
+  });
   const chart = $('histChart');
   chart.addEventListener('pointermove', histPointer);
   chart.addEventListener('pointerdown', histPointer); // touch: tap a bucket

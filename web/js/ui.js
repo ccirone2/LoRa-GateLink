@@ -2,9 +2,8 @@
 import { $ } from './util.js';
 import { S } from './state.js';
 
-// Controls that work without a board. (The survey's Copy keeps its own state: it works once there is a report.)
-export const OFFLINE_OK = ['logRaw', 'btnLogClear', 'btnLogSave', 'keyInput', 'btnKeyGen', 'btnKeyCopy', 'btnKeyBackup',
-  'keyRestoreFile', 'btnFwLatest', 'fwFile', 'btnBootPort', 'btnSurveyCopy'];
+// Controls marked data-offline work without a board (connecting and disconnecting leave them as they are).
+export const worksOffline = (el) => el.hasAttribute('data-offline');
 
 export const logLines = []; // what Download saves; the view keeps only the last 1000
 const LOG_KEEP = 20000;
@@ -54,7 +53,7 @@ export function guard(fn) {
     const b = a[0]?.currentTarget instanceof HTMLButtonElement ? a[0].currentTarget : null;
     if (b) b.disabled = true;
     try { await fn(...a); } catch (e) { toast(e.message, 'err'); } finally {
-      if (b) b.disabled = !S.port && !OFFLINE_OK.includes(b.id);
+      if (b) b.disabled = !S.port && !worksOffline(b);
     }
   };
 }

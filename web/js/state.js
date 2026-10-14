@@ -3,7 +3,6 @@
 export const S = {
   port: null, // the open console port; null = not connected
   role: 'unset',
-  keySet: false,
   meta: [], // config.get meta: per param name, id, min, max, radio, remote, reboot
   params: {}, // config.get params: name -> value, as the board runs them
   appliedUnsaved: false, // settings applied since the last Save (this page's own record; lost on reboot)

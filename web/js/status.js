@@ -1,10 +1,9 @@
-// The Status tab: board info, the live status (polled, and pushed by the house on each gate report), the role.
-import { $, esc, cap, fmtDur, fmtNum, yesNo, pill } from './util.js';
+// The Status tab: the live status, polled, and pushed by the house on each gate report.
+import { $, esc, cap, fmtDur, fmtFei, fmtNum, yesNo, pill } from './util.js';
 import { S } from './state.js';
 import { call } from './serial.js';
-import { IO_LABELS, WIRING, renderWiring } from './wiring.js';
-import { updateFwCard, reportFlash } from './firmware.js';
-import { showBoardKey } from './security.js';
+import { applyRole, updateTitle, showResponding } from './board.js';
+import { IO_LABELS } from './wiring.js';
 import { PROBLEMS } from './logdecode.js';
 import { askGateFw, peerDiffs, peerHtml } from './peer.js';
 import { healthLine, linkMargin } from './healthline.js';
@@ -46,54 +45,6 @@ export function resetHtml(s) {
   return cause + run + hang;
 }
 
-// Tab title: the gate state first, so a background tab still shows it.
-export function updateTitle(gate) {
-  const parts = [gate, S.role !== 'unset' && cap(S.role), 'GateLink'].filter(Boolean);
-  document.title = parts.length > 1 ? parts.join(' · ') : 'GateLink Console';
-}
-
-export function applyRole(r) {
-  S.role = r;
-  updateTitle();
-  document.querySelectorAll('[data-role]').forEach((el) => { el.hidden = el.dataset.role !== S.role; });
-  const hint = {
-    gate: 'K1 pulses the opener OPEN input and K2 the CLOSE input — this moves the real gate.',
-    house: 'K1 toggles the controller sync output (gate commands are paused during the test). K2 drives the contact sensor output.',
-    unset: 'Set a role first.',
-  };
-  $('relayHint').textContent = hint[S.role] || '';
-  $('btnK1').textContent = S.role === 'gate' ? 'Pulse K1 (OPEN)' : 'Pulse K1';
-  $('btnK2').textContent = S.role === 'gate' ? 'Pulse K2 (CLOSE)' : 'Pulse K2';
-  if (WIRING[S.role]) renderWiring(S.role);
-}
-
-let devline = '';
-
-export async function refreshInfo() {
-  const info = await call('info');
-  S.boardInfo = info;
-  updateFwCard();
-  if (S.flashCheck) reportFlash(info);
-  devline = `${info.board} · fw ${info.fw} · ${info.role}`;
-  $('devline').textContent = devline;
-  S.keySet = !!info.key_set;
-  $('keyWarn').hidden = info.key_set;
-  $('secKeySet').textContent = info.key_set ? 'yes' : 'no (link disabled)';
-  showBoardKey();
-  // Boards before 0.5.0 don't report it: program flash, erased by uploads.
-  const spi = info.cfg_store === 'spi';
-  $('secStore').textContent = spi ? 'flash chip (kept across firmware updates)' : 'program flash (erased by firmware updates)';
-  $('secStore').className = spi ? '' : 'bad';
-  applyRole(info.role);
-}
-
-// Frequency error in Hz, signed, with the crystal offset it means at our carrier (ppm).
-export function fmtFei(hz) {
-  if (hz === undefined || hz === null) return '—';
-  const ppm = S.params.freq_hz ? ` (${(Math.abs(hz) / (S.params.freq_hz / 1e6)).toFixed(2)} ppm)` : '';
-  return `${hz > 0 ? '+' : ''}${Math.round(hz)} Hz${ppm}`;
-}
-
 export async function refreshStatus(timeoutMs) {
   const res = await call('status', {}, timeoutMs);
   renderStatus(res.status);
@@ -119,7 +70,7 @@ export async function pollStatus() {
   if (!S.port) return;
   const stale = pollMisses >= 2;
   document.body.classList.toggle('offline', stale);
-  $('devline').textContent = stale ? `${devline} · not responding` : devline;
+  showResponding(!stale);
   if (stale) showHealthLine(null);
 }
 
@@ -158,7 +109,7 @@ export function renderStatus(s) {
   // Newer fields: absent on older firmware; noise is null before its first sample, fei before the first frame.
   $('lnkCrc').textContent = l.crc_err ?? '—';
   $('lnkNoise').textContent = l.noise === undefined || l.noise === null ? '—' : `${fmtNum(l.noise)} dBm`;
-  $('lnkFei').textContent = fmtFei(heard ? l.fei : null);
+  $('lnkFei').textContent = fmtFei(heard ? l.fei : null, S.params.freq_hz);
 
   const labels = IO_LABELS[s.role] || IO_LABELS.unset;
   const io = s.io || {};

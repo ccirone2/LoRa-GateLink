@@ -128,15 +128,15 @@
         <div class="kv" title="The first 4 bytes of HMAC-SHA256(key, &quot;GateLink key id v1&quot;): the same on both boards when their keys match"><span>Key id on this board</span><b id="secKeyId" class="mono">—</b></div>
         <div class="kv"><span>Config and key saved in</span><b id="secStore">—</b></div>
         <div class="row">
-          <input id="keyInput" class="mono" aria-label="Link key (32 hex characters)" aria-describedby="keyHint" placeholder="32 hex characters" spellcheck="false" autocomplete="off">
-          <button id="btnKeyGen">Generate</button>
-          <button id="btnKeyCopy" title="Copy the key to the clipboard">Copy</button>
+          <input id="keyInput" data-offline class="mono" aria-label="Link key (32 hex characters)" aria-describedby="keyHint" placeholder="32 hex characters" spellcheck="false" autocomplete="off">
+          <button id="btnKeyGen" data-offline>Generate</button>
+          <button id="btnKeyCopy" data-offline title="Copy the key to the clipboard">Copy</button>
           <button id="btnKeySet" class="primary">Write to board</button>
         </div>
         <p class="muted small" id="keyHint" aria-live="polite"></p>
         <div class="row">
-          <button id="btnKeyBackup" title="Download the key in the field, encrypted with a passphrase">Save encrypted backup…</button>
-          <label class="button" title="Open a .glkey backup and put its key in the field">Restore from backup…<input id="keyRestoreFile" type="file" accept=".glkey,application/json" hidden></label>
+          <button id="btnKeyBackup" data-offline title="Download the key in the field, encrypted with a passphrase">Save encrypted backup…</button>
+          <label class="button" title="Open a .glkey backup and put its key in the field">Restore from backup…<input id="keyRestoreFile" data-offline type="file" accept=".glkey,application/json" hidden></label>
         </div>
         <p class="muted">Generate a key once, save an encrypted backup (keep its passphrase in a password manager), write the key to this board, then connect the other board, restore or paste the same key and write it there: both boards then show the same key id. Generate the install's key from a local copy of this page or with <span class="mono">tools/gatelink.py key gen</span>; see <a href="https://github.com/ccirone2/LoRa-GateLink/blob/main/docs/key-management.md" target="_blank" rel="noopener">key management</a> for when to replace it.</p>
       </div>
@@ -158,10 +158,10 @@
         </div>
         <div class="card">
           <div class="label">Link ping</div>
-          <div class="row">
+          <fieldset id="pingControls" class="row bare">
             <button id="btnPing">Ping once</button>
             <label class="check"><input id="pingAuto" type="checkbox"> every 3 s</label>
-          </div>
+          </fieldset>
           <div class="kv"><span>Last RTT</span><b id="pingRtt">—</b></div>
           <div class="kv"><span>RSSI/SNR here</span><b id="pingHere">—</b></div>
           <div class="kv"><span>RSSI/SNR at peer</span><b id="pingPeer">—</b></div>
@@ -191,7 +191,7 @@
             </select>
             <button id="btnSurvey" class="primary">Start survey</button>
             <span class="spacer"></span>
-            <button id="btnSurveyCopy" disabled title="Copy the report as plain text, for the install record">Copy report</button>
+            <button id="btnSurveyCopy" data-offline disabled title="Copy the report as plain text, for the install record">Copy report</button>
           </div>
           <progress id="surveyProgress" max="1" value="0" hidden></progress>
           <p class="muted small" id="surveyStep"></p>
@@ -206,7 +206,7 @@
           <div class="label">Link history</div>
           <div class="toolbar">
             <button id="btnHistLoad">Load history</button>
-            <button id="btnHistCsv" disabled>Download CSV</button>
+            <button id="btnHistCsv" data-offline disabled>Download CSV</button>
             <span class="spacer"></span>
             <button id="btnHistClear" class="danger" title="Empty this board's history and start again from now">Clear</button>
           </div>
@@ -229,10 +229,10 @@
           <div class="kv"><span>This board</span><b id="fwBoard">—</b></div>
           <div class="kv"><span>Latest release</span><b id="fwLatest">—</b></div>
           <div class="row">
-            <button id="btnFwLatest" class="primary" hidden>Install latest</button>
-            <label class="button">Flash .bin file…<input id="fwFile" type="file" accept=".bin" hidden></label>
+            <button id="btnFwLatest" data-offline class="primary" hidden>Install latest</button>
+            <label class="button">Flash .bin file…<input id="fwFile" data-offline type="file" accept=".bin" hidden></label>
           </div>
-          <div class="row" id="fwBootRow" hidden><button id="btnBootPort" class="primary">Select bootloader port</button></div>
+          <div class="row" id="fwBootRow" hidden><button id="btnBootPort" data-offline class="primary">Select bootloader port</button></div>
           <progress id="fwProgress" max="1" value="0" hidden></progress>
           <p class="muted small" id="fwStep" role="status"></p>
           <p class="muted small">Connect the board to update, or start with it in its bootloader (press reset twice quickly; the LED fades in and out). Role, config and key stay on the board (firmware 0.5.0 or later). If an update fails, the board stays in its bootloader: flash again.</p>
@@ -249,9 +249,9 @@
     <section id="tab-log" class="tab" role="tabpanel" aria-labelledby="tabbtn-log">
       <div class="toolbar">
         <button id="btnLogGet">Fetch board log</button>
-        <button id="btnLogClear">Clear view</button>
-        <button id="btnLogSave">Download</button>
-        <label class="check"><input id="logRaw" type="checkbox"> show raw serial</label>
+        <button id="btnLogClear" data-offline>Clear view</button>
+        <button id="btnLogSave" data-offline>Download</button>
+        <label class="check"><input id="logRaw" data-offline type="checkbox"> show raw serial</label>
       </div>
       <div id="logView" class="log mono" tabindex="0" role="log" aria-label="Log"></div>
     </section>
@@ -260,8 +260,8 @@
     <section id="tab-install" class="tab" role="tabpanel" aria-labelledby="tabbtn-install">
       <div class="toolbar">
         <div class="seg" role="group" aria-label="Board">
-          <button data-wiring="house">House board</button>
-          <button data-wiring="gate">Gate board</button>
+          <button data-offline data-wiring="house">House board</button>
+          <button data-offline data-wiring="gate">Gate board</button>
         </div>
         <span class="muted small">Field wiring for each board. Opens on the connected board's role.</span>
       </div>

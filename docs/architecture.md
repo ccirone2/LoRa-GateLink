@@ -219,14 +219,20 @@ any of this, on every reset but power-on (TODO.md, the house's warm-reset blip).
 
 ## Web console
 
-Plain ES modules, no build step: `web/app.js` wires the page; the work is in `web/js/` (`serial.js` transport,
-picker and reconnect; `status.js`, `config.js`, `tools.js`, `history.js`, `firmware.js` + `samba.js` per tab;
-`security.js` the Security tab, with `keys.js` the key ids and encrypted backups
-([key-management.md](key-management.md)); `survey.js` the site survey's verdict, twin of
-`tools/gatelink_client/survey.py` (shared vectors in `tests/tools/fixtures/`; [install.md](install.md)); `wiring.js`
-Install tab; `settings.js` setting groups/help; `logdecode.js` log events as text; `peer.js` the other board as last
-seen; `healthline.js` the Status tab's one-line verdict; `ui.js` the log view and toasts; `util.js` small helpers;
-shared state in `state.js`'s `S`).
+Plain ES modules, no build step. `web/app.js` starts the page and runs the connection (what happens on open, close and
+each board event); each card's module wires its own controls in its `init…()` and keeps its timers. In `web/js/`:
+`serial.js` transport, picker and reconnect; `board.js` the board's info reply, role, header line and title (cards that
+show info register `onInfo`, since they import `refreshInfo` from it; `serial.js` knows nothing of the tabs);
+`status.js` the Status tab, with `healthline.js` its one-line verdict and `peer.js` the other board as last seen;
+`config.js` the Config tab, with `settings.js` setting groups/help; `security.js` the Security tab (and the replay
+self-test), with `keys.js` the key ids and encrypted backups ([key-management.md](key-management.md)); `log.js` the
+Log tab, with `logdecode.js` log events as text; `wiring.js` the Install tab (it imports nothing of the page:
+`tools/docgen.py` reads its tables in node). The Tools tab's cards: `ping.js`, `surveycard.js` (the site survey run;
+`survey.js` its verdict, twin of `tools/gatelink_client/survey.py`, shared vectors in `tests/tools/fixtures/`;
+[install.md](install.md)), `remote.js` (the gate's diagnostics and remote writes, from the house), `relay.js`,
+`history.js`, `firmware.js` + `samba.js`. `ui.js` holds the log view (every module writes to it), toasts and the
+click guard; `util.js` small helpers; shared state is `state.js`'s `S`. Controls marked `data-offline` stay usable
+without a board; connecting enables, and disconnecting disables, every other control in `main`.
 Lint and tests: `npm test` (ESLint, `node --test` unit tests of the pure modules, Playwright browser tests of the
 real page against fake boards in `tests/web/fake-serial.js`; `tests/web/README.md`).
 

@@ -1,34 +1,20 @@
 // The Config tab: the board's settings as a form (applied in chunks, saved on request), import and export.
 import { $, esc, download } from './util.js';
 import { S } from './state.js';
-import { toast } from './ui.js';
-import { call, request } from './serial.js';
+import { toast, guard } from './ui.js';
+import { call, request, rebootAndReconnect } from './serial.js';
 import { GROUPS, HELP, MUST_MATCH, SELECTS } from './settings.js';
-import { refreshInfo } from './status.js';
+import { refreshInfo } from './board.js';
 import { rememberBoard } from './peer.js';
+import { fillRemoteParams } from './remote.js';
 
 export async function loadConfig() {
   const res = await call('config.get');
   S.meta = res.meta;
   S.params = res.params;
   renderConfig();
-  // Remote-writable params come from the board's meta, so firmware changes to P_REMOTE follow automatically.
-  const sel = $('remParam');
-  const keep = sel.value;
-  sel.replaceChildren(...S.meta.filter((m) => m.remote).map((m) => new Option(m.name, m.name)));
-  if (keep && S.meta.some((m) => m.remote && m.name === keep)) sel.value = keep;
-  syncRemValue();
+  fillRemoteParams();
   rememberBoard();
-}
-
-// Show the selected remote param's range on the value box (the board still validates it).
-export function syncRemValue() {
-  const m = S.meta.find((x) => x.name === $('remParam').value);
-  const el = $('remValue');
-  if (!m) return;
-  el.min = m.min;
-  el.max = m.max;
-  el.placeholder = `${m.min}–${m.max}`;
 }
 
 export function renderConfig() {
@@ -55,7 +41,7 @@ export function renderConfig() {
         input = `<input id="${id}" type="number" min="${esc(m.min)}" max="${esc(m.max)}" step="1">`;
       }
       const help = HELP[name]
-        ? `<button type="button" class="info" aria-label="About ${esc(name)}" aria-describedby="${id}_tip">i</button>`
+        ? `<button type="button" class="info" data-offline aria-label="About ${esc(name)}" aria-describedby="${id}_tip">i</button>`
           + `<span class="tip" role="tooltip" id="${id}_tip">${esc(HELP[name])}</span>`
         : '';
       // Info icon in its own column at the far right, after the entry field (an empty cell keeps rows aligned).
@@ -125,7 +111,7 @@ export function formValues(onlyDirty) {
 
 const CFG_CHUNK = 8;
 
-export async function applyConfig() {
+async function applyConfig() {
   const changes = formValues(true);
   if (!Object.keys(changes).length) return toast('No changes.');
   for (const [k, v] of Object.entries(changes)) {
@@ -183,7 +169,7 @@ export async function applyConfig() {
   else toast(done || 'Nothing changed.');
 }
 
-export async function importConfig(file) {
+async function importConfig(file) {
   let data;
   try { data = JSON.parse(await file.text()); } catch { return toast('Not a valid JSON file.', 'err'); }
   const src = data?.params || data;
@@ -208,13 +194,13 @@ export async function importConfig(file) {
   toast(`Imported ${found} setting${found === 1 ? '' : 's'}; ${n ? `${n} differ${n === 1 ? 's' : ''} from the board. Review, then Apply and Save.` : 'all match the board already.'}${kept}`);
 }
 
-export async function reloadConfig() {
+async function reloadConfig() {
   const n = dirtyCount();
   if (n && !confirm(`Discard ${n} unapplied edit${n === 1 ? '' : 's'} and reload from the board?`)) return;
   await loadConfig();
 }
 
-export async function saveConfig() {
+async function saveConfig() {
   // Save writes what the board is running; edits still in the form would silently be left out.
   const n = dirtyCount();
   if (n) return toast(`${n} edit${n === 1 ? ' isn’t' : 's aren’t'} applied yet. Apply first, then Save.`, 'err');
@@ -223,7 +209,7 @@ export async function saveConfig() {
   toast('Saved to flash.');
 }
 
-export async function resetConfig() {
+async function resetConfig() {
   if (!confirm('Erase config and key and restore defaults?')) return;
   await call('config.reset');
   markUnsaved(false); // reset saves the defaults
@@ -233,8 +219,37 @@ export async function resetConfig() {
 }
 
 // Exports what the board is running (applied, saved or not), not edits still in the form.
-export function exportConfig() {
+function exportConfig() {
   download(`gatelink-${S.role}-config-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ role: S.role, params: S.params }, null, 2));
   const n = dirtyCount();
   if (n) toast(`Exported the board’s settings. ${n} unapplied edit${n === 1 ? ' isn’t' : 's aren’t'} included: Apply first to export ${n === 1 ? 'it' : 'them'}.`);
+}
+
+async function rebootBoard() {
+  const lose = S.appliedUnsaved ? '\n\nApplied settings haven’t been saved to flash and will be lost.' : '';
+  if (!confirm(`Reboot the board? Relays release during reboot.${lose}`)) return;
+  await rebootAndReconnect();
+  toast('Board rebooting — reconnecting…');
+}
+
+export function initConfig() {
+  $('btnCfgLoad').onclick = guard(reloadConfig);
+  $('btnCfgApply').onclick = guard(applyConfig);
+  $('btnCfgSave').onclick = guard(saveConfig);
+  $('btnReboot').onclick = guard(rebootBoard);
+  $('btnCfgReset').onclick = guard(resetConfig);
+  $('btnCfgExport').onclick = exportConfig;
+  $('fileImport').onchange = (e) => { if (e.target.files[0]) importConfig(e.target.files[0]); e.target.value = ''; };
+  // Setting tooltips show on hover or focus; a tap or click pins one open (touch has no hover).
+  const closeTips = (except) => document.querySelectorAll('.tip.show').forEach((t) => t !== except && t.classList.remove('show'));
+  document.addEventListener('click', (e) => {
+    const tip = e.target.closest('.info')?.nextElementSibling;
+    closeTips(tip);
+    tip?.classList.toggle('show');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    closeTips();
+    if (document.activeElement?.classList.contains('info')) document.activeElement.blur();
+  });
 }

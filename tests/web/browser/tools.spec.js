@@ -26,8 +26,8 @@ test('the board log is fetched and decoded', async ({ page }) => {
   await expect(page.locator('#logView')).toContainText('K1 pulsed for 500 ms');
 });
 
-test('ping shows round trip, both ends and the frequency error', async ({ page }) => {
-  await openConsole(page);
+test('ping shows round trip, both ends and the frequency error; another board clears them', async ({ page }) => {
+  await openConsole(page, [{ role: 'house' }, { role: 'gate' }]);
   await connect(page);
   await page.locator('#tabbtn-tools').click();
   await page.locator('#btnPing').click();
@@ -35,6 +35,9 @@ test('ping shows round trip, both ends and the frequency error', async ({ page }
   await expect(page.locator('#pingHere')).toHaveText('-61 dBm / 9.3 dB');
   await expect(page.locator('#pingPeer')).toHaveText('-60 dBm / 9.0 dB');
   await expect(page.locator('#pingFei')).toContainText('-1450 Hz');
+  await page.locator('#btnDisconnect').click();
+  await connect(page, 'gate');
+  for (const id of ['#pingRtt', '#pingHere', '#pingPeer', '#pingFei']) await expect(page.locator(id)).toHaveText('—');
 });
 
 test('remote diagnostics and a remote write report back', async ({ page }) => {

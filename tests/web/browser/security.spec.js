@@ -24,11 +24,13 @@ test('shows the board\'s key id, and whether the key in the field is the same', 
   await expect(page.locator('#keyHint')).toHaveText(`Key id fa60d1a7; this board has a different key (${DEFAULT_ID}).`);
 });
 
-test('a board without a key says so; disconnected, no id is shown', async ({ page }) => {
+test('a board without a key says so; disconnected, nothing of it is shown', async ({ page }) => {
   await openSecurity(page, [{ role: 'house', keySet: false }]);
   await expect(page.locator('#secKeyId')).toHaveText('no key');
+  await expect(page.locator('#secKeySet')).toHaveText('no (link disabled)');
+  await expect(page.locator('#secStore')).toContainText('flash chip');
   await page.locator('#btnDisconnect').click();
-  await expect(page.locator('#secKeyId')).toHaveText('—');
+  for (const id of ['#secKeyId', '#secKeySet', '#secStore']) await expect(page.locator(id)).toHaveText('—');
 });
 
 test('firmware before key ids: the write is reported without a check', async ({ page }) => {

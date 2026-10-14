@@ -1,15 +1,18 @@
-// The Security tab: the key field and its id, the board's key id, and encrypted key backups (the crypto is in
-// keys.js). Writing the key is wired in app.js (it needs the board connection).
+// The Security tab: the key field and its id, the board's key id, writing the key, encrypted key backups (the crypto
+// is in keys.js), and the replay self-test.
 import { $, download } from './util.js';
 import { S } from './state.js';
-import { toast } from './ui.js';
+import { toast, guard } from './ui.js';
+import { call } from './serial.js';
+import { refreshInfo, onInfo } from './board.js';
+import { rememberBoard } from './peer.js';
 import {
   MIN_PASSPHRASE, parseKeyHex, keyHex, weakKeyReason, generateKey, keyId, encryptBackup, decryptBackup, parseBackup,
   backupFileName, passphraseLength,
 } from './keys.js';
 
 // The field as typed: spaces, colons and dashes (pasted keys) dropped.
-export const keyValue = () => $('keyInput').value.replace(/[\s:-]/g, '').toLowerCase();
+const keyValue = () => $('keyInput').value.replace(/[\s:-]/g, '').toLowerCase();
 
 // What the connected board says about its key (info.key_id from firmware 0.13.8).
 function boardKeyText(info) {
@@ -18,14 +21,14 @@ function boardKeyText(info) {
   return info.key_id ?? 'firmware too old to say';
 }
 
-export function showBoardKey() {
+function showBoardKey() {
   $('secKeyId').textContent = boardKeyText(S.boardInfo);
   checkKeyInput();
 }
 
 // The hint under the field: what's wrong with it, or its key id and whether the board holds the same key.
 let hintSeq = 0;
-export async function checkKeyInput() {
+async function checkKeyInput() {
   const seq = ++hintSeq;
   const k = keyValue();
   const bytes = parseKeyHex(k);
@@ -48,12 +51,12 @@ export async function checkKeyInput() {
   $('keyHint').textContent = `Key id ${id}${board}.`;
 }
 
-export function generate() {
+function generate() {
   $('keyInput').value = keyHex(generateKey());
   checkKeyInput();
 }
 
-export async function copyKey() {
+async function copyKey() {
   const key = keyValue();
   if (!key) return toast('Nothing to copy: generate or enter a key first.', 'err');
   try {
@@ -65,7 +68,7 @@ export async function copyKey() {
 }
 
 // The key in the field, checked for writing: { hex, id }, or null after saying why it can't be written.
-export async function keyToWrite() {
+async function keyToWrite() {
   const bytes = parseKeyHex(keyValue());
   if (!bytes) {
     toast('Key must be exactly 32 hex characters.', 'err');
@@ -80,7 +83,7 @@ export async function keyToWrite() {
 }
 
 // After key.set and a fresh info: does the board report the id of the key written?
-export function reportKeyWritten(id) {
+function reportKeyWritten(id) {
   const got = S.boardInfo?.key_id;
   if (got === undefined) {
     toast('Key written and saved. This firmware can’t report key ids (0.13.8 and later do), so check the link comes up. '
@@ -161,7 +164,7 @@ function askPassphrase({ mode, title, intro, work }) {
   });
 }
 
-export async function saveBackup() {
+async function saveBackup() {
   const bytes = parseKeyHex(keyValue());
   if (!bytes) return toast('Nothing to back up: generate, restore or enter a key first.', 'err');
   const weak = weakKeyReason(bytes);
@@ -179,7 +182,7 @@ export async function saveBackup() {
   toast(`Backup of key ${id} saved as ${backupFileName(backup)}. Keep its passphrase in a password manager: it can’t be recovered.`);
 }
 
-export async function restoreBackup(file) {
+async function restoreBackup(file) {
   let backup;
   try {
     backup = parseBackup(await file.text());
@@ -199,4 +202,49 @@ export async function restoreBackup(file) {
   $('keyInput').value = keyHex(out.key);
   await checkKeyInput();
   toast(`Key ${out.keyId} restored from the backup into the key field. Write it to the board to use it.`);
+}
+
+async function writeKey() {
+  const key = await keyToWrite();
+  if (!key) return;
+  const same = S.boardInfo?.key_id === key.id;
+  if (S.boardInfo?.key_set && !confirm(same ? `This board already has this key (id ${key.id}). Write it again?`
+    : 'This board already has a key. Replacing it takes the link down until the other board gets the same key. Continue?')) return;
+  await call('key.set', { key: key.hex });
+  await refreshInfo();
+  rememberBoard(); // its new key id
+  reportKeyWritten(key.id);
+}
+
+async function replay() {
+  await call('debug.replay');
+  toast('Replay sent. Check the other board’s replay counter (Status → Link).');
+}
+
+// What the board says about its key and where it keeps it (cfg_store: boards before 0.5.0 don't report it, and
+// keep both in program flash, which uploads erase).
+function showInfo(info) {
+  const spi = info?.cfg_store === 'spi';
+  $('secKeySet').textContent = !info ? '—' : info.key_set ? 'yes' : 'no (link disabled)';
+  $('secStore').textContent = !info ? '—' : spi ? 'flash chip (kept across firmware updates)' : 'program flash (erased by firmware updates)';
+  $('secStore').className = info && !spi ? 'bad' : '';
+  showBoardKey();
+}
+
+export function initSecurity() {
+  // Key input: accepts pasted keys with spaces, colons or dashes; the hint flags anything that isn't 32 hex chars, or
+  // gives the key's id.
+  $('btnKeyGen').onclick = generate;
+  $('keyInput').addEventListener('input', checkKeyInput);
+  $('keyInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('btnKeySet').disabled) $('btnKeySet').click(); });
+  $('btnKeyCopy').onclick = copyKey;
+  $('btnKeySet').onclick = guard(writeKey);
+  $('btnKeyBackup').onclick = guard(saveBackup);
+  $('keyRestoreFile').onchange = guard(async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (f) await restoreBackup(f);
+  });
+  $('btnReplay').onclick = guard(replay);
+  onInfo(showInfo);
 }

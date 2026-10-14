@@ -98,6 +98,7 @@ body.offline #tab-status .grid { opacity: .55; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; min-width: 0; }
 .card.narrow { max-width: 640px; }
+.card.wide { grid-column: 1 / -1; }
 .label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 8px; }
 .kv { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
 .kv:last-child, .kv:last-of-type { border-bottom: none; } /* last-of-type: before a <details> */
@@ -109,15 +110,10 @@ body.offline #tab-status .grid { opacity: .55; }
 .row input.mono { flex: 1 1 260px; min-width: 0; }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 .spacer { flex: 1; }
+/* A fieldset only to disable its controls together (disabled there, they stay disabled whatever they say). */
+fieldset.bare { border: 0; padding: 0; min-width: 0; }
 .check { display: inline-flex; gap: 6px; align-items: center; }
 
-.gate-state { font-size: 34px; font-weight: 700; margin: 4px 0 10px; text-transform: capitalize; }
-.gate-state.closed { color: var(--ok); }
-.gate-state.open, .gate-state.between { color: var(--warn); }
-.gate-state.fault, .gate-state.unknown, .gate-state.no_power { color: var(--bad); }
-/* House with the link down: the state shown is the gate's last report, so it mustn't read as live. */
-.gate-state.stale { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 2px; }
-.stale-note { color: var(--bad); font-weight: 600; margin: -6px 0 10px; }
 .good { color: var(--ok); }
 .bad { color: var(--bad); }
 progress { width: 100%; height: 8px; accent-color: var(--accent); }
@@ -125,6 +121,21 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .pill { display: inline-block; min-width: 38px; text-align: center; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); }
 .pill.on { background: var(--ok); color: var(--surface); border-color: var(--ok); }
 
+/* Status tab */
+.health-line { font-weight: 600; border-left: 4px solid var(--border); }
+.health-line.good { color: var(--ok); border-left-color: var(--ok); }
+.health-line.warn { color: var(--warn); border-left-color: var(--warn); }
+.health-line.bad { color: var(--bad); border-left-color: var(--bad); }
+details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.gate-state { font-size: 34px; font-weight: 700; margin: 4px 0 10px; text-transform: capitalize; }
+.gate-state.closed { color: var(--ok); }
+.gate-state.open, .gate-state.between { color: var(--warn); }
+.gate-state.fault, .gate-state.unknown, .gate-state.no_power { color: var(--bad); }
+/* House with the link down: the state shown is the gate's last report, so it mustn't read as live. */
+.gate-state.stale { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 2px; }
+.stale-note { color: var(--bad); font-weight: 600; margin: -6px 0 10px; }
+
+/* Config tab */
 .cfg-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
 /* Uniform rows: every setting row is the same height whatever its control (number, select or toggle). */
 .field { position: relative; display: grid; grid-template-columns: 1fr 130px 18px; gap: 8px; align-items: center; padding: 4px 0; min-height: 46px; }
@@ -159,6 +170,7 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .field input.toggle:disabled { opacity: .5; cursor: default; }
 .field.dirty input.toggle { box-shadow: 0 0 0 2px var(--warn); }
 
+/* Tools tab: ping */
 #rssiChart { width: 100%; height: 90px; margin-top: 8px; background: var(--bg); border-radius: 6px; }
 #rssiChart polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .legend { display: flex; gap: 10px; align-items: center; font-size: 12px; margin-top: 4px; flex-wrap: wrap; }
@@ -166,7 +178,7 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .sw.here { background: var(--chart-here); }
 .sw.peer { background: var(--chart-peer); }
 
-/* Site survey (Tools tab) */
+/* Tools tab: site survey */
 .verdict-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin: 6px 0 10px; }
 .verdict { font-size: 22px; font-weight: 700; }
 .verdict.good { color: var(--ok); }
@@ -174,13 +186,7 @@ progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .verdict.poor { color: var(--bad); }
 #surveyTable td, #surveyTable th { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-/* Link history (Tools tab) */
-.card.wide { grid-column: 1 / -1; }
-.health-line { font-weight: 600; border-left: 4px solid var(--border); }
-.health-line.good { color: var(--ok); border-left-color: var(--ok); }
-.health-line.warn { color: var(--warn); border-left-color: var(--warn); }
-.health-line.bad { color: var(--bad); border-left-color: var(--bad); }
-details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+/* Tools tab: link history */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 4px 0 10px; }
 .tile { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .tile .t-label { font-size: 12px; color: var(--muted); }
@@ -228,6 +234,7 @@ details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 .hist-table summary { cursor: pointer; color: var(--muted); }
 .hist-table td, .hist-table th { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+/* Tools tab: the gate over the link; Log tab */
 pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 .log { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; height: 60vh; overflow: auto; font-size: 12px; }
 .log div { white-space: pre-wrap; overflow-wrap: anywhere; }

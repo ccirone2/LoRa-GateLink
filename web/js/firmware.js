@@ -1,8 +1,9 @@
 // The Tools tab's firmware card: install the release bundled with the page, or a .bin, over the board's bootloader.
 import { $, cmpVer, sleep } from './util.js';
 import { S } from './state.js';
-import { logLine, toast } from './ui.js';
+import { logLine, toast, guard } from './ui.js';
 import { disconnect, stopReconnect, startReconnect, expectBack } from './serial.js';
+import { onInfo } from './board.js';
 import { USB_VID, BOOT_PID, APP_START, CHUNK, isBootPort, crc16, parseFirmware, SamBa } from './samba.js';
 
 let bootPick = null; // { resolve, reject } while waiting for the user to grant the bootloader port
@@ -22,7 +23,7 @@ function setFlashing(on) {
   if (!on) $('fwBootRow').hidden = true;
 }
 
-export function updateFwCard() {
+function updateFwCard() {
   const info = S.boardInfo;
   $('fwBoard').textContent = info ? `${info.fw} (${info.role})` : '—';
   if (!S.latestFw) return;
@@ -36,7 +37,7 @@ export function updateFwCard() {
   b.classList.toggle('primary', rel > 0);
 }
 
-export async function loadLatest() {
+async function loadLatest() {
   try {
     const r = await fetch('firmware/latest.json', { cache: 'no-cache' });
     if (!r.ok) return;
@@ -46,7 +47,7 @@ export async function loadLatest() {
   } catch { /* served without the bundle (local copy): the file picker still works */ }
 }
 
-export async function installLatest() {
+async function installLatest() {
   const latest = S.latestFw;
   const r = await fetch(`firmware/${latest.file}`, { cache: 'no-cache' });
   if (!r.ok) throw new Error(`Couldn't download ${latest.file} (${r.status}).`);
@@ -61,7 +62,7 @@ export async function installLatest() {
   await flashFirmware(fw);
 }
 
-export async function flashFile(file) {
+async function flashFile(file) {
   const fw = parseFirmware(await file.arrayBuffer(), file.name);
   if (!fw.version) {
     // No marker: another sketch, or GateLink before 0.5.1. Before 0.5.0 config and key lived in program flash, which
@@ -93,7 +94,7 @@ async function findBootPort() {
   }
 }
 
-export async function pickBootPort() {
+async function pickBootPort() {
   try {
     const p = await navigator.serial.requestPort({ filters: [{ usbVendorId: USB_VID, usbProductId: BOOT_PID }] });
     bootPick?.resolve(p);
@@ -191,7 +192,7 @@ async function flashFirmware(fw) {
 }
 
 // After an update the board comes back on its new firmware: show what it reports.
-export function reportFlash(info) {
+function reportFlash(info) {
   const c = S.flashCheck;
   S.flashCheck = null;
   const problems = [];
@@ -205,4 +206,19 @@ export function reportFlash(info) {
     fwStep(`Updated to ${info.fw}. Role, config and key kept.`, 'good');
     toast(`Firmware ${info.fw} running on the ${info.role} board.`);
   }
+}
+
+export function initFirmware() {
+  loadLatest();
+  $('btnFwLatest').onclick = guard(installLatest);
+  $('fwFile').onchange = guard(async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (f) await flashFile(f);
+  });
+  $('btnBootPort').onclick = pickBootPort;
+  onInfo((info) => {
+    updateFwCard();
+    if (info && S.flashCheck) reportFlash(info);
+  });
 }

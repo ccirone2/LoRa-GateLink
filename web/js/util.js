@@ -23,6 +23,13 @@ export function fmtDur(ms) {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
+// Frequency error in Hz, signed, with the crystal offset it means at carrier freqHz (ppm), if known.
+export function fmtFei(hz, freqHz) {
+  if (hz === undefined || hz === null) return '—';
+  const ppm = freqHz ? ` (${(Math.abs(hz) / (freqHz / 1e6)).toFixed(2)} ppm)` : '';
+  return `${hz > 0 ? '+' : ''}${Math.round(hz)} Hz${ppm}`;
+}
+
 // Compares "x.y.z" versions: negative, zero or positive.
 export function cmpVer(a, b) {
   const pa = String(a).split('.').map(Number);

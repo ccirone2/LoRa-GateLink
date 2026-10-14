@@ -1,33 +1,30 @@
 // GateLink web console: talks newline-delimited JSON to the board over Web Serial (docs/console.md). Plain ES
-// modules, no build step. This file wires the page together; the work is in js/:
-//   serial.js   port, requests, board picker, reconnect      status.js   Status tab
-//   config.js   Config tab                                    tools.js    ping, diagnostics, remote writes, relays
-//   history.js  link history chart                            firmware.js firmware update (samba.js: bootloader)
-//   wiring.js   Install tab (tracks pins.h)                   settings.js setting groups and help text
-//   security.js Security tab (keys.js: key ids, backups)      logdecode.js log events as text
-//   survey.js   site survey verdict (tools.js runs the card; tools/gatelink_client/survey.py is its twin)
-//   ui.js log view, toasts      state.js shared state      util.js helpers
-import { $, fmtDur, download } from './js/util.js';
+// modules, no build step. This file starts the page and runs the connection; each card's module wires its own
+// controls (its init function). In js/:
+//   serial.js   port, requests, board picker, reconnect     board.js    the board's info, role, header line, title
+//   status.js   Status tab                                   config.js   Config tab (settings.js: groups, help text)
+//   security.js Security tab (keys.js: key ids, backups)     log.js      Log tab (logdecode.js: events as text)
+//   wiring.js   Install tab (tracks pins.h)                  peer.js     the other board, as last seen
+//   Tools tab:  ping.js, surveycard.js (survey.js: the verdict, twin of tools/gatelink_client/survey.py),
+//               remote.js (the gate over the link), relay.js, history.js, firmware.js (samba.js: bootloader)
+//   healthline.js the Status tab's verdict   ui.js log view, toasts   state.js shared state   util.js helpers
+import { $ } from './js/util.js';
 import { S } from './js/state.js';
-import { OFFLINE_OK, logLine, logLines, clearLog, toast, hideToast, guard } from './js/ui.js';
+import { worksOffline, toast, hideToast, guard } from './js/ui.js';
 import * as serial from './js/serial.js';
-import { decodeLog, rawLog } from './js/logdecode.js';
-import { renderWiring, wiringRole, wiringResized } from './js/wiring.js';
-import { applyRole, refreshInfo, refreshStatus, renderStatus, pollStatus, resetPoll, showHealthLine, POLL_MS } from './js/status.js';
-import { rememberBoard, resetPeer } from './js/peer.js';
-import {
-  loadConfig, syncRemValue, applyConfig, importConfig, exportConfig, reloadConfig, saveConfig, resetConfig,
-  markUnsaved, dirtyCount,
-} from './js/config.js';
-import { loadHistory, clearHistoryView, historyCsv, historyRole, historyLoaded, initHistory } from './js/history.js';
-import { updateFwCard, loadLatest, installLatest, flashFile, pickBootPort } from './js/firmware.js';
-import {
-  ping, setAutoPing, resetToolsView, stopTools, relayTest, remoteDiag, remoteSet, replay, onToolsEvent, toggleSurvey,
-  copySurvey,
-} from './js/tools.js';
-import {
-  checkKeyInput, showBoardKey, generate, copyKey, keyToWrite, reportKeyWritten, saveBackup, restoreBackup,
-} from './js/security.js';
+import { applyRole, boardGone, refreshInfo } from './js/board.js';
+import { refreshStatus, renderStatus, pollStatus, resetPoll, showHealthLine, POLL_MS } from './js/status.js';
+import { resetPeer } from './js/peer.js';
+import { initConfig, loadConfig, markUnsaved, dirtyCount } from './js/config.js';
+import { initSecurity } from './js/security.js';
+import { initLog, showLogEntry } from './js/log.js';
+import { initWiring } from './js/wiring.js';
+import { initPing, onPong, resetPing, stopPing } from './js/ping.js';
+import { initSurvey, surveyPong, resetSurvey, stopSurvey } from './js/surveycard.js';
+import { initRemote, onRemoteEvent, resetRemote, stopRemote } from './js/remote.js';
+import { initRelay } from './js/relay.js';
+import { initHistory, clearHistoryView } from './js/history.js';
+import { initFirmware } from './js/firmware.js';
 
 let pollTimer = null;
 
@@ -36,42 +33,31 @@ function setConnected(on) {
   $('btnConnect').hidden = on;
   $('btnDisconnect').hidden = !on;
   $('btnIdentify').hidden = !on;
-  document.querySelectorAll('main button, main input, main select').forEach((el) => {
-    if (el.closest('#tab-install') || el.classList.contains('info')) return; // reference, usable without a board
-    if (!OFFLINE_OK.includes(el.id)) el.disabled = !on;
-  });
+  document.querySelectorAll('main button, main input, main select').forEach((el) => { if (!worksOffline(el)) el.disabled = !on; });
   document.body.classList.toggle('offline', !on);
   resetPoll();
-  if (!on) markUnsaved(false); // a reboot drops them; another board never had them
-  if (!on) clearHistoryView(); // another board (or this one after a reset) has a different record
-  $('btnHistCsv').disabled = !historyLoaded();
   if (!on) {
-    S.boardInfo = null;
-    showBoardKey();
-    updateFwCard();
-    $('devline').textContent = 'not connected';
-    $('keyWarn').hidden = true;
-    document.title = 'GateLink Console';
+    markUnsaved(false); // a reboot drops them; another board never had them
+    clearHistoryView(); // another board (or this one after a reset) has a different record
+    boardGone();
   }
 }
 
-const logEntryLine = (e) => `[${fmtDur(e.t)}] ${decodeLog(e, S.meta)}`;
-
-function onEvent(ev) {
-  switch (ev.event) {
-    case 'log':
-      logLine(logEntryLine(ev), '', `[${fmtDur(ev.t)}] ${rawLog(ev)}`);
-      break;
-    case 'status':
-      renderStatus(ev.status);
-      break;
-    default:
-      onToolsEvent(ev);
-  }
-}
+// Unsolicited events from the board, to the cards that wait for them.
+const EVENTS = {
+  log: showLogEntry,
+  status: (ev) => renderStatus(ev.status),
+  pong: (ev) => { surveyPong(ev); onPong(ev); },
+  remote_diag: onRemoteEvent,
+  remote_set: onRemoteEvent,
+};
 
 serial.hooks.onOpen = async ({ otherBoard, port }) => {
-  if (otherBoard) resetToolsView(); // another board: its ping/diag results don't apply
+  if (otherBoard) { // another board: its ping, survey and diagnostics results don't apply
+    resetPing();
+    resetSurvey();
+    resetRemote();
+  }
   resetPeer();
   setConnected(true);
   try {
@@ -87,11 +73,12 @@ serial.hooks.onOpen = async ({ otherBoard, port }) => {
 };
 serial.hooks.onClosing = () => {
   clearInterval(pollTimer);
-  stopTools();
+  stopSurvey();
+  stopPing();
+  stopRemote();
 };
 serial.hooks.onClosed = () => setConnected(false);
-serial.hooks.onEvent = onEvent;
-serial.hooks.onRawLine = (line) => { if ($('logRaw').checked) logLine(line, 'raw'); };
+serial.hooks.onEvent = (ev) => { if (Object.hasOwn(EVENTS, ev.event)) EVENTS[ev.event](ev); };
 
 // Tabs: click or arrow keys (roving tabindex, per the ARIA tabs pattern).
 function initTabs() {
@@ -136,11 +123,19 @@ function init() {
     $('unsupported').hidden = false;
     $('btnConnect').disabled = true;
   }
+  serial.initSerial();
+  initWiring();
+  initConfig();
+  initSecurity();
+  initRelay();
+  initPing();
+  initSurvey();
+  initRemote();
+  initHistory();
+  initFirmware();
+  initLog();
   setConnected(false);
-  renderWiring(wiringRole());
   applyRole('unset');
-  document.querySelectorAll('[data-wiring]').forEach((b) => b.addEventListener('click', () => renderWiring(b.dataset.wiring)));
-  new ResizeObserver(([e]) => wiringResized(e.contentRect.width)).observe(document.querySelector('.wiring'));
   initTabs();
 
   $('toast').onclick = hideToast;
@@ -154,115 +149,8 @@ function init() {
   window.addEventListener('beforeunload', (e) => { if (S.flashing || (S.meta.length && dirtyCount())) e.preventDefault(); });
 
   $('btnConnect').onclick = serial.connect;
-  $('btnPickAdd').onclick = serial.addBoard;
-  $('btnPickRefresh').onclick = serial.pickRefresh;
-  $('btnPickCancel').onclick = serial.closePicker;
-  $('boardPicker').addEventListener('close', serial.pickerClosed);
-  $('boardPicker').addEventListener('click', (e) => { // backdrop clicks land on the dialog too, outside its box
-    const r = $('boardPicker').getBoundingClientRect();
-    if (e.target === $('boardPicker') && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) {
-      serial.closePicker();
-    }
-  });
   $('btnDisconnect').onclick = () => { serial.stopReconnect(); serial.disconnect(); };
   $('btnIdentify').onclick = guard(async () => { await serial.call('identify'); toast('LED strobing for 6 s.'); });
-
-  $('btnCfgLoad').onclick = guard(reloadConfig);
-  $('btnCfgApply').onclick = guard(applyConfig);
-  // Setting tooltips show on hover or focus; a tap or click pins one open (touch has no hover).
-  const closeTips = (except) => document.querySelectorAll('.tip.show').forEach((t) => t !== except && t.classList.remove('show'));
-  document.addEventListener('click', (e) => {
-    const info = e.target.closest('.info');
-    const tip = info?.nextElementSibling;
-    closeTips(tip);
-    tip?.classList.toggle('show');
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    closeTips();
-    if (document.activeElement?.classList.contains('info')) document.activeElement.blur();
-  });
-  $('btnCfgSave').onclick = guard(saveConfig);
-  $('btnReboot').onclick = guard(async () => {
-    const lose = S.appliedUnsaved ? '\n\nApplied settings haven’t been saved to flash and will be lost.' : '';
-    if (!confirm(`Reboot the board? Relays release during reboot.${lose}`)) return;
-    await serial.rebootAndReconnect();
-    toast('Board rebooting — reconnecting…');
-  });
-  $('btnCfgReset').onclick = guard(resetConfig);
-  $('btnCfgExport').onclick = exportConfig;
-  $('fileImport').onchange = (e) => { if (e.target.files[0]) importConfig(e.target.files[0]); e.target.value = ''; };
-
-  // Key input: accepts pasted keys with spaces, colons or dashes; the hint flags anything that isn't 32 hex chars, or
-  // gives the key's id.
-  $('btnKeyGen').onclick = generate;
-  $('keyInput').addEventListener('input', checkKeyInput);
-  $('keyInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('btnKeySet').disabled) $('btnKeySet').click(); });
-  $('btnKeyCopy').onclick = copyKey;
-  $('btnKeySet').onclick = guard(async () => {
-    const key = await keyToWrite();
-    if (!key) return;
-    const same = S.boardInfo?.key_id === key.id;
-    if (S.keySet && !confirm(same ? `This board already has this key (id ${key.id}). Write it again?`
-      : 'This board already has a key. Replacing it takes the link down until the other board gets the same key. Continue?')) return;
-    await serial.call('key.set', { key: key.hex });
-    await refreshInfo();
-    rememberBoard(); // its new key id
-    reportKeyWritten(key.id);
-  });
-  $('btnKeyBackup').onclick = guard(saveBackup);
-  $('keyRestoreFile').onchange = guard(async (e) => {
-    const f = e.target.files[0];
-    e.target.value = '';
-    if (f) await restoreBackup(f);
-  });
-
-  $('btnK1').onclick = guard(() => relayTest(1));
-  $('btnK2').onclick = guard(() => relayTest(2));
-  $('btnPing').onclick = guard(ping);
-  $('pingAuto').onchange = (e) => setAutoPing(e.target.checked);
-  $('btnSurvey').onclick = guard(toggleSurvey);
-  $('btnSurveyCopy').onclick = copySurvey;
-  $('btnDiag').onclick = guard(remoteDiag);
-  $('remParam').onchange = syncRemValue;
-  $('remValue').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('btnRemSet').disabled) $('btnRemSet').click(); });
-  $('btnRemSet').onclick = guard(remoteSet);
-  $('btnReplay').onclick = guard(replay);
-
-  $('btnHistLoad').onclick = guard(async () => {
-    await loadHistory();
-    $('btnHistLoad').textContent = 'Refresh';
-  });
-  $('btnHistCsv').onclick = () => historyLoaded() && download(`gatelink-${historyRole()}-link-history.csv`, historyCsv(), 'text/csv');
-  $('btnHistClear').onclick = guard(async () => {
-    if (!confirm('Empty this board’s link history and start recording again from now?')) return;
-    await serial.call('hist.clear');
-    await loadHistory();
-    toast('Link history cleared.');
-  });
-  initHistory();
-
-  loadLatest();
-  $('btnFwLatest').onclick = guard(installLatest);
-  $('fwFile').onchange = guard(async (e) => {
-    const f = e.target.files[0];
-    e.target.value = '';
-    if (f) await flashFile(f);
-  });
-  $('btnBootPort').onclick = pickBootPort;
-
-  $('btnLogGet').onclick = guard(async () => {
-    const res = await serial.call('log.get');
-    logLine(`--- board log (${res.log.length} entries, board uptime ${fmtDur(res.now)}) ---`);
-    for (const e of res.log) logLine(logEntryLine(e), '', `[${fmtDur(e.t)}] ${rawLog(e)}`);
-  });
-  $('btnLogClear').onclick = clearLog;
-  $('btnLogSave').onclick = () => {
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-    download(`gatelink-${S.role}-log-${stamp}.txt`, logLines.join('\n') + '\n', 'text/plain');
-  };
-
-  serial.watchPorts();
 }
 
 init();

@@ -1,6 +1,7 @@
 // The board's console over Web Serial: the port, newline-delimited JSON requests and replies (docs/console.md), the
 // board picker, and auto-reconnect after a reboot or a dropped cable. What happens on the page when a board connects,
-// goes or sends an event is up to the hooks (set by app.js), so this module knows nothing of the tabs.
+// goes or sends an event is up to the hooks (set by app.js; onRawLine by log.js), so this module knows nothing of
+// the tabs.
 import { $, esc, cap } from './util.js';
 import { S } from './state.js';
 import { logLine, toast } from './ui.js';
@@ -41,7 +42,7 @@ export async function connect() {
 }
 
 // Grants a new port through Chrome's chooser and connects to it.
-export async function addBoard() {
+async function addBoard() {
   closePicker();
   let p;
   try {
@@ -133,7 +134,7 @@ function probePort(p, cmd = 'info') {
   });
 }
 
-export async function pickRefresh() {
+async function pickRefresh() {
   const gen = ++pickGen;
   const ports = await knownPorts();
   if (gen !== pickGen) return;
@@ -154,13 +155,13 @@ function pickRefreshSoon() {
   pickSoonTimer = setTimeout(() => { if ($('boardPicker').open) pickRefresh(); }, 1000);
 }
 
-export function closePicker() {
+function closePicker() {
   pickGen++;
   clearTimeout(pickSoonTimer);
   if ($('boardPicker').open) $('boardPicker').close();
 }
 
-export const pickerClosed = () => pickGen++; // Escape
+const pickerClosed = () => pickGen++; // Escape
 
 function pickText(e) {
   if (e.state === 'probing') return ['LoRa GateLink board', 'checking…'];
@@ -411,15 +412,26 @@ export async function call(cmd, args, timeoutMs) {
   return res;
 }
 
-// USB plug events: refresh an open picker; a granted port reappearing while we wait for a reboot is the board coming
-// back (the other board never left, so it can't fire this).
-export function watchPorts() {
+// The board picker's controls, and USB plug events: refresh an open picker; a granted port reappearing while we
+// wait for a reboot is the board coming back (the other board never left, so it can't fire this).
+export function initSerial() {
+  const picker = $('boardPicker');
+  $('btnPickAdd').onclick = addBoard;
+  $('btnPickRefresh').onclick = pickRefresh;
+  $('btnPickCancel').onclick = closePicker;
+  picker.addEventListener('close', pickerClosed);
+  picker.addEventListener('click', (e) => { // backdrop clicks land on the dialog too, outside its box
+    const r = picker.getBoundingClientRect();
+    if (e.target === picker && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) {
+      closePicker();
+    }
+  });
   navigator.serial?.addEventListener('disconnect', (e) => {
-    if ($('boardPicker').open) pickRefreshSoon();
+    if (picker.open) pickRefreshSoon();
     if (e.target === S.port) connectionLost();
   });
   navigator.serial?.addEventListener('connect', (e) => {
-    if ($('boardPicker').open) pickRefreshSoon();
+    if (picker.open) pickRefreshSoon();
     if (!reconnectUntil || S.port || isBootPort(e.target)) return;
     lastPort = e.target;
     tryReconnect(lastPort);

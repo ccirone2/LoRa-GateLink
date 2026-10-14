@@ -38,6 +38,7 @@ enum LogCode : uint8_t {
   EV_HANG,           // at boot, after a watchdog reset its early warning saw coming: a = the program counter the
                      //   warning interrupted (4 s into the stall), b = the loop's stage then (status hang_stage)
   EV_CMD_LATE,       // a = cmd id, b = ms past its deadline (negative: a deadline too far ahead); refused, no pulse
+  EV_MISSED_MOVE,    // a = times the gate left closed unheard (house: the sensor opens for a moment to show it)
   EV_COUNT
 };
 

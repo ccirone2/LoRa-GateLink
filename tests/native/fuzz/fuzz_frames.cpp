@@ -11,7 +11,7 @@
 //              flags: bits 0-1 seq (0 next, 1 the last again, 2 next + delta, 3 seq given), 2 session given,
 //              3 bad tag, 4 src/dst swapped, 5 rssi/snr given, 6 don't wait for the board (the next frame may
 //              overwrite it in the FIFO), 7 payload as given (else a CMD of at least 3 bytes gets a deadline 10 s
-//              ahead of the gate board's clock, and a STATUS of at least 26 bytes our clock, as the boards send)
+//              ahead of the gate board's clock, and a STATUS of at least 26 bytes our clock, padded to 32 if shorter)
 //     RAW      flags, len, bytes (unauthenticated; flags bit 0: with a valid header, so it fails at the MAC)
 //     TIME     ms u16
 //     PINS     bits 0-3 IN1..IN4, bit 4 board supply lost (charger power good off)
@@ -75,7 +75,7 @@ static bool opAuth(Reader &r) {
     if (payload.size() < CMD_LEN) payload.resize(CMD_LEN);
     putU48(&payload[CMD_DEADLINE], peerBoardClock() + 10000);
   } else if (!(flags & 0x80) && type == MSG_STATUS && payload.size() >= ST_CLOCK) {
-    if (payload.size() < ST_LEN) payload.resize(ST_LEN);
+    if (payload.size() < ST_LEN_V4) payload.resize(ST_LEN_V4);  // a 0.16 gate's, or longer as the input gives
     putU48(&payload[ST_CLOCK], peer.clock);
   }
   Bytes f = peerFrame(type, payload.data(), payload.size(), session, seq);

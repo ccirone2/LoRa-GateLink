@@ -241,6 +241,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `cmd_hold` | pending command: 1 held (a HELLO came from an unverified session), 0 sent after all (the verified session answered), 2 dropped (the new session verified: the gate restarted), 3 waiting for the gate's clock to give it a deadline in (no STATUS yet from that gate session: it just restarted, or a link did; at most `cmd_ttl_s`, then `cmd_dropped`) | that session id |
 | `health` | fault output D5 changed (`fault_out`, see Fault output): 1 HIGH (healthy), 0 LOW (needs attention), −1 released (`fault_out` turned off: an input again) | the problems then, as bits: 1 starting, 2 radio, 4 link, 8 ac, 16 no_power, 32 fault, 64 reboots (0 = none) |
 | `cmd_late` | command id (gate: refused, no pulse) | ms past its deadline (a command delayed or played back); negative: a deadline that far ahead of the gate's clock, further than any `cmd_ttl_s` allows |
+| `missed_move` | (house) times the gate left closed since its STATUS before, which the house never heard while it showed the gate closed (its reports jammed or lost): the contact sensor opens for 5 s so the alarm records the move late | |
 | `hang` | at boot, after a watchdog reset its early warning saw coming: the program counter it interrupted (status `hang_pc`) | the loop's stage then: 0 setup, 1 relays, 2 radio_recover, 3 hist_save, 4 console, 5 supply, 6 link, 7 role, 8 history, 9 health, 10 led, 11 core (between passes) (status `hang_stage`) |
 
 ## Example

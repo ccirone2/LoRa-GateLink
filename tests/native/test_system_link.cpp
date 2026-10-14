@@ -416,6 +416,132 @@ TEST(link_command_right_after_the_gates_link_restart_runs) {
   CHECK_EQ(w.house.count("cmd_dropped"), 0);
 }
 
+// Another controller opens the gate and closes it again (8 s of travel each way) while everything from the gate is jammed
+// at the house for `jamMs` from the first press (0: nothing is).
+static void hiddenCycle(World &w, uint32_t jamMs = 0) {
+  uint32_t from = w.now;
+  if (jamMs) w.drop = [&w, from, jamMs](const AirFrame &f) { return f.from == w.gate.idx && w.now - from < jamMs; };
+  w.extPress(true, 300);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
+  w.run(2000);
+  w.extPress(false, 300);
+  CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 15000));
+}
+
+// The sensor opens within ms and closes again 5 s later (MISSED_OPEN_MS).
+static void sensorBlips(World &w, uint32_t ms) {
+  uint32_t opened = 0, closed = 0;
+  CHECK(w.runUntil([&] {
+    if (!opened && !w.sensorClosed()) opened = w.now | 1;
+    if (opened && !closed && w.sensorClosed()) closed = w.now | 1;
+    return closed != 0;
+  }, ms));
+  CHECK_IN(closed - opened, 4990, 5010);
+}
+
+// The sensor stays closed for ms.
+static bool sensorStaysClosed(World &w, uint32_t ms) {
+  return !w.runUntil([&] { return !w.sensorClosed(); }, ms);
+}
+
+// [sensor-closed-only-known] An open-and-close cycle hidden by jamming (every report from the gate jammed at the house,
+// for less than the link timeout: link-loss-concealment-window) left the sensor closed throughout, and the alarm never
+// saw the gate open. The gate counts its departures from closed in STATUS; its next one gets through showing closed
+// with the count one up, and the house opens the sensor for 5 s, so the alarm records the move late (log missed_move).
+TEST(link_move_hidden_by_jamming_is_shown_late) {
+  World w;
+  w.commission();
+  CHECK(w.sensorClosed());
+  hiddenCycle(w, 40000);
+  CHECK(w.sensorClosed());  // the house never knew
+  CHECK(w.houseLinkUp());   // within the link timeout
+  CHECK_EQ(w.house.count("missed_move"), 0);
+  sensorBlips(w, 45000);  // the jam ends 40 s in; the gate's next heartbeat
+  CHECK_EQ(w.house.count("missed_move"), 1);
+  CHECK_EQ(w.house.last("missed_move")->a, 1);
+  CHECK(w.opener.atClosed());
+  CHECK(sensorStaysClosed(w, 40000));  // shown once: the next reports change nothing
+  CHECK_EQ(w.house.count("missed_move"), 1);
+}
+
+// [sensor-closed-only-known] The same cycle with nothing jammed: the house heard every report, the sensor opened and
+// closed with the gate, and nothing is shown again afterwards.
+TEST(link_move_the_house_heard_is_not_shown_again) {
+  World w;
+  w.commission();
+  hiddenCycle(w);
+  CHECK(w.runUntil([&] { return w.sensorClosed(); }, 3000));
+  CHECK(sensorStaysClosed(w, 40000));
+  CHECK_EQ(w.house.count("missed_move"), 0);
+}
+
+// [sensor-closed-only-known] The house hears the gate open, then its reports are jammed while it closes, opens again
+// and closes: the sensor showed open throughout (the house last heard open), so the alarm missed nothing, and when the
+// closed report gets through the sensor just closes, with no missed move shown.
+TEST(link_move_while_the_sensor_showed_open_is_not_shown_again) {
+  World w;
+  w.commission();
+  w.extPress(true, 300);
+  CHECK(w.runUntil([&] { return w.opener.atOpen() && w.houseSees() == GS_OPEN_; }, 15000));
+  CHECK(!w.sensorClosed());
+  uint32_t from = w.now;
+  w.drop = [&](const AirFrame &f) { return f.from == w.gate.idx && w.now - from < 40000; };
+  w.extPress(false, 300);
+  CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 15000));
+  w.extPress(true, 300);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
+  w.extPress(false, 300);
+  CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 15000));
+  CHECK(!w.sensorClosed());
+  CHECK(w.runUntil([&] { return w.sensorClosed(); }, 45000));
+  CHECK(sensorStaysClosed(w, 10000));
+  CHECK_EQ(w.house.count("missed_move"), 0);
+}
+
+// [sensor-closed-only-known] Jammed for longer than the link timeout: the sensor had already opened on the link loss
+// (linkloss_open), so the alarm saw the gate not closed through the cycle, and there is nothing to show afterwards.
+TEST(link_move_hidden_by_a_link_loss_was_shown_already) {
+  World w;
+  w.commission();
+  hiddenCycle(w, 110000);
+  CHECK(w.runUntil([&] { return !w.houseLinkUp(); }, 110000));
+  CHECK(!w.sensorClosed());
+  CHECK(w.runUntil([&] { return w.houseLinkUp() && w.sensorClosed(); }, 45000));
+  CHECK(sensorStaysClosed(w, 10000));
+  CHECK_EQ(w.house.count("missed_move"), 0);
+}
+
+// [sensor-closed-only-known] With linkloss_open 0 the sensor stays closed through a link loss, so the alarm never saw a
+// cycle hidden by it: shown once the link is back.
+TEST(link_move_hidden_by_a_link_loss_with_linkloss_open_0_is_shown_late) {
+  World w;
+  w.commission([](Board &b) {
+    if (b.idx == 0) CHECK(b.set("linkloss_open", 0));
+  });
+  w.limits.sensorTruth = false;  // its lag limit assumes linkloss_open 1: here lagging is the setting's point
+  hiddenCycle(w, 110000);
+  CHECK(w.runUntil([&] { return !w.houseLinkUp(); }, 110000));
+  CHECK(w.sensorClosed());
+  sensorBlips(w, 45000);
+  CHECK_EQ(w.house.count("missed_move"), 1);
+}
+
+// [sensor-closed-only-known] [restarts] A gate that reboots starts its count over, which says nothing about a move: no
+// sensor blip. (A move hidden by cutting the gate board's power is lost with its count: logged as a new session.)
+TEST(link_gate_reboot_is_not_a_missed_move) {
+  World w;
+  w.commission();
+  hiddenCycle(w);  // the gate's count is 1
+  w.run(5000);
+  int sessions = w.house.count("session");
+  w.gate.reset(PM_RCAUSE_SYST);
+  CHECK(w.runUntil([&] { return w.house.count("session") > sessions; }, 10000));
+  size_t statuses = w.sent(w.gate, 5).size();
+  CHECK(w.runUntil([&] { return w.sent(w.gate, 5).size() > statuses; }, 12000));  // its first STATUS, count 0
+  CHECK(sensorStaysClosed(w, 5000));
+  CHECK_EQ(w.house.count("missed_move"), 0);
+}
+
 static std::string testKeyHex() {
   std::string s;
   char b[3];

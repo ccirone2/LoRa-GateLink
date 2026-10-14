@@ -36,6 +36,8 @@ test('decoded lines', () => {
   assert.equal(rawLog({ ev: 'pulse', a: 1, b: 500 }), 'pulse a=1 b=500');
   assert.equal(decodeLog({ ev: 'hang', a: 0x12345, b: 4 }), 'the watchdog reset the board: the loop hung in console (pc 0x00012345)');
   assert.equal(decodeLog({ ev: 'hang', a: 1, b: 99 }), 'the watchdog reset the board: the loop hung in stage 99 (pc 0x00000001)');
+  assert.equal(decodeLog({ ev: 'cmd_late', a: 7, b: 60123 }), 'command #7 refused: 60123 ms past its deadline (delayed or played back)');
+  assert.equal(decodeLog({ ev: 'cmd_late', a: 8, b: -130000 }), 'command #8 refused: its deadline lies too far ahead (130000 ms) of this gate’s clock');
 });
 
 test('hang stages follow app.cpp', () => {

@@ -19,7 +19,6 @@
 struct PeerReport {
   int16_t rssi;  // at the gate, of its last frame from the house (0 = none yet)
   int8_t snr;
-  bool ext;      // the fields below were in the STATUS (gate firmware 0.4.0 on)
   uint16_t retries, giveups, crcErr;  // running totals, low 16 bits; going down means its link restarted
   int8_t noiseAvg, noiseMax;  // dBm since its previous STATUS (0 = no sample)
 };

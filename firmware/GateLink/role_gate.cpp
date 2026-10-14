@@ -44,6 +44,18 @@ static uint32_t rebootAt = 0;
 
 static void drainCfgQueue();
 
+// Our clock: millis() since boot, extended to 64 bits so it never wraps (millis() does every 49.7 days). STATUS carries
+// it, and the house stamps every command with a deadline in it: a command kept from us and played back later is
+// refused however long it stays inside the replay window, and with 64 bits no wrap brings an old one back into date.
+static uint64_t clockBase;  // the latest millis() seen, extended: gateLoop reads the clock every pass
+
+static uint64_t gateClock(uint32_t ms) {
+  int32_t d = (int32_t)(ms - (uint32_t)clockBase);  // a little negative for the loop's `now` after a handler's millis()
+  uint64_t t = clockBase + (int64_t)d;
+  if (d > 0) clockBase = t;
+  return t;
+}
+
 // IN3 = AC power (the 24 V supply on mains). The opener has battery backup, so it keeps running without AC.
 static bool acPower() {
   return !cfg.power_sense || in3.active();
@@ -71,7 +83,8 @@ static void sendStatus(uint32_t now) {
   p[ST_CAUSE] = cause;
   p[ST_RESULT] = lastResult;
   putU16(p + ST_CMD_ID, lastCmdId);
-  putU32(p + ST_UPTIME, now / 1000);
+  uint64_t clock = gateClock(now);
+  putU32(p + ST_UPTIME, (uint32_t)(clock / 1000));
   // Every authenticated frame from the house counts, ACKs included (most of what it sends).
   const LinkStats &st = linkStats();
   putU16(p + ST_RSSI, st.lastRxAt ? (uint16_t)st.lastRssi : 0);
@@ -86,6 +99,7 @@ static void sendStatus(uint32_t now) {
   p[ST_NOISE] = (uint8_t)noise;
   p[ST_NOISE_MAX] = (uint8_t)noiseMax;
   putU16(p + ST_TRAVEL, cfg.travel_timeout_s);
+  putU48(p + ST_CLOCK, clock);
   reportedHeartbeat = cfg.heartbeat_s;
   // Retries spread over the TTL: cap it so a lost status is retried within a fraction of a second even with a
   // long heartbeat (the next heartbeat supersedes it anyway).
@@ -129,9 +143,11 @@ void gateBegin() {
   cause = CAUSE_NONE;
   settling = true;
   bootAt = steadySince = millis();
+  clockBase = bootAt;
 }
 
 void gateLoop(uint32_t now) {
+  gateClock(now);  // keeps the clock's base within 2^31 ms of millis()
   if (rebootAt && elapsed(now, rebootAt, 0)) boardReset();
   in1.update(now, cfg.debounce_ms, cfg.in1_invert);
   in2.update(now, cfg.debounce_ms, cfg.in2_invert);
@@ -221,7 +237,7 @@ void gateLoop(uint32_t now) {
 }
 
 static void handleCmd(const RxMsg &m, uint32_t now) {
-  if (m.len < 3) {
+  if (m.len < CMD_LEN) {
     linkAck(m.seq, RES_BAD);
     return;
   }
@@ -234,6 +250,14 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   }
   if (action != ACT_OPEN && action != ACT_CLOSE) {
     linkAck(m.seq, RES_BAD);
+    return;
+  }
+  // Past its deadline by our clock: kept from us (jammed here while it was recorded) and played back, or so late that
+  // the house has given it up. Or a deadline further ahead than any cmd_ttl_s makes it: a clock reckoned wrong.
+  int64_t late = (int64_t)(gateClock(now) - getU48(m.payload + CMD_DEADLINE));
+  if (late > (int64_t)CMD_LATE_SLACK_MS || late < -(int64_t)CMD_AHEAD_MAX_MS) {
+    logEvent(EV_CMD_LATE, id, late > INT32_MAX ? INT32_MAX : late < INT32_MIN ? INT32_MIN : (int32_t)late);
+    linkAck(m.seq, RES_LATE);
     return;
   }
   logEvent(EV_CMD_RX, action, id);
@@ -338,7 +362,7 @@ static void sendDiag() {
     p[DIAG_FW + i] = x;
     if (*v == '.') v++;
   }
-  putU32(p + DIAG_UPTIME, millis() / 1000);
+  putU32(p + DIAG_UPTIME, (uint32_t)(gateClock(millis()) / 1000));
   const LinkStats &st = linkStats();
   uint32_t counters[DC_COUNT];
   counters[DC_TX] = st.tx;

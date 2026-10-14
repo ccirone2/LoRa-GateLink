@@ -6,7 +6,7 @@
 // dropped on its header. 13 bytes: ~41 ms at SF9/500 kHz.
 static Bytes neighbourFrame() {
   Bytes f(13, 0x5A);
-  f[0] = 1;     // PROTO_VER
+  f[0] = 2;     // PROTO_VER
   f[1] = 6;     // PING
   f[2] = 0x43;  // net_id
   return f;
@@ -174,7 +174,7 @@ TEST(link_withheld_status_delivered_late_changes_nothing) {
     return seqOf(f.b) == seqOf(kept);
   };
   CHECK(w.runUntil([&] { return !kept.empty(); }, 40000));
-  CHECK_EQ(kept[13], GS_CLOSED_);  // ST_STATE
+  CHECK_EQ(w.plain(kept)[0], GS_CLOSED_);  // ST_STATE
   w.run(11000);  // the gate gives up on it (STATUS TTL 10 s)
   // Someone else opens the gate; the house takes its new STATUS.
   w.extPress(true, 500);
@@ -196,6 +196,80 @@ TEST(link_withheld_status_delivered_late_changes_nothing) {
   CHECK(w.runUntil([&] { return !w.houseLinkUp(); }, 6000));
   CHECK_IN(w.now - taken, timeout - 100, timeout + 100);
   CHECK(w.opener.atOpen());
+}
+
+// [freshness] [pulse-only] A command kept from the gate (jammed at it while recorded: every send of it) and played back
+// a minute after the house gave it up (threat model withheld-command-fires-late). Its seq is still inside the gate's
+// replay window, so the link takes it, but its deadline (the gate's clock, as the house had it from STATUS) has
+// passed: refused (cmd_late, ACKed RES_LATE), no pulse. Before 0.16.0 the gate opened, at a time the attacker chose.
+TEST(link_withheld_command_played_back_later_is_refused) {
+  World w;
+  w.commission();
+  Bytes kept;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from != w.house.idx || f.type() != 4) return false;  // MSG_CMD
+    if (kept.empty()) kept = f.b;
+    return true;
+  };
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.house.count("cmd_dropped") > 0; }, 15000));  // cmd_ttl_s, then given up
+  w.drop = nullptr;
+  CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, 90000));  // resynced after mismatch_timeout_s: it never moved
+  w.run(60000);
+  int replays = w.gate.count("replay");
+  w.inject(w.gate, kept);
+  w.run(500);
+  CHECK_EQ(w.gate.count("replay"), replays);  // in the window: only the deadline stops it
+  CHECK_EQ(w.gate.count("cmd_late"), 1);
+  CHECK(w.gate.last("cmd_late")->b > 60000);  // ms past its deadline
+  CHECK_EQ(w.gate.count("cmd_rx"), 0);
+  CHECK_EQ(w.gate.count("pulse"), 0);
+  w.run(5000);
+  CHECK(w.opener.atClosed());
+  CHECK(w.sensorClosed());
+}
+
+// [freshness] [outage] The house's last resend of a command, 9.7 s into its 10 s cmd_ttl_s, is the first to get
+// through: the gate still takes it (its deadline is the end of the house's TTL, reckoned from the gate's own clock in
+// STATUS, so it isn't refused as late) and opens.
+TEST(link_command_resent_at_the_end_of_its_ttl_still_runs) {
+  World w;
+  w.commission();
+  uint32_t asked = w.now;
+  w.drop = [&](const AirFrame &f) { return f.from == w.house.idx && f.type() == 4 && (int32_t)(w.now - asked) < 9000; };
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.gate.count("cmd_rx") > 0; }, 11000));
+  CHECK(w.now - asked > 9000);
+  CHECK_EQ(w.gate.count("cmd_late"), 0);
+  w.drop = nullptr;
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 20000));
+  CHECK_EQ(w.house.count("cmd_dropped"), 0);
+}
+
+// [freshness] [restarts] The gate reboots and the user switches before its first STATUS (it waits BOOT_SETTLE_MS for
+// its inputs): the house knows the new session but not its clock, so it has nothing to stamp a deadline with. The
+// command is dropped, not sent undated, and the controller put back; once the gate has reported, the next switch
+// opens it.
+TEST(link_command_before_a_restarted_gates_first_status_is_dropped_not_sent_undated) {
+  World w;
+  w.commission();
+  int sessions = w.house.count("session");
+  w.gate.reset(PM_RCAUSE_SYST);
+  CHECK(w.runUntil([&] { return w.house.count("session") > sessions; }, 5000));
+  CHECK_EQ(w.gate.count("cmd_rx"), 0);
+  CHECK(w.gate.status()["settling"] == true);
+  int sent = w.house.count("cmd_sent"), statuses = (int)w.sent(w.gate, 5).size();
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.house.count("cmd_dropped") > 0; }, 1000));
+  CHECK_EQ(w.house.count("cmd_sent"), sent);
+  CHECK_EQ((int)w.sent(w.gate, 5).size(), statuses);  // still no STATUS from the new session
+  CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, 20000));  // put back once the gate reports (still closed)
+  CHECK_EQ(w.gate.count("pulse"), 0);
+  CHECK(w.opener.atClosed());
+  w.run(5000);
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 20000));
+  CHECK_EQ(w.gate.count("cmd_late"), 0);
 }
 
 static std::string testKeyHex() {

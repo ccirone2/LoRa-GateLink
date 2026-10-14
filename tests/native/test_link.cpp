@@ -1,6 +1,7 @@
 // link.cpp: handshake, reliable delivery, replay protection, sessions across restarts, HELLO side effects,
 // retry spacing and timer wrap. Two real link instances over the simulated channel (sim.h).
 #include "sim.h"
+#include "framecrypt.h"
 
 static const Bytes CMD_OPEN = { 0x01, 0x00, 1 };  // cmd_id u16, action
 
@@ -165,6 +166,70 @@ TEST(tampered_frame_fails_the_mac) {
   s.run(500);
   CHECK_EQ(s.gate.rxCount(MSG_PING), 1);
   CHECK_EQ(s.gate.stats().macFail, 1);
+}
+
+TEST(payloads_are_encrypted_on_the_air) {
+  // What a listener records: the header in the clear, the payload not. The same payload sent twice (another seq)
+  // reads differently each time, and decrypts with the key, as the protocol specifies (framecrypt.h), to what was
+  // sent. 18 bytes: two counter blocks.
+  Sim s;
+  CHECK(s.handshake());
+  const Bytes p = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 1, 2, 3 };
+  s.house.send(MSG_PING, p);
+  s.run(300);
+  s.house.send(MSG_PING, p);
+  s.run(300);
+  auto sent = s.sent(s.house, MSG_PING);
+  CHECK(sent.size() >= 2);
+  const Bytes &a = sent[sent.size() - 2]->b, &b = sent.back()->b;
+  CHECK_EQ(a.size(), FRAME_PAYLOAD + p.size() + FRAME_TAG);
+  Bytes ca(a.begin() + FRAME_PAYLOAD, a.end() - FRAME_TAG), cb(b.begin() + FRAME_PAYLOAD, b.end() - FRAME_TAG);
+  CHECK(ca != p);
+  CHECK(ca != cb);
+  CHECK(framePlain(s.house.cfg.key, a) == p);
+  CHECK(framePlain(s.house.cfg.key, b) == p);
+  CHECK_EQ(s.gate.rxCount(MSG_PING), 2);
+  CHECK(s.gate.rx.back().payload == p);
+}
+
+TEST(a_hello_ack_must_echo_the_whole_challenge) {
+  // A challenge is 16 bytes (32 bits let answers recorded over weeks come to match one), and an answer counts only if
+  // it echoes all of them: one with the first 4 (all a 32-bit challenge had) or all but one bit doesn't verify.
+  Sim s;
+  s.drop = [](const AirFrame &f) { return f.type() == MSG_HELLO_ACK; };  // nothing verifies by itself
+  s.run(1500);  // both boards' boot HELLOs
+  const AirFrame *hello = last(s.sent(s.house, MSG_HELLO)), *g = last(s.sent(s.gate, MSG_HELLO));
+  CHECK(hello && g);
+  Bytes c = framePlain(s.house.cfg.key, hello->b);
+  CHECK_EQ(c.size(), 16u);
+  uint32_t session = g->session(), seq = g->seq() + 100;
+  auto answer = [&](const Bytes &payload) {
+    s.inject(s.house, frameSeal(s.house.cfg.key, MSG_HELLO_ACK, g->b[2], g->b[3], g->b[4], session, seq++,
+                                payload.data(), payload.size()));
+    s.run(50);
+  };
+  Bytes wrong = c;
+  wrong[15] ^= 1;
+  answer(Bytes(c.begin(), c.begin() + 4));
+  answer(wrong);
+  CHECK(!s.house.verified());
+  answer(c);
+  CHECK(s.house.verified());
+}
+
+TEST(a_new_key_encrypts_and_tags_alike_without_a_restart) {
+  // The cipher key is derived again whenever the link key changes, not only at linkBegin, so a frame is never
+  // encrypted under the old key and tagged under the new one: the peer would take it as authentic and read garbage.
+  Sim s;
+  CHECK(s.handshake());
+  s.house.send(MSG_PING, { 1, 2, 3 });
+  s.run(300);
+  for (Node *n : { &s.house, &s.gate }) n->cfg.key[0] ^= 0x5A;
+  s.house.send(MSG_PING, { 4, 5, 6 });
+  s.run(300);
+  CHECK_EQ(s.gate.rxCount(MSG_PING), 2);
+  CHECK(s.gate.rx.back().payload == Bytes({ 4, 5, 6 }));
+  CHECK(framePlain(s.house.cfg.key, last(s.sent(s.house, MSG_PING))->b) == Bytes({ 4, 5, 6 }));
 }
 
 TEST(frames_from_before_a_gate_restart_are_rejected) {
@@ -513,7 +578,7 @@ TEST(full_tx_queue_keeps_the_newest_response) {
   s.run(3000);
   auto sent = s.sent(s.house, MSG_ACK);
   CHECK_EQ(sent.size(), acks + 1);
-  CHECK_EQ(getU32(&sent.back()->b[13]), 1234u);
+  CHECK_EQ(getU32(framePlain(s.house.cfg.key, sent.back()->b).data()), 1234u);
   CHECK_EQ(s.sent(s.house, MSG_PING).size(), pings + 4);
 }
 
@@ -527,7 +592,7 @@ TEST(full_tx_queue_of_responses_drops_the_oldest) {
   auto sent = s.sent(s.house, MSG_ACK);
   CHECK(sent.size() >= 4);
   std::vector<uint32_t> seqs;
-  for (size_t i = sent.size() - 4; i < sent.size(); i++) seqs.push_back(getU32(&sent[i]->b[13]));
+  for (size_t i = sent.size() - 4; i < sent.size(); i++) seqs.push_back(getU32(framePlain(s.house.cfg.key, sent[i]->b).data()));
   CHECK((seqs == std::vector<uint32_t>{ 5, 4, 3, 2 }));
 }
 

@@ -290,6 +290,7 @@ struct World {
   void airSend(const Bytes &frame, int from = -1);  // a frame on the air from a transmitter of our own
   void inject(Board &to, const Bytes &frame) { to.rxq.clear(), to.rxq.push_back(frame); }
   std::vector<const AirFrame *> sent(const Board &from, uint8_t type) const;
+  Bytes plain(const Bytes &frame) const;  // a frame's payload, decrypted with TEST_KEY (framecrypt.h)
   uint32_t airtimeMs(size_t len, int sf = 9, int bwHz = 500000, int cr = 5) const;
 
   // Monitors: the behavioural invariants, checked every millisecond. A breach is recorded (and traced); tests end

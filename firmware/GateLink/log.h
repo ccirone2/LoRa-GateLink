@@ -36,6 +36,7 @@ enum LogCode : uint8_t {
                      //   off: an input again); b = the problems then (Problem bits, health.h)
   EV_HANG,           // at boot, after a watchdog reset its early warning saw coming: a = the program counter the
                      //   warning interrupted (4 s into the stall), b = the loop's stage then (status hang_stage)
+  EV_CMD_LATE,       // a = cmd id, b = ms past its deadline (negative: a deadline too far ahead); refused, no pulse
   EV_COUNT
 };
 

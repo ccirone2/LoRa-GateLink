@@ -3,6 +3,7 @@
 #include "sim.h"
 #include <FlashStorage.h>
 #include "extflash.h"
+#include "roles.h"
 
 extern FlashStorageClass<Config> cfgStore;  // config.cpp's fallback store
 
@@ -62,6 +63,14 @@ static void fresh() {
 static void saveWith(int32_t pulse) {
   cfg.pulse_ms = pulse;
   CHECK(configSave());
+}
+
+// The gate refuses a command whose deadline lies further ahead than the longest cmd_ttl_s allows (roles.h): that bound
+// must follow the setting's range, or a house with a long cmd_ttl_s would have every command refused.
+TEST(config_cmd_ttl_s_maximum_is_the_deadline_bound) {
+  const ParamDef *p = paramByName("cmd_ttl_s");
+  CHECK(p != nullptr);
+  CHECK_EQ(p->maxV, CMD_TTL_MAX_S);
 }
 
 TEST(config_round_trip) {

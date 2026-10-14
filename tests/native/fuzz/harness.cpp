@@ -12,6 +12,7 @@
 #include "crc32.h"
 #include "link.h"
 #include "roles.h"
+#include "../framecrypt.h"
 
 #ifndef FUZZ_SNAPSHOT
 #define FUZZ_SNAPSHOT 0
@@ -25,6 +26,7 @@ const uint8_t FUZZ_KEY[16] = { 0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
 static const uint32_t SERIAL_NO[4] = { 0x5EED0000, 0x5EED0001, 0x5EED0002, 0x5EED0003 };
 #define HDR_LEN 13
 #define TAG_LEN 8
+#define CHALLENGE_LEN 16
 #define PASS_BUDGET 40000  // loop passes per input (the tail that lets a pulse end comes on top)
 
 Peer peer;
@@ -183,9 +185,12 @@ static void peerReset(FuzzRole role) {
   peer = Peer();
   peer.session = 0x5EE50000u | role;
   peer.seq = 0x1000;
+  peer.clockSeen = hal.ms;
 }
 
 void peerScan() {
+  peer.clock += (uint32_t)(hal.ms - peer.clockSeen);
+  peer.clockSeen = hal.ms;
   for (const Bytes &f : hal.tx) {
     if (f.size() >= HDR_LEN + TAG_LEN) {
       uint8_t type = f[1];
@@ -194,10 +199,15 @@ void peerScan() {
         peer.haveSeq[type] = true;
         peer.lastSeq[type] = getU32(&f[9]);
       }
-      if (type == MSG_HELLO && f.size() >= HDR_LEN + 4 + TAG_LEN) {
-        peer.prevChallenge = peer.challenge;
-        peer.challenge = getU32(&f[HDR_LEN]);
+      Bytes p = type == MSG_HELLO || type == MSG_STATUS ? framePlain(cfg.key, f) : Bytes();
+      if (type == MSG_HELLO && p.size() >= CHALLENGE_LEN) {
+        memcpy(peer.prevChallenge, peer.challenge, CHALLENGE_LEN);
+        memcpy(peer.challenge, p.data(), CHALLENGE_LEN);
         peer.haveChallenge = true;
+      }
+      if (type == MSG_STATUS && p.size() >= ST_LEN) {
+        peer.boardClock = getU48(&p[ST_CLOCK]);
+        peer.boardClockAt = hal.ms;
       }
     }
     peer.heard.push_back(f);
@@ -206,25 +216,13 @@ void peerScan() {
   hal.tx.clear();
 }
 
-static void tagOf(const uint8_t *buf, size_t len, uint8_t *tag) {
-  SHA256 h;
-  h.resetHMAC(cfg.key, sizeof(cfg.key));
-  h.update(buf, len);
-  h.finalizeHMAC(cfg.key, sizeof(cfg.key), tag, TAG_LEN);
+Bytes peerFrame(uint8_t type, const uint8_t *payload, size_t len, uint32_t session, uint32_t seq) {
+  // From the board's point of view: the peer sends, the board receives.
+  return frameSeal(cfg.key, type, (uint8_t)cfg.net_id, peerNodeId(), myNodeId(), session, seq, payload, len);
 }
 
-Bytes peerFrame(uint8_t type, const uint8_t *payload, size_t len, uint32_t session, uint32_t seq) {
-  Bytes f(HDR_LEN + len + TAG_LEN);
-  f[0] = 1;  // PROTO_VER
-  f[1] = type;
-  f[2] = (uint8_t)cfg.net_id;
-  f[3] = peerNodeId();  // from the board's point of view: the peer sends, the board receives
-  f[4] = myNodeId();
-  putU32(&f[5], session);
-  putU32(&f[9], seq);
-  if (len) memcpy(&f[HDR_LEN], payload, len);
-  tagOf(f.data(), HDR_LEN + len, &f[HDR_LEN + len]);
-  return f;
+uint64_t peerBoardClock() {
+  return peer.boardClock + (uint32_t)(hal.ms - peer.boardClockAt);
 }
 
 void deliver(const Bytes &frame, int16_t rssi, float snr) {
@@ -246,9 +244,7 @@ void sendAuth(uint8_t type, const uint8_t *payload, size_t len) {
 }
 
 void answerChallenge() {
-  uint8_t p[4];
-  putU32(p, peer.challenge);
-  sendAuth(MSG_HELLO_ACK, p, 4);
+  sendAuth(MSG_HELLO_ACK, peer.challenge, CHALLENGE_LEN);
 }
 
 void ackLast(uint8_t type, uint8_t result) {
@@ -269,6 +265,7 @@ Bytes statusPayload(uint8_t state, uint8_t inputs) {
   p[ST_NOISE] = (uint8_t)(int8_t)-112;
   p[ST_NOISE_MAX] = (uint8_t)(int8_t)-105;
   putU16(&p[ST_TRAVEL], 60);
+  putU48(&p[ST_CLOCK], peer.clock);
   return p;
 }
 

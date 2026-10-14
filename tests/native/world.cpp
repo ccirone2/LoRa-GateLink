@@ -11,6 +11,7 @@
 #include "board.h"
 #include "console_io.h"
 #include "extflash.h"
+#include "framecrypt.h"
 #include "log.h"
 #include "radio.h"
 #include "supply.h"
@@ -982,6 +983,10 @@ std::vector<const AirFrame *> World::sent(const Board &from, uint8_t type) const
   for (const AirFrame &f : air)
     if (f.from == from.idx && f.type() == type) out.push_back(&f);
   return out;
+}
+
+Bytes World::plain(const Bytes &frame) const {
+  return framePlain(TEST_KEY, frame);
 }
 
 // --- monitors ------------------------------------------------------------------------------------------------------

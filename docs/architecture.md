@@ -39,12 +39,29 @@ into a chained state; don't replace it with `LoRa.random()` alone (near-constant
 ## `link.cpp`
 
 Every frame on the air uses authenticated framing: `ver|type|net_id|src|dst|session|seq|payload|tag`, tag =
-HMAC-SHA256(key) truncated to 8 bytes. The link is disabled entirely while `cfg.key_set == 0`.
+HMAC-SHA256(key) of the header and the encrypted payload, truncated to 8 bytes. The link is disabled entirely while
+`cfg.key_set == 0`.
+
+**Encryption** (frame format 2, 0.16.0). `cryptPayload` XORs the payload with AES-128-CTR (the Crypto library's
+`AES128`, its key the first 16 bytes of the link key's HMAC of `GateLink payload v1`): `buildFrame` encrypts before
+tagging, `handleFrame` checks the tag first and only then decrypts in place, and `reframePending` decrypts a queued
+frame under its old seq before renumbering it. The counter block is the header's bytes 3–12 (`src`, `dst`,
+`session`, `seq`), so a keystream repeats only if a session id does; the node ids in it keep the directions (and the
+gates of a house serving several, ROADMAP F8) apart. The cipher key is derived again whenever `cfg.key` differs from
+the copy it was derived from (`cipherKeyOf`), not only in `linkBegin`: a frame encrypted under an old key and tagged
+under a new one would pass the peer's MAC and be parsed as garbage. About 2 KB of flash and 100 B of RAM with the
+challenge below. Type, length and timing stay visible: a listener can tell a command went and that the gate's state
+changed, not which (padding to one length wouldn't hide it, since STATUS goes on every change; not done).
 
 **Sessions and replay protection.** Replay protection has no persisted seq counters: each boot (and link restart)
 picks a new session id; a peer session is accepted only after a HELLO challenge is echoed in HELLO_ACK, and from
 then on only seqs above that HELLO_ACK's pass (then a 32-frame sliding window), so frames recorded before a reboot
-can't be replayed. Answering a HELLO renumbers everything still waiting (`reframePending`; the renumbered resend
+can't be replayed. Challenges are 16 bytes (`drawChallenge`: the link key's HMAC of our session, a count and one
+`radioRandom32()`, so one draw costs 20 ms of RSSI sampling, as the 32-bit one did): with 32 bits, answers to the
+challenges an attacker provokes by replaying stale HELLOs, recorded over weeks, came to match a later one within
+hours and re-verified a superseded session (`challenge-library-session-rebind`). Binding the answer to the
+challenger's session, or refusing a session superseded since boot, would add nothing with 128 bits: not done.
+Answering a HELLO renumbers everything still waiting (`reframePending`; the renumbered resend
 escapes the peer's ACK memo, so reliable messages must be idempotent: CMDs by `lastCmdId`), except that a HELLO from
 a new session after a verified one holds a pending CMD (`cmdHeld`, log `cmd_hold`): if that session verifies (the
 peer restarted) the CMD is dropped, since the restarted gate may have pulsed and lost the ACK and its `lastCmdId`,
@@ -101,6 +118,21 @@ The application state machines; the rules they keep are the behavioural invarian
 STATUS payload layout is defined in `roles.h` (built in `role_gate.cpp`, parsed in `role_house.cpp`); DIAG's too
 (`DIAG_*`, `DiagCounter`), built in `role_gate.cpp` (`sendDiag`) and parsed in `console.cpp` (`consoleEventDiag`);
 keep them in sync. The longest loop pass since boot is status `loop_max_us` (the soak fails it past 4 s).
+
+**Command deadlines** (0.16.0, [protocol.md](protocol.md#command-deadlines)). The gate's clock (`gateClock`) is
+`millis()` extended to 64 bits, read every `gateLoop` pass so its base stays within 2^31 ms; STATUS carries it
+(`ST_CLOCK`, 48 bits) and its uptime fields come from it, so they no longer wrap at 49.7 days either. The house keeps
+one reading per gate session (`clockSession`, `clockGate`, `clockAt`): a later-reading STATUS replaces it at once, an
+earlier one only after `CLOCK_SAMPLE_LIFE_MS` (10 min), and `capStamps` forgets it after `CLOCK_MAX_AGE_MS` (3 h).
+`sendCommand` stamps `CMD_DEADLINE` = the gate's clock now + `cmd_ttl_s` (the slot's TTL), or drops the command with
+no reading for the verified gate session (`linkPeerSession`, 0 during our own link restart too). `handleCmd` checks
+it after the duplicate check (a resend of a command already run gets its result) and refuses outside
+[−`CMD_LATE_SLACK_MS`, `CMD_AHEAD_MAX_MS`] with `RES_LATE`, which the house treats as `RES_NO_POWER`: resync at once.
+Don't use 32 bits for the deadline (a command withheld 2^32 ms would read as current, host-tested) nor a time window
+on the gate alone (it can't tell a delayed frame from a retry). Considered and not built: deadlines on every reliable
+frame in the link, with the peer's clock carried in HELLO_ACK. One reading a session drifts past the slack within
+hours (100 ppm: 8.6 s a day), so it needs STATUS's readings anyway, and gate-to-house freshness would need the house's
+clock too; STATUS has its own (seq order) and config writes rarely matter (`withheld-config-write`).
 
 ## History: `history.cpp` and `histlog.cpp`
 

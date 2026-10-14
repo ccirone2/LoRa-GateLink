@@ -587,7 +587,7 @@ def gen_params(repo):
 # ---------------------------------------------------------------------------------------------------------------
 # Wire formats (link.h, roles.h)
 
-SIZES = {"u8": 1, "i8": 1, "u16": 2, "i16": 2, "u32": 4, "i32": 4}
+SIZES = {"u8": 1, "i8": 1, "u16": 2, "i16": 2, "u32": 4, "i32": 4, "u48": 6}
 # Meanings for STATUS fields and input bits roles.h has no comment for (or only a type and unit). A key that
 # isn't a macro in roles.h any more is reported.
 ST_MEANING = {
@@ -613,7 +613,7 @@ ACK_MEANING = {"RES_OK": "done"}
 
 def _typed(comment):
     """(type, rest) of a field comment such as "u16, gate link retries"; type None if it names none."""
-    m = re.match(r"([ui](?:8|16|32))\b[,:]?\s*(.*)", comment)
+    m = re.match(r"([ui](?:8|16|32|48))\b[,:]?\s*(.*)", comment)
     return (m.group(1), m.group(2)) if m else (None, comment)
 
 
@@ -677,7 +677,8 @@ def gen_status(repo):
 
     lines = ["### STATUS payload (gate → house)", "",
              f"{length} bytes, little-endian. **Since**: the gate firmware that added the field (— = every "
-             "version); an older gate's shorter STATUS still works.", "",
+             "version); a gate older than a field leaves it off, and the house still takes its STATUS, back to "
+             "0.16.0 (frame format 2: an older gate can't link at all).", "",
              "| Offset | Size | Type | Field | Meaning | Since |", "|---|---|---|---|---|---|"]
     for i, (k, off, comment) in enumerate(fields):
         nxt = fields[i + 1][1] if i + 1 < len(fields) else length
@@ -1352,7 +1353,10 @@ FACTS = [
          (Q(PRO, r"\(shared\s+(\d+)-bit key\)", lambda v: v * 8),
           Q(CON, r"`key`: (\d+) hex chars", lambda v: v * 2))),
     # STATUS
-    D("ST_LEN", f"{FW}/roles.h", Q(PRO, r"STATUS is (\d+) bytes: it ends with")),
+    D("ST_LEN", f"{FW}/roles.h", Q(PRO, r"the whole STATUS, now (\d+) bytes with the gate's clock")),
+    D("ST_LEN_V3", f"{FW}/roles.h", Q(PRO, r"STATUS is (\d+) bytes: it ends with")),
+    Fact("STATUS clock since", f"{FW}/roles.h", r"#define ST_LEN_V3 .*added in ([\d.]+)",
+         (Q(PRO, r"Since ([\d.]+) the frame format is 2"),)),
     D("ST_LEN_V2", f"{FW}/roles.h",
       Q(PRO, r"An older gate's (\d+)-byte STATUS"),
       Q(PRO, r"Since [\d.]+, STATUS is (\d+) bytes: the gate also")),

@@ -18,7 +18,9 @@ difference:
 | `FlashStorage` (cmaglie) | 1.0.0 |
 | `ArduinoJson` | 7.4.3 |
 
-When updating one, change it here and in `.github/workflows/ci.yml` and `release.yml`.
+When updating one, change it here, in `.github/workflows/ci.yml` (every job), `release.yml`, `fuzz.yml` and
+`mutate.yml`, and in `tools/agent/cloud_setup.sh` (`tests/tools/test_agent_tooling.py` checks the last against CI
+and this table).
 
 The web console is plain JS (ES modules) with no build step; its lint and tests need Node.js 22 and `npm ci`
 (`package.json`).
@@ -129,7 +131,8 @@ covers the Arduino cores and libraries, arduino-cli, uv and gcovr (CI runs gcovr
   `tests/tools/test_mutate.py` until the catalog follows.
 - **Fuzzing:** `tests/native/fuzz` fuzzes the frame, console and config parsers with the whole firmware under
   ASan/UBSan and the relay invariants; `make -C tests/native` replays its corpus, and `fuzz/crashes/` holds
-  reproducers of known bugs that must keep crashing until fixed.
+  reproducers of known bugs that must keep crashing until fixed. CI (`fuzz.yml`) searches for new crashes a minute
+  per target on pull requests that touch the firmware or `tests/native`, and half an hour per target nightly.
 - **Bench end-to-end suite** (`tests/e2e`, pytest; [tests/e2e/README.md](../tests/e2e/README.md)): drives both
   boards, the GateSim and the Shelly (via Home Assistant) and checks the behavioural invariants after every scenario.
   It parses console replies, log event names/values and status fields (`tests/e2e/gatelink/`, and the console client
@@ -245,9 +248,5 @@ PRs: #n
 
 ## Claude Code skills
 
-Project skills live in `.claude/skills/`:
-
-- `/implement` — build ROADMAP/TODO items end to end, judged against the [goals](../README.md#goals).
-- `/flash` — flash the bench boards (and optionally the GateSim) and restore their config and key.
-- `/release` — run the bench per the release criteria, collect and merge the evidence, then tag and publish the
-  release with notes from the merged pull requests.
+Project skills live in `.claude/skills/` (`/implement`, `/flash`, `/bench`, `/release`, `/doc-audit`,
+`/pr-followup`); [agent-tooling.md](agent-tooling.md) describes each, with the hooks and the nightly routines.

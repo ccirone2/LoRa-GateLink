@@ -145,6 +145,12 @@ details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 /* Uniform rows: every setting row is the same height whatever its control (number, select or toggle). */
 .field { position: relative; display: grid; grid-template-columns: 1fr 130px 18px; gap: 8px; align-items: center; padding: 4px 0; min-height: 46px; }
 .field label { overflow-wrap: anywhere; min-width: 0; }
+.field label .pname { display: block; color: var(--muted); font: 11.5px ui-monospace, SFMono-Regular, Consolas, monospace; }
+/* The other role's groups and Advanced: folded below the rest, across the whole width. */
+.cfg-fold { grid-column: 1 / -1; }
+.cfg-fold > summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
+.cfg-fold > summary:not([data-dirty=""])::after { content: ' · ' attr(data-dirty); color: var(--warn); font-weight: 600; }
+.cfg-fold > .cfg-groups { margin-top: 8px; }
 .must { color: var(--warn); font-weight: 700; margin-left: 2px; }
 /* Info icon + tooltip for each setting: shown on hover, keyboard focus, or pinned by a tap/click. */
 .info {

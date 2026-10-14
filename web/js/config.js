@@ -4,7 +4,7 @@ import { $, esc, download } from './util.js';
 import { S } from './state.js';
 import { toast, guard } from './ui.js';
 import { call, request, rebootAndReconnect } from './serial.js';
-import { GROUPS, HELP, MUST_MATCH, SELECTS } from './settings.js';
+import { GROUPS, GROUP_ROLE, ADVANCED, LABELS, HELP, MUST_MATCH, SELECTS } from './settings.js';
 import { refreshInfo } from './board.js';
 import { refreshStatus } from './status.js';
 import { rememberBoard } from './peer.js';
@@ -19,9 +19,30 @@ export async function loadConfig() {
   rememberBoard();
 }
 
+// A folded part of the form: the other role's groups, or Advanced. Kept open across a re-render (each Apply) if it was,
+// unless the role it was folded for has changed.
+let foldedFor = null;
+function fold(id, summary, open, keep) {
+  const d = document.createElement('details');
+  d.id = id;
+  d.className = 'cfg-fold';
+  d.open = open || (keep && !!$(id)?.open);
+  d.innerHTML = `<summary>${summary}</summary><div class="cfg-groups"></div>`;
+  return d;
+}
+
 export function renderConfig() {
   const byName = Object.fromEntries(S.meta.map((m) => [m.name, m]));
   const form = $('cfgForm');
+  // The role in the board's settings, not the one it runs: one applied for the next reboot folds at once.
+  const role = SELECTS.role.find(([v]) => v === S.params.role)?.[1];
+  const known = role === 'house' || role === 'gate';
+  const keep = foldedFor === role;
+  foldedFor = role;
+  const other = known ? fold('cfgOther', `Settings for the ${role === 'house' ? 'gate' : 'house'} board`, false, keep) : null;
+  // Open while any is on: an inversion makes a dead input read active, so it mustn't sit out of sight.
+  const advOn = GROUPS.find(([t]) => t === ADVANCED)?.[1].some((n) => S.params[n]);
+  const adv = fold('cfgAdvanced', 'Advanced: input inversions (leave off) and the bench UART console', advOn, keep);
   form.innerHTML = '';
   for (const [title, names] of GROUPS) {
     const card = document.createElement('div');
@@ -48,20 +69,24 @@ export function renderConfig() {
         : '';
       // Info icon in its own column at the far right, after the entry field (an empty cell keeps rows aligned).
       const star = MUST_MATCH.has(name) ? '<span class="must" title="Must match on both boards" aria-label="must match on both boards">*</span>' : '';
-      row.innerHTML = `<label for="${id}">${esc(name)}${star}</label>${input}${help || '<span></span>'}`;
+      const label = LABELS[name] ? `${esc(LABELS[name])}${star}<small class="pname">${esc(name)}</small>` : `${esc(name)}${star}`;
+      row.innerHTML = `<label for="${id}">${label}</label>${input}${help || '<span></span>'}`;
       card.appendChild(row);
       const el = row.querySelector('input, select');
       setField(el, S.params[name]);
       el.addEventListener('input', () => {
         const v = fieldValue(el);
         row.classList.toggle('dirty', v !== S.params[name]);
+        if (v !== S.params[name]) row.closest('details')?.setAttribute('open', ''); // an import's edit isn't left folded
         if (el.type === 'number') el.setAttribute('aria-invalid', String(!Number.isInteger(v) || v < m.min || v > m.max || el.value === ''));
         updateDirtyCount();
       });
       if (el.type === 'number') el.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnCfgApply').click(); });
     }
-    form.appendChild(card);
+    const into = title === ADVANCED ? adv : known && GROUP_ROLE[title] && GROUP_ROLE[title] !== role ? other : null;
+    (into ? into.lastChild : form).appendChild(card);
   }
+  for (const d of [other, adv]) if (d?.lastChild.childElementCount) form.appendChild(d);
   updateDirtyCount();
 }
 
@@ -70,6 +95,11 @@ export const dirtyCount = () => Object.keys(formValues(true)).length;
 export function updateDirtyCount() {
   const n = dirtyCount();
   $('btnCfgApply').textContent = n ? `Apply (${n})` : 'Apply';
+  // A fold closed over an edit still says so.
+  document.querySelectorAll('#cfgForm .cfg-fold').forEach((d) => {
+    const k = d.querySelectorAll('.field.dirty').length;
+    d.firstChild.dataset.dirty = k ? `${k} unapplied` : '';
+  });
   markConfigTab();
 }
 

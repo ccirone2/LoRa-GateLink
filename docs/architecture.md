@@ -225,7 +225,8 @@ each board event); each card's module wires its own controls in its `init…()` 
 show info register `onInfo`, since they import `refreshInfo` from it; `serial.js` knows nothing of the tabs);
 `status.js` the Status tab and the health line above every tab, with `healthline.js` its verdict and `peer.js` the
 other board as last seen;
-`config.js` the Config tab, with `settings.js` setting groups/help; `log.js` the Log tab, with `logdecode.js` log
+`config.js` the Config tab, with `settings.js` setting groups, labels and help (the other role's groups and
+*Advanced* fold away below the rest, opening for an edit, and *Advanced* while any of it is on); `log.js` the Log tab, with `logdecode.js` log
 events as text. The Link tab: `history.js`, `surveycard.js` (the site survey run; `survey.js` its verdict, twin of
 `tools/gatelink_client/survey.py`, shared vectors in `tests/tools/fixtures/`; [install.md](install.md)), `ping.js`,
 `remote.js` (the gate's diagnostics and remote writes, from the house). The Board tab: `security.js` the link key card

@@ -4,13 +4,33 @@ export const GROUPS = [
   ['General', ['role', 'net_id']],
   ['Radio', ['freq_hz', 'sf', 'bw_hz', 'cr', 'tx_power', 'sync_word']],
   ['Link', ['retries', 'heartbeat_s', 'link_timeout_s', 'cmd_ttl_s']],
-  ['Inputs', ['debounce_ms', 'in1_invert', 'in2_invert', 'in3_invert', 'in4_invert', 'power_sense']],
-  ['Gate node', ['pulse_ms', 'travel_timeout_s']],
+  ['Inputs', ['debounce_ms']],
+  ['Gate node', ['pulse_ms', 'travel_timeout_s', 'power_sense']],
   ['House node', ['ctrl_sync', 'sync_window_ms', 'resync_ms', 'mismatch_timeout_s', 'sensor_invert', 'linkloss_open',
     'ctrl_power_sense', 'ctrl_power_pmic', 'ctrl_confirm_ms', 'ctrl_settle_ms']],
   ['Fault output', ['fault_out', 'fault_hold_s']],
-  ['Board', ['uart_console']],
+  ['Advanced', ['in1_invert', 'in2_invert', 'in3_invert', 'in4_invert', 'uart_console']],
 ];
+// Groups only one role uses: on a board with the other role they are folded away below the rest (not removed: an
+// import may still set them). With no role yet, every group shows.
+export const GROUP_ROLE = { 'Gate node': 'gate', 'House node': 'house' };
+// Folded unless one of them is on: the inversions must stay off, and the UART console is for bench power tests.
+export const ADVANCED = 'Advanced';
+// The Config tab's label for each setting, with its unit; the setting's own name shows under it (the docs, help texts
+// and tools use the names). A setting without one is labelled by its name.
+export const LABELS = {
+  role: 'Role', net_id: 'Network id', freq_hz: 'Frequency (Hz)', sf: 'Spreading factor', bw_hz: 'Bandwidth',
+  cr: 'Coding rate (4/x)', tx_power: 'Transmit power (dBm)', sync_word: 'Sync word', retries: 'Retries',
+  heartbeat_s: 'Heartbeat (s)', link_timeout_s: 'Link timeout (s)', cmd_ttl_s: 'Command lifetime (s)',
+  debounce_ms: 'Input debounce (ms)', in1_invert: 'Invert IN1', in2_invert: 'Invert IN2', in3_invert: 'Invert IN3',
+  in4_invert: 'Invert IN4', power_sense: 'AC power sense (IN3)', pulse_ms: 'Relay pulse (ms)',
+  travel_timeout_s: 'Travel timeout (s)', ctrl_sync: 'Sync the controller (K1)', sync_window_ms: 'Sync window (ms)',
+  resync_ms: 'Resync pulse (ms)', mismatch_timeout_s: 'Mismatch timeout (s)', sensor_invert: 'Invert contact sensor',
+  linkloss_open: 'Sensor open on link loss', ctrl_power_sense: 'Controller power sense (IN2)',
+  ctrl_power_pmic: 'Controller power from board supply', ctrl_confirm_ms: 'Switch-off confirm (ms)',
+  ctrl_settle_ms: 'Power-up settle (ms)', fault_out: 'Fault output (D5)', fault_hold_s: 'Fault hold (s)',
+  uart_console: 'UART console',
+};
 // Config tooltips: what the setting does, then when you'd change it.
 const NO_INVERT = 'Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead.';
 export const HELP = {

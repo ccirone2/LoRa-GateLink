@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
-import { GROUPS } from '../../../web/js/settings.js';
+import { GROUPS, GROUP_ROLE, ADVANCED, LABELS } from '../../../web/js/settings.js';
 
 const root = new URL('../../../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
@@ -82,4 +82,10 @@ test('fixture key ids = HMAC-SHA256(key, config.cpp KEY_ID_LABEL), as the host t
     .map(([, key, id]) => [key, id]);
   assert.deepEqual(native, fx.key.vectors);
   assert.ok(read('firmware/GateLink/console.cpp').includes(`"${fx.key.weak_error}"`), 'key.set refuses a weak key so');
+});
+
+test('every setting has a Config label, and the folded groups name real groups', () => {
+  assert.deepEqual(Object.keys(LABELS).sort(), params.map((p) => p.name).sort());
+  const titles = GROUPS.map(([t]) => t);
+  for (const t of [...Object.keys(GROUP_ROLE), ADVANCED]) assert.ok(titles.includes(t), `${t} is a GROUPS title`);
 });

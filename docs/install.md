@@ -97,7 +97,8 @@ Keep the report: the command-retry item in [TODO.md](../TODO.md) waits on real i
 ## Install checklist
 
 A skeleton: each step is from [hardware.md](hardware.md) or the README. Check every wire against the Install tab of
-the web console (it works without a board) before powering up.
+the web console (it works without a board) before powering up. With a board connected, the Install tab's *Setup*
+card ticks the steps it can see (role, key, the other board matching, the link, a fair survey).
 
 ### Before going
 

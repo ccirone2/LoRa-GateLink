@@ -7,6 +7,8 @@ import { IO_LABELS } from './wiring.js';
 import { PROBLEMS } from './logdecode.js';
 import { askGateFw, peerDiffs, peerHtml } from './peer.js';
 import { healthLine, linkMargin } from './healthline.js';
+import { setupSteps } from './checklist.js';
+import { surveyVerdict } from './surveycard.js';
 
 // Status `health` (the problems now) and `fault_out` (D5: true high, false low, null off) as HTML; firmware before
 // 0.14.0 reports neither.
@@ -39,6 +41,22 @@ export function showHealthLine(hl) {
   shownLine = key;
   $('healthLine').textContent = hl ? hl.text : '';
   $('healthLine').className = `card health-line ${hl ? hl.level : ''}`;
+}
+
+// The Install tab's setup checklist; null empties it (another board, or none). Rewritten only when it changes.
+let shownSetup = '';
+function showSetup(steps) {
+  const html = (steps ?? []).map((st) => `<li class="${st.done ? 'done' : ''}">`
+    + `<span class="tick" aria-hidden="true">${st.done ? '✓' : '○'}</span>`
+    + `<span><span class="sr">${st.done ? 'Done: ' : 'To do: '}</span>${esc(st.text)} <span class="muted">· ${esc(st.where)}</span></span>`
+    + '</li>').join('');
+  if (html !== shownSetup) $('setupList').innerHTML = shownSetup = html;
+}
+
+// What the page concluded about the board (the health line, the setup checklist): gone with it.
+export function clearVerdicts() {
+  showHealthLine(null);
+  showSetup(null);
 }
 
 // Status `reset_cause`, with (from 0.15.0) a run of crash resets and where a watchdog reset found the loop hung.
@@ -107,6 +125,10 @@ export function renderStatus(s, pushed = false) {
   margins.push(linkMargin(s, S.params.sf));
   if (margins.length > MARGIN_POLLS) margins.shift();
   if (!pushed || pollMisses < 2) showHealthLine(healthLine(s, { margin: median(margins), peer: pd }));
+  // Up as the health line judges it: `verified` alone stays set after the link is lost.
+  const linkUp = s.role === 'house' ? s.link_up === true : l.verified === true && !(s.health ?? []).includes('link');
+  showSetup(setupSteps({ role: s.role, rebootPending: s.reboot_pending, keySet: s.key_set, peer: pd, linkUp,
+    survey: surveyVerdict() }));
   $('lnkAge').textContent = heard ? `${fmtDur(l.age_ms)} ago` : 'never';
   $('lnkRssi').textContent = heard ? `${l.rssi} dBm / ${Number(l.snr).toFixed(1)} dB` : '—';
   $('lnkTxRx').textContent = `${l.tx} / ${l.rx}`;

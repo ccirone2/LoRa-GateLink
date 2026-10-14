@@ -45,22 +45,21 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | 13 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
 | 14 | B5 | Let the suite check D5, K1 and supply dips | S | |
 | 15 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 16 | C6 | Organize the web console by the installer's jobs | M | |
-| 17 | F11 | Firmware ready for a second board | M | |
-| 18 | B2 | Test attacks over real RF | M | B1 |
-| 19 | B3 | Reach the host-only fault paths on the bench | M | |
-| 20 | D2 | Run the bench automatically, safely | M | |
-| 21 | F18 | Stop casual actuation over USB | M | |
-| 22 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 23 | F5 | Change radio settings without stranding the link | L | |
-| 24 | F13 | Work with controllers that pulse | L | |
-| 25 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
+| 16 | F11 | Firmware ready for a second board | M | |
+| 17 | B2 | Test attacks over real RF | M | B1 |
+| 18 | B3 | Reach the host-only fault paths on the bench | M | |
+| 19 | D2 | Run the bench automatically, safely | M | |
+| 20 | F18 | Stop casual actuation over USB | M | |
+| 21 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 22 | F5 | Change radio settings without stranding the link | L | |
+| 23 | F13 | Work with controllers that pulse | L | |
+| 24 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 26 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 27 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 28 | C4 | Check a board still runs genuine firmware | M | |
-| 29 | B6 | Turn field incidents into tests | M | F1 |
-| 30 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 25 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 26 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 27 | C4 | Check a board still runs genuine firmware | M | |
+| 28 | B6 | Turn field incidents into tests | M | F1 |
+| 29 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -348,27 +347,6 @@ the gate.
 **How.** The F1 journal as a readable timeline, e.g. "14:02 Opened from the controller, open in 14 s", "03:10 Moved
 locally (keypad or other controller)", readable remotely through the house via F2. (The naming rule applies: no brand
 names in `web/`.)
-
-### C6: Organize the web console by the installer's jobs
-
-**Goal.** The installer finds each job in one place: what is wrong now, the settings, the link's health over time,
-the board's upkeep, and the wiring with a way to check it. Diagnosability, for the installer.
-
-**Today.** The tabs follow the jobs (Status, Link, Log, Config, Board, Install), and each card's module wires its own
-controls, so a card moves with its markup; the health line shows above every tab; Config labels each setting and
-folds away the other role's and the advanced ones. Left: Install is reference plus a wiring check, with nothing to say
-what's done.
-
-Reboot and Export stay on Config, next to Apply and Save (decided 2026-10-13: a saved role needs Save then Reboot,
-and the health line points there); factory reset is on Board, with the key it erases.
-
-**How.** In steps, each its own pull request; the page's behaviour and the console contract stay as they are.
-
-1. Install: a short checklist whose ticks come from the board (role, key, other board matching, link verified, survey
-   fair or better), each step linking to where it's done; phones open on Install.
-
-**Cost / risk.** The browser tests and docs that name tabs and ids move with each step. Later items have a place:
-C3 in Link, C2 and F2's log in Log, C4 in Board.
 
 ### C3: Help the installer aim the antenna
 

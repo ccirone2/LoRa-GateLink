@@ -55,8 +55,9 @@ test('a line that breaks the page is logged and skipped, and the session carries
   await expect(page.locator('#devline')).toContainText('house'); // still connected
 });
 
-test('a browser without Web Serial shows the banner and keeps Install usable', async ({ page }) => {
-  await openConsole(page, [], { noSerial: true, hash: 'install' });
+test('a browser without Web Serial opens on Install, shows the banner and keeps Install usable', async ({ page }) => {
+  await openConsole(page, [], { noSerial: true });
+  await expect(page.locator('#tabbtn-install')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#unsupported')).toBeVisible();
   await expect(page.locator('#btnConnect')).toBeDisabled();
   await expect(page.locator('#wiringTable')).toContainText('IN1 (A1)');

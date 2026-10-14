@@ -7,14 +7,14 @@
 //   Link tab:   history.js, surveycard.js (survey.js: the verdict, twin of tools/gatelink_client/survey.py),
 //               ping.js, remote.js (the gate over the link)
 //   Board tab:  security.js (keys.js: key ids, backups), firmware.js (samba.js: bootloader)
-//   Install tab: wiring.js (tracks pins.h), relay.js
+//   Install tab: wiring.js (tracks pins.h), relay.js, checklist.js (the setup steps)
 //   healthline.js the health line (verdict)  ui.js log view, toasts   state.js shared state   util.js helpers
 import { $ } from './js/util.js';
 import { S } from './js/state.js';
 import { worksOffline, toast, hideToast, guard } from './js/ui.js';
 import * as serial from './js/serial.js';
 import { applyRole, boardGone, refreshInfo } from './js/board.js';
-import { refreshStatus, renderStatus, pollStatus, resetPoll, showHealthLine, POLL_MS } from './js/status.js';
+import { refreshStatus, renderStatus, pollStatus, resetPoll, clearVerdicts, POLL_MS } from './js/status.js';
 import { resetPeer } from './js/peer.js';
 import { initConfig, loadConfig, markUnsaved, dirtyCount } from './js/config.js';
 import { initSecurity } from './js/security.js';
@@ -30,7 +30,7 @@ import { initFirmware } from './js/firmware.js';
 let pollTimer = null;
 
 function setConnected(on) {
-  if (!on) showHealthLine(null);
+  if (!on) clearVerdicts();
   $('btnConnect').hidden = on;
   $('btnDisconnect').hidden = !on;
   $('btnIdentify').hidden = !on;
@@ -128,6 +128,8 @@ function init() {
       + 'Use a desktop or laptop with Chrome or Edge and a USB cable. The Install tab still works here.';
     $('unsupported').hidden = false;
     $('btnConnect').disabled = true;
+    // Install is the tab that works here: open there, unless a link names another.
+    if (!location.hash) history.replaceState(null, '', '#install');
   }
   serial.initSerial();
   initWiring();

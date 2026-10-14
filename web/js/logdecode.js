@@ -66,6 +66,7 @@ const DECODE = {
   cmd_hold: (a, b) => `${CMD_HOLD[a] ?? `command hold ${a}`} (session ${hex(b)})`,
   health: (a, b) => `${FAULT_OUT[a] ?? `fault output ${a}`}${b ? ` (${problems(b)})` : ''}`,
   cmd_late: (a, b) => (b < 0 ? `command #${a} refused: its deadline lies too far ahead (${-b} ms) of this gate’s clock` : `command #${a} refused: ${b} ms past its deadline (delayed or played back)`),
+  missed_move: (a) => `the gate left closed ${a === 1 ? 'once' : `${a} times`} unseen (its reports were jammed or lost): the alarm sensor opened for 5 s to record it`,
   hang: (a, b) => `the watchdog reset the board: the loop hung in ${(HANG_STAGES[b] ?? `stage ${b}`).replaceAll('_', ' ')} (pc 0x${hex(a)})`,
 };
 

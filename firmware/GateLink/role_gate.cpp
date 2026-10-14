@@ -32,6 +32,7 @@ static uint32_t targetSince = 0;
 static bool haveCmd = false;
 static uint16_t lastCmdId = 0;
 static uint8_t lastCmdAck = RES_OK;
+static uint8_t leftClosed = 0;  // times the reported state has left closed since boot (ST_LEFT_CLOSED)
 static uint32_t lastStatusAt = 0;
 static int32_t reportedHeartbeat = 0;  // heartbeat_s in our last STATUS
 static bool reportedRebootLoop = false;  // STI_REBOOTS in our last STATUS
@@ -106,6 +107,7 @@ static void sendStatus(uint32_t now) {
   p[ST_NOISE_MAX] = (uint8_t)noiseMax;
   putU16(p + ST_TRAVEL, cfg.travel_timeout_s);
   putU48(p + ST_CLOCK, gateClock(now));
+  p[ST_LEFT_CLOSED] = leftClosed;
   reportedHeartbeat = cfg.heartbeat_s;
   // Retries spread over the TTL: cap it so a lost status is retried within a fraction of a second even with a
   // long heartbeat (the next heartbeat supersedes it anyway).
@@ -190,6 +192,7 @@ void gateLoop(uint32_t now) {
     bool power = s == GS_NO_POWER || state == GS_NO_POWER;
     uint8_t prev = state;
     state = s;
+    if (prev == GS_CLOSED) leftClosed++;
     // Ours only while our pulse is still heading somewhere and the gate moves that way: reaching the target,
     // or leaving a limit toward it (or the limit our pulse is moving it off). Anything else (a local button,
     // the other controllers, an override to the far limit) is external.

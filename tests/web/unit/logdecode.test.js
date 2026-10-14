@@ -38,6 +38,7 @@ test('decoded lines', () => {
   assert.equal(decodeLog({ ev: 'hang', a: 1, b: 99 }), 'the watchdog reset the board: the loop hung in stage 99 (pc 0x00000001)');
   assert.equal(decodeLog({ ev: 'cmd_late', a: 7, b: 60123 }), 'command #7 refused: 60123 ms past its deadline (delayed or played back)');
   assert.equal(decodeLog({ ev: 'cmd_late', a: 8, b: -130000 }), 'command #8 refused: its deadline lies too far ahead (130000 ms) of this gate’s clock');
+  assert.equal(decodeLog({ ev: 'missed_move', a: 1, b: 0 }), 'the gate left closed once unseen (its reports were jammed or lost): the alarm sensor opened for 5 s to record it');
 });
 
 test('hang stages follow app.cpp', () => {

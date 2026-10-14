@@ -1109,8 +1109,8 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "  bool closed = gateState == GS_CLOSED;",
-    "replace": "  bool closed = gateState == GS_CLOSED || (holdingTravel(now) && lastEnd == GS_CLOSED);"
+    "find": "  bool closed = gateState == GS_CLOSED && !missedUntil;",
+    "replace": "  bool closed = (gateState == GS_CLOSED || (holdingTravel(now) && lastEnd == GS_CLOSED)) && !missedUntil;"
    }
   ]
  },
@@ -1842,8 +1842,8 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "  bool closed = gateState == GS_CLOSED;",
-    "replace": "  bool closed = gateState == GS_CLOSED || (holdingTravel(now) && lastEnd == GS_CLOSED);"
+    "find": "  bool closed = gateState == GS_CLOSED && !missedUntil;",
+    "replace": "  bool closed = (gateState == GS_CLOSED || (holdingTravel(now) && lastEnd == GS_CLOSED)) && !missedUntil;"
    }
   ]
  },
@@ -2751,6 +2751,67 @@
     "file": "role_gate.cpp",
     "find": "  if (verified && (!houseVerified || linkPeerSession() != houseSession)) {",
     "replace": "  if (verified && linkPeerSession() != houseSession) {"
+   }
+  ]
+ },
+ {
+  "name": "missed_move_m1_gate_never_counts",
+  "invariant": "missed-move",
+  "why": "M1: the gate never counts its departures from closed, so a cycle hidden by jamming is never shown to the alarm.",
+  "killed_by": [
+   "link_move_hidden_by_jamming_is_shown_late"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    if (prev == GS_CLOSED) leftClosed++;\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "missed_move_m2_shown_though_the_sensor_was_open",
+  "invariant": "missed-move",
+  "why": "M2: the house shows a missed move even when its sensor was already open through it (a link loss): a second alarm event for one move.",
+  "killed_by": [
+   "link_move_hidden_by_a_link_loss_was_shown_already",
+   "link_move_while_the_sensor_showed_open_is_not_shown_again"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    } else if (left != leftWhenClosed && gateState == GS_CLOSED && sensorClosed) {",
+    "replace": "    } else if (left != leftWhenClosed && gateState == GS_CLOSED) {"
+   }
+  ]
+ },
+ {
+  "name": "missed_move_m3_count_compared_across_gate_boots",
+  "invariant": "missed-move",
+  "why": "M3: the house compares the count across a gate reboot (which starts it over), so every gate reboot reads as a missed move: a nuisance alarm.",
+  "killed_by": [
+   "link_gate_reboot_is_not_a_missed_move"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    if (!sameSession) {\n      leftWhenClosed = left;\n    } else if (",
+    "replace": "    if (false && sameSession) {\n    } else if ("
+   }
+  ]
+ },
+ {
+  "name": "missed_move_m4_sensor_not_opened",
+  "invariant": "missed-move",
+  "why": "M4: the missed move is logged but the contact sensor isn't opened, so the alarm still never sees it.",
+  "killed_by": [
+   "link_move_hidden_by_jamming_is_shown_late"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "  bool closed = gateState == GS_CLOSED && !missedUntil;",
+    "replace": "  bool closed = gateState == GS_CLOSED;"
    }
   ]
  }

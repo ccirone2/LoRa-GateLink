@@ -98,6 +98,10 @@ once its fix is merged and record it in the pull request.
   board, Shelly SW mode, CSW24UL AUX relay settings, power sense checks, the survey, config export and key backup).
   Left, once the install hardware is in hand: walk it on site and correct it, add the Shelly and CSW24UL menu steps
   as done, the readings at each check and photos, and record the first survey. Then drop the draft notice.
+- [ ] **Check that the alarm records a 5 s sensor open.** 0.17.0 opens the contact sensor (K2) for 5 s to show a move
+  the house never heard (`missed_move`). Untested against a real 2GIG sensor and panel: at the house, take the house
+  board's antenna off while the gate opens and closes (within the 100 s link timeout), put it back, and check
+  Alarm.com logs the gate opened and closed. If the sensor or panel needs longer, raise `MISSED_OPEN_MS`.
 - [ ] **Troubleshooting: a limit that never reads may be unset limits.** On a real install the opener's AUX limit
   relays only switch once the CSW24UL's travel limits have been learned, so a limit input that never goes active (at
   either end of the travel) may mean the limits aren't set, not a wiring fault. Say so in the help text where an

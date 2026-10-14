@@ -30,7 +30,9 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 #define ST_TRAVEL 24     // u16, gate travel_timeout_s: the house holds K1 through a travel for as long
 #define ST_LEN_V3 26     // 0.13.0 up to 0.15.x; the field below was added in 0.16.0
 #define ST_CLOCK 26      // u48, the gate's clock (ms, from a random origin each boot): commands' deadlines are in it
-#define ST_LEN 32
+#define ST_LEN_V4 32     // 0.16.x; the field below was added in 0.17.0
+#define ST_LEFT_CLOSED 32  // u8, times the gate's reported state has left closed since its boot (mod 256)
+#define ST_LEN 33
 
 // ST_INPUTS bits: the gate's inputs and relays as it sees them
 #define STI_IN1 0x01      // open limit

@@ -136,6 +136,18 @@ the house treats as `RES_NO_POWER`: resync at once. CMD stays 9 bytes (a 30-byte
 would take made the frame 34 bytes, which no longer fit the gaps of a neighbour sending every 100 ms; the random
 origin binds a deadline to its boot instead. Don't use 32 bits for the deadline (a command withheld 2^32 ms would read
 as current, host-tested) nor a time window on the gate alone (it can't tell a delayed frame from a retry).
+**Missed moves** (0.17.0, ROADMAP F17 when it was one). The gate counts each time its reported state leaves
+`closed` (`leftClosed`, STATUS `ST_LEFT_CLOSED`, a byte: every departure the house would have shown as not closed,
+`no_power` and `fault` too). The house keeps the latest count (`gateLeft`) and the count when the contact sensor last
+went closed (`leftWhenClosed`, in `applyOutputs`); a STATUS from the same gate session (`statusSession`) that reads
+closed with the sensor still closed (`sensorClosed`) and the count past that one opens the sensor for
+`MISSED_OPEN_MS` (5 s, `missedUntil`, expired in `applyOutputs`). The sensor's decision, not its open moments: at the
+first STATUS after a link loss `applyOutputs` still sees the link down for a pass, and a sensor that was open while
+the gate left closed again (the house last heard it open) showed the alarm all it needed. A new gate session takes the
+count as it comes: a reboot starts it over (and a link restart without a reboot, rare, gives up a move hidden just
+before it), and a 0.16 gate's 32-byte STATUS carries none. It drives K2 only: K1 (the Alarm.com switch) still shows the real state, and
+D5 isn't involved (the move isn't a fault; the link history shows the outage).
+
 Considered and not built: deadlines on every reliable
 frame in the link, with the peer's clock carried in HELLO_ACK. One reading a session drifts past the slack within
 hours (100 ppm: 8.6 s a day), so it needs STATUS's readings anyway, and gate-to-house freshness would need the house's

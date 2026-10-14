@@ -30,35 +30,34 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | **Tier 1: the gate's real state, safety, never late** | | | | |
 | 1 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
 | 2 | F14 | Catch faults the inputs alone don't show | M | |
-| 3 | F17 | Tell the alarm about a move it missed | M | |
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
-| 4 | C3 | Help the installer aim the antenna | S | |
-| 5 | B1 | Repeatable RF tests | S | |
-| 6 | F3 | Tell the alarm what kind of trouble it is | M | |
-| 7 | F1 | Keep the event log across resets | M | |
-| 8 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
-| 9 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 10 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
+| 3 | C3 | Help the installer aim the antenna | S | |
+| 4 | B1 | Repeatable RF tests | S | |
+| 5 | F3 | Tell the alarm what kind of trouble it is | M | |
+| 6 | F1 | Keep the event log across resets | M | |
+| 7 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
+| 8 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
+| 9 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 11 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 12 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 13 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 14 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 15 | F11 | Firmware ready for a second board | M | |
-| 16 | B2 | Test attacks over real RF | M | B1 |
-| 17 | B3 | Reach the host-only fault paths on the bench | M | |
-| 18 | D2 | Run the bench automatically, safely | M | |
-| 19 | F18 | Stop casual actuation over USB | M | |
-| 20 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 21 | F5 | Change radio settings without stranding the link | L | |
-| 22 | F13 | Work with controllers that pulse | L | |
+| 10 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 11 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
+| 12 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 13 | C2 | Answer "what happened last night?" | M | F1, F2 |
+| 14 | F11 | Firmware ready for a second board | M | |
+| 15 | B2 | Test attacks over real RF | M | B1 |
+| 16 | B3 | Reach the host-only fault paths on the bench | M | |
+| 17 | D2 | Run the bench automatically, safely | M | |
+| 18 | F18 | Stop casual actuation over USB | M | |
+| 19 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 20 | F5 | Change radio settings without stranding the link | L | |
+| 21 | F13 | Work with controllers that pulse | L | |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 23 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
-| 24 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 25 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 26 | C4 | Check a board still runs genuine firmware | M | |
-| 27 | B6 | Turn field incidents into tests | M | F1 |
-| 28 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 22 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
+| 23 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 24 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 25 | C4 | Check a board still runs genuine firmware | M | |
+| 26 | B6 | Turn field incidents into tests | M | F1 |
+| 27 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -289,19 +288,6 @@ then an OPEN.
 
 **How.** Ideas: watch for the Shelly's relay dropping and coming back within a short window with no matching Alarm.com
 change, or sense its status LED.
-
-### F17: Tell the alarm about a move it missed
-
-**Goal.** An opening hidden by jamming or a cut gate board is recorded by the alarm late rather than never
-(`link-loss-concealment-window`).
-
-**Today.** Jamming through an open–pass–close cycle leaves the sensor closed until the link timeout.
-
-**How.** A "left closed since you last heard" latch or movement counter in STATUS: when the house sees it advance while
-it showed closed (also on link recovery), it opens K2 for a few seconds (and D5).
-
-**Cost / risk.** A STATUS field: a MINOR. F6's frame change shipped in 0.16.0 without it, so a house that has it must
-still take a 0.16.0 gate's shorter STATUS.
 
 ### F18: Stop casual actuation over USB
 

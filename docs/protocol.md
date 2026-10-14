@@ -213,7 +213,7 @@ ACK result codes (`AckResult`; a gap is a retired code, never reused):
 
 ### STATUS payload (gate → house)
 
-32 bytes, little-endian. **Since**: the gate firmware that added the field (— = every version); a gate older than a field leaves it off, and the house still takes its STATUS, back to 0.16.0 (frame format 2: an older gate can't link at all).
+33 bytes, little-endian. **Since**: the gate firmware that added the field (— = every version); a gate older than a field leaves it off, and the house still takes its STATUS, back to 0.16.0 (frame format 2: an older gate can't link at all).
 
 | Offset | Size | Type | Field | Meaning | Since |
 |---|---|---|---|---|---|
@@ -234,6 +234,7 @@ ACK result codes (`AckResult`; a gap is a retired code, never reused):
 | 23 | 1 | i8 | `ST_NOISE_MAX` | its peak | 0.4.0 |
 | 24 | 2 | u16 | `ST_TRAVEL` | gate `travel_timeout_s`: the house holds K1 through a travel for as long | 0.13.0 |
 | 26 | 6 | u48 | `ST_CLOCK` | the gate's clock (ms, from a random origin each boot): commands' deadlines are in it | 0.16.0 |
+| 32 | 1 | u8 | `ST_LEFT_CLOSED` | times the gate's reported state has left closed since its boot (mod 256) | 0.17.0 |
 
 `ST_INPUTS` bits:
 
@@ -277,9 +278,14 @@ Enums in STATUS (also the `status` reply's names):
 
 ### History
 
+Since 0.17.0, STATUS is 33 bytes, ending with the gate's count of departures from closed (`ST_LEFT_CLOSED`): a
+house that gets a move it never heard (the count advanced while it showed the gate closed) opens the contact sensor
+for 5 s, so the alarm records it late (log `missed_move`). A 0.17.0 house still takes a 0.16 gate's 32-byte STATUS,
+without that check, and a 0.16 house ignores the byte.
+
 Since 0.16.0 the frame format is 2 (encrypted payloads, 128-bit challenges, deadlines on commands): a board drops
-frames from a board on an older version, so the house needs the whole STATUS, now 32 bytes with the gate's clock at
-the end. The notes below are about gates before 0.16.0, which can't link with a 0.16.0 house.
+frames from a board on an older version, so the house needs the whole STATUS of then, 32 bytes with the gate's clock
+at the end. The notes below are about gates before 0.16.0, which can't link with a 0.16.0 house.
 
 Since 0.13.0, STATUS is 26 bytes: it ends with the gate's `travel_timeout_s`, and the house holds K1 through a travel
 for that long instead of its own setting (only the gate's copy can be changed remotely, so the two could

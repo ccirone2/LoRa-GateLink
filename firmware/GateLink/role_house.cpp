@@ -48,6 +48,13 @@ static uint64_t clockGate = 0;
 #define CLOCK_DRIFT 10000  // 1/100 ppm
 #define CLOCK_MAX_AGE_MS 10800000UL
 static bool clockWait = false;  // the pending command is waiting for the gate's clock (sendCommand)
+// The gate's count of departures from closed (ST_LEFT_CLOSED) in its latest STATUS, and what it was when the contact
+// sensor last went closed (applyOutputs): a count past that with the sensor still closed is a move the alarm never saw.
+static uint8_t gateLeft = 0, leftWhenClosed = 0;
+static bool sensorClosed = false;  // as applyOutputs last decided
+// A move the house never heard (its reports jammed or lost) shows on the contact sensor afterwards: open this long.
+#define MISSED_OPEN_MS 5000
+static uint32_t missedUntil = 0;  // the sensor shows a missed move until then (0 = it doesn't)
 static uint8_t lastEnd = GS_UNKNOWN;  // last limit reached (OPEN/CLOSED), held while BETWEEN
 static uint32_t betweenSince = 0;
 
@@ -155,9 +162,12 @@ static void driveK1(uint32_t now, bool level) {
 }
 
 static void applyOutputs(uint32_t now) {
-  // Contact sensor: closed only when we positively know the gate is closed.
-  bool closed = gateState == GS_CLOSED;
+  // Contact sensor: closed only when we positively know the gate is closed (and not showing a missed move).
+  if (missedUntil && elapsed(now, missedUntil, 0)) missedUntil = 0;
+  bool closed = gateState == GS_CLOSED && !missedUntil;
   if (!linkUp && cfg.linkloss_open) closed = false;
+  if (closed && !sensorClosed) leftWhenClosed = gateLeft;
+  sensorClosed = closed;
   bool k2on = closed != (bool)cfg.sensor_invert;
   if (!k2.pulsing() && k2.on() != k2on) k2.set(k2on);
 
@@ -348,7 +358,7 @@ void houseLoop(uint32_t now) {
 }
 
 static void handleStatus(const RxMsg &m, uint32_t now) {
-  if (m.len < ST_LEN) {  // every gate that can verify our link (frame format 2, 0.16.0 on) sends all of it
+  if (m.len < ST_LEN_V4) {  // every gate that can verify our link (frame format 2, 0.16.0 on) sends this much
     linkAck(m.seq, RES_BAD);
     return;
   }
@@ -361,6 +371,7 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
     logEvent(EV_REPLAY, (int32_t)m.seq, (int32_t)statusSeq);
     return;
   }
+  bool sameSession = session == statusSession;
   statusSession = session;
   statusSeq = m.seq;
   statusAt = now | 1;
@@ -390,6 +401,20 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   r.noiseAvg = gateNoise = (int8_t)m.payload[ST_NOISE];
   r.noiseMax = (int8_t)m.payload[ST_NOISE_MAX];
   histPeer(r);
+  // The gate left its closed limit (and came back) since the contact sensor went closed, which it still is: the move's
+  // reports were jammed or lost, and the alarm never saw the gate open. Open the sensor for a moment now, so the alarm
+  // records the move late rather than never. Not when it was open meanwhile (a link loss): the alarm saw that. (A gate
+  // before 0.17.0 doesn't count; a reboot starts the count over, which says nothing about a move.)
+  if (m.len > ST_LEFT_CLOSED) {
+    uint8_t left = m.payload[ST_LEFT_CLOSED];
+    if (!sameSession) {
+      leftWhenClosed = left;
+    } else if (left != leftWhenClosed && gateState == GS_CLOSED && sensorClosed) {
+      logEvent(EV_MISSED_MOVE, (uint8_t)(left - leftWhenClosed));
+      missedUntil = (now + MISSED_OPEN_MS) | 1;
+    }
+    gateLeft = left;
+  }
   bool first = !haveStatus;
   haveStatus = true;
 

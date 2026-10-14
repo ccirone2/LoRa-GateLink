@@ -5,6 +5,7 @@ import { S } from './state.js';
 import { toast, guard } from './ui.js';
 import { call } from './serial.js';
 import { refreshInfo, onInfo } from './board.js';
+import { refreshStatus } from './status.js';
 import { rememberBoard } from './peer.js';
 import {
   MIN_PASSPHRASE, parseKeyHex, keyHex, weakKeyReason, generateKey, keyId, encryptBackup, decryptBackup, parseBackup,
@@ -213,6 +214,7 @@ async function writeKey() {
   await call('key.set', { key: key.hex });
   await refreshInfo();
   rememberBoard(); // its new key id
+  await refreshStatus(); // the health line, now
   reportKeyWritten(key.id);
 }
 

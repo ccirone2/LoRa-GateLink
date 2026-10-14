@@ -45,7 +45,7 @@ test('factory reset erases config and key and reloads the form', async ({ page }
   await expect(page.locator('#secKeySet')).toHaveText('no (link disabled)');
   await page.locator('#tabbtn-config').click();
   await expect(page.locator('#p_pulse_ms')).toHaveValue('500');
-  await expect(page.locator('#keyWarn')).toBeVisible(); // the key went too
+  await expect(page.locator('#healthLine')).toHaveText(/^A saved role waits for a reboot.*no link key either/);
 });
 
 test('Apply sends only the edited settings, and Save is offered afterwards', async ({ page }) => {

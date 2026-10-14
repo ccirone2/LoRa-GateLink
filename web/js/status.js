@@ -28,11 +28,17 @@ const median = (v) => {
   return s.length ? s[Math.floor((s.length - 1) / 2)] : null;
 };
 
-// The health line; null clears it (disconnected, or the board stopped answering).
+// The health line, above every tab; null empties it (disconnected, or the board stopped answering). Empty, it takes no
+// room but stays in the page, so screen readers announce the next verdict; an unchanged one isn't rewritten, so it
+// isn't announced again every poll.
+let shownLine = '';
 export function showHealthLine(hl) {
   if (!hl) margins = [];
-  $('healthLine').textContent = hl ? hl.text : '—';
-  $('healthLine').className = `card wide health-line ${hl ? hl.level : ''}`;
+  const key = hl ? `${hl.level} ${hl.text}` : '';
+  if (key === shownLine) return;
+  shownLine = key;
+  $('healthLine').textContent = hl ? hl.text : '';
+  $('healthLine').className = `card health-line ${hl ? hl.level : ''}`;
 }
 
 // Status `reset_cause`, with (from 0.15.0) a run of crash resets and where a watchdog reset found the loop hung.
@@ -76,7 +82,8 @@ export async function pollStatus() {
 
 export const resetPoll = () => { pollMisses = 0; };
 
-export function renderStatus(s) {
+// pushed: a status event (the house's, on each gate report), which mustn't bring the verdict back while polls fail.
+export function renderStatus(s, pushed = false) {
   if (s.role !== S.role) applyRole(s.role);
   S.rebootPending = !!s.reboot_pending;
   const gs = s.gate || 'unknown';
@@ -99,7 +106,7 @@ export function renderStatus(s) {
   askGateFw(s);
   margins.push(linkMargin(s, S.params.sf));
   if (margins.length > MARGIN_POLLS) margins.shift();
-  showHealthLine(healthLine(s, { margin: median(margins), peer: pd }));
+  if (!pushed || pollMisses < 2) showHealthLine(healthLine(s, { margin: median(margins), peer: pd }));
   $('lnkAge').textContent = heard ? `${fmtDur(l.age_ms)} ago` : 'never';
   $('lnkRssi').textContent = heard ? `${l.rssi} dBm / ${Number(l.snr).toFixed(1)} dB` : '—';
   $('lnkTxRx').textContent = `${l.tx} / ${l.rx}`;
@@ -127,7 +134,6 @@ export function renderStatus(s) {
   const faults = nf ? ` <span class="bad">· ${nf} TX fault${nf === 1 ? '' : 's'}</span>` : '';
   $('bRadio').innerHTML = (s.radio_ok ? '<span class="good">ok</span>' : '<span class="bad">not initialised</span>') + faults;
   $('bHealth').innerHTML = healthHtml(s);
-  $('keyWarn').hidden = s.key_set;
   $('bSettling').textContent = 'settling' in s ? (s.settling ? 'yes · first report waits' : 'no') : '—';
   const store = { spi: 'flash chip', internal: 'program flash' }[s.cfg_store] ?? s.cfg_store;
   const fid = S.boardInfo?.flash_id ? ` · id ${S.boardInfo.flash_id}` : '';
@@ -140,7 +146,6 @@ export function renderStatus(s) {
     const r = s.remote || {};
     $('lnkUp').innerHTML = s.link_up ? '<span class="good">up</span>' : '<span class="bad">down</span>';
     $('lnkRemoteRssi').textContent = r.uptime_s ? `${r.rssi} dBm / ${Number(r.snr).toFixed(1)} dB` : '—';
-    $('hCtrl').innerHTML = pill(s.ctrl);
     $('hCtrlPower').innerHTML = 'ctrl_power' in s ? (s.ctrl_power ? pill(true) : '<span class="bad">off · edges ignored</span>') : '—';
     $('hArmed').textContent = yesNo(s.armed);
     $('hSync').textContent = `${yesNo(s.sync_window)} / ${yesNo(s.resyncing)}`;

@@ -12,7 +12,6 @@ test('house: gate state, link and controller fields', async ({ page }) => {
   await expect(page.locator('#lnkVerified')).toHaveText('yes');
   await expect(page.locator('#hArmed')).toHaveText('yes');
   await expect(page.locator('#hLimits')).toHaveText('open ○  closed ●');
-  await expect(page.locator('#hCtrl')).toHaveText('off');
   await expect(page.locator('#hCtrlPower')).toHaveText('ON');
   await expect(page).toHaveTitle('Closed · House · GateLink');
 });
@@ -20,7 +19,6 @@ test('house: gate state, link and controller fields', async ({ page }) => {
 test('house: an unpowered controller shows its edges are ignored', async ({ page }) => {
   await openConsole(page, [{ role: 'house', status: { ctrl: true, ctrl_power: false } }]);
   await connect(page);
-  await expect(page.locator('#hCtrl')).toHaveText('ON');
   await expect(page.locator('#hCtrlPower')).toHaveText('off · edges ignored');
 });
 
@@ -98,7 +96,10 @@ test('the health line sums up the site, most important first', async ({ page }) 
   await expect(page.locator('#lnkTxRx')).toBeHidden();
   await page.locator('#tab-status details.more summary').first().click();
   await expect(page.locator('#lnkTxRx')).toBeVisible();
+  // On every tab, not just Status.
+  await page.locator('#tabbtn-config').click();
+  await expect(line).toBeVisible();
   // Disconnected, no verdict is left standing.
   await page.locator('#btnDisconnect').click();
-  await expect(line).toHaveText('—');
+  await expect(line).toBeEmpty();
 });

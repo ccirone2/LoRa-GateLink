@@ -32,7 +32,7 @@ export function healthLine(s, { margin = null, peer = null } = {}) {
   const line = (level, text) => ({ level, text });
   if (s.reboot_pending) return line('warn', 'A saved role waits for a reboot: Config → Reboot.');
   if (s.role !== 'house' && s.role !== 'gate') return line('info', 'Role not set: choose house or gate under Config, save, then reboot.');
-  if (s.key_set === false) return line('bad', 'No link key: write the same key to both boards under Security.');
+  if (s.key_set === false) return line('bad', 'No link key: write the same key to both boards under Board.');
   if (s.radio_ok === false) return line('bad', 'The radio isn’t working: reboot the board; if it stays down, the board needs checking.');
 
   // `reboots` on the house is its own loop or the gate's (STATUS bit 7): its own has the crash resets to show.
@@ -57,7 +57,7 @@ export function healthLine(s, { margin = null, peer = null } = {}) {
     if (peer?.fwMinor) {
       return line('bad', `No link to the ${other}, and its firmware differs (${s.fw} here, ${peer.there.fw} there): update both boards.`);
     }
-    return line('bad', `No link to the ${other}: check it has power and its antenna, and that both boards have the same key and radio settings; then Tools → Ping.`);
+    return line('bad', `No link to the ${other}: check it has power and its antenna, and that both boards have the same key and radio settings; then Link → Ping.`);
   }
 
   if (s.gate === 'no_power') return line('bad', 'The gate opener has no power and no limit reads: check the opener and its battery. The alarm shows the gate not closed meanwhile.');
@@ -69,7 +69,7 @@ export function healthLine(s, { margin = null, peer = null } = {}) {
   if (peer?.fwMinor) return line('warn', `Firmware differs from the ${other} (${s.fw} here, ${peer.there.fw} there): update both.`);
   if (peer?.diffs?.length) return line('warn', `Settings differ from the ${other} as last seen (${peer.diffs.map((d) => d.name).join(', ')}): check Other board.`);
   if (isNum(margin) && margin < FAIR_DB) {
-    return line('warn', `Link weak: ${fmt1(margin)} dB above the floor on recent frames. Run Tools → Site survey; raise sf on both boards if it stays under ${FAIR_DB} dB.`);
+    return line('warn', `Link weak: ${fmt1(margin)} dB above the floor on recent frames. Run Link → Site survey; raise sf on both boards if it stays under ${FAIR_DB} dB.`);
   }
   if (s.supply === false) return line('warn', 'The board is running on its LiPo: its supply (VIN) is off.');
   if (s.hang_stage) return line('warn', `The last reset was the watchdog: the board hung in ${words(s.hang_stage)}. Report it with the log.`);

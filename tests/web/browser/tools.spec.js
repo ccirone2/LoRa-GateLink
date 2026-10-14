@@ -1,4 +1,4 @@
-// The Log and Tools tabs: decoded log lines, ping, remote diagnostics and writes, relay tests, link history.
+// The Log, Link and Install tabs: decoded log lines, ping, remote diagnostics and writes, relay tests, link history.
 import { test, expect, openConsole, connect, requests, pushEvent } from './helpers.js';
 
 test('log events are shown decoded, and the download keeps the board’s own form', async ({ page }) => {
@@ -29,7 +29,7 @@ test('the board log is fetched and decoded', async ({ page }) => {
 test('ping shows round trip, both ends and the frequency error; another board clears them', async ({ page }) => {
   await openConsole(page, [{ role: 'house' }, { role: 'gate' }]);
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await page.locator('#btnPing').click();
   await expect(page.locator('#pingRtt')).toHaveText('142 ms');
   await expect(page.locator('#pingHere')).toHaveText('-61 dBm / 9.3 dB');
@@ -43,7 +43,7 @@ test('ping shows round trip, both ends and the frequency error; another board cl
 test('remote diagnostics and a remote write report back', async ({ page }) => {
   await openConsole(page);
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await page.locator('#btnDiag').click();
   await expect(page.locator('#diagOut')).toContainText('fw 0.13.8 · up 1h 0m');
   await page.locator('#remParam').selectOption('pulse_ms');
@@ -56,7 +56,12 @@ test('remote diagnostics and a remote write report back', async ({ page }) => {
 test('a gate relay test asks first, then pulses', async ({ page }) => {
   await openConsole(page, [{ role: 'gate' }]);
   await connect(page, 'gate');
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-install').click();
+  // Next to the gate's wiring, with its inputs as the board reads them.
+  await expect(page.locator('[data-wiring=gate]')).toHaveClass(/active/);
+  await expect(page.locator('#checkRole')).toHaveText('the connected gate board');
+  await expect(page.locator('#ioCheck')).toContainText('IN1 · Open limit');
+  await expect(page.locator('#btnK2')).toHaveText('Pulse K2 (CLOSE)');
   await page.locator('#btnK2').click();
   await expect.poll(() => page.dialogs.length).toBe(1);
   expect(page.dialogs[0]).toContain('pulse the opener CLOSE input');
@@ -67,7 +72,7 @@ test('a gate relay test asks first, then pulses', async ({ page }) => {
 test('link history loads every page and draws the chart, tiles and table', async ({ page }) => {
   await openConsole(page, [{ role: 'house', histBuckets: 30 }]);
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await page.locator('#btnHistLoad').click();
   await expect(page.locator('#histBody')).toBeVisible();
   await expect(page.locator('#histTable tbody tr')).toHaveCount(30);
@@ -86,7 +91,7 @@ test('link history loads every page and draws the chart, tiles and table', async
 test('link history marks where the board reset, and the times before it as earlier', async ({ page }) => {
   await openConsole(page, [{ role: 'gate', histBuckets: 20, histResetAt: 15 }]);
   await connect(page, 'gate');
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await page.locator('#btnHistLoad').click();
   await expect(page.locator('#histChart line.reset')).toHaveCount(1);
   await expect(page.locator('#histLegend')).toContainText('board reset');

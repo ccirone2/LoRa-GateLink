@@ -16,7 +16,7 @@ const touched = (page) => page.evaluate(() => window.__fake.ports[0].opens.inclu
 test('a file that isn’t an image for this board is refused', async ({ page }) => {
   await openConsole(page);
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-board').click();
   await page.locator('#fwFile').setInputFiles({ name: 'sketch.hex', mimeType: 'application/octet-stream',
     buffer: Buffer.from(':100000000C9434000C9446000C9446000C9446006A\n'.repeat(80)) });
   await expect(page.locator('#toast')).toContainText('not a firmware image for this board');
@@ -26,7 +26,7 @@ test('a file that isn’t an image for this board is refused', async ({ page }) 
 test('an image without the GateLink marker needs a confirmation', async ({ page }) => {
   await openConsole(page, [{ role: 'house', cfgStore: 'internal' }], { dismissDialogs: true });
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-board').click();
   await page.locator('#fwFile').setInputFiles({ name: 'blink.bin', mimeType: 'application/octet-stream', buffer: image({ marker: '' }) });
   await expect.poll(() => page.dialogs.length).toBe(1);
   expect(page.dialogs[0]).toContain('has no GateLink version marker');
@@ -37,7 +37,7 @@ test('an image without the GateLink marker needs a confirmation', async ({ page 
 test('without a marker, a board keeping its config on the flash chip is warned that pre-0.5.0 loses it', async ({ page }) => {
   await openConsole(page, [{ role: 'house' }], { dismissDialogs: true });
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-board').click();
   await page.locator('#fwFile').setInputFiles({ name: 'GateLink-0.4.2.bin', mimeType: 'application/octet-stream',
     buffer: image({ marker: '' }) });
   await expect.poll(() => page.dialogs.length).toBe(1);
@@ -47,7 +47,7 @@ test('without a marker, a board keeping its config on the flash chip is warned t
 test('flashing an older image says so before anything happens', async ({ page }) => {
   await openConsole(page, [{ role: 'house', fw: '0.13.6' }], { dismissDialogs: true });
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-board').click();
   await page.locator('#fwFile').setInputFiles({ name: 'old.bin', mimeType: 'application/octet-stream',
     buffer: image({ marker: 'GATELINK_FW=0.12.1' }) });
   await expect.poll(() => page.dialogs.length).toBe(1);
@@ -76,7 +76,7 @@ for (const [what, tweak, message] of MISMATCHES) {
     await serveLatest(page, tweak(latest), bin);
     await openConsole(page);
     await connect(page);
-    await page.locator('#tabbtn-tools').click();
+    await page.locator('#tabbtn-board').click();
     await page.locator('#btnFwLatest').click();
     await expect(page.locator('#toast')).toContainText(message);
     expect(page.dialogs).toEqual([]); // refused before asking to flash
@@ -89,7 +89,7 @@ test('Install latest offers the bundled release, checks it, then asks', async ({
   await serveLatest(page, { version: '0.14.0', file: 'GateLink-v0.14.0.bin', sha256: await sha256(bin), size: bin.length }, bin);
   await openConsole(page, [{ role: 'house', fw: '0.13.6' }], { dismissDialogs: true });
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-board').click();
   await expect(page.locator('#btnFwLatest')).toHaveText('Install 0.14.0');
   await expect(page.locator('#fwLatest')).toHaveText('0.14.0 · update available');
   await page.locator('#btnFwLatest').click();

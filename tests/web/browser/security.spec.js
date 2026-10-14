@@ -1,4 +1,4 @@
-// The Security tab: key ids (the board's and the field's), the weak-key check, writing a key and checking the board
+// The Board tab's link key card: key ids (the board's and the field's), the weak-key check, writing a key and checking the board
 // took it, and encrypted backups (save: a download; restore: a file) through the passphrase dialog.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -9,14 +9,14 @@ const PY_BACKUP = fileURLToPath(new URL('../../tools/fixtures/key-backup-v1-pyth
 const PASS = 'correct horse battery staple';
 const DEFAULT_ID = fixture.key.vectors.find(([k]) => k === fixture.key.default)[1];
 
-async function openSecurity(page, boards) {
+async function openKeyCard(page, boards) {
   await openConsole(page, boards);
   await connect(page);
-  await page.locator('#tabbtn-security').click();
+  await page.locator('#tabbtn-board').click();
 }
 
 test('shows the board\'s key id, and whether the key in the field is the same', async ({ page }) => {
-  await openSecurity(page);
+  await openKeyCard(page);
   await expect(page.locator('#secKeyId')).toHaveText(DEFAULT_ID);
   await page.locator('#keyInput').fill(fixture.key.default.toUpperCase().match(/../g).join(':'));
   await expect(page.locator('#keyHint')).toHaveText(`Key id ${DEFAULT_ID}, the same as this board’s.`);
@@ -25,7 +25,7 @@ test('shows the board\'s key id, and whether the key in the field is the same', 
 });
 
 test('a board without a key says so; disconnected, nothing of it is shown', async ({ page }) => {
-  await openSecurity(page, [{ role: 'house', keySet: false }]);
+  await openKeyCard(page, [{ role: 'house', keySet: false }]);
   await expect(page.locator('#secKeyId')).toHaveText('no key');
   await expect(page.locator('#secKeySet')).toHaveText('no (link disabled)');
   await expect(page.locator('#secStore')).toContainText('flash chip');
@@ -34,7 +34,7 @@ test('a board without a key says so; disconnected, nothing of it is shown', asyn
 });
 
 test('firmware before key ids: the write is reported without a check', async ({ page }) => {
-  await openSecurity(page, [{ role: 'house', fw: '0.13.5' }]);
+  await openKeyCard(page, [{ role: 'house', fw: '0.13.5' }]);
   await expect(page.locator('#secKeyId')).toHaveText('firmware too old to say');
   await page.locator('#keyInput').fill('00112233445566778899aabbccddeeff');
   await expect(page.locator('#keyHint')).toHaveText('Key id fa60d1a7.');
@@ -43,7 +43,7 @@ test('firmware before key ids: the write is reported without a check', async ({ 
 });
 
 test('writing a key checks the board reports its id', async ({ page }) => {
-  await openSecurity(page);
+  await openKeyCard(page);
   await page.locator('#keyInput').fill('00112233445566778899aabbccddeeff');
   await page.locator('#btnKeySet').click();
   await expect(page.locator('#toast')).toHaveText(
@@ -62,7 +62,7 @@ test('writing a key checks the board reports its id', async ({ page }) => {
 });
 
 test('a weak key is flagged and not written', async ({ page }) => {
-  await openSecurity(page);
+  await openKeyCard(page);
   await page.locator('#keyInput').fill('000102030405060708090a0b0c0d0e0f');
   await expect(page.locator('#keyInput')).toHaveAttribute('aria-invalid', 'true');
   await expect(page.locator('#keyHint')).toContainText('Weak key: the bytes count up by one');
@@ -77,7 +77,7 @@ test('a weak key is flagged and not written', async ({ page }) => {
 });
 
 test('Generate makes a key with an id; Save encrypted backup downloads it, encrypted', async ({ page }) => {
-  await openSecurity(page);
+  await openKeyCard(page);
   await page.locator('#btnKeyGen').click();
   const key = await page.locator('#keyInput').inputValue();
   await expect(page.locator('#keyHint')).toHaveText(/^Key id [0-9a-f]{8}; this board has a different key/);
@@ -110,7 +110,7 @@ test('Generate makes a key with an id; Save encrypted backup downloads it, encry
 });
 
 test('cancelling the passphrase dialog saves nothing', async ({ page }) => {
-  await openSecurity(page);
+  await openKeyCard(page);
   await page.locator('#keyInput').fill(fixture.key.default);
   let downloads = 0;
   page.on('download', () => downloads++);
@@ -127,7 +127,7 @@ test('cancelling the passphrase dialog saves nothing', async ({ page }) => {
 });
 
 test('Restore from backup fills the key field (a Python-made backup); Write then sets it', async ({ page }) => {
-  await openSecurity(page);
+  await openKeyCard(page);
   await page.locator('#keyRestoreFile').setInputFiles(PY_BACKUP);
   await expect(page.locator('#passDialog')).toBeVisible();
   await expect(page.locator('#passIntro')).toContainText('key-backup-v1-python.glkey: key fa60d1a7');
@@ -146,7 +146,7 @@ test('Restore from backup fills the key field (a Python-made backup); Write then
 });
 
 test('a file that isn\'t a backup is refused before any passphrase', async ({ page }) => {
-  await openSecurity(page);
+  await openKeyCard(page);
   await page.locator('#keyRestoreFile').setInputFiles({ name: 'config.json', mimeType: 'application/json',
     buffer: Buffer.from('{"params":{}}') });
   await expect(page.locator('#toast')).toHaveText('config.json: not a GateLink key backup');
@@ -155,7 +155,7 @@ test('a file that isn\'t a backup is refused before any passphrase', async ({ pa
 
 test('backups work without a board', async ({ page }) => {
   await openConsole(page);
-  await page.locator('#tabbtn-security').click();
+  await page.locator('#tabbtn-board').click();
   await expect(page.locator('#btnKeyBackup')).toBeEnabled();
   await expect(page.locator('#keyRestoreFile')).toBeEnabled();
   await expect(page.locator('#btnKeySet')).toBeDisabled();

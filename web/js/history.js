@@ -1,4 +1,4 @@
-// The Tools tab's link history card: the board's hourly link record (hist.get, docs/console.md#link-history),
+// The Link tab's history card: the board's hourly link record (hist.get, docs/console.md#link-history),
 // fetched page by page, drawn as one SVG of stacked panels on a shared time axis so one crosshair and tooltip serve
 // them all. The here/peer colours (--chart-here/--chart-peer) were chosen with a colour-blind palette check.
 import { $, esc, fmtDur, fmtNum, sum, niceScale, download } from './util.js';
@@ -387,7 +387,7 @@ export function initHistory() {
   chart.addEventListener('pointerleave', () => { histAt = -1; drawHistHover(); });
   chart.addEventListener('keydown', histKey);
   chart.addEventListener('blur', () => { histAt = -1; drawHistHover(); });
-  // Redraw at the new width (text stays at its real size); also when the Tools tab is first shown.
+  // Redraw at the new width (text stays at its real size); also when the Link tab is first shown.
   let histWidth = 0;
   new ResizeObserver(() => {
     const w = $('histPlot').clientWidth; // a redraw changes the height only, which mustn't trigger another

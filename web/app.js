@@ -3,10 +3,11 @@
 // controls (its init function). In js/:
 //   serial.js   port, requests, board picker, reconnect     board.js    the board's info, role, header line, title
 //   status.js   Status tab                                   config.js   Config tab (settings.js: groups, help text)
-//   security.js Security tab (keys.js: key ids, backups)     log.js      Log tab (logdecode.js: events as text)
-//   wiring.js   Install tab (tracks pins.h)                  peer.js     the other board, as last seen
-//   Tools tab:  ping.js, surveycard.js (survey.js: the verdict, twin of tools/gatelink_client/survey.py),
-//               remote.js (the gate over the link), relay.js, history.js, firmware.js (samba.js: bootloader)
+//   log.js      Log tab (logdecode.js: events as text)       peer.js     the other board, as last seen
+//   Link tab:   history.js, surveycard.js (survey.js: the verdict, twin of tools/gatelink_client/survey.py),
+//               ping.js, remote.js (the gate over the link)
+//   Board tab:  security.js (keys.js: key ids, backups), firmware.js (samba.js: bootloader)
+//   Install tab: wiring.js (tracks pins.h), relay.js
 //   healthline.js the Status tab's verdict   ui.js log view, toasts   state.js shared state   util.js helpers
 import { $ } from './js/util.js';
 import { S } from './js/state.js';
@@ -80,6 +81,9 @@ serial.hooks.onClosing = () => {
 serial.hooks.onClosed = () => setConnected(false);
 serial.hooks.onEvent = (ev) => { if (Object.hasOwn(EVENTS, ev.event)) EVENTS[ev.event](ev); };
 
+// Tabs that were split up (2026-10), so their links and bookmarks still land somewhere sensible.
+const OLD_TABS = { tools: 'link', security: 'board' };
+
 // Tabs: click or arrow keys (roving tabindex, per the ARIA tabs pattern).
 function initTabs() {
   const tabs = [...document.querySelectorAll('#tabs [role=tab]')];
@@ -105,7 +109,9 @@ function initTabs() {
     });
   });
   const tabFromHash = () => {
-    const b = tabs.find((x) => `#${x.dataset.tab}` === location.hash);
+    const h = location.hash.slice(1);
+    const name = Object.hasOwn(OLD_TABS, h) ? OLD_TABS[h] : h;
+    const b = tabs.find((x) => x.dataset.tab === name);
     if (b) selectTab(b);
   };
   tabFromHash();

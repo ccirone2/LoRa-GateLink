@@ -30,7 +30,7 @@ alone, a full-power transmit with a relay energized has reset boards (hardware.m
 
 ### How
 
-**Web console:** Tools → **Site survey**. Choose 1, 2 or 5 minutes and **Start survey**. It sends a ping every
+**Web console:** Link → **Site survey**. Choose 1, 2 or 5 minutes and **Start survey**. It sends a ping every
 2 s, one at a time (the board reports a pong only for its latest ping); a ping without an answer within 8 s counts
 as lost.
 The ping card pauses while it runs (auto-ping resumes after). **Stop survey** ends it early and keeps what it has; so
@@ -90,7 +90,7 @@ With fewer than 20 pings answered the result is rough: survey longer.
      settings must match, and they can't be written over the link, so change one board, then the other over its
      own USB: the link is down in between.
 - **Pings lost with a good margin:** frames are being lost to something else. Check the antenna cables and the
-  noise floor (Status → Noise floor on each board; on the house, Tools → Link history also shows the gate's).
+  noise floor (Status → Noise floor on each board; on the house, Link → Link history also shows the gate's).
 
 Keep the report: the command-retry item in [TODO.md](../TODO.md) waits on real install-site RF numbers.
 
@@ -120,7 +120,7 @@ the web console (it works without a board) before powering up.
   the I/O card shows IN1 (open limit) and IN2 (closed limit) lit at their limits.
 - [ ] AC power sense (`power_sense` on): unplug the AC supply: the I/O card shows IN3 (AC power) off, and OPEN
   and CLOSE still run on the opener's battery; plug it back. If IN3 isn't wired, turn `power_sense` off.
-- [ ] Tools → Relay test, with someone watching the gate: K1 opens it, K2 closes it.
+- [ ] Install → Check the wiring → relay test, with someone watching the gate: K1 opens it, K2 closes it.
 
 ### House board
 

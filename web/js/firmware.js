@@ -1,4 +1,4 @@
-// The Tools tab's firmware card: install the release bundled with the page, or a .bin, over the board's bootloader.
+// The Board tab's firmware card: install the release bundled with the page, or a .bin, over the board's bootloader.
 import { $, cmpVer, sleep } from './util.js';
 import { S } from './state.js';
 import { logLine, toast, guard } from './ui.js';

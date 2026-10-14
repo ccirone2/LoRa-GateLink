@@ -102,7 +102,7 @@ shield, antenna, USB cable or channel, with lower SNR than its partner (5.5–7.
 
 **Still manual:** status LED patterns and **Identify**; the web console itself (Config toggles: flip one → its
 row is highlighted as unsaved, Apply → the highlight clears and Status reflects it, Save and reboot → it keeps
-its position, Export shows it as 0/1; Tools → Send replay; Tools → remote setting); a board really unpowered
+its position, Export shows it as 0/1; Board → Developer → Send replay; Link → remote setting); a board really unpowered
 rather than a simulated outage; the Shelly's real 12 V removed (unless the suite has `GATELINK_HA_POWER_ENTITY`).
 
 - House IN1 to 3.3 V (Shelly ON) → gate K1 pulses once; release → gate K2 pulses once.
@@ -124,7 +124,7 @@ rather than a simulated outage; the Shelly's real 12 V removed (unless the suite
   no AC power, position unknown*, and the Shelly is resynced. Re-jumper → state follows the limits again. *e2e:
   `test_ac_loss_limits_trusted`, `test_ac_loss_commands_run`,
   `test_power_loss_at_rest`, `test_power_loss_mid_travel`.*
-  Manual: turn the gate's `power_sense` toggle off and Apply (or from the house: Tools → remote setting
+  Manual: turn the gate's `power_sense` toggle off and Apply (or from the house: Link → remote setting
   `power_sense` = 0) → IN3 is ignored. *e2e: `test_options.py`*
 - Shelly power sense: with the gate open, the Shelly on and the house board on its LiPo, remove the Shelly's 12 V →
   house log `supply 0` and `ctrl_power 0` ~0.2 s before `ctrl` b=1 (the relay drop, ignored); `ctrl_power` b=2
@@ -133,7 +133,7 @@ rather than a simulated outage; the Shelly's real 12 V removed (unless the suite
   `GATELINK_HA_POWER_ENTITY` is set)*
 - Unpower the gate board → after `link_timeout_s` (at least 2.5 × the gate's `heartbeat_s`) house K2 releases
   (sensor open), log `link_down`. *e2e: `test_link_loss_at_rest` (simulated outage)*
-- Tools → Send replay on one board → the other board's replay counter increases (or it re-ACKs).
+- Board → Developer → Send replay on one board → the other board's replay counter increases (or it re-ACKs).
   *e2e: `test_replayed_frames_rejected`*
 - Different key on one board → *Peer verified* stays no and `mac_fail` climbs. *e2e: `test_wrong_key_rejected`*
 - Reboot the house board with IN1 jumpered to 3.3 V → the gate does not move.

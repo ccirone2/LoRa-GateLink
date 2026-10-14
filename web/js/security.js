@@ -1,5 +1,5 @@
-// The Security tab: the key field and its id, the board's key id, writing the key, encrypted key backups (the crypto
-// is in keys.js), and the replay self-test.
+// The Board tab's link key card: the key field and its id, the board's key id, writing the key, encrypted key
+// backups (the crypto is in keys.js); and the replay self-test (under Developer).
 import { $, download } from './util.js';
 import { S } from './state.js';
 import { toast, guard } from './ui.js';

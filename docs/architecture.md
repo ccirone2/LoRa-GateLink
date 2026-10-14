@@ -224,13 +224,15 @@ each board event); each card's module wires its own controls in its `init…()` 
 `serial.js` transport, picker and reconnect; `board.js` the board's info reply, role, header line and title (cards that
 show info register `onInfo`, since they import `refreshInfo` from it; `serial.js` knows nothing of the tabs);
 `status.js` the Status tab, with `healthline.js` its one-line verdict and `peer.js` the other board as last seen;
-`config.js` the Config tab, with `settings.js` setting groups/help; `security.js` the Security tab (and the replay
-self-test), with `keys.js` the key ids and encrypted backups ([key-management.md](key-management.md)); `log.js` the
-Log tab, with `logdecode.js` log events as text; `wiring.js` the Install tab (it imports nothing of the page:
-`tools/docgen.py` reads its tables in node). The Tools tab's cards: `ping.js`, `surveycard.js` (the site survey run;
-`survey.js` its verdict, twin of `tools/gatelink_client/survey.py`, shared vectors in `tests/tools/fixtures/`;
-[install.md](install.md)), `remote.js` (the gate's diagnostics and remote writes, from the house), `relay.js`,
-`history.js`, `firmware.js` + `samba.js`. `ui.js` holds the log view (every module writes to it), toasts and the
+`config.js` the Config tab, with `settings.js` setting groups/help; `log.js` the Log tab, with `logdecode.js` log
+events as text. The Link tab: `history.js`, `surveycard.js` (the site survey run; `survey.js` its verdict, twin of
+`tools/gatelink_client/survey.py`, shared vectors in `tests/tools/fixtures/`; [install.md](install.md)), `ping.js`,
+`remote.js` (the gate's diagnostics and remote writes, from the house). The Board tab: `security.js` the link key card
+(and the replay self-test under *Developer*), with `keys.js` the key ids and encrypted backups
+([key-management.md](key-management.md)); `firmware.js` + `samba.js`; factory reset (wired by `config.js`). The
+Install tab: `wiring.js` (it imports nothing of the page: `tools/docgen.py` reads its tables in node) and `relay.js`
+(the wiring check's relay test; `status.js` fills its inputs). Links to the tabs the console had before (`#tools`,
+`#security`) open their successors. `ui.js` holds the log view (every module writes to it), toasts and the
 click guard; `util.js` small helpers; shared state is `state.js`'s `S`. Controls marked `data-offline` stay usable
 without a board; connecting enables, and disconnecting disables, every other control in `main`.
 Lint and tests: `npm test` (ESLint, `node --test` unit tests of the pure modules, Playwright browser tests of the
@@ -244,7 +246,7 @@ Notable pieces:
 - The Install tab is driven by the `WIRING` table (keep it in sync with `pins.h` and the role behaviour).
 - 0/1 params without a `SELECTS` entry render as toggle checkboxes, so read/write form fields through
   `fieldValue`/`setField`, not `.value`.
-- The Tools tab's firmware card flashes boards over the SAM-BA bootloader (`SamBa`, `flashFirmware`: 1200-baud
+- The Board tab's firmware card flashes boards over the SAM-BA bootloader (`SamBa`, `flashFirmware`: 1200-baud
   touch, bootloader PID 0x0059 needs its own port grant, `X`/`S`+`Y`/`Z` at 0x2000) and recognises images by
   `FW_MARKER` (`GATELINK_FW=x.y.z`, `config.cpp`); the `pages` workflow bundles the latest release `.bin` +
   `firmware/latest.json` into the deploy after each release.

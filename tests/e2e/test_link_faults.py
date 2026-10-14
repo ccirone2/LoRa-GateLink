@@ -12,6 +12,7 @@ from gatelink_client.wire import ACT_OPEN, GS
 LINK_TIMEOUT_S = PROFILE_COMMON["link_timeout_s"]
 HEARTBEAT_S = PROFILE_COMMON["heartbeat_s"]
 CMD_TTL_S = PROFILE_COMMON["cmd_ttl_s"]
+MISSED_OPEN_S = 5  # MISSED_OPEN_MS (role_house.cpp): how long the sensor shows a move it never heard
 
 
 def test_link_loss_at_rest(rig):
@@ -99,6 +100,37 @@ def test_gate_moved_during_outage(rig):
     rig.wait_ctrl(True, timeout=30)
     rig.expect_no("gate", "pulse", since=m)
     rig.latency("link restored -> house learns missed move", seen["t"] - t_restore)
+
+
+def test_move_hidden_by_an_outage_shown_late(rig):
+    """House linkloss_open 0, so K2 stays closed through an outage, which hides an open-and-close cycle (external
+    moves): the alarm never saw the gate open. When frames return, the gate's count of departures from closed in its
+    STATUS is one up, and the house opens K2 for MISSED_OPEN_S with the gate closed (log missed_move), once."""
+    rig.expect_commands(0)
+    m = rig.mark()
+    try:
+        rig.house.config_set(linkloss_open=0)
+        with outage(rig):
+            rig.sim.open_gate()
+            rig.wait_gate("open", timeout=SIM_TRAVEL_S + 5)
+            rig.sim.close_gate()
+            rig.wait_gate("closed", timeout=SIM_TRAVEL_S + 5)
+            st = rig.house.status()
+            assert st["gate"] == "closed" and st["io"]["k2"], "the house can't have heard about it, nor K2 opened"
+            t_restore = rig.mark()
+        missed = rig.wait_log("house", "missed_move", since=t_restore, timeout=HEARTBEAT_S + 15)
+        assert missed["a"] == 1, f"missed_move counted {missed['a']} departures, expected 1"
+        rig.wait_house(3, "K2 open for the missed move", gate="closed", link_up=True, io__k2=False)
+        rig.wait_house(MISSED_OPEN_S + 3, "K2 closed again", gate="closed", io__k2=True)
+        shown = rig.mark() - missed["t"]
+        assert MISSED_OPEN_S - 0.5 <= shown <= MISSED_OPEN_S + 1.5, f"K2 open {shown:.2f} s, expected {MISSED_OPEN_S} s"
+        rig.latency("link restored -> house shows the hidden move", missed["t"] - t_restore)
+        rig.latency("missed move: K2 open (polled)", shown)
+    finally:
+        rig.house.config_set(linkloss_open=1)
+    rig.expect_no("house", "missed_move", seconds=HEARTBEAT_S + 1, since=missed["t"] + 0.5)
+    rig.wait_house(5, gate="closed", link_up=True, io__k2=True, io__k1=False, ctrl=False)
+    rig.expect_no("gate", "pulse", since=m)
 
 
 def test_replayed_frames_rejected(rig):

@@ -31,7 +31,7 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | 1 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
 | 2 | F14 | Catch faults the inputs alone don't show | M | |
 | 3 | F17 | Tell the alarm about a move it missed | M | best with F6 (one frame change) |
-| 4 | F6 | Keep the link private and commands fresh | L | decide F8's addressing with it |
+| 4 | F6 | Keep the link private and commands fresh | L | |
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
 | 5 | C3 | Help the installer aim the antenna | S | |
 | 6 | B1 | Repeatable RF tests | S | |
@@ -53,8 +53,8 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | 21 | F16 | Ignore a Shelly that reboots without losing power | M | |
 | 22 | F5 | Change radio settings without stranding the link | L | |
 | 23 | F13 | Work with controllers that pulse | L | |
-| 24 | F8 | Serve more than one gate from one house | L | the addressing decided with F6 |
 | **Tier 4: later, or waiting on a decision** | | | | |
+| 24 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
 | 25 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
 | 26 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
 | 27 | C4 | Check a board still runs genuine firmware | M | |
@@ -183,8 +183,8 @@ and recorded can still be delivered later inside the replay window (`jam-and-del
   `cmd_ttl_s`.
 - Challenges: 128 bits, bound to the challenger's session, and never re-verify a session superseded since boot.
 
-**Cost / risk.** A MINOR both boards need together. Decide F8's addressing and F17's STATUS field in the same change,
-so the wire format changes once before 1.0.
+**Cost / risk.** A MINOR both boards need together. Decide F17's STATUS field in the same change, so the wire format
+changes once before 1.0 (F8's addressing needs no wire change: decided 2026-10-13, in F8).
 
 ### F7: Update the gate's firmware without visiting it
 
@@ -213,13 +213,26 @@ it its own threat-model section, and host-test power cuts mid-copy.
 **Goal.** One house end controls and reports several gates, e.g. a pedestrian gate beside the drive gate: the obvious
 growth case.
 
-**Today.** Node addresses are fixed by role (house 1, gate 2) and STATUS carries one gate.
+**Today.** Node addresses are fixed by role (house 1, gate 2, `myNodeId`/`peerNodeId`), and the house keeps one
+peer's link state and one gate's role state.
 
-**How.** Make addressing one-to-many. Each gate needs its own controller input, contact sensor and fault output at the
-house, which the relay shield doesn't have (H1).
+**How.**
+- Give each gate its own node id (a setting) and keep the house's link state per peer: session, replay window,
+  challenge, ACK memo, reliable slots and the gate clock its commands are stamped with (F6).
+- Keep the role state per gate as well, and give each gate its own controller input, contact sensor and fault output
+  at the house, which the relay shield doesn't have (H1).
+- Give each gate its own key, held by the house beside the others, so a gate box opened exposes only that gate's link
+  (a config record change: the record must still fit its 256-byte page).
 
-**Cost / risk.** A protocol change, so decide the addressing with F6, before 1.0, even if it's built later. Each extra
-gate end costs about $100.
+**Cost / risk.** Firmware and hardware, not a frame-format change: a house that serves several gates still talks to a
+single one as before. Each extra gate end costs about $110–125 (see Hardware). Build it only when this site has a
+second gate (README "Goals": this site first).
+
+**Decided 2026-10-13 (`/implement`):** the addressing needs no wire change, so it no longer waits on F6. The frame
+header's `src` and `dst` bytes already address up to 255 nodes, and each gate sends its own STATUS frame, so STATUS
+needs no gate index. F6 keeps the per-node separation by construction (its CTR nonce includes `src` and `dst`, and
+the session permutation already includes the node id). It waits on H1 and on a real second gate, so it moves to
+tier 4.
 
 ### F11: Firmware ready for a second board
 

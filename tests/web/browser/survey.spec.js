@@ -1,4 +1,4 @@
-// The Tools tab's site survey card: pings for the chosen time on a fake clock, judges both directions, pauses the ping
+// The Link tab's site survey card: pings for the chosen time on a fake clock, judges both directions, pauses the ping
 // card meanwhile, counts unanswered pings, stops on request and on disconnect, and copies a plain-text report.
 import { test, expect, openConsole, connect, requests, fixture } from './helpers.js';
 
@@ -8,7 +8,7 @@ async function startSurvey(page, boards, minutes = '1') {
   await page.clock.install(); // runs on its own until a test moves it on with runFor
   await openConsole(page, boards);
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await page.locator('#surveyMins').selectOption(minutes);
   await page.locator('#btnSurvey').click();
   await expect(page.locator('#btnSurvey')).toHaveText('Stop survey');
@@ -20,7 +20,7 @@ test('a survey pings for the chosen time, one at a time, and judges both directi
   await page.clock.install();
   await openConsole(page, [{ role: 'house', pongs: [{ rssi: -92, snr: 6.5, peer_rssi: -95, peer_snr: 3 }] }]);
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await page.locator('#pingAuto').check();
   await page.locator('#btnSurvey').click(); // 2 min, the default
   await expect(page.locator('#btnSurvey')).toHaveText('Stop survey');
@@ -101,7 +101,7 @@ test('a role string from the board reaches the table as text', async ({ page }) 
   await page.locator('#btnConnect').click();
   await page.locator('#pickList .pick-item.ok .pick-main').click();
   await expect(page.locator('#devline')).toContainText('<i>x</i>');
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await page.locator('#btnSurvey').click();
   await expect(page.locator('#btnSurvey')).toHaveText('Stop survey');
   await page.clock.runFor(5000);
@@ -123,7 +123,7 @@ test('a disconnect ends the survey and keeps what it found; another board clears
   expect(await pings(page)).toBe(n);
 
   await connect(page, 'gate'); // Connect ends the auto-reconnect
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await expect(page.locator('#surveyBody')).toBeHidden();
   await expect(page.locator('#surveyStep')).toHaveText('');
   await expect(page.locator('#btnSurveyCopy')).toBeDisabled();
@@ -132,7 +132,7 @@ test('a disconnect ends the survey and keeps what it found; another board clears
 test('a survey needs the link up', async ({ page }) => {
   await openConsole(page, [{ role: 'gate', status: { link: { ...fixture.status_common.link, verified: false } } }]);
   await connect(page, 'gate');
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await page.locator('#btnSurvey').click();
   await expect(page.locator('#toast')).toContainText('Survey needs the link up');
   await expect(page.locator('#btnSurvey')).toHaveText('Start survey');

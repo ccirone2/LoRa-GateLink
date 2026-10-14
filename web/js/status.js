@@ -113,7 +113,8 @@ export function renderStatus(s) {
 
   const labels = IO_LABELS[s.role] || IO_LABELS.unset;
   const io = s.io || {};
-  $('ioList').innerHTML = ['in1', 'in2', 'in3', 'in4', 'k1', 'k2'].filter((k) => k in io)
+  // Also on the Install tab, next to the relay test.
+  $('ioList').innerHTML = $('ioCheck').innerHTML = ['in1', 'in2', 'in3', 'in4', 'k1', 'k2'].filter((k) => k in io)
     .map((k) => `<div class="kv"><span>${labels[k]}</span>${pill(io[k])}</div>`).join('');
 
   $('bRole').textContent = s.reboot_pending ? `${s.role} (reboot to apply saved role)` : s.role;

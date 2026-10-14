@@ -1,4 +1,4 @@
-// The relay test card: pulse K1 or K2 for a set time (relay.test).
+// The relay test, on the Install tab's wiring check: pulse K1 or K2 for a set time (relay.test).
 import { $ } from './util.js';
 import { S } from './state.js';
 import { toast, guard } from './ui.js';
@@ -20,6 +20,7 @@ async function relayTest(k) {
 
 // The board's role: what the relays are wired to.
 export function showRelayRole(role) {
+  $('checkRole').textContent = role === 'unset' ? 'the connected board (no role yet)' : `the connected ${role} board`;
   $('relayHint').textContent = HINT[role] || '';
   $('btnK1').textContent = role === 'gate' ? 'Pulse K1 (OPEN)' : 'Pulse K1';
   $('btnK2').textContent = role === 'gate' ? 'Pulse K2 (CLOSE)' : 'Pulse K2';

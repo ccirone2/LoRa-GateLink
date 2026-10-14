@@ -354,24 +354,21 @@ names in `web/`.)
 **Goal.** The installer finds each job in one place: what is wrong now, the settings, the link's health over time,
 the board's upkeep, and the wiring with a way to check it. Diagnosability, for the installer.
 
-**Today.** Cards were added where there was room. The Tools tab holds seven of them for four jobs (install checks,
-link diagnosis, firmware, a developer's replay test), with the link history, the best diagnostic, mid-page. Status
-shows the controller input and power twice, and the key warning both as a banner and in the health line. Config shows
-both roles' settings, the input inversions (which must stay off) as prominently as the rest, and raw parameter names.
-Reboot and factory reset sit in the Config toolbar. On a phone the tab bar cuts off Install, the one tab that works
-there.
+**Today.** The tabs follow the jobs (Status, Link, Log, Config, Board, Install), and each card's module wires its own
+controls, so a card moves with its markup. Left: Status shows the controller input and power twice, and the key
+warning both as a banner and in the health line. Config shows both roles' settings, the input inversions (which must
+stay off) as prominently as the rest, and raw parameter names. Install is reference plus a wiring check, with nothing
+to say what's done.
 
-**How.** In steps, each its own pull request; the page's behaviour and the console contract stay as they are. (Each
-card's module already wires its own controls, so a card moves with its markup.)
+Reboot and Export stay on Config, next to Apply and Save (decided 2026-10-13: a saved role needs Save then Reboot,
+and the health line points there); factory reset is on Board, with the key it erases.
 
-1. Split Tools: a **Link** tab (history first, ping, survey, the gate's diagnostics), a **Board** tab (link key and
-   backups, firmware, reboot and factory reset, the replay test under *Developer*), and the relay test next to the
-   wiring on **Install** with the live inputs. Old `#tools`, `#security` links land on the new tabs. Update the tab
-   names the health line, the hints and `docs/install.md` quote.
-2. Status: drop the repeated rows and the key banner; keep the health line in view on every tab.
-3. Config: only the connected role's settings (all of them with no role), the inversions and `uart_console` under
+**How.** In steps, each its own pull request; the page's behaviour and the console contract stay as they are.
+
+1. Status: drop the repeated rows and the key banner; keep the health line in view on every tab.
+2. Config: only the connected role's settings (all of them with no role), the inversions and `uart_console` under
    *Advanced*, a readable label with the unit beside each name.
-4. Install: a short checklist whose ticks come from the board (role, key, other board matching, link verified, survey
+3. Install: a short checklist whose ticks come from the board (role, key, other board matching, link verified, survey
    fair or better), each step linking to where it's done; phones open on Install.
 
 **Cost / risk.** The browser tests and docs that name tabs and ids move with each step. Later items have a place:

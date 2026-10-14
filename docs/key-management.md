@@ -6,7 +6,7 @@ key the link is off, so a fresh or reset board can never be commanded.
 
 The key is write-only: `key.set` stores it in the board's SPI flash, and no console command reads it back. This
 page covers how to create, keep, check and replace it. Commands are in [console.md](console.md); the tools are
-`tools/gatelink.py key …` and the web console's **Security** tab.
+`tools/gatelink.py key …` and the web console's **Board** tab.
 
 ## Where the key lives
 
@@ -20,7 +20,7 @@ page covers how to create, keep, check and replace it. Commands are in [console.
 ## Key id
 
 Each board reports a **key id** (`info`, `config.get`; firmware 0.13.8 or later): the first 4 bytes of
-HMAC-SHA256(key, `"GateLink key id v1"`), as 8 hex digits, e.g. `e03fddf7`. The web console shows it on the Security
+HMAC-SHA256(key, `"GateLink key id v1"`), as 8 hex digits, e.g. `e03fddf7`. The web console shows it on the Board
 tab and in the board picker, `gatelink.py ports` lists it for each board, `gatelink.py key id` gives it for the key
 in `~/.gatelink_key`, and every backup file carries it in its name and contents.
 
@@ -71,16 +71,16 @@ firmware too), and the tools never generate one. A random key is weak about once
    it), **Write to board**; then the other board. Tools: `gatelink.py key restore FILE --out ~/.gatelink_key`, then
    `gatelink.py restore` (after a `snapshot`) or `gatelink.py key set house` and `gatelink.py key set gate`, which
    read the key file (never put the key itself on a command line: it lands in shell history and process lists). The link is down from the first write until the second, so the house's contact sensor reads open.
-5. **Verify.** Both boards report the same key id (Security tab, the board picker, `gatelink.py ports`), the same as
+5. **Verify.** Both boards report the same key id (Board tab, the board picker, `gatelink.py ports`), the same as
    the backup's name, and the link comes up (*Peer verified* yes).
 6. **Rotate** (a new key, steps 1–5, then destroy the old backups) when:
    - a board is replaced, lost, stolen, sent away (repair, a loan) or decommissioned: it holds the key in flash.
      Wipe it first if you still can (step 7), but rotate anyway if it was out of your hands;
    - the backup file and its passphrase may both have been exposed, or the passphrase alone;
    - the plaintext key may have leaked: a lost laptop with `~/.gatelink_key`, a key pasted into a chat or a ticket,
-     a screenshot of the Security tab;
+     a screenshot of the Board tab's link key card;
    - a board's key was set from a weak or hand-made value.
-7. **Wipe** a board before it leaves your hands, or for good: **Factory reset** (Config tab) or `config.reset`
+7. **Wipe** a board before it leaves your hands, or for good: **Factory reset** (Board tab) or `config.reset`
    erases the saved config and the key from both flash records, and the link stops at once. Check afterwards that
    the board reports no key (`key_set` false). A board on the program-flash fallback (`cfg_store` `internal`) is
    reset to defaults there.

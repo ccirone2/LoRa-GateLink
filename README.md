@@ -168,13 +168,13 @@ Or flash a release binary (check it first: `sha256sum -c GateLink-vX.Y.Z.bin.sha
 (from the [latest release](https://github.com/ccirone2/LoRa-GateLink/releases/latest)).
 `uv run tools/flash.py GateLink-vX.Y.Z.bin COM5` (needs uv: docs/development.md) does the same with every wait bounded, and checks the board
 comes back reporting that version.
-Without any tools, use the web console's **Tools → Firmware update** (below).
+Without any tools, use the web console's **Board → Firmware update** (below).
 
 Flash the same firmware to both boards. From 0.5.0 the config and key are kept in the board's SPI flash chip
 and **survive firmware uploads**; settings a new firmware doesn't know are dropped and new ones take their
 defaults. Upgrading from an older version erases them once (they lived in program flash), so export config from
 the web page first and re-apply after, or use `uv run tools/gatelink.py snapshot` / `restore`. **Factory
-reset** in the web console (`config.reset`) erases the saved config and key.
+reset** in the web console (Board tab; `config.reset`) erases the saved config and key.
 
 ## Web console
 
@@ -193,7 +193,7 @@ reboot from the console, or if the board drops off USB, the page reconnects to i
 (no re-pairing); **Disconnect** releases the port so `arduino-cli upload` can use it. The browser tab
 title shows the board's role.
 
-**Tools → Firmware update** flashes a board from the browser: **Install** the latest release (the page
+**Board → Firmware update** flashes a board from the browser: **Install** the latest release (the page
 carries its `.bin`) or pick a `.bin` file. The page restarts the board into its bootloader and writes, verifies
 and restarts it, then reconnects and checks it kept its role and key. The first time on a computer the browser
 asks for the bootloader's port (a separate USB device) once. A board already in its bootloader (reset pressed
@@ -201,7 +201,7 @@ twice; the LED fades in and out), for example after an interrupted update, can b
 first. The page refuses files that aren't GateLink firmware for this board; files from before 0.5.1 (no version
 marker) need a confirm.
 
-**Tools → Link history** charts the board's hourly link record (firmware 0.4.0+, up to four days; kept across
+**Link → Link history** charts the board's hourly link record (firmware 0.4.0+, up to four days; kept across
 resets from 0.14.0, a dashed line marking each):
 - received signal and SNR margin above the spreading factor's limit, with the house board also showing what the
   gate received;
@@ -212,11 +212,12 @@ Summary figures above the chart give link-up %, worst SNR margin, resend rate an
 chart or use the arrow keys to read an hour. There is also a table view and CSV download.
 
 Tabs: **Status** (gate, link quality, I/O incl. AC power and spare inputs, house bridge state, board uptime,
-last reset cause, radio TX faults), **Config** (all parameters, with toggle switches for on/off settings;
-apply/save, export/import JSON), **Security** (generate, back up and write the link key; key ids), **Tools** (relay tests, ping with
-RSSI chart, site survey, remote gate diagnostics and settings over LoRa from the house board, replay self-test),
-**Log** (live events and the board's event ring buffer), **Install** (field wiring diagram, terminal
-table and notes for each board; works without a board connected).
+last reset cause, radio TX faults), **Link** (link history, site survey, ping with RSSI chart, and from the house
+board the gate's diagnostics and settings over LoRa), **Log** (live events and the board's event ring buffer),
+**Config** (all parameters, with toggle switches for on/off settings; apply/save, reboot, export/import JSON),
+**Board** (generate, back up and write the link key; key ids; firmware update; factory reset; the replay self-test
+under *Developer*), **Install** (field wiring diagram, terminal table and notes for each board, which work without a
+board connected; and a wiring check: the connected board's inputs and a relay test).
 
 ### First-time setup
 
@@ -225,7 +226,7 @@ table and notes for each board; works without a board connected).
 3. Power senses: on the gate, turn `power_sense` off if IN3 (AC power) isn't wired yet, or the gate reads
    `no_power` while it moves and refuses commands then. On the house, turn `ctrl_power_sense` off until IN2 is wired, or Alarm.com
    commands are ignored (Status: *Controller power: off*). Apply and Save.
-4. Security → **Generate** → **Save encrypted backup…** (keep the passphrase in a password manager) → write the key
+4. Board → **Generate** → **Save encrypted backup…** (keep the passphrase in a password manager) → write the key
    to board A, then write the **same** key to board B: both then show the same key id. The radio link stays off
    until a key is set, so a fresh or reset board can never be commanded. Boards can't read the key back and config
    export doesn't include it, so the backup is the only copy; see [docs/key-management.md](docs/key-management.md)
@@ -233,7 +234,7 @@ table and notes for each board; works without a board connected).
 5. With both powered, Status on either board should show *Peer verified: yes* within a few seconds. If it doesn't,
    *Other board* (once this page has seen both boards) lists what differs: the key id, firmware or a setting that
    must match.
-6. Tools → Ping to check RSSI/SNR. At the install site run Tools → **Site survey**
+6. Link → Ping to check RSSI/SNR. At the install site run Link → **Site survey**
    ([docs/install.md](docs/install.md)) and aim for *good* or *fair* (≥10 dB margin above the SF's sensitivity);
    raise `sf` (and/or `tx_power`) on **both** boards if the link is marginal.
 7. Check end to end, with someone watching the gate: turn the Alarm.com switch on, and the gate should open, the

@@ -212,7 +212,7 @@ After the pull request carrying a new `FW_VERSION` is merged (`/release` in Clau
    builds the firmware at the tag and attaches `GateLink-vX.Y.Z.bin`, `GateLink-vX.Y.Z.bin.sha256` (from v0.13.0)
    and the evidence as `GateLink-vX.Y.Z-evidence.md`. It never replaces a binary already attached unless run by hand
    with `replace` ticked. When it succeeds the `pages` workflow checks the `.bin` against that `.sha256` and redeploys the
-   web console with it and a `firmware/latest.json` (version, file, sha256, size) bundled in (the page can't fetch release assets from github.com: no CORS), so **Tools →
+   web console with it and a `firmware/latest.json` (version, file, sha256, size) bundled in (the page can't fetch release assets from github.com: no CORS), so **Board →
    Firmware update** offers it. They are never committed (`web/firmware/` is ignored).
 
 The web console flashes over Web Serial by speaking the Arduino SAM-BA bootloader protocol itself (`SamBa` in

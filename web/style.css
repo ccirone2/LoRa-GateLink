@@ -94,6 +94,8 @@ main { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .tab.active { display: block; }
 /* Disconnected: the status cards still show the last values; dim them so they don't read as live. */
 body.offline #tab-status .grid { opacity: .55; }
+/* The wiring check is the connected board's: nothing to show without one. */
+body.offline #wiringCheck { display: none; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; min-width: 0; }
@@ -170,7 +172,7 @@ details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 .field input.toggle:disabled { opacity: .5; cursor: default; }
 .field.dirty input.toggle { box-shadow: 0 0 0 2px var(--warn); }
 
-/* Tools tab: ping */
+/* Link tab: ping */
 #rssiChart { width: 100%; height: 90px; margin-top: 8px; background: var(--bg); border-radius: 6px; }
 #rssiChart polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .legend { display: flex; gap: 10px; align-items: center; font-size: 12px; margin-top: 4px; flex-wrap: wrap; }
@@ -178,7 +180,7 @@ details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 .sw.here { background: var(--chart-here); }
 .sw.peer { background: var(--chart-peer); }
 
-/* Tools tab: site survey */
+/* Link tab: site survey */
 .verdict-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin: 6px 0 10px; }
 .verdict { font-size: 22px; font-weight: 700; }
 .verdict.good { color: var(--ok); }
@@ -186,7 +188,7 @@ details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 .verdict.poor { color: var(--bad); }
 #surveyTable td, #surveyTable th { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-/* Tools tab: link history */
+/* Link tab: history */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 4px 0 10px; }
 .tile { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .tile .t-label { font-size: 12px; color: var(--muted); }
@@ -234,7 +236,7 @@ details.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 .hist-table summary { cursor: pointer; color: var(--muted); }
 .hist-table td, .hist-table th { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-/* Tools tab: the gate over the link; Log tab */
+/* Link tab: the gate over the link; Log tab */
 pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 .log { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; height: 60vh; overflow: auto; font-size: 12px; }
 .log div { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -259,6 +261,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 .wiring .w-out, .sw.w-out { stroke: var(--wire-out); background: var(--wire-out); }
 .wiring .w-in, .sw.w-in { stroke: var(--wire-in); background: var(--wire-in); }
 .wiring .w-pwr, .sw.w-pwr { stroke: var(--wire-pwr); background: var(--wire-pwr); }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 8px 24px; align-items: start; }
 .install-grid { margin-top: 14px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
 .table-wrap { overflow-x: auto; }
 .wtable { width: 100%; border-collapse: collapse; }
@@ -283,7 +286,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .pick-main small { color: var(--muted); }
 .pick-item:not(.ok) .pick-main b { color: var(--muted); }
 
-/* Passphrase dialog (Security: key backups). */
+/* Passphrase dialog (Board: key backups). */
 .pass-field { display: grid; gap: 4px; margin: 10px 0; }
 .pass-field input { width: 100%; }
 #passError:empty, #passWarn:empty { display: none; }
@@ -299,6 +302,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .toast:empty { padding: 0; border: 0; box-shadow: none; }
 
 @media (max-width: 520px) {
+  /* Every tab in view on a phone (Install is the one that works there): tighter, and wrapping if still too wide. */
+  nav { padding: 6px 8px 0; gap: 0; flex-wrap: wrap; }
+  nav button { padding: 8px 10px; }
   .install-grid { grid-template-columns: 1fr; }
   .gate-state { font-size: 28px; }
 }

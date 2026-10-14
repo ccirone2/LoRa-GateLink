@@ -157,7 +157,7 @@ With no role set, `starting`, `radio` and `link` stay listed.
 ## Link history
 
 Each board keeps a RAM ring of buckets: by default an hour each, the last 96 plus the one in progress (four
-days). It is for diagnostics only and never affects the gate or the outputs. The web console charts it (Tools → Link
+days). It is for diagnostics only and never affects the gate or the outputs. The web console charts it (Link → Link
 history), and `tools/gatelink.py <board> hist [--csv FILE]` fetches every page as CSV.
 
 Since firmware 0.14.0 each bucket is also written to the SPI flash as it completes (the reply's `persist` is true), so

@@ -1,4 +1,5 @@
-// The Config tab: the board's settings as a form (applied in chunks, saved on request), import and export.
+// The Config tab: the board's settings as a form (applied in chunks, saved on request), import and export; and the
+// Board tab's factory reset, which reloads the form.
 import { $, esc, download } from './util.js';
 import { S } from './state.js';
 import { toast, guard } from './ui.js';
@@ -210,7 +211,12 @@ async function saveConfig() {
 }
 
 async function resetConfig() {
-  if (!confirm('Erase config and key and restore defaults?')) return;
+  // It runs from the Board tab, out of sight of the form: say what else goes.
+  const n = dirtyCount();
+  const edits = n ? `
+
+The ${n} unapplied edit${n === 1 ? '' : 's'} on the Config tab will be lost too.` : '';
+  if (!confirm(`Erase config and key and restore defaults?${edits}`)) return;
   await call('config.reset');
   markUnsaved(false); // reset saves the defaults
   await refreshInfo(); // first: loadConfig remembers the board with its key id, which the reset erased

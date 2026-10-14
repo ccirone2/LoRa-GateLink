@@ -28,17 +28,22 @@ test('Reload asks before dropping unapplied edits; factory reset asks first too'
   await expect.poll(() => page.dialogs.length).toBe(1);
   expect(page.dialogs[0]).toContain('Discard 1 unapplied edit');
   await expect(page.locator('#p_pulse_ms')).toHaveValue('600'); // declined: kept
+  await page.locator('#tabbtn-board').click(); // factory reset lives with the key
   await page.locator('#btnCfgReset').click();
   await expect.poll(() => page.dialogs.length).toBe(2);
   expect(page.dialogs[1]).toContain('Erase config and key');
+  expect(page.dialogs[1]).toContain('The 1 unapplied edit on the Config tab will be lost too.'); // out of sight there
   expect((await requests(page)).some((r) => r.cmd === 'config.reset')).toBe(false); // declined: not sent
 });
 
 test('factory reset erases config and key and reloads the form', async ({ page }) => {
   await openConfig(page, [{ role: 'house', params: { pulse_ms: 900 } }]);
   await expect(page.locator('#p_pulse_ms')).toHaveValue('900');
+  await page.locator('#tabbtn-board').click();
   await page.locator('#btnCfgReset').click();
   await expect(page.locator('#toast')).toContainText('Defaults restored');
+  await expect(page.locator('#secKeySet')).toHaveText('no (link disabled)');
+  await page.locator('#tabbtn-config').click();
   await expect(page.locator('#p_pulse_ms')).toHaveValue('500');
   await expect(page.locator('#keyWarn')).toBeVisible(); // the key went too
 });

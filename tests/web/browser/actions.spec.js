@@ -6,7 +6,7 @@ test('Generate makes a 32-hex key and Write sends exactly it', async ({ page }) 
   await openConsole(page, [{ role: 'house', keySet: false }]);
   await connect(page);
   await expect(page.locator('#keyWarn')).toBeVisible();
-  await page.locator('#tabbtn-security').click();
+  await page.locator('#tabbtn-board').click();
   await page.locator('#btnKeyGen').click();
   const key = await page.locator('#keyInput').inputValue();
   expect(key).toMatch(/^[0-9a-f]{32}$/);
@@ -20,7 +20,7 @@ test('Generate makes a 32-hex key and Write sends exactly it', async ({ page }) 
 test('a pasted key with separators is accepted; a short one is flagged and not sent', async ({ page }) => {
   await openConsole(page);
   await connect(page);
-  await page.locator('#tabbtn-security').click();
+  await page.locator('#tabbtn-board').click();
   await page.locator('#keyInput').fill('00112233');
   await expect(page.locator('#keyInput')).toHaveAttribute('aria-invalid', 'true');
   await expect(page.locator('#keyHint')).toHaveText('8/32 characters');
@@ -38,9 +38,11 @@ test('Identify, replay and history clear send their commands', async ({ page }) 
   await connect(page);
   await page.locator('#btnIdentify').click();
   await expect(page.locator('#toast')).toHaveText('LED strobing for 6 s.');
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-board').click();
+  await page.getByText('Developer', { exact: true }).click();
   await page.locator('#btnReplay').click();
   await expect(page.locator('#toast')).toContainText('Replay sent');
+  await page.locator('#tabbtn-link').click();
   await page.locator('#btnHistClear').click();
   await expect(page.locator('#toast')).toHaveText('Link history cleared.');
   const cmds = (await requests(page)).map((r) => r.cmd);
@@ -50,7 +52,7 @@ test('Identify, replay and history clear send their commands', async ({ page }) 
 test('auto-ping pings every 3 s until switched off', async ({ page }) => {
   await openConsole(page);
   await connect(page);
-  await page.locator('#tabbtn-tools').click();
+  await page.locator('#tabbtn-link').click();
   await page.locator('#pingAuto').check();
   await expect.poll(async () => (await requests(page)).filter((r) => r.cmd === 'radio.ping').length, { timeout: 8000 })
     .toBeGreaterThanOrEqual(2);

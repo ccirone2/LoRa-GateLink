@@ -1,5 +1,5 @@
 // Site survey: how much margin the radio link has, judged from pings (radio.ping, answered by pong events). Pure
-// functions, no page: the Tools tab's survey card runs them (surveycard.js), and tools/gatelink_client/survey.py is the
+// functions, no page: the Link tab's survey card runs them (surveycard.js), and tools/gatelink_client/survey.py is the
 // same logic for `tools/gatelink.py survey`. Both are checked against tests/tools/fixtures/survey-vectors.json, so
 // change them together. Texts here are plain ASCII, as the command line prints the same ones.
 

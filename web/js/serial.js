@@ -52,7 +52,7 @@ async function addBoard() {
     return;
   }
   if (isBootPort(p)) {
-    toast('That board is in its bootloader, waiting for firmware: flash it from Tools → Firmware update, or press its reset button once.', 'err');
+    toast('That board is in its bootloader, waiting for firmware: flash it from Board → Firmware update, or press its reset button once.', 'err');
     return;
   }
   await connectTo(p);

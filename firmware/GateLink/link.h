@@ -29,6 +29,8 @@ enum MsgType : uint8_t {
   MSG_CFG_SET = 10,   // param id u8, value i32               (reliable, house->gate)
 };
 
+#define LINK_OVERHEAD 21  // a frame's header and tag around its payload (link.cpp HDR_LEN + TAG_LEN)
+
 enum Slot : uint8_t { SLOT_CMD = 0, SLOT_STATUS, SLOT_CFG, SLOT_COUNT };
 
 // ACK result codes

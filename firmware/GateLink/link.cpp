@@ -9,6 +9,7 @@
 #define HDR_LEN 13
 #define TAG_LEN 8
 #define CHALLENGE_LEN 16
+static_assert(HDR_LEN + TAG_LEN == LINK_OVERHEAD, "link.h LINK_OVERHEAD");
 #define MAX_PAYLOAD 100
 #define MAX_FRAME (HDR_LEN + MAX_PAYLOAD + TAG_LEN)
 #define HELLO_INTERVAL_MS 1000

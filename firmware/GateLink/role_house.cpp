@@ -36,17 +36,18 @@ static bool haveStatus = false;
 // The last STATUS taken: its gate session and seq (only later ones count), and when (the link's liveness).
 static uint32_t statusSession = 0, statusSeq = 0, statusAt = 0;
 // The gate's clock (ST_CLOCK), which commands carry their deadline in, as of a STATUS taken from it: the reading and
-// when it was taken here. Only for the gate session it came from (clockSession; 0 = none): the clock starts over when
-// the gate boots.
+// when it was taken here (millis() in the handler, so it can be a little later than the loop's `now`: compared
+// signed). Only for the gate session it came from (clockSession; 0 = none): the clock starts over when the gate boots.
 static uint32_t clockSession = 0, clockAt = 0;
 static uint64_t clockGate = 0;
-// A STATUS resent (its first frames lost) carries the clock of when it was built, so it reads behind: a reading that
-// puts the gate's clock later than the one in use replaces it at once, one that puts it earlier only once the one in
-// use is CLOCK_SAMPLE_LIFE_MS old (so it keeps up with this board's crystal running a little fast against the gate's:
-// a few ms meanwhile). No reading for CLOCK_MAX_AGE_MS (a dead link: the gate reports every heartbeat_s, an hour at
-// most) and the clock isn't used, as by then the crystals may have drifted apart by most of CMD_LATE_SLACK_MS.
-#define CLOCK_SAMPLE_LIFE_MS 600000UL
+// A STATUS resent (its first frames lost) carries the clock of when it was built, so it reads behind, by seconds. A
+// reading replaces the one in use if it puts the gate's clock later, or earlier by no more than the crystals can have
+// drifted apart since (CLOCK_DRIFT: 100 ppm), so this board's crystal running a little fast against the gate's is
+// followed while a resent STATUS isn't taken. No reading for CLOCK_MAX_AGE_MS (a dead link: the gate reports every
+// heartbeat_s, an hour at most) and the clock isn't used: the crystals may have drifted apart by most of the slack.
+#define CLOCK_DRIFT 10000  // 1/100 ppm
 #define CLOCK_MAX_AGE_MS 10800000UL
+static bool clockWait = false;  // the pending command is waiting for the gate's clock (sendCommand)
 static uint8_t lastEnd = GS_UNKNOWN;  // last limit reached (OPEN/CLOSED), held while BETWEEN
 static uint32_t betweenSince = 0;
 
@@ -65,7 +66,7 @@ static uint32_t mismatchSince = 0;
 static bool checkSoon = false;  // boot, power return, command refused or overridden: resync at once if out of step
 static bool k1WasPulsing = false;
 static bool ctrlPower = true;
-static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms (CLOSE only, see below)
+static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms (CLOSE only, see below) or the gate's clock
 static uint32_t pendingAt = 0;
 
 static uint16_t cmdId = 0;
@@ -120,7 +121,7 @@ bool houseGateRebootLoop() {
 // or its link did, and hasn't reported yet), or none for CLOCK_MAX_AGE_MS (capStamps).
 static bool gateClockNow(uint32_t now, uint64_t &clock) {
   if (!clockSession || clockSession != linkPeerSession()) return false;
-  clock = clockGate + (uint32_t)(now - clockAt);
+  clock = clockGate + (int64_t)(int32_t)(now - clockAt);  // under CLOCK_MAX_AGE_MS old: signed is safe
   return true;
 }
 
@@ -165,7 +166,8 @@ static void applyOutputs(uint32_t now) {
   }
 }
 
-static void sendCommand(uint8_t action, uint32_t now) {
+// False while the command waits for the gate's clock (below): call it again next pass.
+static bool sendCommand(uint8_t action, uint32_t now) {
   uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
   // Don't suppress while an opposite command is queued, or ACKed but not yet reported in a STATUS, or the gate is
   // still heading the other way (switch flipped off and straight back on before the gate left its limit).
@@ -173,20 +175,32 @@ static void sendCommand(uint8_t action, uint32_t now) {
                   || (gateTarget != GS_UNKNOWN && gateTarget != want);
   if (linkUp && gateState == want && !opposing) {
     logEvent(EV_CMD_SUPPRESSED, action, gateState);
-    return;
+    return true;
   }
-  cmdId++;
-  mismatchSince = 0;
+  // Without the gate's clock for its session there is nothing to date the command in, and one it couldn't date could be
+  // played back to it later: the gate restarted and hasn't reported yet (BOOT_SETTLE_MS, a few seconds), or a link
+  // restarted and hasn't verified the gate again. So it waits, for up to cmd_ttl_s from the switch, and loses that
+  // much of its lifetime; never dated by then, it is dropped like one never ACKed, and the controller put back.
   uint32_t ttl = (uint32_t)cfg.cmd_ttl_s * 1000;
   uint64_t clock;
-  if (!gateClockNow(now, clock)) {
-    // Nothing to date it in: the gate restarted and hasn't reported yet (BOOT_SETTLE_MS, a few seconds), or our link
-    // did and hasn't verified the gate's session again. A command it couldn't date could be played back to it later.
-    // Dropped like one that wasn't ACKed; the controller is put back as soon as nothing else is in the way.
+  bool dated = gateClockNow(now, clock);
+  if (clockWait || !dated) {
+    uint32_t waited = now - pendingAt;
+    ttl = waited < ttl ? ttl - waited : 0;
+  }
+  if (!dated && ttl) {
+    if (!clockWait) logEvent(EV_CMD_HOLD, 3, (int32_t)linkPeerSession());
+    clockWait = true;
+    return false;
+  }
+  clockWait = false;
+  cmdId++;
+  mismatchSince = 0;
+  if (!ttl) {
     cmdResult = -2;
     checkSoon = true;
     logEvent(EV_CMD_DROPPED, action, cmdId);
-    return;
+    return true;
   }
   cmdAction = action;
   cmdResult = -1;
@@ -198,6 +212,7 @@ static void sendCommand(uint8_t action, uint32_t now) {
   linkSendReliable(SLOT_CMD, MSG_CMD, p, CMD_LEN, ttl);
   checkSoon = false;  // a boot's or power return's check is for the old level, not the user's new one
   logEvent(EV_CMD_SENT, action, cmdId);
+  return true;
 }
 
 // Controller powered: IN2 on (ctrl_power_sense) and the board's supply good (ctrl_power_pmic).
@@ -241,7 +256,7 @@ static void capStamps(uint32_t now) {
   if (mismatchSince && elapsed(now, mismatchSince, STAMP_CAP_MS)) mismatchSince = (now - STAMP_CAP_MS) | 1;
   if (elapsed(now, betweenSince, STAMP_CAP_MS)) betweenSince = now - STAMP_CAP_MS;
   if (statusAt && elapsed(now, statusAt, STAMP_CAP_MS)) statusAt = (now - STAMP_CAP_MS) | 1;  // else it reads as fresh
-  if (clockSession && now - clockAt >= CLOCK_MAX_AGE_MS) clockSession = 0;
+  if (clockSession && elapsed(now, clockAt, CLOCK_MAX_AGE_MS)) clockSession = 0;
 }
 
 void houseLoop(uint32_t now) {
@@ -281,6 +296,7 @@ void houseLoop(uint32_t now) {
       if (armed) {
         pendingAction = shellyLevel ? ACT_OPEN : ACT_CLOSE;
         pendingAt = now;
+        clockWait = false;
       }
     }
   }
@@ -290,8 +306,7 @@ void houseLoop(uint32_t now) {
   // ctrl_confirm_ms, while an OPEN (relay on), which no power loss can produce, goes at once.
   if (pendingAction && ((!cfg.ctrl_power_sense && !cfg.ctrl_power_pmic) || pendingAction == ACT_OPEN
                         || elapsed(now, pendingAt, cfg.ctrl_confirm_ms))) {
-    sendCommand(pendingAction, now);
-    pendingAction = 0;
+    if (sendCommand(pendingAction, now)) pendingAction = 0;
   }
 
   // Resync the Shelly to the real gate if they disagree for too long
@@ -350,7 +365,7 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   statusSeq = m.seq;
   statusAt = now | 1;
   uint64_t clock = getU48(m.payload + ST_CLOCK), held;
-  if (!gateClockNow(now, held) || (int64_t)(clock - held) > 0 || now - clockAt >= CLOCK_SAMPLE_LIFE_MS) {
+  if (!gateClockNow(now, held) || (int64_t)(clock - held) >= -(int64_t)((uint32_t)(now - clockAt) / CLOCK_DRIFT)) {
     clockSession = session;
     clockGate = clock;
     clockAt = now;

@@ -247,29 +247,173 @@ TEST(link_command_resent_at_the_end_of_its_ttl_still_runs) {
 }
 
 // [freshness] [restarts] The gate reboots and the user switches before its first STATUS (it waits BOOT_SETTLE_MS for
-// its inputs): the house knows the new session but not its clock, so it has nothing to stamp a deadline with. The
-// command is dropped, not sent undated, and the controller put back; once the gate has reported, the next switch
-// opens it.
-TEST(link_command_before_a_restarted_gates_first_status_is_dropped_not_sent_undated) {
+// its inputs): the house knows the new session but not its clock, so it has nothing to date the command in. The
+// command waits, never sent undated, and goes once the gate has reported: the gate opens, within cmd_ttl_s of the
+// switch.
+TEST(link_command_before_a_restarted_gates_first_status_waits_for_it) {
   World w;
   w.commission();
   int sessions = w.house.count("session");
   w.gate.reset(PM_RCAUSE_SYST);
   CHECK(w.runUntil([&] { return w.house.count("session") > sessions; }, 5000));
-  CHECK_EQ(w.gate.count("cmd_rx"), 0);
   CHECK(w.gate.status()["settling"] == true);
-  int sent = w.house.count("cmd_sent"), statuses = (int)w.sent(w.gate, 5).size();
+  int sent = w.house.count("cmd_sent");
+  size_t statuses = w.sent(w.gate, 5).size();
+  uint32_t asked = w.now;
   w.user(true);
-  CHECK(w.runUntil([&] { return w.house.count("cmd_dropped") > 0; }, 1000));
+  w.run(500);
+  CHECK_EQ(w.house.count("cmd_sent"), sent);  // waiting for the gate's clock
+  CHECK(w.runUntil([&] { return w.house.count("cmd_sent") > sent; }, 10000));
+  CHECK(w.sent(w.gate, 5).size() > statuses);  // once the new session's first STATUS is in
+  CHECK(w.now - asked < 10000);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 20000));
+  CHECK_EQ(w.house.count("cmd_dropped"), 0);
+  CHECK_EQ(w.gate.count("cmd_late"), 0);
+}
+
+// [freshness] [restarts] The same, with the restarted gate's STATUS kept from the house past cmd_ttl_s: the command is
+// dropped, never sent undated, and the controller put back once the gate reports.
+TEST(link_command_never_dated_within_its_ttl_is_dropped) {
+  World w;
+  w.commission();
+  int sessions = w.house.count("session");
+  w.gate.reset(PM_RCAUSE_SYST);
+  uint32_t reset = w.now;
+  w.drop = [&](const AirFrame &f) { return f.from == w.gate.idx && f.type() == 5 && w.now - reset < 15000; };
+  CHECK(w.runUntil([&] { return w.house.count("session") > sessions; }, 5000));
+  int sent = w.house.count("cmd_sent");
+  uint32_t asked = w.now;
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.house.count("cmd_dropped") > 0; }, 12000));
+  CHECK_IN(w.now - asked, 9900, 10100);  // cmd_ttl_s from the switch
   CHECK_EQ(w.house.count("cmd_sent"), sent);
-  CHECK_EQ((int)w.sent(w.gate, 5).size(), statuses);  // still no STATUS from the new session
   CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, 20000));  // put back once the gate reports (still closed)
   CHECK_EQ(w.gate.count("pulse"), 0);
   CHECK(w.opener.atClosed());
-  w.run(5000);
+}
+
+// [freshness] [restarts] A house kept from seeing the gate restart (the new session's answers jammed at it) still dates
+// commands in the clock of the gate's last boot. Were each boot's clock counted from 0, the new one would come to read
+// such a deadline as current, and the command, kept from the gate and played back then, would run (found in the
+// security review of 0.16.0). Each boot draws its clock's origin at random, so it lands nowhere near: refused. (The
+// simulation's millis() doesn't start over at a reboot, so with one origin its deadline would read as current at once.)
+TEST(link_command_dated_in_the_gates_previous_boot_is_refused) {
+  World w;
+  w.commission();
+  int sessions = w.house.count("session");
+  bool firstHello = true;
+  Bytes kept;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from == w.gate.idx) {  // all but the restarted gate's first HELLO, so it verifies the house
+      if (f.type() != 1 || !firstHello) return true;
+      firstHello = false;
+      return false;
+    }
+    if (f.type() != 4) return false;  // and the house's commands at the gate, the first one kept
+    if (kept.empty()) kept = f.b;
+    return true;
+  };
+  w.gate.reset(PM_RCAUSE_SYST);
+  CHECK(w.runUntil([&] { return !firstHello && w.gate.status()["link"]["verified"] == true; }, 10000));
+  CHECK_EQ(w.house.count("session"), sessions);  // the house still has the gate's old session
+  w.run(4000);  // the gate has settled
+  w.user(true);
+  CHECK(w.runUntil([&] { return !kept.empty(); }, 2000));
+  int replays = w.gate.count("replay");
+  w.inject(w.gate, kept);
+  w.run(300);
+  CHECK_EQ(w.gate.count("replay"), replays);  // the link takes it: only the session it names stops it
+  CHECK_EQ(w.gate.count("cmd_late"), 1);
+  CHECK_EQ(w.gate.count("cmd_rx"), 0);
+  CHECK_EQ(w.gate.count("pulse"), 0);
+  CHECK(w.opener.atClosed());
+}
+
+// [freshness] On the board a loop pass takes a millisecond or more before linkPoll, so the STATUS handler stamps its
+// clock reading with a millis() later than the loop's `now`. Read unsigned, that reading was ~49.7 days old at once
+// and thrown away, and every command waited for a clock that never came (found in review, before the bench).
+TEST(link_commands_dated_when_the_status_handler_runs_after_the_loops_now) {
+  World w;
+  w.house.preLinkUs = 1200;
+  w.commission();
   w.user(true);
   CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 20000));
+  w.run(6000);  // past the sync window K1's change opened
+  w.user(false);
+  CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 30000));
+  CHECK_EQ(w.house.count("cmd_sent"), 2);
+  CHECK_EQ(w.house.count("cmd_dropped"), 0);
+}
+
+// [freshness] A STATUS whose first sends were lost reaches the house 8 s after it was built, its clock reading 8 s
+// behind. Taken, it would date the next command 8 s early, and the command's resends late in its lifetime would be
+// refused. A reading that far behind the one in use isn't taken: a command whose first sends are lost too still runs.
+TEST(link_a_resent_status_doesnt_set_the_houses_reckoning_back) {
+  World w;
+  w.commission();
+  w.run(2000);
+  uint32_t first = 0, firstAt = 0;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from != w.gate.idx || f.type() != 5) return false;
+    if (!first) first = seqOf(f.b), firstAt = f.start;
+    return seqOf(f.b) == first && (int32_t)(f.start - firstAt) < 8000;
+  };
+  auto taken = [&] {
+    for (const AirFrame &f : w.air)
+      if (f.from == w.gate.idx && f.type() == 5 && first && seqOf(f.b) == first && f.delivered && !f.dropped)
+        return true;
+    return false;
+  };
+  CHECK(w.runUntil(taken, 45000));
+  CHECK(w.now - firstAt > 8000);
+  uint32_t asked = w.now;
+  w.drop = [&](const AirFrame &f) { return f.from == w.house.idx && f.type() == 4 && w.now - asked < 6000; };
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.gate.count("cmd_rx") > 0 || w.gate.count("cmd_late") > 0; }, 11000));
   CHECK_EQ(w.gate.count("cmd_late"), 0);
+  CHECK(w.now - asked > 6000);
+  w.drop = nullptr;
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 20000));
+}
+
+// [freshness] [outage] At SF12/125 kHz, CR 4/8 a STATUS takes ~3.5 s on the air and a command ~2 s: the house's
+// reckoning of the gate's clock lags it by the one, and the command takes the other to arrive, so its last resend
+// (27 s into a cmd_ttl_s of 30, about the least SF12 needs: a send and its ACK take ~4.5 s) arrives seconds past its
+// deadline. The gate's slack covers both airtimes: it still runs.
+TEST(link_command_resent_late_in_its_ttl_at_sf12_still_runs) {
+  World w;
+  w.commission();
+  CHECK(w.house.request("config.set", "\"params\":{\"cmd_ttl_s\":30}")["ok"] == true);
+  for (Board *b : { &w.house, &w.gate })
+    CHECK(b->request("config.set", "\"params\":{\"sf\":12,\"bw_hz\":125000,\"cr\":8}")["ok"] == true);
+  CHECK(w.runUntil([&] { return !w.houseLinkUp(); }, 5000));
+  CHECK(w.runUntil([&] { return w.houseLinkUp(); }, 120000));  // relinked, and the gate's STATUS taken
+  w.run(20000);
+  uint32_t asked = w.now;
+  w.drop = [&](const AirFrame &f) { return f.from == w.house.idx && f.type() == 4 && w.now - asked < 24000; };
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.gate.count("cmd_rx") > 0 || w.gate.count("cmd_late") > 0; }, 35000));
+  CHECK_EQ(w.gate.count("cmd_late"), 0);
+  CHECK(w.now - asked > 26000);
+  w.drop = nullptr;
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 40000));
+}
+
+// [freshness] [restarts] The gate's link starts over (a radio setting changed at its console) without a reboot: its new
+// session verified, it reports at once, so the house has its clock again within a second or two and a command right
+// after runs. (It used to report only at its next heartbeat, and the command waited out cmd_ttl_s and was dropped.)
+TEST(link_command_right_after_the_gates_link_restart_runs) {
+  World w;
+  w.commission();
+  int sessions = w.house.count("session");
+  CHECK(w.gate.request("config.set", "\"params\":{\"tx_power\":5}")["ok"] == true);
+  CHECK(w.runUntil([&] { return w.house.count("session") > sessions; }, 10000));
+  uint32_t verified = w.now;
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.house.count("cmd_sent") > 0; }, 10000));
+  CHECK(w.now - verified < 3000);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 20000));
+  CHECK_EQ(w.house.count("cmd_dropped"), 0);
 }
 
 static std::string testKeyHex() {

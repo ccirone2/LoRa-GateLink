@@ -10,7 +10,7 @@ const ROLES = { 0: 'unset', 1: 'house', 2: 'gate' };
 const CFG_SOURCES = { 0: 'defaults (nothing saved)', 1: 'the flash chip', 2: 'program flash' };
 const RADIO_FAIL = { 0: 'radio failed to initialise', 1: 'radio TX fault, re-initialised', 2: 'radio reset itself, re-initialised',
   3: 'radio initialised on retry' };
-const CMD_HOLD = { 0: 'held command sent after all: the gate’s session answered', 1: 'command held: HELLO from an unverified gate session',
+const CMD_HOLD = { 0: 'held command sent after all: the gate’s session answered', 1: 'command held: HELLO from an unverified gate session', 3: 'command waiting for the gate’s first status report (it just restarted)',
   2: 'held command dropped: the gate restarted (it may have run it)' };
 // The board's health problems (health.h Problem), in bit order: status `health` names them, log `health` b has the bits.
 export const PROBLEMS = { starting: 'starting up', radio: 'radio down', link: 'link down', ac: 'no AC power at the gate',

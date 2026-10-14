@@ -29,7 +29,7 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 #define ST_LEN_V2 24     // 0.4.0 up to 0.12.x; the field below was added in 0.13.0
 #define ST_TRAVEL 24     // u16, gate travel_timeout_s: the house holds K1 through a travel for as long
 #define ST_LEN_V3 26     // 0.13.0 up to 0.15.x; the field below was added in 0.16.0
-#define ST_CLOCK 26      // u48, the gate's clock (ms since its boot): the house stamps commands with a deadline in it
+#define ST_CLOCK 26      // u48, the gate's clock (ms, from a random origin each boot): commands' deadlines are in it
 #define ST_LEN 32
 
 // ST_INPUTS bits: the gate's inputs and relays as it sees them
@@ -42,11 +42,13 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 #define STI_AC_LOST 0x40  // 0.7.0
 #define STI_REBOOTS 0x80  // 0.15.0
 
-// CMD payload (house -> gate): cmd_id u16, action u8, then the deadline (link.h)
+// CMD payload (house -> gate): cmd_id u16, action u8, then the deadline (link.h). 9 bytes keep the frame at 30, which
+// fits the gaps a busy neighbour leaves (test_system_link.cpp): a 34-byte one no longer did.
 #define CMD_DEADLINE 3  // u48, the gate's clock by which it must arrive: when it was sent plus the house's cmd_ttl_s
 #define CMD_LEN 9
-// The gate takes a command until CMD_LATE_SLACK_MS past its deadline (the house's reckoning of the gate's clock lags
-// it a little: a STATUS's time on the air, a resent one, the crystals drifting apart since), and refuses one whose
+// The gate takes a command until CMD_LATE_SLACK_MS past its deadline, plus a STATUS's and a command's time on the air
+// (the house's reckoning of the gate's clock lags it a little: a STATUS's backoff and airtime, the crystals drifting
+// apart since; and the command takes its airtime to arrive), and refuses one whose
 // deadline lies further ahead than the longest cmd_ttl_s allows (CMD_TTL_MAX_S, its PARAMS maximum: test_config
 // checks they agree).
 #define CMD_TTL_MAX_S 120

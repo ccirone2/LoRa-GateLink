@@ -120,16 +120,23 @@ STATUS payload layout is defined in `roles.h` (built in `role_gate.cpp`, parsed 
 keep them in sync. The longest loop pass since boot is status `loop_max_us` (the soak fails it past 4 s).
 
 **Command deadlines** (0.16.0, [protocol.md](protocol.md#command-deadlines)). The gate's clock (`gateClock`) is
-`millis()` extended to 64 bits, read every `gateLoop` pass so its base stays within 2^31 ms; STATUS carries it
-(`ST_CLOCK`, 48 bits) and its uptime fields come from it, so they no longer wrap at 49.7 days either. The house keeps
-one reading per gate session (`clockSession`, `clockGate`, `clockAt`): a later-reading STATUS replaces it at once, an
-earlier one only after `CLOCK_SAMPLE_LIFE_MS` (10 min), and `capStamps` forgets it after `CLOCK_MAX_AGE_MS` (3 h).
-`sendCommand` stamps `CMD_DEADLINE` = the gate's clock now + `cmd_ttl_s` (the slot's TTL), or drops the command with
-no reading for the verified gate session (`linkPeerSession`, 0 during our own link restart too). `handleCmd` checks
-it after the duplicate check (a resend of a command already run gets its result) and refuses outside
-[−`CMD_LATE_SLACK_MS`, `CMD_AHEAD_MAX_MS`] with `RES_LATE`, which the house treats as `RES_NO_POWER`: resync at once.
-Don't use 32 bits for the deadline (a command withheld 2^32 ms would read as current, host-tested) nor a time window
-on the gate alone (it can't tell a delayed frame from a retry). Considered and not built: deadlines on every reliable
+`millis()` extended to 64 bits (`uptimeMs`, read every `gateLoop` pass so its base stays within 2^31 ms) plus
+`clockOrigin`, 47 random bits drawn in `gateBegin`; STATUS carries it (`ST_CLOCK`, 48 bits) and its uptime fields come
+from `uptimeMs`, so they no longer wrap at 49.7 days either. The house keeps one reading per gate session
+(`clockSession`, `clockGate`, `clockAt`; `clockAt` is the handler's `millis()`, later than the loop's `now`, so every
+age is signed): a reading replaces it unless it's behind by more than `CLOCK_DRIFT` (100 ppm) of the age, and
+`capStamps` forgets it after `CLOCK_MAX_AGE_MS` (3 h). `sendCommand` stamps `CMD_DEADLINE` = the gate's clock now +
+the slot's TTL; with no reading for the verified gate session (`linkPeerSession`, 0 during our own link restart too) it
+returns false and the press stays in `pendingAction` (`clockWait`, log `cmd_hold` a=3) until there is one, its TTL
+shortened by the wait, or `cmd_ttl_s` from the switch has passed (`cmd_dropped`). The gate sends STATUS as soon as its
+link verifies the house, a new session or after its own restart (`houseSession`, `houseVerified`), so that wait is a
+second or two. `handleCmd` checks the deadline after the duplicate check (a resend of a command already run gets its
+result), with a slack of `CMD_LATE_SLACK_MS` plus a STATUS's and a CMD's airtime, and refuses with `RES_LATE`, which
+the house treats as `RES_NO_POWER`: resync at once. CMD stays 9 bytes (a 30-byte frame): the 4 more a gate session id
+would take made the frame 34 bytes, which no longer fit the gaps of a neighbour sending every 100 ms; the random
+origin binds a deadline to its boot instead. Don't use 32 bits for the deadline (a command withheld 2^32 ms would read
+as current, host-tested) nor a time window on the gate alone (it can't tell a delayed frame from a retry).
+Considered and not built: deadlines on every reliable
 frame in the link, with the peer's clock carried in HELLO_ACK. One reading a session drifts past the slack within
 hours (100 ppm: 8.6 s a day), so it needs STATUS's readings anyway, and gate-to-house freshness would need the house's
 clock too; STATUS has its own (seq order) and config writes rarely matter (`withheld-config-write`).

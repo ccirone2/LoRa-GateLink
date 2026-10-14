@@ -1197,9 +1197,6 @@ TEST(robustness_quiet_26_days_mismatch_resynced_as_soon_as_the_link_returns) {
   w.checkClean();
 }
 
-// Both boards up for `days` with the link working, then one reboots: the link must come back. It restarts once
-// at the start too, so its peer has answered a HELLO from a session it hadn't verified (and stamped when: link.cpp's
-// HELLO_ANSWER_GAP_MS check), as it would have after any restart in the field.
 // [freshness] [wrap-safe] A command kept from the gate, then RF down both ways for 2^32 ms (~49.7 days, the length of
 // millis()), so the gate hears none of the house's frames meanwhile and the command's seq stays inside its replay
 // window. Played back 5 s into its 10 s lifetime as millis() counts it, it would be current again by a 32-bit clock;
@@ -1244,6 +1241,9 @@ TEST(robustness_quiet_2_32_ms_then_a_withheld_command_played_back_is_refused) {
   w.checkClean();
 }
 
+// Both boards up for `days` with the link working, then one reboots: the link must come back. It restarts once
+// at the start too, so its peer has answered a HELLO from a session it hadn't verified (and stamped when: link.cpp's
+// HELLO_ANSWER_GAP_MS check), as it would have after any restart in the field.
 static void relinkAfterQuiet(bool houseReboots, uint32_t days) {
   World w;
   Guard g{ w };
@@ -1882,9 +1882,8 @@ TEST(robustness_restart_gate_radio_fails_to_initialise_then_recovers) {
 // [restarts] [pulse-only]
 TEST(robustness_restart_house_radio_fails_on_restart_command_given_up_then_recovers) {
   // The house's radio doesn't come back after a restart (a radio setting changed). A command meanwhile can't go out:
-  // with no gate session verified since the restart there is no gate clock to date it in, so it is dropped at once
-  // (before 0.16.0 it waited out cmd_ttl_s). It never runs late once the radio is back, and the controller is
-  // resynced.
+  // with no gate session verified since the restart there is no gate clock to date it in, so it waits for one, and is
+  // dropped at cmd_ttl_s. It never runs late once the radio is back, and the controller is resynced.
   World w;
   Guard g{ w };
   w.commission();
@@ -1895,10 +1894,14 @@ TEST(robustness_restart_house_radio_fails_on_restart_command_given_up_then_recov
   CHECK(find(w.house, "radio_fail", h0, 0).ok);
   CHECK(w.house.status()["radio_ok"] == false);
   r.run(1000);
+  uint32_t asked = w.now;
   w.user(true);
-  CHECK(waitFor(r, w.house, "cmd_dropped", h0, 1000, ACT_OPEN_).ok);
+  Found drop = waitFor(r, w.house, "cmd_dropped", h0, TTL_MS + 2000, ACT_OPEN_);
+  CHECK(drop.ok);
+  // At the TTL, or after the radio retry (every 5 s) that holds the loop pass the TTL ends in (LoRa.begin(): 470 ms)
+  CHECK_IN(drop.e.at - asked, TTL_MS - 10, TTL_MS + 500);
   CHECK_EQ(countSince(w.house, "cmd_sent", h0), 0);
-  r.run(TTL_MS + 5000);
+  r.run(5000);
   size_t h1 = w.house.logs.size();
   w.house.radioPresent = true;
   CHECK(waitFor(r, w.house, "radio_fail", h0, 6000, 3).ok);

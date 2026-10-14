@@ -106,6 +106,9 @@ struct Board {
   std::deque<Bytes> rxq;  // at most one frame waits in the FIFO (a newer one overwrites it); empty = bad CRC
   uint32_t rxDone = 0, crcErr = 0, faults = 0;  // radio.cpp's counters since boot
   uint32_t retryAt = 0;  // radio.cpp while the radio didn't start: when to try again (0: no failure logged yet)
+  // Time each loop pass spends before linkPoll (in supplyPoll, the step before it): 0 here, but on the board a pass
+  // takes a millisecond or more, so what linkPoll's handlers stamp with millis() is later than the loop's `now`.
+  uint32_t preLinkUs = 0;
   int16_t rssi = -60, noise = -118;
   float snr = 9.0f;
 

@@ -67,20 +67,25 @@ only in seq order (0.13.9), and a command carries a deadline (below).
 
 ## Command deadlines
 
-Every CMD carries a deadline in the gate's clock (milliseconds since the gate booted, 64 bits, so it never wraps):
-when the house sent it plus the house's `cmd_ttl_s`, the time the house gives it up. The gate refuses a command past
-its deadline (by more than 2 s, `CMD_LATE_SLACK_MS`) or with one further ahead than the longest `cmd_ttl_s` allows
-(122 s): ACKed `RES_LATE`, log `cmd_late`, no pulse. So a command jammed at the gate and recorded, played back
-later, never moves it, however long its seq stays inside the window (before 0.16.0 it could fire whenever the
-attacker chose while the gate heard fewer than 32 frames from the house). The house learns the gate's clock from
-STATUS, which carries it (`ST_CLOCK`): a reading that puts it later than the one in use replaces it at once, an
-earlier one (a STATUS resent, built earlier) only once the one in use is 10 minutes old, and none for 3 hours (a
-dead link) leaves it unknown, as the boards' crystals may by then have drifted apart by most of the slack. The clock
-is kept for the gate session it came from: with no STATUS yet from the verified gate session (the gate just
-restarted: it reports once its inputs have settled, a few seconds) a command can't be dated, so the house drops it
-(log `cmd_dropped`) and puts the controller back, rather than send one that could be played back later. A remote
-config write carries no deadline: a withheld one can only set a value the installer chose, after it was reported
-failed.
+Every CMD carries a deadline in the gate's clock: when the house sent it plus the house's `cmd_ttl_s`, the time the
+house gives it up. The clock is milliseconds, 64 bits (48 in the frames), from an origin each boot draws at random
+(47 bits), so it never wraps and a deadline reckoned in another boot's clock lands nowhere near this one's. The gate
+refuses a command past its deadline by more than 2 s (`CMD_LATE_SLACK_MS`) plus a STATUS's and a command's time on
+the air (the house's reckoning lags by the one, the command takes the other to arrive: a few ms at SF9 / 500 kHz,
+seconds at SF12 / 125 kHz), or with one further ahead than the longest `cmd_ttl_s` allows (122 s): ACKed
+`RES_LATE`, log `cmd_late`, no pulse. So a command jammed at the gate and recorded, played back later, never moves
+it, however long its seq stays inside the window (before 0.16.0 it could fire whenever the attacker chose while the
+gate heard fewer than 32 frames from the house).
+
+The house learns the gate's clock from STATUS, which carries it (`ST_CLOCK`). A STATUS that was resent (its first
+frames lost) carries the clock of when it was built, seconds behind, so a reading replaces the one in use only if it
+puts the gate's clock later, or earlier by no more than the crystals can have drifted apart since (100 ppm); none for
+3 hours (a dead link) leaves it unknown. The reading is kept for the gate session it came from. With none for the
+verified gate session (the gate just restarted and waits for its inputs to settle, a few seconds, or a link restarted)
+a command can't be dated: it waits (log `cmd_hold` a=3) for up to `cmd_ttl_s` from the switch, losing that much of its
+lifetime, and is dropped after it (log `cmd_dropped`, the controller put back), never sent undated. The gate reports
+as soon as its link has verified the house, a new session or its own restarted, so the wait is short. A remote config
+write carries no deadline: a withheld one can only set a value the installer chose, after it was reported failed.
 
 ## Reliable delivery
 
@@ -228,7 +233,7 @@ ACK result codes (`AckResult`; a gap is a retired code, never reused):
 | 22 | 1 | i8 | `ST_NOISE` | gate noise floor since its previous STATUS, dBm (0 = no sample) | 0.4.0 |
 | 23 | 1 | i8 | `ST_NOISE_MAX` | its peak | 0.4.0 |
 | 24 | 2 | u16 | `ST_TRAVEL` | gate `travel_timeout_s`: the house holds K1 through a travel for as long | 0.13.0 |
-| 26 | 6 | u48 | `ST_CLOCK` | the gate's clock (ms since its boot): the house stamps commands with a deadline in it | 0.16.0 |
+| 26 | 6 | u48 | `ST_CLOCK` | the gate's clock (ms, from a random origin each boot): commands' deadlines are in it | 0.16.0 |
 
 `ST_INPUTS` bits:
 

@@ -9,8 +9,21 @@ async function openConfig(page, boards, options) {
 
 test('the form shows every setting in its group, with on/off ones as toggles', async ({ page }) => {
   await openConfig(page);
-  await expect(page.locator('#cfgForm .card .label')).toHaveText(['General', 'Radio', 'Link', 'Inputs', 'Gate node',
-    'House node', 'Fault output', 'Board']);
+  await expect(page.locator('#cfgForm .card .label')).toHaveText(['General', 'Radio', 'Link', 'Inputs', 'House node',
+    'Fault output', 'Gate node', 'Advanced']);
+  // A readable label, with the setting's name under it.
+  await expect(page.locator('label[for=p_sf]')).toHaveText('Spreading factor*sf');
+  // The gate's settings and the advanced ones are folded away on a house board.
+  await expect(page.locator('#cfgOther summary')).toHaveText('Settings for the gate board');
+  await expect(page.locator('#p_pulse_ms')).toBeHidden();
+  await expect(page.locator('#p_in1_invert')).toBeHidden();
+  await page.locator('#cfgAdvanced summary').click();
+  await expect(page.locator('#p_in1_invert')).toBeVisible();
+  // An edit in a fold that is closed again stays in sight on its summary.
+  await page.locator('#cfgOther summary').click();
+  await page.locator('#p_pulse_ms').fill('600');
+  await page.locator('#cfgOther summary').click();
+  await expect(page.locator('#cfgOther summary')).toHaveAttribute('data-dirty', '1 unapplied');
   await expect(page.locator('#p_heartbeat_s')).toHaveValue('30');
   await expect(page.locator('#p_power_sense')).toHaveAttribute('type', 'checkbox');
   await expect(page.locator('#p_power_sense')).toBeChecked();
@@ -23,11 +36,11 @@ test('the form shows every setting in its group, with on/off ones as toggles', a
 
 test('Reload asks before dropping unapplied edits; factory reset asks first too', async ({ page }) => {
   await openConfig(page, [{ role: 'house' }], { dismissDialogs: true });
-  await page.locator('#p_pulse_ms').fill('600');
+  await page.locator('#p_debounce_ms').fill('60');
   await page.locator('#btnCfgLoad').click();
   await expect.poll(() => page.dialogs.length).toBe(1);
   expect(page.dialogs[0]).toContain('Discard 1 unapplied edit');
-  await expect(page.locator('#p_pulse_ms')).toHaveValue('600'); // declined: kept
+  await expect(page.locator('#p_debounce_ms')).toHaveValue('60'); // declined: kept
   await page.locator('#tabbtn-board').click(); // factory reset lives with the key
   await page.locator('#btnCfgReset').click();
   await expect.poll(() => page.dialogs.length).toBe(2);
@@ -86,7 +99,7 @@ test('a must-match radio setting asks first, and nothing is sent if declined', a
 
 test('Save is refused while edits are unapplied', async ({ page }) => {
   await openConfig(page);
-  await page.locator('#p_pulse_ms').fill('600');
+  await page.locator('#p_debounce_ms').fill('60');
   await page.locator('#btnCfgSave').click();
   await expect(page.locator('#toast')).toContainText('isn’t applied yet');
 });
@@ -100,22 +113,23 @@ test('importing the other board’s export keeps this board’s role', async ({ 
   await expect(page.locator('#p_role')).toHaveValue('1');
   await expect(page.locator('#p_heartbeat_s')).toHaveValue('60');
   await expect(page.locator('#btnCfgApply')).toHaveText('Apply (2)');
+  await expect(page.locator('#p_pulse_ms')).toBeVisible(); // a gate setting: its fold opens to show the edit
 });
 
 test('export writes what the board runs, not unapplied edits', async ({ page }) => {
   await openConfig(page);
-  await page.locator('#p_pulse_ms').fill('600');
+  await page.locator('#p_debounce_ms').fill('60');
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#btnCfgExport').click()]);
   const json = JSON.parse(await (await download.createReadStream()).toArray().then((c) => Buffer.concat(c).toString()));
   expect(json.role).toBe('house');
-  expect(json.params.pulse_ms).toBe(500);
+  expect(json.params.debounce_ms).toBe(50);
   await expect(page.locator('#toast')).toContainText('unapplied edit isn’t included');
 });
 
 test('a board that stops answering mid-apply leaves the rest as unapplied edits', async ({ page }) => {
   await openConfig(page);
   // Nine edits: two chunks. The board answers the first config.set, then goes silent.
-  const edits = { heartbeat_s: 40, link_timeout_s: 120, cmd_ttl_s: 12, debounce_ms: 60, pulse_ms: 600, travel_timeout_s: 70,
+  const edits = { heartbeat_s: 40, link_timeout_s: 120, cmd_ttl_s: 12, debounce_ms: 60, ctrl_confirm_ms: 600, ctrl_settle_ms: 9000,
     sync_window_ms: 3500, resync_ms: 1200, mismatch_timeout_s: 80 };
   for (const [k, v] of Object.entries(edits)) await page.locator(`#p_${k}`).fill(String(v));
   await page.evaluate(() => {
@@ -128,4 +142,22 @@ test('a board that stops answering mid-apply leaves the rest as unapplied edits'
   await expect(page.locator('#toast')).toContainText('Applying stopped', { timeout: 10000 });
   await expect(page.locator('#btnCfgApply')).toHaveText('Apply (1)');
   await expect(page.locator('#btnCfgSave')).toHaveText('Save to flash •');
+});
+
+test('on a gate board the house settings fold away; an inversion that is on keeps Advanced open', async ({ page }) => {
+  await openConfig(page, [{ role: 'gate', params: { in2_invert: 1 } }]);
+  await expect(page.locator('#cfgOther summary')).toHaveText('Settings for the house board');
+  await expect(page.locator('#p_ctrl_sync')).toBeHidden();
+  await expect(page.locator('#p_pulse_ms')).toBeVisible();
+  await expect(page.locator('#p_in2_invert')).toBeVisible();
+  await expect(page.locator('#p_in2_invert')).toBeChecked();
+});
+
+test('a role applied for the next reboot folds the form for it at once', async ({ page }) => {
+  await openConfig(page);
+  await page.locator('#p_role').selectOption('2');
+  await page.locator('#btnCfgApply').click();
+  await expect(page.locator('#toast')).toContainText('Applied role');
+  await expect(page.locator('#cfgOther summary')).toHaveText('Settings for the house board');
+  await expect(page.locator('#p_pulse_ms')).toBeVisible();
 });

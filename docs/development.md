@@ -79,8 +79,8 @@ are built from the pull requests since the last tag.
    - Log events (`log.h`/`log.cpp`) ↔ the suite ↔ docs/console.md.
    - STATUS/DIAG wire format (`roles.h`) ↔ `role_house.cpp` / `console.cpp`; both boards need the new firmware.
    - Pins or role behaviour (`pins.h`) ↔ the `WIRING` table in `web/js/wiring.js` ↔ [docs/hardware.md](hardware.md).
-   - A new setting: field in `Config` + default + `PARAMS` row with a new, never reused id + group/help text
-     in `web/js/settings.js`, then `python tools/docgen.py --write` ([config.md](config.md)). Saved config is
+   - A new setting: field in `Config` + default + `PARAMS` row with a new, never reused id + group, help text and
+     label in `web/js/settings.js`, then `python tools/docgen.py --write` ([config.md](config.md)). Saved config is
      stored by param id, so a changed meaning or unit needs a new id; bump `CFG_VERSION` (it only guards the
      program-flash fallback) if the struct layout changes.
 3. Bump `FW_VERSION` in `firmware/GateLink/config.h` for any firmware change (see Versioning).

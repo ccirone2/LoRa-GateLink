@@ -413,7 +413,7 @@ the host simulation, including the command deadlines (0.16.0).
 
 **Today.** Those paths are exercised only by the host tests.
 
-**How.** The rejected board (…191117, TODO.md / `docs/bench-testing.md`) as a third node inside B1's box: replay
+**How.** The rejected board (…191117, `docs/bench-testing.md`) as a third node inside B1's box: replay
 frames, send foreign traffic on our SF and sync word, keep the channel busy, and withhold and late-deliver a CMD.
 
 **Cost / risk.** Run it as a separate bench-only sketch, like the GateSim, never a mode in GateLink firmware

@@ -119,10 +119,6 @@ once its fix is merged and record it in the pull request.
 
 ## Housekeeping
 
-- [ ] **Pin arduino-cli in CI?** `ci.yml` installs it through `setup-arduino-cli` with no `version`, so CI
-  builds with the latest release, while `tools/agent/cloud_setup.sh` pins 1.5.1 (found by the 2026-10-14 doc
-  audit). Harmless so far, but a new release could change a build. Decide: pin it in `ci.yml` (and the other
-  workflows that install it) and list it in docs/development.md "Toolchain", or leave it unpinned.
 - [ ] **Back up the bench link key.** It was rotated on 2026-09-30 so the wrong-key test could run, and is only in
   `~/.gatelink_key` (not in the repo; boards can't read it back). Make the encrypted backup with
   `python tools/gatelink.py key backup <dir>` and keep its passphrase in the password manager; then

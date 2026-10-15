@@ -4,8 +4,8 @@
 # the background; it can also be a cloud environment's setup script. Idempotent: a step whose tool is already
 # there is skipped. Writes ~/.cache/gatelink/setup.done (what's installed, and what failed) when it ends.
 #
-# Versions: keep in step with docs/development.md, .github/workflows/ci.yml and release.yml, and uv's with
-# pyproject.toml's required-version
+# Versions: keep in step with docs/development.md and .github/workflows/ (arduino-cli: every setup-arduino-cli
+# step), and uv's with pyproject.toml's required-version
 # (tests/tools/test_agent_tooling.py checks they agree).
 set -uo pipefail
 

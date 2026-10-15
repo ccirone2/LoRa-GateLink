@@ -31,6 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+        with:
+          version: '1.5.1'
       # Versions: keep in sync with ci.yml (pins listed in docs/development.md).
       - name: Install libraries
         run: arduino-cli lib install "Crypto@0.4.0" "ArduinoJson@7.4.3"

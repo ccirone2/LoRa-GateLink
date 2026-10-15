@@ -59,3 +59,30 @@ def test_find_lipos_refuses_an_untapped_board(tapped):
     with pytest.raises(bench_mod.NoUartTap, match="UART tap"):
         b.find_lipos()
     assert b.cuts == []
+
+
+class StatusBoard:
+    def __init__(self, st):
+        self.st = st
+        self.asked = 0
+
+    def status(self):
+        self.asked += 1
+        return self.st
+
+
+@pytest.mark.parametrize("link_up, verified, pong, ok", [
+    (True, True, True, True),
+    (True, True, False, False),   # link_up left from the gate's old session (20261014-231116): no pong
+    (False, True, True, False),
+    (True, False, True, False),
+])
+def test_baseline_link_is_up_in_the_gate_s_current_session(link_up, verified, pong, ok):
+    b = bench_mod.Bench.__new__(bench_mod.Bench)
+    b.house = StatusBoard({"link_up": link_up})
+    b.gate = StatusBoard({"link": {"verified": verified}})
+    pings = []
+    b.ping = lambda required=True: pings.append(required) or ({"event": "pong"} if pong else None)
+    assert bool(b._link_current()) is ok
+    assert b.gate.asked == link_up, "the gate is asked only once the house has the link up"
+    assert pings == ([False] if link_up and verified else [])

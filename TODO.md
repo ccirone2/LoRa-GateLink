@@ -23,12 +23,6 @@ once its fix is merged and record it in the pull request.
 
 ## Bench and field tests
 
-- [ ] **Flaky: `test_history_outage` at 17 dBm (0.17.0).** In the 0.17.0 release run at `--tx-power 17`
-  (`20261014-231116`) it failed with `gate down_s 0`; its one rerun passed (`20261014-233421`). The test before it,
-  `test_history_kept_across_a_reboot`, reboots the gate, and the baseline only waits for the house's `link_up`
-  (still true from the old session's last STATUS) and the gate's `verified`. The house hadn't verified the gate's new
-  session when the outage began (it did 14 s after the reboot, after the outage), so the link the test cut wasn't up.
-  Fix the baseline (`gatelink/bench.py`): wait until the house has taken a STATUS from the gate's current session.
 - [ ] **A rebooted gate's session is verified slowly at 17 dBm on the bench.** After a gate reboot the house accepted
   the new session within 1.4–1.9 s at 5 dBm, but in 1.5–4.2 s at 17 dBm (and once over 7.8 s, run
   `20261014-231116`), on 0.15.2 as well (1.5–4.2 s, `20261013-144010`). While the house still has the old session
@@ -37,6 +31,11 @@ once its fix is merged and record it in the pull request.
   (antennas close, RSSI about -36 dBm), and whether the house should challenge a rebooted peer's new session sooner,
   still bounded against replays. Availability only: a command waits for the gate's clock (up to `cmd_ttl_s`).
 
+- [ ] **`lbt_forced` in `test_history_counts` at 5 dBm.** On 2026-10-15 the gate sent a STATUS (type 5) anyway after
+  waiting 506–595 ms for the channel, in two of the five runs of `test_history.py` alone (`20261015-072034`,
+  `20261015-073644`; both 5 dBm runs, none of the three at 17 dBm), but not in the full suite (`20261015-074616`) or
+  any earlier run. The test sends a burst of pings, so the gate may be holding back for the house's own frames.
+  Check that test's timeline for what the gate heard while it waited.
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
   - `pulse_ms` isn't in the test profile: `test_reboots.py` assumes 500 ms and `test_options.py` uses the saved
     value. Add `pulse_ms: 500` to `PROFILE_GATE` (`gatelink/bench.py`) and check pulses against it.

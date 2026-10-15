@@ -31,6 +31,11 @@ once its fix is merged and record it in the pull request.
   (antennas close, RSSI about -36 dBm), and whether the house should challenge a rebooted peer's new session sooner,
   still bounded against replays. Availability only: a command waits for the gate's clock (up to `cmd_ttl_s`).
 
+- [ ] **`lbt_forced` in `test_history_counts` at 5 dBm.** On 2026-10-15 the gate sent a STATUS (type 5) anyway after
+  waiting 506–595 ms for the channel, in two of the five runs of `test_history.py` alone (`20261015-072034`,
+  `20261015-073644`; both 5 dBm runs, none of the three at 17 dBm), but not in the full suite (`20261015-074616`) or
+  any earlier run. The test sends a burst of pings, so the gate may be holding back for the house's own frames.
+  Check that test's timeline for what the gate heard while it waited.
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
   - `pulse_ms` isn't in the test profile: `test_reboots.py` assumes 500 ms and `test_options.py` uses the saved
     value. Add `pulse_ms: 500` to `PROFILE_GATE` (`gatelink/bench.py`) and check pulses against it.

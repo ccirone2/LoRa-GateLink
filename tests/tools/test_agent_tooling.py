@@ -116,6 +116,14 @@ def test_cloud_setup_pins_match_ci():
     for pin in core_lib.findall(setup):
         name, version = pin.rsplit("@", 1)
         assert re.search(rf"`{re.escape(name)}`[^|\n]*\| {re.escape(version)} \|", dev), f"{pin} not in development.md"
+    # arduino-cli: the same version in every workflow that installs it (without one, the action takes the newest tag,
+    # release candidates included)
+    cli = re.search(r"ARDUINO_CLI_VERSION=([\d.]+)", setup).group(1)
+    assert re.search(rf"`arduino-cli`[^|\n]*\| {re.escape(cli)} \|", dev), f"arduino-cli {cli} not in development.md"
+    for wf in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        text = wf.read_text(encoding="utf-8")
+        pinned = re.findall(rf"setup-arduino-cli@\w+ # v[\d.]+\n\s+with:\n\s+version: '{re.escape(cli)}'\n", text)
+        assert len(pinned) == text.count("setup-arduino-cli@"), f"{wf.name}: setup-arduino-cli without version '{cli}'"
 
 
 # ---- a throwaway repo for the hooks to judge ---------------------------------------------------------------

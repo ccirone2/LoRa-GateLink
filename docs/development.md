@@ -11,6 +11,7 @@ difference:
 
 | Package | Version |
 |---|---|
+| `arduino-cli` | 1.5.1 |
 | `arduino:samd` core | 1.8.14 |
 | `arduino:avr` core (GateSim) | 1.8.8 |
 | `LoRa` (sandeepmistry) | 0.8.0 |
@@ -19,8 +20,9 @@ difference:
 | `ArduinoJson` | 7.4.3 |
 
 When updating one, change it here, in `.github/workflows/ci.yml` (every job), `release.yml`, `fuzz.yml` and
-`mutate.yml`, and in `tools/agent/cloud_setup.sh` (`tests/tools/test_agent_tooling.py` checks the last against CI
-and this table).
+`mutate.yml` (arduino-cli: each `setup-arduino-cli` step's `version`), and in `tools/agent/cloud_setup.sh`
+(arduino-cli with its SHA-256; `tests/tools/test_agent_tooling.py` checks the last against the workflows and this
+table).
 
 The web console is plain JS (ES modules) with no build step; its lint and tests need Node.js 22 and `npm ci`
 (`package.json`).

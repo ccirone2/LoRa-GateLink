@@ -41,6 +41,12 @@ static bool houseVerified = false;  // the link had verified the house at the la
 static bool settling = true;  // after boot: tracking the inputs silently, see BOOT_SETTLE_MS
 static uint32_t bootAt = 0, steadySince = 0;
 static uint32_t betweenAt = 0;  // when the inputs started reading between while we report something else (0 = not)
+// Both limits have read at once since the open limit last read alone: the closed limit isn't trusted (fault). It comes
+// from the AUX2 relay's NC contact, which reads closed whenever that relay isn't energized: a failed relay or driver, or
+// the opener's AUX setting wrong. With it stuck, the gate reads fault only while at its open limit and closed everywhere
+// else, mid-travel included; held, a stuck closed limit is fault from the first full opening on. The open limit
+// reading alone (wetted by the same 24 V) shows the closed one released.
+static bool closedUnproven = false;
 static bool rebootAfterCmd = false;  // debug: next pulsed command reboots us before its ACK (a power cut)
 static uint32_t rebootAt = 0;
 
@@ -71,7 +77,8 @@ static bool acPower() {
 
 static uint8_t readState() {
   bool open = in1.active(), closed = in2.active();
-  if (open && closed) return GS_FAULT;
+  if (open) closedUnproven = closed;
+  if (closed && closedUnproven) return GS_FAULT;
   if (closed) return GS_CLOSED;
   if (open) return GS_OPEN;
   // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may

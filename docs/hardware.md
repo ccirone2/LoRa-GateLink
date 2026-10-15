@@ -42,7 +42,11 @@ and `firmware/GateLink/pins.h` in sync.
   at a limit", never closed. The NC closed-limit contact keeps that: with the opener dead its accessory output has
   no 24 V to wet the contact, so IN2 reads off even though the relay has dropped. Wet the limits from the
   accessory output, not the AC 24 V supply, or a dead opener on AC would read closed. Leave the gate's `inN_invert` toggles off: inverting would make those faults read
-  active.
+  active. What the NC contact can't show is its own relay failing with the 24 V present (or AUX 2 left at "always
+  off"): IN2 then reads closed wherever the gate is. Since 0.17.1 the gate reads `fault` from the first time both
+  limits read together (at the open limit, with such a fault) until IN1 reads with IN2 off, so after one full opening
+  the alarm sees not closed; before it, nothing can tell. Check it at the install (threat model,
+  `closed-limit-nc-fail-unsafe`).
 - **Gate IN3 = AC power sense** (`power_sense`, default on). An opto channel across the 120 VAC → 24 V supply
   (the one feeding the AES controller) drives IN3; the CSW24UL has battery backup and keeps running without AC.
   IN3 off → a command still runs while a limit reads or reverses ours mid-travel (CLOSE from 0.15.1, OPEN from 0.15.2: cutting the AC mustn't

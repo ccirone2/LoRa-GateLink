@@ -342,14 +342,61 @@ TEST(gate_state_both_limits_read_fault) {
   w.run(4000);
   size_t g1 = w.gate.logs.size();
   w.opener.force[0] = -1;
-  Found c = waitFor(w, w.gate, "gate_state", g1, 1000);
+  // Which one lied can't be told: the closed limit alone isn't trusted until the open limit has read alone.
+  w.run(5000);
+  CHECK_EQ(countSince(w.gate, "gate_state", g1), 0);
+  CHECK_STR(str(w.gate.status(), "gate"), "fault");
+  CHECK(w.house.coil(1));
+  CHECK(!w.sensorClosed());
+  CHECK_EQ(countSince(w.gate, "pulse", g0), 0);
+  // The gate opens (a relay test, a command runs as well: AC is on) and its open limit reads alone: trusted again.
+  JsonDocument r = w.gate.request("relay.test", "\"k\":1,\"ms\":500");
+  CHECK(r["ok"] == true);
+  Found op = waitFor(w, w.gate, "gate_state", g1, 15000, GS_OPEN_);
+  CHECK(op.ok);
+  CHECK_EQ(op.e.b, CAUSE_LORA_);
+  w.run(2000);
+  size_t g2 = w.gate.logs.size();
+  CHECK(w.gate.request("relay.test", "\"k\":2,\"ms\":500")["ok"] == true);
+  Found c = waitFor(w, w.gate, "gate_state", g2, 15000, GS_CLOSED_);
   CHECK(c.ok);
-  CHECK_EQ(c.e.a, GS_CLOSED_);
   waitBoth(w, GS_CLOSED_, 2000);
-  w.run(100);
+  w.run(MISMATCH_MS + 3000);
   CHECK(!w.house.coil(1));
   CHECK(w.sensorClosed());
-  CHECK_EQ(countSince(w.gate, "pulse", g0), 0);
+}
+
+// A closed limit stuck on (the AUX2 relay never energizing: its NC contact reads closed wherever the gate is) reads
+// fault from the gate's first full opening on, and not closed again until the open limit reads alone, a restart
+// excepted. Before that opening it can't be told from a closed gate. ROADMAP F14, threat closed-limit-nc-fail-unsafe.
+// [state-from-limits]
+TEST(gate_state_stuck_closed_limit_reads_fault_after_the_first_full_open) {
+  Site w;
+  w.commission();
+  w.opener.force[1] = 1;
+  size_t g0 = w.gate.logs.size();
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
+  CHECK_EQ(countSince(w.gate, "gate_state", g0, GS_BETWEEN_), 0);  // the stuck limit hides the travel
+  Found f = waitFor(w, w.gate, "gate_state", g0, 1000, GS_FAULT_);
+  CHECK(f.ok);
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_FAULT_; }, 2000));
+  w.run(MISMATCH_MS + 3000);
+  // Closed again, through the travel and at the limit: fault all along, the house never shows it closed.
+  size_t g1 = w.gate.logs.size();
+  w.user(false);
+  CHECK_EQ(watch(w, 20000, [&] { return !w.sensorClosed() && w.house.coil(1); }), 0);
+  CHECK(w.opener.atClosed());
+  CHECK_EQ(countSince(w.gate, "gate_state", g1), 0);
+  CHECK_STR(str(w.gate.status(), "gate"), "fault");
+  // Repaired with the gate closed: still fault (nothing has shown the closed limit works) until the gate restarts.
+  w.opener.force[1] = -1;
+  w.run(5000);
+  CHECK_STR(str(w.gate.status(), "gate"), "fault");
+  w.gate.reset(PM_RCAUSE_SYST);
+  w.run(1000);
+  CHECK(poll(w, [&] { return w.gate.status()["gate"] == "closed"; }, 8000));
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_CLOSED_ && w.sensorClosed(); }, 5000));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1113,11 +1160,17 @@ TEST(gate_state_without_ac_commands_run_while_a_limit_reads) {
   CHECK(waitFor(w, w.gate, "cmd_refused", g4, 2000, ACT_CLOSE_, cs4.e.b).ok);
   CHECK_EQ(countSince(w.gate, "pulse", g4), 0);
   w.opener.force[0] = w.opener.force[1] = -1;
-  // AC back: commands go through again.
+  // AC back: commands go through again. The closed limit alone isn't trusted yet after both read (still fault), so
+  // the CLOSE pulses, and the OPEN that follows clears it.
   w.opener.ac = w.opener.battery = true;
   CHECK(poll(w, [&] { return w.house.status()["remote"]["ac_power"] == true; }, 3000));
-  waitBoth(w, GS_CLOSED_, 5000);
-  CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, 5000));
+  w.run(5000);
+  CHECK_STR(str(w.gate.status(), "gate"), "fault");
+  CHECK(w.alarmSwitch());
+  size_t g5 = w.gate.logs.size();
+  w.user(false);
+  CHECK(waitFor(w, w.gate, "pulse", g5, 3000, 2).ok);
+  CHECK_EQ(countSince(w.gate, "cmd_refused", g5), 0);
   w.run(5000);
   size_t g3 = w.gate.logs.size();
   w.user(true);

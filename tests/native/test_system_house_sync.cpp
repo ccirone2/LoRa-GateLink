@@ -214,6 +214,8 @@ TEST(house_sync_k1_mirrors_moves_by_other_controllers) {
 TEST(house_sync_k1_energized_whenever_the_gate_is_not_closed) {
   // Energized = not closed: a fault (both limits) and no_power (the opener dead, no limit reading) show not closed too,
   // and the Shelly follows; back at the closed limit both go off. Each change happens on the pass the house hears it.
+  // (After a fault the closed limit alone is trusted again only once the open limit has read alone, or the gate board
+  // restarts: here it restarts.)
   Site w;
   w.commission();
   size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
@@ -228,7 +230,11 @@ TEST(house_sync_k1_energized_whenever_the_gate_is_not_closed) {
   w.run(4000);
   size_t h1 = w.house.logs.size();
   w.opener.force[0] = -1;
-  Found c = waitFor(w, w.house, "gate_state", h1, 3000);
+  w.run(3000);
+  CHECK_EQ(countSince(w.house, "gate_state", h1), 0);
+  CHECK(w.house.coil(1));
+  w.gate.reset(PM_RCAUSE_SYST);
+  Found c = waitFor(w, w.house, "gate_state", h1, 10000);
   CHECK(c.ok);
   CHECK_EQ(c.e.a, GS_CLOSED_);
   CHECK(!w.house.coil(1));
@@ -316,18 +322,19 @@ TEST(house_sync_between_after_no_power_or_fault_holds_no_limit) {
     CHECK_EQ(countSince(w.house, "gate_state", h1), 1);
     CHECK_EQ(countSince(w.house, "sync", h1), 0);  // the Shelly never moved
 
-    // Closed again by another controller.
+    // Closed again by another controller. After the fault, the closed limit alone isn't trusted until the open limit
+    // has read alone: still fault, not closed.
     size_t h2 = w.house.logs.size();
     w.opener.stuck = false;
     w.extPress(false, 300);
-    Found cl = waitFor(w, w.house, "gate_state", h2, 10000, GS_CLOSED_);
+    Found cl = waitFor(w, w.house, "gate_state", h2, 10000, fault ? GS_FAULT_ : GS_CLOSED_);
     CHECK(cl.ok);
-    CHECK(!w.house.coil(1));
-    CHECK(w.sensorClosed());
-    CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, SYNC_EDGE));
+    CHECK_EQ(w.house.coil(1), (bool)fault);
+    CHECK_EQ(w.sensorClosed(), !fault);
+    CHECK(w.runUntil([&] { return w.alarmSwitch() == (bool)fault; }, SYNC_EDGE));
     w.run(3000);
     CHECK(w.opener.atClosed());
-    CHECK_EQ(countSince(w.house, "sync", h0), 2);
+    CHECK_EQ(countSince(w.house, "sync", h0), fault ? 1 : 2);
     CHECK_EQ(countSince(w.house, "ctrl", h0), 0);
     CHECK_EQ(countSince(w.house, "cmd_sent", h0), 0);
     CHECK_EQ(countSince(w.house, "resync", h0), 0);

@@ -116,7 +116,9 @@ that its early warning saw coming (4 s into the stall, 4 s before the reset), wh
 `history`, `health`, `led`, or `core` between passes) and `hang_pc` (the program counter the warning interrupted: look it up in the build's
 `.elf` with `arm-none-eabi-addr2line -f -e GateLink.ino.elf 0x<hang_pc>`); both null otherwise.
 
-- **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`), `cause` (`none`, `lora`,
+- **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`; `fault`: both limits read at once,
+  and since 0.17.1 it stays `fault` with the closed limit reading alone until the open limit has read alone or the
+  gate board restarts, see [architecture.md](architecture.md#roles-role_gatecpp-and-role_housecpp)), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,
   `power_sense`, `ac_power` (IN3, or true with `power_sense` off), `settling` (after boot: the first STATUS waits
   until the inputs have been steady for 3 s, at most 10 s).
@@ -149,7 +151,7 @@ of D5 with the problems then as bits:
 | 4 | `link` | no STATUS within `link_timeout_eff_s` (`link_up` false) | nothing heard from the house within `link_timeout_s`, at least 2.5 × its own `heartbeat_s` (the house answers each STATUS) |
 | 8 | `ac` | the gate's STATUS says AC lost | IN3 off (with `power_sense`) |
 | 16 | `no_power` | the gate reports `no_power` | the gate reads `no_power` |
-| 32 | `fault` | the gate reports `fault` | the gate reads `fault` (both limits) |
+| 32 | `fault` | the gate reports `fault` | the gate reads `fault` (both limits, held as above) |
 | 64 | `reboots` | in a reboot loop itself, or the gate's STATUS says it is (`remote.reboot_loop`) | in a reboot loop: three watchdog or brown-out resets in a row, each within an hour of the boot before, until a boot has run an hour (status `crash_resets`; from 0.15.0) |
 
 With no role set, `starting`, `radio` and `link` stay listed.

@@ -322,6 +322,12 @@ struct World {
   uint32_t gatePulseAt = 0;  // the last gate relay pulse's start (0: over travel_timeout_s ago)
   uint32_t in3OnSince = 0;       // since when the gate's IN3 (AC) has read on (0: off; capped at a minute's age)
   uint32_t oneLimitSince = 0;    // since when exactly one of its limits has read (0: none or both; capped likewise)
+  uint32_t bothLimitsSince = 0;  // since when both have read (likewise)
+  uint32_t openAloneSince = 0;   // since when the open limit has read alone (likewise)
+  // Both limits have read together since the open limit last read alone (or the gate last booted): the gate mustn't
+  // report closed. Sure: both read past the debounce, so the gate has seen it; maybe: they read at all, cleared only
+  // once the open limit has read alone long enough for the gate to see that (refusals are excused while it's set).
+  bool closedUnprovenSure = false, closedUnprovenMaybe = false;
   std::vector<int32_t> refused;  // commands the gate refused this step, for monitor()
   int houseView = GS_UNKNOWN_;  // the house's idea of the gate (its gate_state log)
   uint32_t houseViewAt = 0;

@@ -232,7 +232,8 @@ def test_opener_ignores_command(rig):
 
 
 def test_both_limits_active(rig):
-    """Both limit signals at once (wiring fault): gate fault, house not-closed, nothing commanded."""
+    """Both limit signals at once (wiring fault): gate fault, house not-closed, nothing commanded. The closed limit
+    reading alone afterwards is still fault (which one lied can't be told) until the open limit has read alone."""
     rig.expect_commands(0)
     m = rig.mark()
     rig.sim.fault("both")
@@ -241,7 +242,14 @@ def test_both_limits_active(rig):
     rig.wait_ctrl(True, timeout=30)
     m2 = rig.mark()
     rig.sim.fault("none")
-    rig.wait_log("gate", "gate_state", a=GS["closed"], since=m2, timeout=5)
+    rig.expect_no("gate", "gate_state", seconds=3, since=m2)
+    rig.wait_house(10, gate="fault", io__k2=False, io__k1=True)
+    rig.sim.open_gate()
+    rig.wait_log("gate", "gate_state", a=GS["open"], since=m2, timeout=SIM_TRAVEL_S + 5)
+    rig.wait_house(10, gate="open", io__k2=False, io__k1=True)
+    m3 = rig.mark()
+    rig.sim.close_gate()
+    rig.wait_log("gate", "gate_state", a=GS["closed"], since=m3, timeout=SIM_TRAVEL_S + 5)
     rig.wait_house(10, gate="closed", io__k2=True, io__k1=False)
     rig.wait_ctrl(False, timeout=30)
     rig.expect_no("gate", "pulse", since=m)

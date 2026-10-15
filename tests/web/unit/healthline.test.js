@@ -46,7 +46,7 @@ test('link down: what differs from the other board, else where to look', () => {
 
 test('the gate’s state and power, the controller, start-up', () => {
   assert.match(txt(house({ gate: 'no_power', health: ['no_power'] })), /^The gate opener has no power/);
-  assert.match(txt(house({ gate: 'fault', health: ['fault'] })), /^Both gate limits/);
+  assert.match(txt(house({ gate: 'fault', health: ['fault'] })), /^Both gate limits.*clears once the gate reaches its open limit/);
   assert.equal(lvl(gate({ health: ['ac'], ac_power: false })), 'warn');
   assert.match(txt(gate({ health: ['ac'] })), /on its battery.*Commands still work/);
   assert.match(txt(house({ ctrl_power: false })), /controller has no power/);

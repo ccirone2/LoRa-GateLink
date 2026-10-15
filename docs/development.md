@@ -226,7 +226,7 @@ After the pull request carrying a new `FW_VERSION` is merged (`/release` in Clau
    the evidence (`check --ci`), builds the firmware at that commit with a read-only token, attaches
    `GateLink-vX.Y.Z.bin`, `GateLink-vX.Y.Z.bin.sha256` and the evidence as `GateLink-vX.Y.Z-evidence.md` to the draft,
    and publishes it, which creates the tag. GitHub attests an immutable release (`gh release verify`). Anything that
-   fails leaves the draft unpublished; it is fixed and the workflow run again. When it succeeds the `pages` workflow checks the `.bin` against that `.sha256` and redeploys the
+   fails before it publishes leaves the draft unpublished; it is fixed and the workflow started again. When it succeeds the `pages` workflow checks the `.bin` against that `.sha256` and redeploys the
    web console with it and a `firmware/latest.json` (version, file, sha256, size) bundled in (the page can't fetch release assets from github.com: no CORS), so **Board →
    Firmware update** offers it. They are never committed (`web/firmware/` is ignored).
 

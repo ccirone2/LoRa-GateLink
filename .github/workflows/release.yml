@@ -1,12 +1,13 @@
 name: Release firmware binary
 
 # Builds a release from its draft and publishes it. Releases are immutable once published (a repository setting):
-# the tag can't move and nothing can be attached or replaced, so a release is never published by hand. /release
-# creates the draft, targeted at the evidence merge commit by full SHA (a draft has no tag yet), and runs this.
-# It checks the draft, FW_VERSION and the release evidence (docs/release-criteria.md), builds the firmware at that
-# commit, attaches GateLink-<tag>.bin, its .sha256 and the evidence file to the draft, and publishes it, which
-# creates the tag on that commit (GitHub attests the release: gh release verify). Anything that fails leaves the
-# draft unpublished: fix the cause and run this again (a draft's files are replaced).
+# the tag can't move and nothing can be attached or replaced, so a release is never published by hand while its
+# files aren't attached. /release creates the draft, targeted at the evidence merge commit by full SHA (a draft has
+# no tag yet), and runs this. It checks the draft, FW_VERSION and the release evidence (docs/release-criteria.md),
+# builds the firmware at that commit, attaches GateLink-<tag>.bin, its .sha256 and the evidence file to the draft,
+# and publishes it, which creates the tag on that commit (GitHub attests the release: gh release verify). Anything
+# that fails before Publish leaves the draft unpublished: fix the cause and start a new run (a draft's files are
+# replaced). "Re-run failed jobs" would reuse the first job's reading of the draft.
 #
 # The write token is only in the jobs that run nothing but GitHub's own API and actions; the build (third-party
 # actions and the Arduino toolchain) has a read-only one.
@@ -62,7 +63,7 @@ jobs:
           fi
           read -r id draft sha <<< "$rel"
           if [ "$draft" != true ]; then
-            echo "::error::$TAG is already published, and immutable: nothing can be attached; release a new version"
+            echo "::error::$TAG is already published, and immutable: nothing can be attached. If it has its three files and its tag is on its target (gh release view $TAG --json assets; git ls-remote origin refs/tags/$TAG), only Pages is left (gh workflow run pages.yml); otherwise release a new version"
             exit 1
           fi
           if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -86,9 +87,15 @@ jobs:
         with:
           ref: ${{ needs.draft.outputs.sha }}
           fetch-depth: 0  # main, and all tags: the evidence check works out the release kind from the previous release
-      - name: Check the commit is on main and the tag is free
+      # The workflow (and so the toolchain below) comes from the branch it was started on, the source from $SHA: they
+      # must be the same release.yml, or the binary isn't built the way that commit says.
+      - name: Check the commit is on main, the tag is free and this is its workflow
         run: |
           git merge-base --is-ancestor "$SHA" origin/main || { echo "::error::$SHA isn't on main"; exit 1; }
+          if ! git diff --quiet "$SHA" "$GITHUB_SHA" -- .github/workflows/release.yml; then
+            echo "::error::release.yml on $GITHUB_REF_NAME differs from $SHA's: point the draft at $GITHUB_REF_NAME's head if its firmware and FW_VERSION are the same (the evidence check passes there once CI has), then start a new run"
+            exit 1
+          fi
           if at=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}"); then
             echo "::error::tag $TAG already exists, on $at: publishing would release that commit, not $SHA"
             exit 1
@@ -108,7 +115,8 @@ jobs:
           if ! python tools/release_evidence.py check "$TAG" --ci; then
             msg="$TAG has no complete release evidence (docs/releases/$TAG.md; what's missing is listed above,"
             msg+=" the criteria are in docs/release-criteria.md). Collect it with tools/release_evidence.py, merge it,"
-            msg+=" wait for CI to pass on the merge commit, point the draft at that commit, then re-run this workflow."
+            msg+=" wait for CI to pass on the merge commit, point the draft at that commit (gh release edit $TAG --target"
+            msg+=" <sha>), then start a new run (gh workflow run release.yml -f tag=$TAG)."
             echo "::error::$msg"
             exit 1
           fi
@@ -158,13 +166,27 @@ jobs:
           (cd out && sha256sum -c "$f.sha256")
           gh release upload "$TAG" "out/$f" "out/$f.sha256" "out/GateLink-$TAG-evidence.md" \
             --repo "$GITHUB_REPOSITORY" --clobber
-      # Publishing creates the tag on the draft's target. The release: published event it makes comes from this
-      # token, so it starts no workflow; Pages redeploys when this run completes (pages.yml, workflow_run). GitHub
-      # refuses this token a release on a commit that adds or changes a workflow file relative to main: then the
-      # draft, its files attached, is published by hand (/release).
+      # Publishing is the one step that can't be undone, so it checks this draft again (still a draft, named $TAG,
+      # with exactly the three files: a second draft of the same name could have taken the upload) and the tag, and
+      # names the built commit itself, whatever the draft points at by now. The release: published event it makes
+      # comes from this token, so it starts no workflow; Pages redeploys when this run completes (pages.yml,
+      # workflow_run). GitHub refuses this token a release on a commit that adds or changes a workflow file relative
+      # to main: then the draft, its files attached, is published by hand (/release).
       - name: Publish
         if: inputs.publish
         run: |
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$ID" -F draft=false --jq '"published \(.html_url)"'
+          names=$(gh api "repos/$GITHUB_REPOSITORY/releases/$ID" \
+                    --jq "select(.draft and .tag_name == \"$TAG\") | [.assets[].name] | sort | join(\" \")")
+          want="GateLink-$TAG-evidence.md GateLink-$TAG.bin GateLink-$TAG.bin.sha256"
+          if [ "$names" != "$want" ]; then
+            echo "::error::release $ID is no longer the $TAG draft with its three files (it has: ${names:-none}); nothing published"
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            echo "::error::tag $TAG appeared during this run; nothing published"
+            exit 1
+          fi
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$ID" -f tag_name="$TAG" -f target_commitish="$SHA" \
+            -F draft=false --jq '"published \(.html_url)"'
           at=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)
-          [ "$at" = "$SHA" ] || { echo "::error::tag $TAG is on $at, not $SHA"; exit 1; }
+          [ "$at" = "$SHA" ] || { echo "::error::published, but tag $TAG is on $at, not $SHA"; exit 1; }

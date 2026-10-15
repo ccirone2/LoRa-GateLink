@@ -17,8 +17,9 @@ without it. Versioning and the notes template: `docs/development.md` ("Versionin
    gh release list --limit 5
    python tools/release_evidence.py collect vX.Y.Z --dry-run
    ```
-   The version in `config.h` must not have a release or tag yet. If it does, the firmware change didn't bump
-   `FW_VERSION`: stop and say so rather than retagging. The dry run prints the release kind (from the previous
+   The version in `config.h` must not have a published release or a tag yet. If it does, the firmware change
+   didn't bump `FW_VERSION`: stop and say so. A draft for it is a release in progress from an earlier run: keep it,
+   and pick it up at step 10 or 11 rather than creating another. The dry run prints the release kind (from the previous
    tag), whether CI passed on this commit, and which criteria are still open: that is the bench plan. If CI
    didn't pass on `main`, stop: fix it first.
 2. **Flash both boards with this `main`** (`/flash`, from this checkout, no local changes under `firmware/`).
@@ -81,7 +82,8 @@ without it. Versioning and the notes template: `docs/development.md` ("Versionin
    before publishing: a release on this public repo is visible to everyone, and it is immutable once published
    (its tag and files are locked, and its version can never be used again).
 10. **Create the draft and run the release workflow.** Never publish a release yourself while its files aren't
-    attached: `gh release create` without `--draft` publishes at once, with nothing attached.
+    attached: `gh release create` without `--draft` publishes at once, with nothing attached. If step 1 found a
+    draft, update it instead (`gh release edit vX.Y.Z --target <merge-commit-sha> --notes-file <notes.md>`).
     ```sh
     gh release create vX.Y.Z --draft --target <merge-commit-sha> --title "vX.Y.Z — <one-line summary>" --notes-file <notes.md>
     gh workflow run release.yml -f tag=vX.Y.Z
@@ -90,7 +92,9 @@ without it. Versioning and the notes template: `docs/development.md` ("Versionin
     A draft has no tag. The workflow finds the draft and checks it: its target is a full SHA on `main`, the tag is
     free, `FW_VERSION` matches and the evidence passes (`check --ci`). It then builds that commit, attaches
     `GateLink-vX.Y.Z.bin`, its `.sha256` and `GateLink-vX.Y.Z-evidence.md`, and publishes, which creates the tag
-    there. With `-f publish=false` it stops once the files are attached, to check them on the draft first.
+    there. With `-f publish=false` it stops once the files are attached, to check them on the draft first; then
+    run it again without the flag to publish (it rebuilds the same commit with the same toolchain, so the `.sha256`
+    it attaches should match the one checked).
 11. **Check the release.**
     - `gh release view vX.Y.Z --json isDraft,isImmutable,tagName,assets` shows it published, immutable, and with
       the three files.
@@ -99,11 +103,19 @@ without it. Versioning and the notes template: `docs/development.md` ("Versionin
       .bin>` the binary against it.
     - The Pages run after the release workflow passed, and the page's `firmware/latest.json` names the version.
 
-    If the workflow failed, the release is still a private draft: show the log (`gh run view <id> --log-failed`),
-    fix the cause, and run it again (a draft's files are replaced). If the evidence was merged again, point the
-    draft at the new merge commit first (`gh release edit vX.Y.Z --target <sha>`). If only the **Publish** step was
-    refused, the files are attached: GitHub doesn't let the workflow's token release a commit that adds or changes a
-    workflow file relative to `main`. Publish it yourself (`gh release edit vX.Y.Z --draft=false`) once
-    `gh release view` lists all three files, then `gh workflow run pages.yml`.
+    If the workflow failed, check `gh release view vX.Y.Z --json isDraft,assets` and show the log (`gh run view <id>
+    --log-failed`).
+    - **Still a draft** (it failed before publishing): fix the cause and start a new run (`gh workflow run
+      release.yml -f tag=vX.Y.Z`; not "Re-run failed jobs", which reuses the first job's reading of the draft). If
+      the evidence was merged again, point the draft at the new merge commit first (`gh release edit vX.Y.Z --target
+      <sha>`). If the build refused because `release.yml` differs between the branch it ran from and the target,
+      point the draft at `main`'s head when its firmware tree and `FW_VERSION` are the same.
+    - **Publish was refused by GitHub** with the files attached: GitHub doesn't let the workflow's token release a
+      commit that adds or changes a workflow file relative to `main`. Publish it yourself (`gh release edit vX.Y.Z
+      --draft=false`) once `gh release view` lists all three files, then run the checks above and `gh workflow run
+      pages.yml`.
+    - **Published** (it failed after Publish printed `published <url>`): don't run it again. Do the checks above: if
+      the three files are there and the tag is on the target, only `gh workflow run pages.yml` is left. If not, stop
+      and tell the user: the version is used up, and a fix needs a new one.
 12. **Tidy the trackers.** Remove items shipped in this release from `TODO.md` and `ROADMAP.md` if the PR didn't
     already, on a branch with a PR.

@@ -16,11 +16,14 @@ CI runs the same (`ci.yml`, job `web`) and keeps the Playwright report as an art
 ## Unit tests (`unit/`)
 
 `node --test` on the modules that don't touch the page: `samba.js` (firmware image checks, the bootloader's CRC),
-`logdecode.js` (log events as text), `keys.js` (key ids, the weak-key rule, encrypted key backups), `util.js`, and
+`logdecode.js` (log events as text), `keys.js` (key ids, the weak-key rule, encrypted key backups), `util.js`,
+`checklist.js` (the Install tab's setup checklist), `healthline.js` (the Status tab's one-line verdict), and
 `survey.js` (the site survey's verdict, against the vectors in `tests/tools/fixtures/survey-vectors.json` that
 `tests/tools/test_survey.py` checks the Python twin with). Some also read the firmware sources, so the page can't drift
 from them: every log event in `log.cpp` must have a decoder, the gate states and causes must match `roles.h`, and the
-key id label must match `config.cpp`. The key backup tests also open a backup written by the Python tools
+key id label must match `config.cpp`. `fixture.test.js` checks that `fixtures/firmware.json` (below) says what
+the firmware says and that the Config tab lists every setting; `rules.test.js` checks the page keeps the project's
+rules (CLAUDE.md, "Web console": the naming rule, every module loaded as an ES module). The key backup tests also open a backup written by the Python tools
 (`tests/tools/fixtures/key-backup-v1-python.glkey`), and `tests/tools` opens one written by `keys.js`
 (`key-backup-v1.glkey`), so the two implementations stay one format.
 

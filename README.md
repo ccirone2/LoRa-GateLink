@@ -81,6 +81,9 @@ The UX has three audiences:
 | `firmware/GateLink/` | One Arduino sketch for both boards; the role (house or gate) is set in config |
 | `web/` | Static configuration and diagnostics page (Web Serial over USB, no server), hosted on GitHub Pages |
 | `tests/e2e/` | Bench end-to-end suite (pytest; needs the hardware) |
+| `tests/native/` | Host tests: the firmware built for the PC, both boards in a simulated site; fuzzing and mutation testing |
+| `tests/web/` | Web console lint, unit and browser tests (`npm test`) |
+| `tests/tools/` | Tests for the Python tools and the agent tooling (pytest) |
 | `tools/GateSim/` | Bench-only Uno sketch that simulates the opener |
 | `tools/bench-wiring/` | Bench wiring diagram (`wiring.json`, edited in the page served by `serve.py`) |
 | `tools/gatelink.py` | Command-line access to a board's USB console; config snapshot/restore around a flash; link history as CSV; radio preflight for a new board (`rftest`); site survey (`survey`); the link key: generate, encrypted backup and restore, key id (`key`) |
@@ -98,6 +101,8 @@ The UX has three audiences:
 - [docs/key-management.md](docs/key-management.md) — the link key: generating, encrypted backups, key ids, rotating, wiping
 - [docs/bench-testing.md](docs/bench-testing.md) — bench rules and the test checklist
 - [tests/e2e/README.md](tests/e2e/README.md) — the end-to-end suite
+- [tests/native/README.md](tests/native/README.md) — the host tests: the simulated site, invariant tags, mutation testing
+- [tests/web/README.md](tests/web/README.md) — the web console's unit and browser tests
 - [tools/GateSim/README.md](tools/GateSim/README.md) — the opener simulator
 - [tools/bench-wiring/README.md](tools/bench-wiring/README.md) — the bench wiring diagram
 - [docs/architecture.md](docs/architecture.md) — how the firmware (layer by layer) and the web console are built, and why

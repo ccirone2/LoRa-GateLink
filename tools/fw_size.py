@@ -5,7 +5,7 @@
 
 Reads arduino-cli's compile output ("Sketch uses ... Global variables use ..."), prints flash and static RAM use
 against the budget (also to $GITHUB_STEP_SUMMARY in CI) and exits 1 if either is over. The budget lives here, so a
-change that needs more is a visible decision in its pull request (docs/development.md, "Size budget").
+change that needs more is a visible decision in its pull request (docs/development.md, "Making a change").
 """
 
 import argparse

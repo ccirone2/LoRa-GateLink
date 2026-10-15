@@ -28,16 +28,17 @@ CHECK_TIMEOUT_S = 25  # per external check; settings.json gives each hook 60 s
 STATE_MAX_AGE_S = 14 * 24 * 3600  # stop-hook state files older than this are removed
 FW = "firmware/GateLink/"
 
-# The console contract: tools/check_contract.py compares these.
+# The console contract: tools/check_contract.py compares these (and the Python under CONTRACT_DIRS).
 CONTRACT_FILES = (
     FW + "console.cpp",
+    FW + "link.h",
     FW + "log.cpp",
     FW + "log.h",
     FW + "roles.h",
     "docs/console.md",
     "tools/check_contract.py",
 )
-CONTRACT_DIRS = ("tools/gatelink_client/", "tests/e2e/gatelink/")
+CONTRACT_DIRS = ("tools/gatelink_client/", "tests/e2e/")
 # What tools/docgen.py reads besides the docs themselves.
 DOCGEN_SOURCES = (FW, "web/js/", "tests/e2e/", "tools/release_evidence.py", "tools/bench-wiring/wiring.json",
                   "tools/docgen.py")

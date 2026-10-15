@@ -50,7 +50,7 @@ of its own is reported and ignored, and without Python the checks are skipped.
 | `*.md` | Relative links resolve; `tools/docgen.py` still agrees (the docs against the source) |
 | `.claude/settings.json` | Parses; every hook's script exists |
 | `.claude/skills/*/SKILL.md`, `.claude/routines/*.md` | Front matter; skills used and paths named exist |
-| The console contract (`console.cpp`, `log.cpp`, `log.h`, `roles.h`, `docs/console.md`, `tools/gatelink_client/`, `tests/e2e/gatelink/`) | `tools/check_contract.py` |
+| The console contract (`console.cpp`, `link.h`, `log.cpp`, `log.h`, `roles.h`, `docs/console.md`, `tools/gatelink_client/`, `tests/e2e/`) | `tools/check_contract.py` |
 
 Firmware edits get no per-edit check: a compile takes too long for every keystroke; the checklist and CI cover it.
 

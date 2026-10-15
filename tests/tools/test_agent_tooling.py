@@ -520,3 +520,16 @@ def test_post_edit_runs_docgen_on_a_doc(repo, monkeypatch, capsys):
     assert rc == 2 and "tools/docgen.py (after editing docs/console.md)" in err
     fake_docgen(repo, ok=True)
     assert post_edit(repo, "docs/console.md", monkeypatch, capsys)[0] == 0
+
+
+def test_contract_check_runs_for_every_file_it_reads():
+    """The post-edit and stop hooks run tools/check_contract.py for exactly the files it reads (link.h's AckResult,
+    the e2e tests' wait_log names), so an edit that breaks the contract is caught at the edit, not in CI."""
+    import check_contract
+
+    src = (ROOT / "tools/check_contract.py").read_text(encoding="utf-8")
+    read = [f"firmware/GateLink/{n}" for n in re.findall(r'FW / "([\w.]+)"', src)]
+    read += [p.relative_to(ROOT).as_posix() for p in (check_contract.DOC, check_contract.WIRE)]
+    read += [p.relative_to(ROOT).as_posix() for d in check_contract.SUITE for p in d.rglob("*.py")]
+    assert "firmware/GateLink/link.h" in read and "tests/e2e/test_remote.py" in read
+    assert [f for f in read if not hooks.is_contract(f)] == []

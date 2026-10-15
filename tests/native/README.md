@@ -145,7 +145,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `missed-move` | A move the house never heard (the gate's count of departures from closed advanced while the sensor showed closed) opens the sensor for 5 s; nothing else does: a move it heard, a link loss that already opened it, a gate reboot | `link` |
 | `busy-channel` | Listen-before-talk: frames get through a busy neighbour's gaps, and never start into a frame heard | `link` |
 | `history-kept` | Each completed history bucket is written to the flash once (a failing chip costs one try per bucket) and a reset loads them back as they were; a write torn by a power cut is skipped and nothing else lost; the log wraps by erasing only its oldest sector; `hist.clear` clears the flash too | `history` |
-| `fault-out` | D5 (`fault_out`): untouched while off; HIGH only while healthy, LOW once a problem has lasted `fault_hold_s` and at once after a reset until the board has decided; recovery raises it at once; it commands nothing | `fault_out` |
+| `fault-out` | D5 (`fault_out`): untouched while off; HIGH only while healthy, LOW once a problem has lasted `fault_hold_s` and at once after a reset until the board has decided; recovery raises it at once; it commands nothing | `fault_out`, `reboots` |
 
 ## Mutation testing (`mutations.json`, `tools/mutate.py`)
 

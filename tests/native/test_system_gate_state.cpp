@@ -366,6 +366,27 @@ TEST(gate_state_both_limits_read_fault) {
   CHECK(w.sensorClosed());
 }
 
+// Both limits for less than BOTH_LIMITS_HOLD_MS (500 ms; a glitch, the relays switching over): a moment's fault, and the
+// closed limit is trusted again as soon as the open one releases, not held until the gate next opens.
+// [state-from-limits]
+TEST(gate_state_short_overlap_of_both_limits_is_not_held) {
+  Site w;
+  w.commission();
+  size_t g0 = w.gate.logs.size();
+  w.opener.force[0] = 1;
+  w.run(300);
+  w.opener.force[0] = -1;
+  Found f = waitFor(w, w.gate, "gate_state", g0, 1000, GS_FAULT_);
+  CHECK(f.ok);
+  Found c = waitFor(w, w.gate, "gate_state", g0, 1000, GS_CLOSED_);
+  CHECK(c.ok);
+  CHECK_IN(c.e.at - f.e.at, 295, 305);
+  waitBoth(w, GS_CLOSED_, 2000);
+  w.run(100);
+  CHECK(w.sensorClosed());
+  CHECK(!w.house.coil(1));
+}
+
 // A closed limit stuck on (the AUX2 relay never energizing: its NC contact reads closed wherever the gate is) reads
 // fault from the gate's first full opening on, and not closed again until the open limit reads alone, a restart
 // excepted. Before that opening it can't be told from a closed gate. ROADMAP F14, threat closed-limit-nc-fail-unsafe.

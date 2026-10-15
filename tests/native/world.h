@@ -325,7 +325,8 @@ struct World {
   uint32_t bothLimitsSince = 0;  // since when both have read (likewise)
   uint32_t openAloneSince = 0;   // since when the open limit has read alone (likewise)
   // Both limits have read together since the open limit last read alone (or the gate last booted): the gate mustn't
-  // report closed. Sure: both read past the debounce, so the gate has seen it; maybe: they read at all, cleared only
+  // report closed. Sure: both read past the gate's 500 ms hold and its lag, so it has held them; maybe: they read at
+  // all, cleared only
   // once the open limit has read alone long enough for the gate to see that (refusals are excused while it's set).
   bool closedUnprovenSure = false, closedUnprovenMaybe = false;
   std::vector<int32_t> refused;  // commands the gate refused this step, for monitor()

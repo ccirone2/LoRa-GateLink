@@ -269,6 +269,9 @@ switch edges are ignored and nothing alarms. A welded relay contact is invisible
   It answers part of F3's open question (does the controller's power count?): settle that with it.
 - A shared input held on while our coil is off: needs the opener's OPEN/CLOSE terminals sensed on an input (F15, or
   H1).
+- Keep the both-limits hold across a gate board restart (it is in RAM): a reset with a stuck closed limit and the gate
+  part-open reads closed again until the next full opening. A flash write when it latches (outside a pulse) would keep
+  it; weigh that against how rare a reset with a stuck limit is.
 
 **Cost / risk.** The IN2 check adds a health problem (status `health`, log `health`, the web console's health line).
 

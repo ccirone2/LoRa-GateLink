@@ -45,8 +45,13 @@ static uint32_t betweenAt = 0;  // when the inputs started reading between while
 // from the AUX2 relay's NC contact, which reads closed whenever that relay isn't energized: a failed relay or driver, or
 // the opener's AUX setting wrong. With it stuck, the gate reads fault only while at its open limit and closed everywhere
 // else, mid-travel included; held, a stuck closed limit is fault from the first full opening on. The open limit
-// reading alone (wetted by the same 24 V) shows the closed one released.
+// reading alone (wetted by the same 24 V) shows the closed one released. Held only once both have read for
+// BOTH_LIMITS_HOLD_MS: a stuck one reads both at the open limit for as long as the gate stays there, and a shorter
+// overlap (a glitch, the relays switching over on a controller reset) is only a moment's fault, not one held until the
+// gate next opens fully.
+#define BOTH_LIMITS_HOLD_MS 500
 static bool closedUnproven = false;
+static uint32_t bothSince = 0;  // when both limits started reading (0 = they don't)
 static bool rebootAfterCmd = false;  // debug: next pulsed command reboots us before its ACK (a power cut)
 static uint32_t rebootAt = 0;
 
@@ -166,7 +171,14 @@ void gateLoop(uint32_t now) {
   if (rebootAt && elapsed(now, rebootAt, 0)) boardReset();
   in1.update(now, cfg.debounce_ms, cfg.in1_invert);
   in2.update(now, cfg.debounce_ms, cfg.in2_invert);
-  if (in1.active()) closedUnproven = in2.active();
+  if (!in1.active() || !in2.active()) {
+    bothSince = 0;
+    if (in1.active()) closedUnproven = false;
+  } else if (!bothSince) {
+    bothSince = now | 1;
+  } else if (elapsed(now, bothSince, BOTH_LIMITS_HOLD_MS)) {
+    closedUnproven = true;  // a stamp that ages past 2^31 ms only sets it again
+  }
   bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense
 
   uint8_t s = readState();

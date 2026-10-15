@@ -149,13 +149,15 @@ before it), and a 0.16 gate's 32-byte STATUS carries none. It drives K2 only: K1
 D5 isn't involved (the move isn't a fault; the link history shows the outage).
 
 **A closed limit that has read alongside the open one** (0.17.1, ROADMAP F14). Both limits reading at once is
-`fault`, and `readState` keeps it `fault` while the closed limit reads, alone too, until the open limit has read alone
+`fault`, and once they have for `BOTH_LIMITS_HOLD_MS` (500 ms) `readState` keeps it `fault` while the closed limit
+reads, alone too, until the open limit has read alone
 (`closedUnproven`, updated in `gateLoop` as the limits are read; RAM only, so a restart forgets it). The closed limit is the AUX2 relay's NC contact
 ([hardware.md](hardware.md)): it reads closed whenever that relay isn't energized (a failed coil or driver, the AUX
 setting left at "always off"), wherever the gate is. Before this a stuck one read `fault` only at the open limit and
 `closed` everywhere else, mid-travel too; now it is `fault` from the first full opening on, and the house shows not
 closed. Which of the two lied can't be told, so a stuck open limit read at the closed one is held the same way (a
-nuisance only until the next full opening). Only the open limit reading alone clears it, since it is wetted by the
+nuisance only until the next full opening); a shorter overlap (a glitch, the relays switching over) isn't held. Without
+AC a held `fault` refuses commands as any `fault` does: the position can't be verified. Only the open limit reading alone clears it, since it is wetted by the
 same 24 V: the closed one reading off with nothing else (`between`) may only be that 24 V gone. Before the first full
 opening a stuck closed limit can't be told from a closed gate: F12's second sensor is the answer to that.
 Considered and not built (F14, 2026-10-15): a fault when the closed limit stays on after our OPEN pulse (a gate that

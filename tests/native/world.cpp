@@ -1090,12 +1090,20 @@ void World::monitor() {
   steadySince(openAloneSince, opener.in(1) && !opener.in(2));
   // As the gate sees its inputs: past its debounce, and a loop stall (a flash save or radio restart, up to ~1 s) that
   // held off its next read.
-  uint32_t debounce = (uint32_t)gate.get("debounce_ms"), lag = debounce + 1200;
-  auto steady = [&](uint32_t since) { return since && now - since > lag; };
-  if (opener.in(1) && opener.in(2)) closedUnprovenMaybe = true;
-  else if (steady(openAloneSince)) closedUnprovenMaybe = false;
-  if (opener.in(1) && !opener.in(2)) closedUnprovenSure = false;
-  else if (bothLimitsSince && now - bothLimitsSince > debounce + 5) closedUnprovenSure = true;
+  uint32_t lag = 0;
+  auto steady = [&](uint32_t since) {
+    if (!lag) lag = (uint32_t)gate.get("debounce_ms") + 1200;
+    return since && (int32_t)(now - since) > (int32_t)lag;  // signed: a stamp is now | 1, a ms ahead of an even now
+  };
+  // The gate holds both limits after they have read together for 500 ms (BOTH_LIMITS_HOLD_MS): surely once they have
+  // for that plus the lag, maybe once they have read at all.
+  if (bothLimitsSince) {
+    closedUnprovenMaybe = true;
+    if (!closedUnprovenSure && steady(bothLimitsSince) && (int32_t)(now - bothLimitsSince) > (int32_t)lag + 500) closedUnprovenSure = true;
+  } else if (openAloneSince) {
+    closedUnprovenSure = false;
+    if (closedUnprovenMaybe && steady(openAloneSince)) closedUnprovenMaybe = false;
+  }
   // Availability: a command is refused only without AC and with no position to trust (no limit reading, and no pulse
   // of ours under way, or both limits reading).
   if (!refused.empty() && gate.running()) {

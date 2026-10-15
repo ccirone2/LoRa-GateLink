@@ -479,8 +479,23 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (in1.active()) closedUnproven = in2.active();",
-    "replace": "  closedUnproven = false;"
+    "find": "    closedUnproven = true;  // a stamp",
+    "replace": "    closedUnproven = false;  // a stamp"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl6_both_limits_held_at_once",
+  "invariant": "state-from-limits",
+  "why": "SL6: any debounced overlap of both limits is held (no BOTH_LIMITS_HOLD_MS), so a glitch at the closed limit reads fault until the gate next opens fully",
+  "killed_by": [
+   "gate_state_short_overlap_of_both_limits_is_not_held"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "#define BOTH_LIMITS_HOLD_MS 500",
+    "replace": "#define BOTH_LIMITS_HOLD_MS 0"
    }
   ]
  },

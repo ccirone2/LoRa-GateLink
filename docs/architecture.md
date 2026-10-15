@@ -150,7 +150,7 @@ D5 isn't involved (the move isn't a fault; the link history shows the outage).
 
 **A closed limit that has read alongside the open one** (0.17.1, ROADMAP F14). Both limits reading at once is
 `fault`, and `readState` keeps it `fault` while the closed limit reads, alone too, until the open limit has read alone
-(`closedUnproven`; RAM only, so a restart forgets it). The closed limit is the AUX2 relay's NC contact
+(`closedUnproven`, updated in `gateLoop` as the limits are read; RAM only, so a restart forgets it). The closed limit is the AUX2 relay's NC contact
 ([hardware.md](hardware.md)): it reads closed whenever that relay isn't energized (a failed coil or driver, the AUX
 setting left at "always off"), wherever the gate is. Before this a stuck one read `fault` only at the open limit and
 `closed` everywhere else, mid-travel too; now it is `fault` from the first full opening on, and the house shows not

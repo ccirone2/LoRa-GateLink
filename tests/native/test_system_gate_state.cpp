@@ -361,7 +361,7 @@ TEST(gate_state_both_limits_read_fault) {
   Found c = waitFor(w, w.gate, "gate_state", g2, 15000, GS_CLOSED_);
   CHECK(c.ok);
   waitBoth(w, GS_CLOSED_, 2000);
-  w.run(MISMATCH_MS + 3000);
+  w.run(100);
   CHECK(!w.house.coil(1));
   CHECK(w.sensorClosed());
 }

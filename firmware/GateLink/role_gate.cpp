@@ -77,8 +77,7 @@ static bool acPower() {
 
 static uint8_t readState() {
   bool open = in1.active(), closed = in2.active();
-  if (open) closedUnproven = closed;
-  if (closed && closedUnproven) return GS_FAULT;
+  if (closed && (open || closedUnproven)) return GS_FAULT;
   if (closed) return GS_CLOSED;
   if (open) return GS_OPEN;
   // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may
@@ -167,6 +166,7 @@ void gateLoop(uint32_t now) {
   if (rebootAt && elapsed(now, rebootAt, 0)) boardReset();
   in1.update(now, cfg.debounce_ms, cfg.in1_invert);
   in2.update(now, cfg.debounce_ms, cfg.in2_invert);
+  if (in1.active()) closedUnproven = in2.active();
   bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense
 
   uint8_t s = readState();

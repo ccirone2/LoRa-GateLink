@@ -422,7 +422,7 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (closed && closedUnproven) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "find": "  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
     "replace": "  if (closed) return GS_CLOSED;"
    }
   ]
@@ -479,8 +479,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (open) closedUnproven = closed;",
-    "replace": "  closedUnproven = open && closed;"
+    "find": "  if (in1.active()) closedUnproven = in2.active();",
+    "replace": "  closedUnproven = false;"
    }
   ]
  },
@@ -787,8 +787,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool open = in1.active(), closed = in2.active();\n  if (open) closedUnproven = closed;\n  if (closed && closedUnproven) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may\n  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.\n  if (!acPower()) return GS_NO_POWER;\n  return GS_BETWEEN;",
-    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (open) closedUnproven = closed;\n  if (closed && closedUnproven) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  return GS_BETWEEN;"
+    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may\n  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.\n  if (!acPower()) return GS_NO_POWER;\n  return GS_BETWEEN;",
+    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  return GS_BETWEEN;"
    }
   ]
  },
@@ -1047,8 +1047,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (closed && closedUnproven) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
-    "replace": "  if (closed) return GS_CLOSED;\n  if (closed && closedUnproven) return GS_FAULT;"
+    "find": "  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "replace": "  if (closed) return GS_CLOSED;\n  if (closed && (open || closedUnproven)) return GS_FAULT;"
    }
   ]
  },
@@ -1062,8 +1062,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool open = in1.active(), closed = in2.active();\n  if (open) closedUnproven = closed;",
-    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (open) closedUnproven = closed;"
+    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven)) return GS_FAULT;",
+    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven)) return GS_FAULT;"
    }
   ]
  },

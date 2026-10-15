@@ -110,9 +110,11 @@ once its fix is merged and record it in the pull request.
 
 ## Supply chain
 
-- [ ] **Repository settings** (threat model `pages-malicious-firmware`, `release-asset-mutable`,
-  `agent-tooling-push-path`; owner's decision). A ruleset on `main` (pull request and CI required, no force push), a
-  protected `v*` tag pattern, immutable releases, and build provenance attestations for release binaries.
+- [ ] **Release binaries: what's left** (threat model `pages-malicious-firmware`, `release-asset-mutable`). The
+  rulesets on `main` and `v*` tags and immutable releases are on (2026-10-14). Left: Pages could check the bundled
+  `.bin` with `gh release verify-asset` (GitHub's attestation) rather than the release's own `.sha256`, once a release
+  is immutable (v0.17.0 on); and build provenance attestations for the binary (`actions/attest-build-provenance`), if
+  worth a third-party-free path to them.
 - [ ] **Bench hygiene** (threat model, low). Home Assistant TLS verified by default (`ha-token-tls-off`), a Host
   check in `tools/bench-wiring/serve.py` (`bench-wiring-server`), a content security policy in `web/index.html` and
   numeric coercion of `hist.get` fields (`board-output-xss`).

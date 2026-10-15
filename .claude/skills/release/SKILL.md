@@ -1,6 +1,6 @@
 ---
 name: release
-description: Release a GateLink firmware version - run the bench per docs/release-criteria.md on the merged version, collect the release evidence with tools/release_evidence.py and merge it, then tag the merge commit, publish notes from the pull requests since the last tag, and check the release workflow attached the binary and evidence. Use after a pull request that bumps FW_VERSION is merged, or when asked to cut, tag or publish a release or update the changelog.
+description: Release a GateLink firmware version - run the bench per docs/release-criteria.md on the merged version, collect the release evidence with tools/release_evidence.py and merge it, then create a draft release on the merge commit with notes from the pull requests since the last tag, and have the release workflow attach the binary and evidence and publish it. Use after a pull request that bumps FW_VERSION is merged, or when asked to cut, tag or publish a release or update the changelog.
 ---
 
 # Release a firmware version
@@ -64,8 +64,7 @@ without it. Versioning and the notes template: `docs/development.md` ("Versionin
    gh run list --workflow ci.yml --commit $(git rev-parse HEAD) --limit 1
    python tools/release_evidence.py check vX.Y.Z --ci
    ```
-   The release workflow runs the same check on the tag; publishing before it passes leaves a release without a
-   binary.
+   The release workflow runs the same check on the draft's commit and refuses to build or publish until it passes.
 7. **Gather what changed** since the previous tag:
    ```sh
    git log --oneline <prev-tag>..main
@@ -79,18 +78,32 @@ without it. Versioning and the notes template: `docs/development.md` ("Versionin
    evidence file (kind, runs and counts, reruns, notable measurements) and link it. Plain, specific sentences; no
    marketing.
 9. **Show the user the version, target commit (the evidence merge commit, full SHA) and notes, and get a yes**
-   before publishing: a release on this public repo is visible to everyone.
-10. **Publish** on that exact commit:
+   before publishing: a release on this public repo is visible to everyone, and it is immutable once published
+   (its tag and files are locked, and its version can never be used again).
+10. **Create the draft and run the release workflow.** Never publish a release yourself while its files aren't
+    attached: `gh release create` without `--draft` publishes at once, with nothing attached.
     ```sh
-    gh release create vX.Y.Z --target <merge-commit-sha> --title "vX.Y.Z — <one-line summary>" --notes-file <notes.md>
+    gh release create vX.Y.Z --draft --target <merge-commit-sha> --title "vX.Y.Z — <one-line summary>" --notes-file <notes.md>
+    gh workflow run release.yml -f tag=vX.Y.Z
+    gh run list --workflow release.yml --limit 1   # then: gh run watch <id>
     ```
-11. **Check the assets.** The `release` workflow checks the evidence, builds the tag and attaches
-    `GateLink-vX.Y.Z.bin`, its `.sha256` and `GateLink-vX.Y.Z-evidence.md`: `gh run list --workflow release.yml
-    --limit 1`, then `gh release view vX.Y.Z` should list all three. It refuses to replace a binary already attached
-    (re-run by hand with `replace` only if one must be rebuilt). If the workflow failed, show its log (`gh run view
-    <id> --log-failed`); an evidence failure there names what's missing. Tell the user the release is now public
-    with no binary, and the next Pages deploy would drop the web console's bundled firmware (it takes the latest
-    release). Offer to make it a draft again (`gh release edit vX.Y.Z --draft`) until the evidence is fixed; if
-    CI just hadn't finished, re-run the workflow once it has.
+    A draft has no tag. The workflow finds the draft and checks it: its target is a full SHA on `main`, the tag is
+    free, `FW_VERSION` matches and the evidence passes (`check --ci`). It then builds that commit, attaches
+    `GateLink-vX.Y.Z.bin`, its `.sha256` and `GateLink-vX.Y.Z-evidence.md`, and publishes, which creates the tag
+    there. With `-f publish=false` it stops once the files are attached, to check them on the draft first.
+11. **Check the release.**
+    - `gh release view vX.Y.Z --json isDraft,isImmutable,tagName,assets` shows it published, immutable, and with
+      the three files.
+    - `git ls-remote origin refs/tags/vX.Y.Z` shows the tag on the target commit.
+    - `gh release verify vX.Y.Z` checks GitHub's attestation, and `gh release verify-asset vX.Y.Z <downloaded
+      .bin>` the binary against it.
+    - The Pages run after the release workflow passed, and the page's `firmware/latest.json` names the version.
+
+    If the workflow failed, the release is still a private draft: show the log (`gh run view <id> --log-failed`),
+    fix the cause, and run it again (a draft's files are replaced). If the evidence was merged again, point the
+    draft at the new merge commit first (`gh release edit vX.Y.Z --target <sha>`). If only the **Publish** step was
+    refused, the files are attached: GitHub doesn't let the workflow's token release a commit that adds or changes a
+    workflow file relative to `main`. Publish it yourself (`gh release edit vX.Y.Z --draft=false`) once
+    `gh release view` lists all three files, then `gh workflow run pages.yml`.
 12. **Tidy the trackers.** Remove items shipped in this release from `TODO.md` and `ROADMAP.md` if the PR didn't
     already, on a branch with a PR.

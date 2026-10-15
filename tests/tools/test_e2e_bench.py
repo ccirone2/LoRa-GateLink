@@ -59,3 +59,25 @@ def test_find_lipos_refuses_an_untapped_board(tapped):
     with pytest.raises(bench_mod.NoUartTap, match="UART tap"):
         b.find_lipos()
     assert b.cuts == []
+
+
+class StatusBoard:
+    def __init__(self, st):
+        self.st = st
+
+    def status(self):
+        return self.st
+
+
+@pytest.mark.parametrize("remote_up, gate_up_ms, link_up, verified, ok", [
+    (14, 14_300, True, True, True),     # a STATUS from the gate's current boot
+    (2, 14_300, True, True, True),      # an older one from this boot: still the current session
+    (900, 14_300, True, True, False),   # the old boot's last STATUS after a gate reboot (20261014-231116)
+    (14, 14_300, False, True, False),
+    (14, 14_300, True, False, False),
+])
+def test_baseline_link_is_on_a_status_from_the_gate_s_current_boot(remote_up, gate_up_ms, link_up, verified, ok):
+    b = bench_mod.Bench.__new__(bench_mod.Bench)
+    b.house = StatusBoard({"link_up": link_up, "remote": {"uptime_s": remote_up}})
+    b.gate = StatusBoard({"uptime_ms": gate_up_ms, "link": {"verified": verified}})
+    assert bool(b._link_current()) is ok

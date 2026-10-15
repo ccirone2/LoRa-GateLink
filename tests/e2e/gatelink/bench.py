@@ -290,8 +290,7 @@ class Bench:
         self.sim.power(True)
         self.power.ensure_on()
         self.apply_profile()
-        self.wait_for(lambda: self.house.status()["link_up"] and self.gate.status()["link"]["verified"],
-                      45, "link up and verified")
+        self.wait_for(self._link_current, 45, "link up and verified, the house's STATUS from the gate's current boot")
         if self.sim.status()["state"] != "closed":
             self.sim.close_gate()
             self.wait_for(lambda: self.sim.status()["state"] == "closed", SIM_TRAVEL_S + 5, "simulator closed")
@@ -309,6 +308,16 @@ class Bench:
             m = self.mark()
             self.ctrl.off()
             self.expect_no("house", "cmd_sent", seconds=2, since=m)
+
+    def _link_current(self):
+        """The link is up on a STATUS from the gate's current boot. After a gate reboot the house keeps `link_up` from
+        the old session's last STATUS until it times out, and verifying the new session can take seconds at 17 dBm:
+        a test that started then cut a link that wasn't up (test_history_outage, run 20261014-231116). That STATUS's
+        uptime (`remote.uptime_s`) is then the old boot's, more than the gate's own; the house is read first, so a
+        current one never is."""
+        h = self.house.status()
+        g = self.gate.status()
+        return h["link_up"] and g["link"]["verified"] and h["remote"]["uptime_s"] <= g["uptime_ms"] // 1000
 
     def snapshot(self):
         snap = {}

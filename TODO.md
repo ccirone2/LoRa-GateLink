@@ -23,12 +23,6 @@ once its fix is merged and record it in the pull request.
 
 ## Bench and field tests
 
-- [ ] **Flaky: `test_history_outage` at 17 dBm (0.17.0).** In the 0.17.0 release run at `--tx-power 17`
-  (`20261014-231116`) it failed with `gate down_s 0`; its one rerun passed (`20261014-233421`). The test before it,
-  `test_history_kept_across_a_reboot`, reboots the gate, and the baseline only waits for the house's `link_up`
-  (still true from the old session's last STATUS) and the gate's `verified`. The house hadn't verified the gate's new
-  session when the outage began (it did 14 s after the reboot, after the outage), so the link the test cut wasn't up.
-  Fix the baseline (`gatelink/bench.py`): wait until the house has taken a STATUS from the gate's current session.
 - [ ] **A rebooted gate's session is verified slowly at 17 dBm on the bench.** After a gate reboot the house accepted
   the new session within 1.4–1.9 s at 5 dBm, but in 1.5–4.2 s at 17 dBm (and once over 7.8 s, run
   `20261014-231116`), on 0.15.2 as well (1.5–4.2 s, `20261013-144010`). While the house still has the old session

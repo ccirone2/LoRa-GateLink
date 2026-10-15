@@ -114,6 +114,12 @@ are built from the pull requests since the last tag.
 6. Merge to `main`. Once CI has passed on `main`, the web console is deployed to GitHub Pages (`pages.yml`; also
    after each release build, to bundle its `.bin`, and by hand with `gh workflow run pages.yml`).
 
+`main` is protected by a ruleset (repository settings): changes only through a pull request, merged as a merge
+commit, with CI's `firmware`, `static`, `coverage`, `web`, `python` and `workflows` jobs passing; no force pushes or
+deletion. The required checks are listed by job name in the ruleset, not here: rename or split one of those jobs and
+every pull request waits for the old name until the ruleset is changed with it. The fuzz and mutation jobs aren't
+required (they run only when their paths change). `v*` tags can't be moved or deleted (a second ruleset).
+
 CI's actions are pinned by commit SHA and its runners by image (`ubuntu-24.04`); Dependabot
 (`.github/dependabot.yml`) proposes action, npm and Python (`uv.lock`, ruff included) updates weekly, and the nightly deps-check routine
 covers the Arduino cores and libraries, arduino-cli, uv and gcovr (CI runs gcovr 8.6).
@@ -208,15 +214,19 @@ After the pull request carrying a new `FW_VERSION` is merged (`/release` in Clau
 2. `python tools/release_evidence.py collect vX.Y.Z` writes the evidence, `docs/releases/vX.Y.Z.md`, from the
    runs' `summary.json` (exit 1 while a criterion is unmet). Merge it in a pull request with the bench results in
    its body.
-3. Once CI has passed on that merge commit, `python tools/release_evidence.py check vX.Y.Z --ci`, then tag the
-   merge commit `vX.Y.Z` and publish a GitHub release with notes:
+3. Once CI has passed on that merge commit, `python tools/release_evidence.py check vX.Y.Z --ci`, then create a
+   draft release with notes on the merge commit and run the release workflow:
    ```sh
-   gh release create vX.Y.Z --target <merge-commit-sha> --title "vX.Y.Z — <one-line summary>" --notes-file notes.md
+   gh release create vX.Y.Z --draft --target <merge-commit-sha> --title "vX.Y.Z — <one-line summary>" --notes-file notes.md
+   gh workflow run release.yml -f tag=vX.Y.Z
    ```
-4. The `release` workflow checks the evidence (`check --ci`; tags from before the criteria are built without it),
-   builds the firmware at the tag and attaches `GateLink-vX.Y.Z.bin`, `GateLink-vX.Y.Z.bin.sha256` (from v0.13.0)
-   and the evidence as `GateLink-vX.Y.Z-evidence.md`. It never replaces a binary already attached unless run by hand
-   with `replace` ticked. When it succeeds the `pages` workflow checks the `.bin` against that `.sha256` and redeploys the
+   Releases are immutable once published (a repository setting since v0.17.0): the tag can't move, and files can't be
+   added, replaced or removed. So a release is never published by hand while its files aren't attached.
+4. The `release` workflow checks the draft (its target a full SHA on `main`, the tag still free), `FW_VERSION` and
+   the evidence (`check --ci`), builds the firmware at that commit with a read-only token, attaches
+   `GateLink-vX.Y.Z.bin`, `GateLink-vX.Y.Z.bin.sha256` and the evidence as `GateLink-vX.Y.Z-evidence.md` to the draft,
+   and publishes it, which creates the tag. GitHub attests an immutable release (`gh release verify`). Anything that
+   fails before it publishes leaves the draft unpublished; it is fixed and the workflow started again. When it succeeds the `pages` workflow checks the `.bin` against that `.sha256` and redeploys the
    web console with it and a `firmware/latest.json` (version, file, sha256, size) bundled in (the page can't fetch release assets from github.com: no CORS), so **Board →
    Firmware update** offers it. They are never committed (`web/firmware/` is ignored).
 

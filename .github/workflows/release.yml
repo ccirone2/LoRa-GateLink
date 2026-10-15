@@ -1,58 +1,122 @@
 name: Release firmware binary
 
-# Checks the release evidence (docs/release-criteria.md), builds the firmware at a release's tag and attaches
-# GateLink-<tag>.bin, its .sha256 and the evidence file to the release.
-# Run by hand (workflow_dispatch) to add the binary to an existing release. A binary already attached is never
-# replaced unless `replace` is ticked: the web console and anyone who downloaded it rely on it staying the same.
+# Builds a release from its draft and publishes it. Releases are immutable once published (a repository setting):
+# the tag can't move and nothing can be attached or replaced, so a release is never published by hand while its
+# files aren't attached. /release creates the draft, targeted at the evidence merge commit by full SHA (a draft has
+# no tag yet), and runs this. It checks the draft, FW_VERSION and the release evidence (docs/release-criteria.md),
+# builds the firmware at that commit, attaches GateLink-<tag>.bin, its .sha256 and the evidence file to the draft,
+# and publishes it, which creates the tag on that commit (GitHub attests the release: gh release verify). Anything
+# that fails before Publish leaves the draft unpublished: fix the cause and start a new run (a draft's files are
+# replaced). "Re-run failed jobs" would reuse the first job's reading of the draft.
+#
+# The write token is only in the jobs that run nothing but GitHub's own API and actions; the build (third-party
+# actions and the Arduino toolchain) has a read-only one.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to build, e.g. v0.3.5
+        description: The draft release to build and publish, e.g. v0.17.0
         required: true
-      replace:
-        description: Replace a binary already attached to the release
+      publish:
+        description: Publish once the files are attached (untick to check them on the draft first)
         type: boolean
-        default: false
+        default: true
 
-permissions:
-  contents: write
-  actions: read  # the evidence check reads the CI runs of the tagged commit
+permissions: {}
 
 defaults:
   run:
     shell: bash
 
+concurrency:
+  group: release-${{ inputs.tag }}
+
+env:
+  TAG: ${{ inputs.tag }}
+
 jobs:
+  # A draft (published, a release is immutable: the only way on is a new version) whose target is a full commit
+  # SHA, which is what gets built and tagged.
+  draft:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write  # draft releases are listed only to a token that can push
+    outputs:
+      id: ${{ steps.find.outputs.id }}
+      sha: ${{ steps.find.outputs.sha }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$TAG' isn't a release tag like v1.2.3"; exit 1; }
+          rel=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+                  --jq ".[] | select(.tag_name == \"$TAG\") | [.id, .draft, .target_commitish] | @tsv")
+          if [ -z "$rel" ]; then
+            echo "::error::no release $TAG: create the draft first (gh release create $TAG --draft --target <full sha>)"
+            exit 1
+          fi
+          if [ "$(wc -l <<< "$rel")" != 1 ]; then
+            echo "::error::more than one release is named $TAG: delete the extra drafts"
+            exit 1
+          fi
+          read -r id draft sha <<< "$rel"
+          if [ "$draft" != true ]; then
+            echo "::error::$TAG is already published, and immutable: nothing can be attached. If it has its three files and its tag is on its target (gh release view $TAG --json assets; git ls-remote origin refs/tags/$TAG), only Pages is left (gh workflow run pages.yml); otherwise release a new version"
+            exit 1
+          fi
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::the $TAG draft targets '$sha', not a commit: point it at one (gh release edit $TAG --target <full sha>)"
+            exit 1
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: draft
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read  # the evidence check reads the CI runs of the release commit
     env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      SHA: ${{ needs.draft.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.TAG }}
-          fetch-depth: 0  # all tags: the evidence check works out the release kind from the previous release
+          ref: ${{ needs.draft.outputs.sha }}
+          fetch-depth: 0  # main, and all tags: the evidence check works out the release kind from the previous release
+      # The workflow (and so the toolchain below) comes from the branch it was started on, the source from $SHA: they
+      # must be the same release.yml, or the binary isn't built the way that commit says.
+      - name: Check the commit is on main, the tag is free and this is its workflow
+        run: |
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "::error::$SHA isn't on main"; exit 1; }
+          if ! git diff --quiet "$SHA" "$GITHUB_SHA" -- .github/workflows/release.yml; then
+            echo "::error::release.yml on $GITHUB_REF_NAME differs from $SHA's: point the draft at $GITHUB_REF_NAME's head if its firmware and FW_VERSION are the same (the evidence check passes there once CI has), then start a new run"
+            exit 1
+          fi
+          if at=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}"); then
+            echo "::error::tag $TAG already exists, on $at: publishing would release that commit, not $SHA"
+            exit 1
+          fi
+      - name: Check FW_VERSION matches the tag
+        run: |
+          v=$(sed -n 's/^#define FW_VERSION "\(.*\)"/\1/p' firmware/GateLink/config.h)
+          [ "v$v" = "$TAG" ] || { echo "::error::FW_VERSION $v doesn't match tag $TAG"; exit 1; }
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      # Before building: no binary for a release without complete evidence. Tags from before the release criteria
-      # (no tools/release_evidence.py) are built without it.
+      # Before building: no binary for a release without complete evidence.
       - name: Check the release evidence
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ ! -f tools/release_evidence.py ]; then
-            echo "::notice::$TAG predates the release criteria: no evidence to check"
-            exit 0
-          fi
           if ! python tools/release_evidence.py check "$TAG" --ci; then
             msg="$TAG has no complete release evidence (docs/releases/$TAG.md; what's missing is listed above,"
             msg+=" the criteria are in docs/release-criteria.md). Collect it with tools/release_evidence.py, merge it,"
-            msg+=" wait for CI to pass on the merge commit, then re-run this workflow."
+            msg+=" wait for CI to pass on the merge commit, point the draft at that commit (gh release edit $TAG --target"
+            msg+=" <sha>), then start a new run (gh workflow run release.yml -f tag=$TAG)."
             echo "::error::$msg"
             exit 1
           fi
@@ -67,27 +131,62 @@ jobs:
           arduino-cli lib install "LoRa@0.8.0" "Crypto@0.4.0" "FlashStorage@1.0.0" "ArduinoJson@7.4.3"
       - name: Compile
         run: arduino-cli compile --fqbn arduino:samd:mkrwan1310 --output-dir build firmware/GateLink
-      - name: Check FW_VERSION matches the tag
+      - name: Binary, checksum and evidence
         run: |
-          v=$(sed -n 's/^#define FW_VERSION "\(.*\)"/\1/p' firmware/GateLink/config.h)
-          [ "v$v" = "$TAG" ] || { echo "FW_VERSION $v doesn't match tag $TAG"; exit 1; }
-      - name: Attach binary, checksum and evidence to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPLACE: ${{ inputs.replace || false }}
+          mkdir out
+          f="GateLink-$TAG.bin"
+          cp build/GateLink.ino.bin "out/$f"
+          (cd out && sha256sum "$f" > "$f.sha256" && cat "$f.sha256")
+          cp "docs/releases/$TAG.md" "out/GateLink-$TAG-evidence.md"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-files
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: [draft, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write  # attach the files to the draft and publish it
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ID: ${{ needs.draft.outputs.id }}
+      SHA: ${{ needs.draft.outputs.sha }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-files
+          path: out
+      - name: Attach the files to the draft
         run: |
           f="GateLink-$TAG.bin"
-          cp build/GateLink.ino.bin "$f"
-          sha256sum "$f" > "$f.sha256"
-          cat "$f.sha256"
-          files=("$f" "$f.sha256")
-          if [ -f "docs/releases/$TAG.md" ]; then
-            cp "docs/releases/$TAG.md" "GateLink-$TAG-evidence.md"
-            files+=("GateLink-$TAG-evidence.md")
-          fi
-          have=$(gh release view "$TAG" --json assets -q '.assets[].name')
-          if grep -qx "$f" <<< "$have" && [ "$REPLACE" != "true" ]; then
-            echo "::error::$TAG already has $f; run this workflow with 'replace' ticked to rebuild and replace it"
+          (cd out && sha256sum -c "$f.sha256")
+          gh release upload "$TAG" "out/$f" "out/$f.sha256" "out/GateLink-$TAG-evidence.md" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+      # Publishing is the one step that can't be undone, so it checks this draft again (still a draft, named $TAG,
+      # with exactly the three files: a second draft of the same name could have taken the upload) and the tag, and
+      # names the built commit itself, whatever the draft points at by now. The release: published event it makes
+      # comes from this token, so it starts no workflow; Pages redeploys when this run completes (pages.yml,
+      # workflow_run). GitHub refuses this token a release on a commit that adds or changes a workflow file relative
+      # to main: then the draft, its files attached, is published by hand (/release).
+      - name: Publish
+        if: inputs.publish
+        run: |
+          names=$(gh api "repos/$GITHUB_REPOSITORY/releases/$ID" \
+                    --jq "select(.draft and .tag_name == \"$TAG\") | [.assets[].name] | sort | join(\" \")")
+          want="GateLink-$TAG-evidence.md GateLink-$TAG.bin GateLink-$TAG.bin.sha256"
+          if [ "$names" != "$want" ]; then
+            echo "::error::release $ID is no longer the $TAG draft with its three files (it has: ${names:-none}); nothing published"
             exit 1
           fi
-          gh release upload "$TAG" "${files[@]}" --clobber
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            echo "::error::tag $TAG appeared during this run; nothing published"
+            exit 1
+          fi
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$ID" -f tag_name="$TAG" -f target_commitish="$SHA" \
+            -F draft=false --jq '"published \(.html_url)"'
+          at=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)
+          [ "$at" = "$SHA" ] || { echo "::error::published, but tag $TAG is on $at, not $SHA"; exit 1; }

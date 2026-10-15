@@ -20,7 +20,7 @@ CLAUDE.md past 16 KB; move detail to `docs/` rather than raising the limit.
 | `/implement` | Build ROADMAP/TODO items end to end: research (the project and primary sources), a skeptical verdict against the [goals](../README.md#goals), tests, `/flash` and `/bench`, one merged pull request per item; never releases |
 | `/flash` | Upload firmware to the bench boards; check role, config and key survived, restore them if not |
 | `/bench` | Pick, run and report the end-to-end bench suite (`tests/e2e`) for a change |
-| `/release` | Bench evidence per [release-criteria.md](release-criteria.md), then tag and publish with notes |
+| `/release` | Bench evidence per [release-criteria.md](release-criteria.md), then a draft release with notes that the release workflow builds, attaches and publishes |
 | `/doc-audit` | Check the docs, CLAUDE.md, skills and routines against the code; fix in a pull request |
 | `/pr-followup` | Open pull requests: CI, review comments, rebases, and merging only what's cleared |
 

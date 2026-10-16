@@ -420,6 +420,74 @@ TEST(gate_state_stuck_closed_limit_reads_fault_after_the_first_full_open) {
   CHECK(w.runUntil([&] { return w.houseSees() == GS_CLOSED_ && w.sensorClosed(); }, 5000));
 }
 
+// The opener's controller restarting with the gate open: its AUX relays drop, so the open limit releases and the closed
+// one's NC contact reads, for as long as the restart takes. No travel goes from open to closed without reading between:
+// the gate holds that closed as fault until the open limit reads alone again. The relays change in either order (both
+// or neither reading for a moment) or together. [state-from-limits]
+TEST(gate_state_controller_restart_at_open_reads_fault_not_closed) {
+  for (int order = 0; order < 3; order++) {
+    Site w;
+    w.commission();
+    w.user(true);
+    CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
+    waitBoth(w, GS_OPEN_, 3000);
+    w.run(3000);
+    size_t g0 = w.gate.logs.size(), h0 = w.house.logs.size();
+    if (order == 1) {  // the closed limit first: both read for 20 ms
+      w.opener.force[1] = 1;
+      w.run(20);
+    } else if (order == 2) {  // the open limit first: neither reads for 20 ms
+      w.opener.force[0] = 0;
+      w.run(20);
+    }
+    w.opener.force[0] = 0;
+    w.opener.force[1] = 1;
+    CHECK_EQ(watch(w, 20000, [&] { return !w.sensorClosed() && w.house.coil(1); }), 0);
+    CHECK_EQ(countSince(w.gate, "gate_state", g0, GS_CLOSED_), 0);
+    CHECK_STR(str(w.gate.status(), "gate"), "fault");
+    CHECK(w.runUntil([&] { return w.houseSees() == GS_FAULT_; }, 1000));
+    // Restarted: the open limit reads alone, the gate is open again, and a close then reads closed.
+    w.opener.force[0] = w.opener.force[1] = -1;
+    waitBoth(w, GS_OPEN_, 3000);
+    w.run(3000);
+    w.user(false);
+    CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 20000));
+    waitBoth(w, GS_CLOSED_, 3000);
+    CHECK(w.runUntil([&] { return w.sensorClosed(); }, 2000));
+    CHECK_EQ(countSince(w.house, "cmd_sent", h0), 1);  // the close; nothing while it read fault
+  }
+}
+
+// Power back with the gate open and the opener restarting: its 24 V wets the closed limit's NC contact before it
+// energizes the AUX2 relay, so for a moment the closed limit reads alone. Out of no_power with AC back a move into
+// closed is held BOOT_SETTLE_MS: a relay energized within it never shows as closed. [state-from-limits]
+TEST(gate_state_power_return_with_the_aux_relays_late_never_reads_closed) {
+  Site w;
+  w.commission();
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
+  waitBoth(w, GS_OPEN_, 3000);
+  w.run(3000);
+  size_t g0 = w.gate.logs.size();
+  w.opener.ac = false;
+  w.opener.battery = false;  // dead: its limits drop with IN3
+  CHECK(waitFor(w, w.gate, "gate_state", g0, 2000, GS_NO_POWER_).ok);
+  w.run(5000);
+  size_t g1 = w.gate.logs.size(), h1 = w.house.logs.size();
+  w.opener.force[0] = 0;  // the AUX relays not energized yet: the closed limit's NC contact reads
+  w.opener.force[1] = 1;
+  w.opener.ac = true;
+  w.opener.battery = true;
+  CHECK_EQ(watch(w, 2500, [&] { return !w.sensorClosed() && w.house.coil(1); }), 0);
+  w.opener.force[0] = w.opener.force[1] = -1;  // energized: the open limit reads
+  Found op = waitFor(w, w.gate, "gate_state", g1, 2000, GS_OPEN_);
+  CHECK(op.ok);
+  CHECK_EQ(op.e.b, CAUSE_NONE_);
+  CHECK_EQ(countSince(w.gate, "gate_state", g1, GS_CLOSED_), 0);
+  CHECK_EQ(countSince(w.house, "gate_state", h1, GS_CLOSED_), 0);
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_OPEN_; }, 2000));
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // [cause]
 
@@ -686,7 +754,7 @@ TEST(gate_state_relay_test_without_power_sets_no_target) {
   size_t g1 = w.gate.logs.size();
   w.opener.ac = true;
   w.opener.battery = true;
-  Found c = waitFor(w, w.gate, "gate_state", g1, 1000);
+  Found c = waitFor(w, w.gate, "gate_state", g1, 4000);  // after the 3 s hold out of no_power
   CHECK(c.ok);
   CHECK_EQ(c.e.a, GS_CLOSED_);
   CHECK_EQ(c.e.b, CAUSE_NONE_);
@@ -907,7 +975,7 @@ TEST(gate_state_failing_input_supply_reads_no_power_not_a_move) {
     size_t g1 = w.gate.logs.size();
     w.opener.ac = true;
     w.opener.force[1] = -1;
-    Found c = waitFor(w, w.gate, "gate_state", g1, 2000);
+    Found c = waitFor(w, w.gate, "gate_state", g1, 4000);
     CHECK(c.ok);
     CHECK_EQ(c.e.a, GS_CLOSED_);
     CHECK_EQ(c.e.b, CAUSE_NONE_);
@@ -943,7 +1011,7 @@ TEST(gate_state_between_hold_is_500ms) {
   CHECK_EQ(countSince(w.house, "gate_state", h0), 1);
   size_t g1 = w.gate.logs.size();
   w.opener.force[1] = -1;
-  CHECK(waitFor(w, w.gate, "gate_state", g1, 1000, GS_CLOSED_).ok);
+  CHECK(waitFor(w, w.gate, "gate_state", g1, 4000, GS_CLOSED_).ok);
   w.run(5000);
   // Just outside the hold: the limit drops, AC 600 ms later. The move is reported first, then no_power.
   g1 = w.gate.logs.size();
@@ -961,7 +1029,7 @@ TEST(gate_state_between_hold_is_500ms) {
   CHECK(b2.e.at < np.e.at);
   w.opener.ac = true;
   w.opener.force[1] = -1;
-  CHECK(waitFor(w, w.gate, "gate_state", g1, 1000, GS_CLOSED_).ok);
+  CHECK(waitFor(w, w.gate, "gate_state", g1, 4000, GS_CLOSED_).ok);
 }
 
 // [between-hold] [ac-power]
@@ -986,13 +1054,14 @@ TEST(gate_state_power_return_holds_between_for_boot_settle) {
     uint32_t limitMs = late ? 4000 : 2900;
     w.run(limitMs);
     w.opener.force[1] = -1;
-    Found c = waitFor(w, w.gate, "gate_state", g1, 1000, GS_CLOSED_);
+    Found c = waitFor(w, w.gate, "gate_state", g1, 2000, GS_CLOSED_);
     CHECK(c.ok);
     if (!late) {
-      // Within the hold: straight back to closed, no cause, never between.
+      // Within the hold: closed once it's over (with AC back the closed limit may be the restarting opener's AUX2
+      // relay not energized yet), no cause, never between.
       CHECK_EQ(countSince(w.gate, "gate_state", g1), 1);
       CHECK_EQ(c.e.b, CAUSE_NONE_);
-      CHECK_IN(c.e.at - r, limitMs + 50, limitMs + 51);
+      CHECK_EQ(c.e.at - r, ((r + 50) | 1) + 3000 - r);
     } else {
       // Past it: between (power return, no cause) after IN3's debounce + 3 s, then closed.
       Found b = find(w.gate, "gate_state", g1, GS_BETWEEN_);
@@ -1325,7 +1394,7 @@ TEST(gate_state_power_and_limit_lost_together_read_no_power) {
     CHECK_EQ(countSince(w.house, "gate_state", h0), 1);
     w.opener.ac = true;
     w.opener.battery = true;
-    CHECK(w.runUntil([&] { return w.gateSees() == (fromOpen ? GS_OPEN_ : GS_CLOSED_); }, 2000));
+    CHECK(w.runUntil([&] { return w.gateSees() == (fromOpen ? GS_OPEN_ : GS_CLOSED_); }, 4000));
     CHECK_EQ(countSince(w.gate, "gate_state", g0, ANY, CAUSE_EXTERNAL_), 0);
     w.run(5000);
   }
@@ -1335,7 +1404,7 @@ TEST(gate_state_power_and_limit_lost_together_read_no_power) {
 TEST(gate_state_ac_edge_on_the_hold_expiry_reads_no_power) {
   // The closed limit drops, and IN3's debounced edge lands on the very pass the 500 ms between hold expires. IN3 is
   // read before the state, so that pass sees no_power; read after, it would report between/external first. One ms
-  // later and the hold is over first: between, then no_power (the boundary). betweenAt is stamped `now | 1`, so the
+  // later and the hold is over first: between, then no_power (the boundary). heldAt is stamped `now | 1`, so the
   // expiry pass depends on the parity: both are tried.
   Site w;
   w.commission();
@@ -1366,7 +1435,7 @@ TEST(gate_state_ac_edge_on_the_hold_expiry_reads_no_power) {
       }
       w.opener.ac = true;
       w.opener.force[1] = -1;
-      CHECK(w.runUntil([&] { return w.gateSees() == GS_CLOSED_; }, 2000));
+      CHECK(w.runUntil([&] { return w.gateSees() == GS_CLOSED_; }, 4000));
       w.run(5000);
     }
   }

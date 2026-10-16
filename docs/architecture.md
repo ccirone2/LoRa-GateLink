@@ -162,8 +162,21 @@ same 24 V: the closed one reading off with nothing else (`between`) may only be 
 opening a stuck closed limit can't be told from a closed gate: F12's second sensor is the answer to that.
 Considered and not built (F14, 2026-10-15): a fault when the closed limit stays on after our OPEN pulse (a gate that
 doesn't move, the opener locked out or another controller holding CLOSE, is far likelier than a stuck limit and a gate
-stopped short of open, and the travel timeout already reports it: `last_result` `timeout`); a fault for closed reached
-straight from open (unverified that the opener's AUX relays can do that, see TODO.md).
+stopped short of open, and the travel timeout already reports it: `last_result` `timeout`).
+
+**A closed limit with no travel before it** (0.17.2). No travel goes from one limit to the other without reading
+`between`, but the opener's controller can make it look so: restarting, it drops its AUX relays, so the open limit
+releases and the closed one's NC contact reads, for as long as the restart takes (unverified on the CSW24UL; TODO.md
+has the field check). Both cases go to not closed:
+- **Straight from open:** the closed limit reading alone after the open one, with neither limit having read for
+  `BETWEEN_HOLD_MS` in between (`fromOpen`, `neitherSince`), sets `closedUnproven` as both limits do. Relays dropping
+  together read both or neither for a moment, which doesn't count as travel. It reads `fault` until the open limit reads
+  alone, however long the restart takes. A delay would have to guess that length, and a real gate never does this.
+- **Out of `no_power` with AC back:** the restarting opener's 24 V comes back before it energizes AUX2, so the closed
+  limit reads for a moment wherever the gate is. A move into closed waits `BOOT_SETTLE_MS` from when the inputs left
+  `no_power` (`heldAt`, the hold a move into `between` has). It isn't latched, since a gate that was closed through the
+  outage is the common case. Without AC (the opener on battery, its 24 V never dropped) a closed limit is trusted at
+  once: the opener can drive the gate into it during the outage.
 
 Considered and not built: deadlines on every reliable
 frame in the link, with the peer's clock carried in HELLO_ACK. One reading a session drifts past the slack within

@@ -324,6 +324,10 @@ struct World {
   uint32_t oneLimitSince = 0;    // since when exactly one of its limits has read (0: none or both; capped likewise)
   uint32_t bothLimitsSince = 0;  // since when both have read (likewise)
   uint32_t openAloneSince = 0;   // since when the open limit has read alone (likewise)
+  uint32_t neitherSince = 0;     // since when neither limit has read (likewise)
+  // The open limit has read alone, and neither has read long enough since for the gate to see a move: a closed limit
+  // reading alone now is the opener's controller restarting (its AUX relays dropped), which the gate holds as fault.
+  bool fromOpenMaybe = false;
   // Both limits have read together since the open limit last read alone (or the gate last booted): the gate mustn't
   // report closed. Sure: both read past the gate's 500 ms hold and its lag, so it has held them; maybe: they read at
   // all, cleared only

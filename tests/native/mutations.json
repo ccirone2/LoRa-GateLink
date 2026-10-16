@@ -500,6 +500,36 @@
   ]
  },
  {
+  "name": "gate_state_sl7_closed_from_open_trusted",
+  "invariant": "state-from-limits",
+  "why": "SL7: a closed limit straight after open (the opener's controller restarting, its AUX relays dropped) is trusted, so the gate reports closed while it's open",
+  "killed_by": [
+   "gate_state_controller_restart_at_open_reads_fault_not_closed"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    else if (fromOpen) closedUnproven = true;",
+    "replace": "    else if (fromOpen) neitherSince = 0;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl8_from_open_cleared_at_once",
+  "invariant": "state-from-limits",
+  "why": "SL8: a moment of neither limit (the open limit's relay dropping first) counts as a move, so the closed limit that follows is trusted",
+  "killed_by": [
+   "gate_state_controller_restart_at_open_reads_fault_not_closed"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  } else if (!neitherSince) {\n    neitherSince = now | 1;\n  } else if (elapsed(now, neitherSince, BETWEEN_HOLD_MS)) {",
+    "replace": "  } else {"
+   }
+  ]
+ },
+ {
   "name": "gate_state_c2_back_time_window_any",
   "invariant": "cause",
   "why": "C2: back to a time window: any movement within travel_timeout_s of our last pulse is lora",
@@ -656,8 +686,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool holdBetween = betweenAt && cfg.power_sense\n                     && !elapsed",
-    "replace": "  bool holdBetween = betweenAt\n                     && !elapsed"
+    "find": "  bool holdMove = heldAt && cfg.power_sense\n                  && !elapsed",
+    "replace": "  bool holdMove = heldAt\n                  && !elapsed"
    }
   ]
  },
@@ -672,28 +702,28 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "                     && !elapsed(now, betweenAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);",
-    "replace": "                     && !elapsed(now, betweenAt, BETWEEN_HOLD_MS);"
+    "find": "                  && !elapsed(now, heldAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);",
+    "replace": "                  && !elapsed(now, heldAt, BETWEEN_HOLD_MS);"
    }
   ]
  },
  {
   "name": "gate_state_h3_betweenat_cleared_only_once",
   "invariant": "between-hold",
-  "why": "H3: betweenAt is cleared only once between is reported (dropped `s != GS_BETWEEN ||`), so the stamp goes stale and the hold no longer applies",
+  "why": "H3: heldAt is cleared only once between is reported (dropped the check of the reading), so the stamp goes stale and the hold no longer applies",
   "killed_by": [
-   "gate_state_our_reversal_before_leaving_the_limit_is_ours",
-   "gate_state_failing_input_supply_reads_no_power_not_a_move",
+   "gate_state_ac_edge_on_the_hold_expiry_reads_no_power",
    "gate_state_between_hold_is_500ms",
+   "gate_state_failing_input_supply_reads_no_power_not_a_move",
+   "gate_state_our_reversal_before_leaving_the_limit_is_ours",
    "gate_state_power_return_holds_between_for_boot_settle",
-   "gate_state_power_return_mid_travel_is_not_a_move",
-   "gate_state_ac_edge_on_the_hold_expiry_reads_no_power"
+   "gate_state_power_return_mid_travel_is_not_a_move"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (s != GS_BETWEEN || state == GS_BETWEEN) {\n    betweenAt = 0;",
-    "replace": "  if (state == GS_BETWEEN) {\n    betweenAt = 0;"
+    "find": "  if (s == state || (s != GS_BETWEEN && (s != GS_CLOSED || state != GS_NO_POWER || !acPower()))) {\n    heldAt = 0;",
+    "replace": "  if (state == GS_BETWEEN) {\n    heldAt = 0;"
    }
   ]
  },
@@ -702,16 +732,52 @@
   "invariant": "between-hold",
   "why": "H4: off-by-one: hand-written <= comparison holds one ms longer than the hold",
   "killed_by": [
+   "gate_state_ac_edge_on_the_hold_expiry_reads_no_power",
    "gate_state_between_hold_is_500ms",
    "gate_state_power_return_holds_between_for_boot_settle",
-   "gate_state_power_return_mid_travel_is_not_a_move",
-   "gate_state_ac_edge_on_the_hold_expiry_reads_no_power"
+   "gate_state_power_return_mid_travel_is_not_a_move"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "                     && !elapsed(now, betweenAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);",
-    "replace": "                     && (int32_t)(now - betweenAt) <= (int32_t)(state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);"
+    "find": "                  && !elapsed(now, heldAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);",
+    "replace": "                  && (int32_t)(now - heldAt) <= (int32_t)(state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_h5_closed_out_of_power_not_held",
+  "invariant": "between-hold",
+  "why": "H5: with AC back a move into closed out of no_power is reported at once, so a restarting opener's unenergized AUX2 relay reads as closed",
+  "killed_by": [
+   "gate_state_power_return_holds_between_for_boot_settle",
+   "gate_state_power_return_with_the_aux_relays_late_never_reads_closed",
+   "robustness_wrap_2_31_input_supply_failing_reads_no_power_not_a_move",
+   "robustness_wrap_2_31_input_supply_returning_reads_closed_not_a_move",
+   "robustness_wrap_2_32_input_supply_failing_reads_no_power_not_a_move",
+   "robustness_wrap_2_32_input_supply_returning_reads_closed_not_a_move"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "(s != GS_CLOSED || state != GS_NO_POWER || !acPower())",
+    "replace": "(s != GS_CLOSED || state != GS_NO_POWER || !acPower() || true)"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_h6_closed_held_without_ac",
+  "invariant": "between-hold",
+  "why": "H6: a closed limit reached on battery (no AC) is held BOOT_SETTLE_MS too, though the opener's 24 V never dropped",
+  "killed_by": [
+   "gate_state_without_ac_commands_run_while_a_limit_reads",
+   "gate_state_without_ac_reversal_mid_travel_runs"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "(s != GS_CLOSED || state != GS_NO_POWER || !acPower())",
+    "replace": "(s != GS_CLOSED || state != GS_NO_POWER)"
    }
   ]
  },
@@ -1777,7 +1843,7 @@
  {
   "name": "robustness_m22_gate_s_between_hold",
   "invariant": "wrap-safe",
-  "why": "M22: the gate's between hold is written as now < betweenAt + hold. This is skipped only when the gate leaves a limit within BETWEEN_HOLD_MS (500 ms), or 3 s out of no_power, before the 2^32 wrap. A failing input supply there reads as a move, not no_power. SURVIVED: no wrap test cuts the gate's input supply in that window. Also not killed by test_system.cpp.",
+  "why": "M22: the gate's between hold is written as now < heldAt + hold. This is skipped only when the gate leaves a limit within BETWEEN_HOLD_MS (500 ms), or 3 s out of no_power, before the 2^32 wrap. A failing input supply there reads as a move, not no_power. SURVIVED: no wrap test cuts the gate's input supply in that window. Also not killed by test_system.cpp.",
   "killed_by": [
    "robustness_wrap_2_32_input_supply_failing_reads_no_power_not_a_move",
    "robustness_wrap_2_31_input_supply_failing_reads_no_power_not_a_move",
@@ -1787,8 +1853,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "                     && !elapsed(now, betweenAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);",
-    "replace": "                     && now < betweenAt + (state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);"
+    "find": "                  && !elapsed(now, heldAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);",
+    "replace": "                  && now < heldAt + (state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);"
    }
   ]
  },

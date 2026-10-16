@@ -301,7 +301,7 @@ TEST(fault_out_gate_no_power_drops_both_after_the_hold) {
   size_t h1 = w.house.logs.size(), g1 = w.gate.logs.size();
   w.opener.ac = true;
   w.opener.battery = true;
-  Found gc = waitFor(w, w.gate, "gate_state", g1, 1000, GS_CLOSED_);
+  Found gc = waitFor(w, w.gate, "gate_state", g1, 4000, GS_CLOSED_);  // after the 3 s hold out of no_power
   CHECK(gc.ok);
   Found gh = find(w.gate, "health", g1, 1);
   CHECK(gh.ok);

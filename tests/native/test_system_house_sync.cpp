@@ -255,7 +255,7 @@ TEST(house_sync_k1_energized_whenever_the_gate_is_not_closed) {
   size_t h3 = w.house.logs.size();
   w.opener.ac = true;
   w.opener.battery = true;
-  Found c2 = waitFor(w, w.house, "gate_state", h3, 3000);
+  Found c2 = waitFor(w, w.house, "gate_state", h3, 5000);  // the gate holds closed 3 s out of no_power
   CHECK(c2.ok);
   CHECK_EQ(c2.e.a, GS_CLOSED_);
   CHECK(!w.house.coil(1));

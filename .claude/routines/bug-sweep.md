@@ -12,9 +12,9 @@ description: Look for bugs and simplifications in one area a night; fix one, pro
    2. `role_house.cpp` (K1 sync, controller power, K2, link loss)
    3. `console.cpp` and `console_io.cpp`
    4. `config.cpp`, `histlog.cpp` and `extflash.cpp` (the SPI flash)
-   5. `radio.cpp`, `supply.cpp`, `history.cpp`, `health.cpp`, `app.cpp`
-   6. `web/js/serial.js`, `samba.js`, `firmware.js`
-   7. `web/js/status.js`, `config.js`, `history.js`, `settings.js`
+   5. `radio.cpp`, `supply.cpp`, `io.cpp`, `log.cpp`, `history.cpp`, `health.cpp`, `app.cpp`
+   6. `web/js/serial.js`, `samba.js`, `firmware.js`, `keys.js`, `security.js` (the port, flashing, the key)
+   7. `web/app.js` and the other `web/js/` modules (the tabs and cards: `status.js`, `config.js`, `history.js`, ...)
    8. `tools/gatelink.py`, `tools/gatelink_client/`, `tools/release_evidence.py`
    9. `tests/e2e/gatelink/` (the suite's own correctness: checks that can't fail, races in waits)
    10. `tests/native/` and `tests/web/` (fakes that disagree with the real thing)

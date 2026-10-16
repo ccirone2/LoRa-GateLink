@@ -118,7 +118,8 @@ that its early warning saw coming (4 s into the stall, 4 s before the reset), wh
 
 - **Gate:** `gate` (`unknown`, `closed`, `open`, `between`, `fault`, `no_power`; `fault`: both limits read at once,
   and since 0.17.1 it stays `fault` with the closed limit reading alone until the open limit has read alone or the
-  gate board restarts, see [architecture.md](architecture.md#roles-role_gatecpp-and-role_housecpp)), `cause` (`none`, `lora`,
+  gate board restarts; since 0.17.2 also while the closed limit reads straight after the open one, with no travel
+  between, see [architecture.md](architecture.md#roles-role_gatecpp-and-role_housecpp)), `cause` (`none`, `lora`,
   `external`), `last_result` (`none`, `reached`, `timeout`, `already`), `target` (`""` when none), `last_cmd_id`,
   `power_sense`, `ac_power` (IN3, or true with `power_sense` off), `settling` (after boot: the first STATUS waits
   until the inputs have been steady for 3 s, at most 10 s).

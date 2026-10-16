@@ -162,8 +162,31 @@ same 24 V: the closed one reading off with nothing else (`between`) may only be 
 opening a stuck closed limit can't be told from a closed gate: F12's second sensor is the answer to that.
 Considered and not built (F14, 2026-10-15): a fault when the closed limit stays on after our OPEN pulse (a gate that
 doesn't move, the opener locked out or another controller holding CLOSE, is far likelier than a stuck limit and a gate
-stopped short of open, and the travel timeout already reports it: `last_result` `timeout`); a fault for closed reached
-straight from open (unverified that the opener's AUX relays can do that, see TODO.md).
+stopped short of open, and the travel timeout already reports it: `last_result` `timeout`).
+
+**A closed limit with no travel before it** (0.17.2). No travel goes from one limit to the other without reading
+`between`, but the opener's controller can make it look so: restarting, it drops its AUX relays, so the open limit
+releases and the closed one's NC contact reads, for as long as the restart takes (unverified on the CSW24UL; TODO.md
+has the field check). Both cases go to not closed:
+- **Straight from open:** `readState` reads `fault` while the closed limit reads and `fromOpen` is set. `fromOpen` is
+  set once the open limit reads alone and cleared once neither limit has read for `BETWEEN_HOLD_MS` (`neitherSince`).
+  Relays dropping together read both or neither for a moment, which doesn't count as travel. It holds however long the
+  restart takes, since a delay would have to guess that length. It isn't latched like `closedUnproven`: a real move
+  afterwards (neither, then closed) is trusted.
+- **Out of `no_power`:** the restarting opener's 24 V comes back before it energizes AUX2, so the closed limit reads
+  for a moment wherever the gate is. A move into closed waits `BOOT_SETTLE_MS`, as one into `between` does
+  (`heldAt`), started over whenever the held reading changes (`heldTo`): a closed limit that reads 2.8 s after IN3
+  gets the full 3 s, not what is left. It is held whatever IN3 reads, since IN3 can settle after the limit. It isn't
+  latched, since a gate that was closed through the outage is the common case.
+
+Cost: every closed out of `no_power` reports 3 s late. That covers a supply blip at the gate, and a close the opener
+drives on battery during an outage. The house shows not closed meanwhile (K1 energized, K2 open), as it already did
+for the `no_power` before it.
+
+Left open (not built, 2026-10-15): the opener's own 24 V dropping while IN3 stays up (its fuse or breaker, a
+controller reset that dips the accessory output). Neither limit reads for longer than `BETWEEN_HOLD_MS`, so it is
+reported `between`, and a closed limit reading as the 24 V returns before AUX2 is trusted. Telling that from a real
+close would need a minimum travel time, which isn't measured (TODO.md).
 
 Considered and not built: deadlines on every reliable
 frame in the link, with the peer's clock carried in HELLO_ACK. One reading a session drifts past the slack within

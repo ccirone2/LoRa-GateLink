@@ -1008,7 +1008,7 @@ void World::onLog(Board &b, const LogEv &e) {
   if (e.ev == "boot") {
     ft[b.idx] = FaultTrack();
     ft[b.idx].bootT = e.t;
-    if (&b == &gate) closedUnprovenSure = closedUnprovenMaybe = false;
+    if (&b == &gate) closedUnprovenSure = closedUnprovenMaybe = fromOpenMaybe = fromOpenSure = false;
   } else if (e.ev == "link_up" && &b == &house && !ft[0].upSinceBoot) {
     ft[0].upSinceBoot = true;
     ft[0].upT = e.t;
@@ -1062,6 +1062,9 @@ void World::onLog(Board &b, const LogEv &e) {
         violate(fmt("gate pulsed K%d without a command or relay test", e.a));
       }
     } else if (e.ev == "gate_state") {
+      // No travel goes from one limit to the other without reading between: closed straight from open is the opener's
+      // controller restarting (its AUX relays dropped, the closed limit's NC contact reading).
+      if (e.a == GS_CLOSED_ && (gateView == GS_OPEN_ || fromOpenSure)) violate("gate reported closed straight from open");
       gateView = e.a;
       // Gate state comes only from its limit inputs.
       if (e.a == GS_OPEN_ && !opener.in(1)) violate("gate reported open with the open limit off");
@@ -1088,6 +1091,7 @@ void World::monitor() {
   steadySince(oneLimitSince, opener.in(1) != opener.in(2));
   steadySince(bothLimitsSince, opener.in(1) && opener.in(2));
   steadySince(openAloneSince, opener.in(1) && !opener.in(2));
+  steadySince(neitherSince, !opener.in(1) && !opener.in(2));
   // As the gate sees its inputs: past its debounce, and a loop stall (a flash save or radio restart, up to ~1 s) that
   // held off its next read.
   uint32_t lag = 0;
@@ -1104,6 +1108,11 @@ void World::monitor() {
     closedUnprovenSure = false;
     if (closedUnprovenMaybe && steady(openAloneSince)) closedUnprovenMaybe = false;
   }
+  if (openAloneSince) fromOpenMaybe = true;
+  if (steady(openAloneSince)) fromOpenSure = true;
+  else if (neitherSince) fromOpenSure = false;
+  else if (steady(neitherSince) && (int32_t)(now - neitherSince) > (int32_t)lag + 500) fromOpenMaybe = false;
+  if (fromOpenMaybe && opener.in(2) && !opener.in(1)) closedUnprovenMaybe = true;
   // Availability: a command is refused only without AC and with no position to trust (no limit reading, and no pulse
   // of ours under way, or both limits reading).
   if (!refused.empty() && gate.running()) {

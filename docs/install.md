@@ -36,6 +36,10 @@ as lost.
 The ping card pauses while it runs (auto-ping resumes after). **Stop survey** ends it early and keeps what it has; so
 does a disconnect. **Copy report** puts a plain-text report on the clipboard for the install record.
 
+To find an antenna's best spot first, tick **every 3 s** on the Link ping card and watch *Margin here / at peer*
+while you move it: each pong's margin in both directions, coloured by the same thresholds (good from 15 dB, fair
+from 10 dB). The margin varies from pong to pong, so judge a spot over several, then run the survey there.
+
 **Command line** (needs Python and pyserial; close the web console first):
 
 ```sh

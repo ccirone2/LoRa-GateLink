@@ -1,5 +1,7 @@
-// The link ping card: one ping, or one every 3 s; the round trip, both ends' signal and an RSSI chart.
+// The link ping card: one ping, or one every 3 s; the round trip, both ends' signal, the margin (for aiming an
+// antenna: it changes with each pong) and an RSSI chart.
 import { $, fmtFei } from './util.js';
+import { fmt1, marginLevel, sampleMargin } from './survey.js';
 import { S } from './state.js';
 import { guard } from './ui.js';
 import { call } from './serial.js';
@@ -44,6 +46,14 @@ export function pausePing(on, resume = true) {
   resumeAuto = false;
 }
 
+// Each direction's margin above the SF's floor, coloured by the survey's thresholds; '—' for a direction not heard.
+function marginHtml(ev) {
+  const { noise, peer_noise: peerNoise } = S.noise;
+  const m = (snr, rssi, n) => sampleMargin(S.params.sf, snr, rssi, n); // null without an SNR; no RSSI: by SNR alone
+  const show = (x) => (x === null ? '—' : `<span class="lvl-${marginLevel(x)}">${fmt1(x)}</span>`);
+  return `${show(m(ev.snr, ev.rssi, noise))} / ${show(m(ev.peer_snr, ev.peer_rssi, peerNoise))} dB`;
+}
+
 function drawRssi() {
   const svg = $('rssiChart');
   if (!rssiHist.length) { svg.innerHTML = ''; $('rssiRange').textContent = ''; return; }
@@ -65,6 +75,7 @@ export function onPong(ev) {
   $('pingRtt').textContent = `${ev.rtt_ms} ms`;
   $('pingHere').textContent = `${ev.rssi} dBm / ${Number(ev.snr).toFixed(1)} dB`;
   $('pingPeer').textContent = ev.peer_rssi === undefined ? '—' : `${ev.peer_rssi} dBm / ${Number(ev.peer_snr).toFixed(1)} dB`;
+  $('pingMargin').innerHTML = marginHtml(ev);
   $('pingFei').textContent = fmtFei(ev.fei, S.params.freq_hz);
   rssiHist.push({ here: Number(ev.rssi), peer: Number(ev.peer_rssi) }); // NaN = missing, left out of the chart
   if (rssiHist.length > 60) rssiHist.shift();
@@ -75,7 +86,7 @@ export function onPong(ev) {
 export function resetPing() {
   rssiHist.length = 0;
   drawRssi();
-  for (const id of ['pingRtt', 'pingHere', 'pingPeer', 'pingFei']) $(id).textContent = '—';
+  for (const id of ['pingRtt', 'pingHere', 'pingPeer', 'pingMargin', 'pingFei']) $(id).textContent = '—';
 }
 
 // The board is going: nothing more will answer.

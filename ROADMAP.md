@@ -30,34 +30,33 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | **Tier 1: the gate's real state, safety, never late** | | | | |
 | 1 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
-| 2 | C3 | Help the installer aim the antenna | S | |
-| 3 | B1 | Repeatable RF tests | S | |
-| 4 | F3 | Tell the alarm what kind of trouble it is | M | |
-| 5 | F14 | Catch faults the inputs alone don't show | S | |
-| 6 | F1 | Keep the event log across resets | M | |
-| 7 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
-| 8 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 9 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
+| 2 | B1 | Repeatable RF tests | S | |
+| 3 | F3 | Tell the alarm what kind of trouble it is | M | |
+| 4 | F14 | Catch faults the inputs alone don't show | S | |
+| 5 | F1 | Keep the event log across resets | M | |
+| 6 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
+| 7 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
+| 8 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 10 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 11 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 12 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 13 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 14 | F11 | Firmware ready for a second board | M | |
-| 15 | B2 | Test attacks over real RF | M | B1 |
-| 16 | B3 | Reach the host-only fault paths on the bench | M | |
-| 17 | D2 | Run the bench automatically, safely | M | |
-| 18 | F18 | Stop casual actuation over USB | M | |
-| 19 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 20 | F5 | Change radio settings without stranding the link | L | |
-| 21 | F13 | Work with controllers that pulse | L | |
+| 9 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 10 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
+| 11 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 12 | C2 | Answer "what happened last night?" | M | F1, F2 |
+| 13 | F11 | Firmware ready for a second board | M | |
+| 14 | B2 | Test attacks over real RF | M | B1 |
+| 15 | B3 | Reach the host-only fault paths on the bench | M | |
+| 16 | D2 | Run the bench automatically, safely | M | |
+| 17 | F18 | Stop casual actuation over USB | M | |
+| 18 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 19 | F5 | Change radio settings without stranding the link | L | |
+| 20 | F13 | Work with controllers that pulse | L | |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 22 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
-| 23 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 24 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 25 | C4 | Check a board still runs genuine firmware | M | |
-| 26 | B6 | Turn field incidents into tests | M | F1 |
-| 27 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 21 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
+| 22 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 23 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 24 | C4 | Check a board still runs genuine firmware | M | |
+| 25 | B6 | Turn field incidents into tests | M | F1 |
+| 26 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -341,16 +340,6 @@ the gate.
 **How.** The F1 journal as a readable timeline, e.g. "14:02 Opened from the controller, open in 14 s", "03:10 Moved
 locally (keypad or other controller)", readable remotely through the house via F2. (The naming rule applies: no brand
 names in `web/`.)
-
-### C3: Help the installer aim the antenna
-
-**Goal.** At the install, the installer finds the antenna's best spot quickly, by watching the margin change live.
-
-**Today.** The survey card and `tools/gatelink.py survey` give a verdict only after a timed run.
-
-**How.** An open-ended *Aim* mode that pings every 2 s until stopped and shows the latest margin above the SF floor in
-both directions in large type, coloured by the survey's good/fair thresholds (the same `survey.js` / `survey.py` logic
-and shared vectors), and a matching `survey --live`. The timed survey then runs for the install record.
 
 ### C4: Check a board still runs genuine firmware
 

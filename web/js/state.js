@@ -8,6 +8,7 @@ export const S = {
   appliedUnsaved: false, // settings applied since the last Save (this page's own record; lost on reboot)
   boardInfo: null, // last info reply
   rebootPending: false, // last status: a saved role waits for a reboot
+  noise: { noise: null, peer_noise: null }, // last status: the noise floors a pong's margin is judged against
   flashing: false,
   flashCheck: null, // what the board should report once it's back on new firmware
   latestFw: null, // firmware/latest.json, written by the Pages deploy from the latest release

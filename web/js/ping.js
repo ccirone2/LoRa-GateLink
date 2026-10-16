@@ -49,7 +49,7 @@ export function pausePing(on, resume = true) {
 // Each direction's margin above the SF's floor, coloured by the survey's thresholds; '—' for a direction not heard.
 function marginHtml(ev) {
   const { noise, peer_noise: peerNoise } = S.noise;
-  const m = (snr, rssi, n) => (snr === undefined || snr === null ? null : sampleMargin(S.params.sf, Number(snr), Number(rssi), n));
+  const m = (snr, rssi, n) => sampleMargin(S.params.sf, snr, rssi, n); // null without an SNR; no RSSI: by SNR alone
   const show = (x) => (x === null ? '—' : `<span class="lvl-${marginLevel(x)}">${fmt1(x)}</span>`);
   return `${show(m(ev.snr, ev.rssi, noise))} / ${show(m(ev.peer_snr, ev.peer_rssi, peerNoise))} dB`;
 }

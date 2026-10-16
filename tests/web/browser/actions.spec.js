@@ -52,7 +52,7 @@ test('Identify, replay and history clear send their commands', async ({ page }) 
 test('each pong shows both directions’ margin, coloured by the survey’s thresholds', async ({ page }) => {
   // SF 9 (floor −12.5 dB); the house knows both noise floors (−118 here, −117 at the gate) from its status.
   await openConsole(page, [{ role: 'house', pongs: [{}, { snr: -1, rssi: -110, peer_snr: -4, peer_rssi: -112 },
-    { peer_snr: null, peer_rssi: null }] }]);
+    { rssi: null, peer_snr: null, peer_rssi: null }] }]);
   await connect(page);
   await page.locator('#tabbtn-link').click();
   const margin = page.locator('#pingMargin');
@@ -64,7 +64,9 @@ test('each pong shows both directions’ margin, coloured by the survey’s thre
   await expect(margin.locator('.lvl-fair')).toHaveText('11.5');
   await expect(margin.locator('.lvl-marginal')).toHaveText('8.5');
   await page.locator('#btnPing').click();
-  await expect(margin).toHaveText('69.5 / — dB'); // the peer's levels missing (null here: undefined doesn't reach the fake board)
+  // No RSSI here: judged by the SNR alone (9.25 + 12.5); the peer's levels missing (null: undefined doesn't reach the
+  // fake board).
+  await expect(margin).toHaveText('21.8 / — dB');
 });
 
 test('auto-ping pings every 3 s until switched off', async ({ page }) => {

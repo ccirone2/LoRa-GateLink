@@ -36,6 +36,10 @@ test('per-sample margin', () => {
   for (const m of vec.margins) close(sv.sampleMargin(m.sf, m.snr, m.rssi, m.noise), m.margin, JSON.stringify(m));
 });
 
+test('one margin’s level, by the survey’s thresholds', () => {
+  assert.deepEqual([15, 14.9, 10, 9.9, null, NaN].map(sv.marginLevel), ['good', 'fair', 'fair', 'marginal', null, null]);
+});
+
 test('quantiles', () => {
   for (const q of vec.quantiles) close(sv.quantile(q.values, q.q), q.out, JSON.stringify(q));
 });
@@ -89,4 +93,11 @@ test("the survey card's help quotes the thresholds survey.js judges by", () => {
   const m = html.match(/Good from (\d+) dB, fair from (\d+) dB, and poor if more than ([\d.]+) % of pings \(and at least (\d+)\)/);
   assert.ok(m, 'the survey card help text');
   assert.deepEqual(m.slice(1).map(Number), [sv.GOOD_DB, sv.FAIR_DB, 100 * sv.MAX_LOSS, sv.MIN_LOST]);
+});
+
+test("the ping card's margin quotes the same thresholds", () => {
+  const html = readFileSync(new URL('../../../web/index.html', import.meta.url), 'utf8');
+  const m = html.match(/from the last pong: good from (\d+) dB, fair from (\d+) dB/);
+  assert.ok(m, 'the ping card margin title');
+  assert.deepEqual(m.slice(1).map(Number), [sv.GOOD_DB, sv.FAIR_DB]);
 });

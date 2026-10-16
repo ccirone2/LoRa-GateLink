@@ -142,7 +142,7 @@
         </div>
         <div class="card wide" id="surveyCard">
           <div class="label">Site survey</div>
-          <p class="muted small">For the install: with the gate board at its final spot and both antennas mounted, ping the other board for a few minutes and judge the link margin both ways. Needs the link up (<i>Peer verified: yes</i>). The ping card pauses while it runs.</p>
+          <p class="muted small">For the install: with the gate board at its final spot and both antennas mounted, ping the other board for a few minutes and judge the link margin both ways. Needs the link up (<i>Peer verified: yes</i>). The ping card pauses while it runs. To aim an antenna first, tick the ping card's <i>every 3 s</i> and watch its margin as you move it.</p>
           <div class="toolbar">
             <select id="surveyMins" aria-label="Survey length">
               <option value="1">1 min</option>
@@ -171,6 +171,7 @@
           <div class="kv"><span>Last RTT</span><b id="pingRtt">—</b></div>
           <div class="kv"><span>RSSI/SNR here</span><b id="pingHere">—</b></div>
           <div class="kv"><span>RSSI/SNR at peer</span><b id="pingPeer">—</b></div>
+          <div class="kv"><span title="dB above the spreading factor's demodulation limit, from the last pong: good from 15 dB, fair from 10 dB">Margin here / at peer</span><b id="pingMargin">—</b></div>
           <div class="kv"><span>Frequency error</span><b id="pingFei">—</b></div>
           <svg id="rssiChart" viewBox="0 0 300 90" preserveAspectRatio="none" role="img" aria-label="RSSI history"></svg>
           <div class="legend"><span class="sw here"></span>here <span class="sw peer"></span>peer <span class="muted" id="rssiRange"></span></div>

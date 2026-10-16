@@ -9,6 +9,7 @@ import { askGateFw, peerDiffs, peerHtml } from './peer.js';
 import { healthLine, linkMargin } from './healthline.js';
 import { setupSteps } from './checklist.js';
 import { surveyVerdict } from './surveycard.js';
+import { noiseFromStatus } from './survey.js';
 
 // Status `health` (the problems now) and `fault_out` (D5: true high, false low, null off) as HTML; firmware before
 // 0.14.0 reports neither.
@@ -104,6 +105,7 @@ export const resetPoll = () => { pollMisses = 0; };
 export function renderStatus(s, pushed = false) {
   if (s.role !== S.role) applyRole(s.role);
   S.rebootPending = !!s.reboot_pending;
+  S.noise = noiseFromStatus(s);
   const gs = s.gate || 'unknown';
   const g = $('gateState');
   // With the link down the house still reports the gate's last state: show it struck through, not as live.

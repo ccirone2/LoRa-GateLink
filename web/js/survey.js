@@ -44,6 +44,9 @@ export function sampleMargin(sf, snr, rssi, noise) {
   return Math.max(bySnr, rssi - noise - floor);
 }
 
+// good / fair / marginal for one margin, by the survey's thresholds; null if there is none.
+export const marginLevel = (m) => (!isNum(m) ? null : m >= GOOD_DB ? 'good' : m >= FAIR_DB ? 'fair' : 'marginal');
+
 // Linear interpolation between the closest ranks (numpy's default): q = 0.5 is the median.
 export function quantile(values, q) {
   const s = values.filter(isNum).sort((a, b) => a - b);

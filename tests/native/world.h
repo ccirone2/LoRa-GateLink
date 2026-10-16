@@ -328,6 +328,7 @@ struct World {
   // The open limit has read alone, and neither has read long enough since for the gate to see a move: a closed limit
   // reading alone now is the opener's controller restarting (its AUX relays dropped), which the gate holds as fault.
   bool fromOpenMaybe = false;
+  bool fromOpenSure = false;  // likewise, and neither limit has read at all since: the gate mustn't report closed
   // Both limits have read together since the open limit last read alone (or the gate last booted): the gate mustn't
   // report closed. Sure: both read past the gate's 500 ms hold and its lag, so it has held them; maybe: they read at
   // all, cleared only

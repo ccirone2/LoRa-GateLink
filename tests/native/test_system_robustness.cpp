@@ -683,7 +683,8 @@ void wrapGlitch(uint32_t F) {
 // The 24 V that wets the gate's inputs failing: the closed limit's opto drops 200 ms before IN3's (bench,
 // 2026-10-06). The move into between that reads is held BETWEEN_HOLD_MS, and no_power comes within it: reported as
 // no_power with no cause, never as a move. Coming back, IN3 returns a second before the limit: out of no_power the
-// hold is BOOT_SETTLE_MS, and with AC back it holds a move into closed too: closed again once it's over, never between.
+// hold is BOOT_SETTLE_MS, started over when the limit reads (a move into closed is held too): closed once it's over,
+// never between.
 // With `returning` the return (else the failure) falls just before F, where the hold's end (its start + the hold) would
 // wrap.
 void wrapInputSupply(uint32_t F, bool returning) {
@@ -727,7 +728,7 @@ void wrapInputSupply(uint32_t F, bool returning) {
   w.opener.force[1] = -1;
   Found cl = waitFor(r, w.gate, "gate_state", g1, 4000, GS_CLOSED_);
   CHECK(cl.ok);
-  CHECK_IN(cl.e.at - backAt, 3050, 3052);  // the hold out of no_power, from IN3's debounced return
+  CHECK_IN(cl.e.at - (backAt + 1000), 3050, 3052);  // the hold out of no_power, from the limit's debounced return
   if (returning) CHECK(rel(cl.e.at, F) > 0);  // the hold's end wrapped past F
   st = statesSince(w.gate, g1);
   CHECK_EQ(st.size(), 1);

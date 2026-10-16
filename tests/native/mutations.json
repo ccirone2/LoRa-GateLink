@@ -422,7 +422,7 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "find": "  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
     "replace": "  if (closed) return GS_CLOSED;"
    }
   ]
@@ -473,8 +473,8 @@
    "gate_state_stuck_closed_limit_reads_fault_after_the_first_full_open",
    "gate_state_without_ac_commands_run_while_a_limit_reads",
    "house_power_gate_fault_shows_not_closed",
-   "house_sync_k1_energized_whenever_the_gate_is_not_closed",
-   "house_sync_between_after_no_power_or_fault_holds_no_limit"
+   "house_sync_between_after_no_power_or_fault_holds_no_limit",
+   "house_sync_k1_energized_whenever_the_gate_is_not_closed"
   ],
   "edits": [
    {
@@ -509,8 +509,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "    else if (fromOpen) closedUnproven = true;",
-    "replace": "    else if (fromOpen) neitherSince = 0;"
+    "find": "closedUnproven || fromOpen)) return GS_FAULT;",
+    "replace": "closedUnproven)) return GS_FAULT;"
    }
   ]
  },
@@ -712,18 +712,25 @@
   "invariant": "between-hold",
   "why": "H3: heldAt is cleared only once between is reported (dropped the check of the reading), so the stamp goes stale and the hold no longer applies",
   "killed_by": [
+   "fault_out_gate_no_power_drops_both_after_the_hold",
    "gate_state_ac_edge_on_the_hold_expiry_reads_no_power",
-   "gate_state_between_hold_is_500ms",
+   "gate_state_ac_lost_limit_still_trusted",
+   "gate_state_both_limits_read_fault",
    "gate_state_failing_input_supply_reads_no_power_not_a_move",
-   "gate_state_our_reversal_before_leaving_the_limit_is_ours",
-   "gate_state_power_return_holds_between_for_boot_settle",
-   "gate_state_power_return_mid_travel_is_not_a_move"
+   "gate_state_power_and_limit_lost_together_read_no_power",
+   "gate_state_power_return_with_the_aux_relays_late_never_reads_closed",
+   "gate_state_short_overlap_of_both_limits_is_not_held",
+   "gate_state_without_ac_commands_run_while_a_limit_reads",
+   "robustness_wrap_2_31_input_supply_failing_reads_no_power_not_a_move",
+   "robustness_wrap_2_31_input_supply_returning_reads_closed_not_a_move",
+   "robustness_wrap_2_32_input_supply_failing_reads_no_power_not_a_move",
+   "robustness_wrap_2_32_input_supply_returning_reads_closed_not_a_move"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (s == state || (s != GS_BETWEEN && (s != GS_CLOSED || state != GS_NO_POWER || !acPower()))) {\n    heldAt = 0;",
-    "replace": "  if (state == GS_BETWEEN) {\n    heldAt = 0;"
+    "find": "  if (!held) {\n    heldAt = 0;",
+    "replace": "  if (!held && state == GS_BETWEEN) {\n    heldAt = 0;"
    }
   ]
  },
@@ -748,7 +755,7 @@
  {
   "name": "gate_state_h5_closed_out_of_power_not_held",
   "invariant": "between-hold",
-  "why": "H5: with AC back a move into closed out of no_power is reported at once, so a restarting opener's unenergized AUX2 relay reads as closed",
+  "why": "H5: a move into closed out of no_power is reported at once, so a restarting opener's unenergized AUX2 relay reads as closed",
   "killed_by": [
    "gate_state_power_return_holds_between_for_boot_settle",
    "gate_state_power_return_with_the_aux_relays_late_never_reads_closed",
@@ -760,24 +767,28 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "(s != GS_CLOSED || state != GS_NO_POWER || !acPower())",
-    "replace": "(s != GS_CLOSED || state != GS_NO_POWER || !acPower() || true)"
+    "find": "(s == GS_CLOSED && state == GS_NO_POWER)",
+    "replace": "(false)"
    }
   ]
  },
  {
-  "name": "gate_state_h6_closed_held_without_ac",
+  "name": "gate_state_h6_hold_not_restarted_on_a_new_reading",
   "invariant": "between-hold",
-  "why": "H6: a closed limit reached on battery (no AC) is held BOOT_SETTLE_MS too, though the opener's 24 V never dropped",
+  "why": "H6: the hold isn't started over when the held reading changes, so a closed limit that reads late in a between hold out of no_power gets only what is left of it",
   "killed_by": [
-   "gate_state_without_ac_commands_run_while_a_limit_reads",
-   "gate_state_without_ac_reversal_mid_travel_runs"
+   "gate_state_power_return_holds_between_for_boot_settle",
+   "gate_state_power_return_with_the_aux_relays_late_never_reads_closed",
+   "robustness_wrap_2_31_input_supply_failing_reads_no_power_not_a_move",
+   "robustness_wrap_2_31_input_supply_returning_reads_closed_not_a_move",
+   "robustness_wrap_2_32_input_supply_failing_reads_no_power_not_a_move",
+   "robustness_wrap_2_32_input_supply_returning_reads_closed_not_a_move"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "(s != GS_CLOSED || state != GS_NO_POWER || !acPower())",
-    "replace": "(s != GS_CLOSED || state != GS_NO_POWER)"
+    "find": "  } else if (!heldAt || s != heldTo) {",
+    "replace": "  } else if (!heldAt) {"
    }
   ]
  },
@@ -862,14 +873,14 @@
   "why": "A2: swapped order in readState: without AC the state is no_power even with a limit reading",
   "killed_by": [
    "gate_state_ac_lost_limit_still_trusted",
-   "gate_state_without_ac_commands_run_while_a_limit_reads",
-   "gate_state_no_power_transitions_have_no_cause"
+   "gate_state_no_power_transitions_have_no_cause",
+   "gate_state_without_ac_commands_run_while_a_limit_reads"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may\n  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.\n  if (!acPower()) return GS_NO_POWER;\n  return GS_BETWEEN;",
-    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  return GS_BETWEEN;"
+    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may\n  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.\n  if (!acPower()) return GS_NO_POWER;\n  return GS_BETWEEN;",
+    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  return GS_BETWEEN;"
    }
   ]
  },
@@ -1128,8 +1139,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
-    "replace": "  if (closed) return GS_CLOSED;\n  if (closed && (open || closedUnproven)) return GS_FAULT;"
+    "find": "  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "replace": "  if (closed) return GS_CLOSED;\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;"
    }
   ]
  },
@@ -1143,8 +1154,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven)) return GS_FAULT;",
-    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven)) return GS_FAULT;"
+    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;",
+    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;"
    }
   ]
  },

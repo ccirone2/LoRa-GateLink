@@ -21,8 +21,8 @@
 // inputs fails, a limit's opto can drop before IN3's (bench, 2026-10-06), and a moment of between/external was
 // logged before no_power. If no_power (or a limit) follows within it, that is reported instead. Out of no_power the
 // wait is BOOT_SETTLE_MS: on power return IN3 can come back before the limits (the opener restarting). A move into
-// closed with AC back waits too: the closed limit's NC contact reads closed until the restarting opener energizes its
-// AUX2 relay. On battery, without AC, a closed limit is the gate's (the opener's 24 V never dropped).
+// closed waits too, the time over for each reading: the closed limit's NC contact reads closed until a restarting
+// opener energizes its AUX2 relay, and IN3 may settle after it. On battery that costs a close 3 s of reading not closed.
 #define BETWEEN_HOLD_MS 500
 
 static uint8_t state = GS_UNKNOWN;
@@ -42,7 +42,8 @@ static uint32_t houseSession = 0;  // the house session we last reported to
 static bool houseVerified = false;  // the link had verified the house at the last pass
 static bool settling = true;  // after boot: tracking the inputs silently, see BOOT_SETTLE_MS
 static uint32_t bootAt = 0, steadySince = 0;
-static uint32_t heldAt = 0;  // when the inputs started reading a held move we don't report yet (0 = not)
+static uint32_t heldAt = 0;  // when the inputs started reading a held move (heldTo) we don't report yet (0 = not)
+static uint8_t heldTo = GS_UNKNOWN;
 // Both limits have read at once since the open limit last read alone: the closed limit isn't trusted (fault). It comes
 // from the AUX2 relay's NC contact, which reads closed whenever that relay isn't energized: a failed relay or driver, or
 // the opener's AUX setting wrong. With it stuck, the gate reads fault only while at its open limit and closed everywhere
@@ -50,9 +51,9 @@ static uint32_t heldAt = 0;  // when the inputs started reading a held move we d
 // reading alone (wetted by the same 24 V) shows the closed one released. Held only once both have read for
 // BOTH_LIMITS_HOLD_MS: a stuck one reads both at the open limit for as long as the gate stays there, and a shorter
 // overlap (a glitch, the relays switching over on a controller reset) is only a moment's fault, not one held until the
-// gate next opens fully. A closed limit straight after open, the gate never between, isn't trusted either: no travel
-// is that quick, but the opener's controller restarting drops its AUX relays, releasing the open limit and letting
-// the closed one's NC contact read, for as long as the restart takes.
+// gate next opens fully. A closed limit straight after open, the gate never between (fromOpen), is fault too, not held:
+// no travel is that quick, but the opener's controller restarting drops its AUX relays, releasing the open limit and
+// letting the closed one's NC contact read, for as long as the restart takes.
 #define BOTH_LIMITS_HOLD_MS 500
 static bool closedUnproven = false;
 static uint32_t bothSince = 0;  // when both limits started reading (0 = they don't)
@@ -88,7 +89,7 @@ static bool acPower() {
 
 static uint8_t readState() {
   bool open = in1.active(), closed = in2.active();
-  if (closed && (open || closedUnproven)) return GS_FAULT;
+  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;
   if (closed) return GS_CLOSED;
   if (open) return GS_OPEN;
   // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may
@@ -185,14 +186,11 @@ void gateLoop(uint32_t now) {
   } else if (elapsed(now, bothSince, BOTH_LIMITS_HOLD_MS)) {
     closedUnproven = true;  // a stamp that ages past 2^31 ms only sets it again
   }
-  // Closed alone straight from open: unproven like both limits (see BOTH_LIMITS_HOLD_MS). Only a real move clears
-  // fromOpen, neither limit reading for BETWEEN_HOLD_MS: relays dropping together pass through both or neither briefly.
-  if (in1.active() != in2.active()) {
+  // Only a real move clears fromOpen, neither limit reading for BETWEEN_HOLD_MS: relays dropping together pass
+  // through both or neither for a moment.
+  if (in1.active() || in2.active()) {
     neitherSince = 0;
-    if (in1.active()) fromOpen = true;
-    else if (fromOpen) closedUnproven = true;
-  } else if (in1.active()) {
-    neitherSince = 0;
+    if (!in2.active()) fromOpen = true;
   } else if (!neitherSince) {
     neitherSince = now | 1;
   } else if (elapsed(now, neitherSince, BETWEEN_HOLD_MS)) {
@@ -207,10 +205,12 @@ void gateLoop(uint32_t now) {
   if (leaving != GS_UNKNOWN && s == leaving && !appRelaysPulsing() && !k1.gapLeft(now, cfg.debounce_ms)
       && !k2.gapLeft(now, cfg.debounce_ms))
     leaving = GS_UNKNOWN;
-  if (s == state || (s != GS_BETWEEN && (s != GS_CLOSED || state != GS_NO_POWER || !acPower()))) {
+  bool held = s != state && (s == GS_BETWEEN || (s == GS_CLOSED && state == GS_NO_POWER));
+  if (!held) {
     heldAt = 0;
-  } else if (!heldAt) {
-    heldAt = now | 1;
+  } else if (!heldAt || s != heldTo) {
+    heldAt = now | 1;  // a held reading that changes starts over: closed after between out of no_power gets it all
+    heldTo = s;
   }
   bool holdMove = heldAt && cfg.power_sense
                   && !elapsed(now, heldAt, state == GS_NO_POWER ? BOOT_SETTLE_MS : BETWEEN_HOLD_MS);

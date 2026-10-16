@@ -56,8 +56,8 @@ and `firmware/GateLink/pins.h` in sync.
   out of `no_power` have cause none. With `power_sense` on, a move into `between` is reported only after 0.5 s
   (3 s out of `no_power`): when the 24 V that wets the inputs fails, a limit's opto can drop before IN3's (and on
   its return IN3 can come back first), and that is `no_power`, not a move. From 0.17.2 a move into `closed` out of
-  `no_power` with AC back waits the 3 s too: the restarting opener's 24 V wets the closed limit's NC contact before it
-  energizes AUX2, so an open gate can read closed for a moment. A relay test while `no_power` still pulses (a wiring check) but sets no
+  `no_power` waits 3 s from when the limit reads: the restarting opener's 24 V wets the closed limit's NC contact
+  before it energizes AUX2, so an open gate can read closed for a moment. A relay test while `no_power` still pulses (a wiring check) but sets no
   target, so the limit read when power returns isn't attributed to it. Turn the `power_sense` toggle off (also
   possible remotely over LoRa) if IN3 isn't wired.
 - **MKR VIN is 5 V max.** Power the gate board through a 24 V→5 V buck from the opener's 24 V accessory output

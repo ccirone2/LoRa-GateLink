@@ -422,7 +422,7 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (open && closed) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "find": "  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
     "replace": "  if (closed) return GS_CLOSED;"
    }
   ]
@@ -461,6 +461,41 @@
     "file": "role_gate.cpp",
     "find": "    if (state == target) {\n      lastResult = TR_REACHED;",
     "replace": "    if (state == target || state == GS_BETWEEN) {\n      lastResult = TR_REACHED;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl5_both_limits_forgotten",
+  "invariant": "state-from-limits",
+  "why": "SL5: the closed limit is trusted again as soon as the open limit releases after both read, so a stuck closed limit reads closed everywhere but the open limit (F14)",
+  "killed_by": [
+   "gate_state_both_limits_read_fault",
+   "gate_state_stuck_closed_limit_reads_fault_after_the_first_full_open",
+   "gate_state_without_ac_commands_run_while_a_limit_reads",
+   "house_power_gate_fault_shows_not_closed",
+   "house_sync_k1_energized_whenever_the_gate_is_not_closed",
+   "house_sync_between_after_no_power_or_fault_holds_no_limit"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    closedUnproven = true;  // a stamp",
+    "replace": "    closedUnproven = false;  // a stamp"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl6_both_limits_held_at_once",
+  "invariant": "state-from-limits",
+  "why": "SL6: any debounced overlap of both limits is held (no BOTH_LIMITS_HOLD_MS), so a glitch at the closed limit reads fault until the gate next opens fully",
+  "killed_by": [
+   "gate_state_short_overlap_of_both_limits_is_not_held"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "#define BOTH_LIMITS_HOLD_MS 500",
+    "replace": "#define BOTH_LIMITS_HOLD_MS 0"
    }
   ]
  },
@@ -767,8 +802,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool open = in1.active(), closed = in2.active();\n  if (open && closed) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may\n  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.\n  if (!acPower()) return GS_NO_POWER;\n  return GS_BETWEEN;",
-    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (open && closed) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  return GS_BETWEEN;"
+    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may\n  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.\n  if (!acPower()) return GS_NO_POWER;\n  return GS_BETWEEN;",
+    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  return GS_BETWEEN;"
    }
   ]
  },
@@ -1027,8 +1062,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (open && closed) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
-    "replace": "  if (closed) return GS_CLOSED;\n  if (open && closed) return GS_FAULT;"
+    "find": "  if (closed && (open || closedUnproven)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "replace": "  if (closed) return GS_CLOSED;\n  if (closed && (open || closedUnproven)) return GS_FAULT;"
    }
   ]
  },
@@ -1042,8 +1077,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool open = in1.active(), closed = in2.active();\n  if (open && closed) return GS_FAULT;",
-    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (open && closed) return GS_FAULT;"
+    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven)) return GS_FAULT;",
+    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven)) return GS_FAULT;"
    }
   ]
  },

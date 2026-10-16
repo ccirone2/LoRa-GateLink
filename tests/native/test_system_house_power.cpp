@@ -1240,7 +1240,8 @@ TEST(house_power_gate_no_power_from_open_keeps_not_closed) {
 // [unknown-shows-open] [sensor-closed-only-known]
 TEST(house_power_gate_fault_shows_not_closed) {
   // Both limits reading (a stuck limit relay, a wiring fault): fault. From closed the house turns K1 on and opens the
-  // sensor; from open it keeps K1 on. Nothing is commanded; once one limit reads alone the house follows it again.
+  // sensor; from open it keeps K1 on. Nothing is commanded. The closed limit reading alone afterwards is still a fault
+  // (which one lied can't be told); once the open limit reads alone the house follows the gate again.
   World w;
   w.commission();
   size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
@@ -1256,17 +1257,18 @@ TEST(house_power_gate_fault_shows_not_closed) {
   CHECK(w.alarmSwitch());
   size_t h1 = w.house.logs.size();
   w.opener.force[0] = -1;
-  gs = waitFor(w, w.house, "gate_state", h1, 5000);
-  CHECK(gs.ok);
-  CHECK_EQ(gs.e.a, GS_CLOSED_);
-  CHECK(!w.house.coil(1));
-  CHECK(w.sensorClosed());
-  syncWindowOver(w);
-  CHECK(!w.alarmSwitch());
+  bad = watch(w, 5000, [&] { return w.house.coil(1) && !w.sensorClosed(); });
+  CHECK_EQ(bad, 0);
+  CHECK_EQ(countSince(w.house, "gate_state", h1), 0);
   CHECK_EQ(countSince(w.house, "cmd_sent", h0), 0);
   CHECK_EQ(pulses(w, g0), 0);
 
-  openByUser(w);
+  // Opened (a relay test at the gate): the open limit reads alone, and the house follows again.
+  CHECK(w.gate.request("relay.test", "\"k\":1,\"ms\":500")["ok"] == true);
+  gs = waitFor(w, w.house, "gate_state", h1, 15000, GS_OPEN_);
+  CHECK(gs.ok);
+  syncWindowOver(w);
+  CHECK(w.alarmSwitch());
   size_t h2 = w.house.logs.size(), g2 = w.gate.logs.size();
   w.opener.force[1] = 1;  // the closed limit reads too
   gs = waitFor(w, w.house, "gate_state", h2, 5000);

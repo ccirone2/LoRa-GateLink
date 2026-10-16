@@ -29,11 +29,11 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 |---|---|---|---|---|
 | **Tier 1: the gate's real state, safety, never late** | | | | |
 | 1 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
-| 2 | F14 | Catch faults the inputs alone don't show | M | |
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
-| 3 | C3 | Help the installer aim the antenna | S | |
-| 4 | B1 | Repeatable RF tests | S | |
-| 5 | F3 | Tell the alarm what kind of trouble it is | M | |
+| 2 | C3 | Help the installer aim the antenna | S | |
+| 3 | B1 | Repeatable RF tests | S | |
+| 4 | F3 | Tell the alarm what kind of trouble it is | M | |
+| 5 | F14 | Catch faults the inputs alone don't show | S | |
 | 6 | F1 | Keep the event log across resets | M | |
 | 7 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
 | 8 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
@@ -254,16 +254,34 @@ delay before closing), and dealers blocking devices they didn't sell.
 
 ### F14: Catch faults the inputs alone don't show
 
-**Goal.** A failing limit, power sense or relay contact is reported as a fault instead of quietly giving a wrong state
-or disabling remote control (`closed-limit-nc-fail-unsafe`, `power-sense-degradation-silent`,
-`relay-held-welded-or-overlapping`).
+**Goal.** A failing power sense or relay contact is reported as a fault instead of quietly disabling remote control
+(`power-sense-degradation-silent`, `relay-held-welded-or-overlapping`).
 
-**Today.** The gate trusts each input as it reads; a weld or a stuck limit is invisible.
+**Today.** Since 0.17.1 both limits reading at once holds the gate at `fault` until the open limit reads alone, so a
+stuck closed limit (`closed-limit-nc-fail-unsafe`) reads not closed from the gate's first full opening on. A dead gate
+IN3 isn't silent (it reads as AC lost: health `ac`, D5). A dead house IN2 opto reads as a controller without power:
+switch edges are ignored and nothing alarms. A welded relay contact is invisible.
 
-**How.** Latch a fault for: a closed limit that never releases after our OPEN pulse; closed reached without passing
-between; IN2 or IN3 off while everything else says power is there; a shared input held on while our coil is off (that
-last needs the opener's OPEN/CLOSE terminals sensed on an input: F15, or H1). Reboot loops are counted since 0.15.0
-(health `reboots`).
+**How.**
+- House: IN2 off while the board's own supply (`ctrl_power_pmic`, the same 12 V) has stayed good well past the
+  opto's ~2.1 s lag (say 30 s) is a health problem (D5). Only with both senses on and the board fed from the Shelly's
+  supply ([hardware.md](docs/hardware.md)); a USB cable keeps the supply good, so a bench power cut would trip it.
+  It answers part of F3's open question (does the controller's power count?): settle that with it.
+- A shared input held on while our coil is off: needs the opener's OPEN/CLOSE terminals sensed on an input (F15, or
+  H1).
+- Keep the both-limits hold across a gate board restart (it is in RAM): a reset with a stuck closed limit and the gate
+  part-open reads closed again until the next full opening. A flash write when it latches (outside a pulse) would keep
+  it; weigh that against how rare a reset with a stuck limit is.
+
+**Cost / risk.** The IN2 check adds a health problem (status `health`, log `health`, the web console's health line).
+
+Decided 2026-10-15 (`/implement`, verdict *build smaller*): built the both-limits hold (0.17.1); not built, and not
+to be: a fault when the closed limit stays on after our OPEN pulse (a gate that doesn't move, the opener locked out or
+another controller holding CLOSE, is far likelier than a stuck limit with the gate stopped short of open, so it would
+mostly show a closed gate as not closed; the travel timeout already reports it, `last_result` `timeout`); a fault for
+closed reached without passing between (the only path to it found is the AUX relays dropping while the opener's
+controller restarts, unverified: TODO.md); a gate IN3 check (nothing at the gate says AC is there apart from IN3, and
+a dead IN3 already alarms). Moved from rank 2 to 5: what is left serves diagnosis, not the gate's real state.
 
 ### F15: Put the spare inputs to use
 

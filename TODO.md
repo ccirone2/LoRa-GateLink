@@ -103,6 +103,14 @@ once its fix is merged and record it in the pull request.
   later, that move is logged `external` (a label: K1, K2 and commands don't depend on it). The GateSim and the host
   simulation react within 20 ms. At the install, measure the time from a pulse to the limit input dropping (gate log
   `pulse` to `gate_state` between, less `BETWEEN_HOLD_MS`, both ways) and widen the lapse if it's longer.
+- [ ] **What the limits read while the CSW24UL's controller restarts.** The closed limit is the AUX2 relay's NC
+  contact, wetted by the accessory 24 V: if that 24 V comes up (or stays up, on a controller reset) before the
+  controller energizes AUX2, an open or part-open gate reads closed for that moment. The gate trusts a closed limit at
+  once out of `no_power` and from `open` (only a move into `between` is held), so it would report a false closed, a
+  few seconds long. At the install (the GateSim doesn't model it), with the gate open: cut the opener's power with its
+  battery out and restore it, then reset its controller if it has a way; watch gate log `gate_state` for a `closed`
+  before `open`. If it shows, hold a move into closed out of `no_power` or `open` the way `between` is (ROADMAP
+  F14 left it out as unverified).
 
 ## Install
 

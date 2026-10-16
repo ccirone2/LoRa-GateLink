@@ -1008,6 +1008,7 @@ void World::onLog(Board &b, const LogEv &e) {
   if (e.ev == "boot") {
     ft[b.idx] = FaultTrack();
     ft[b.idx].bootT = e.t;
+    if (&b == &gate) closedUnprovenSure = closedUnprovenMaybe = false;
   } else if (e.ev == "link_up" && &b == &house && !ft[0].upSinceBoot) {
     ft[0].upSinceBoot = true;
     ft[0].upT = e.t;
@@ -1065,6 +1066,8 @@ void World::onLog(Board &b, const LogEv &e) {
       // Gate state comes only from its limit inputs.
       if (e.a == GS_OPEN_ && !opener.in(1)) violate("gate reported open with the open limit off");
       if (e.a == GS_CLOSED_ && !opener.in(2)) violate("gate reported closed with the closed limit off");
+      if (e.a == GS_CLOSED_ && closedUnprovenSure)
+        violate("gate reported closed after both limits read, before the open limit read alone");
     }
   }
 }
@@ -1083,16 +1086,31 @@ void World::monitor() {
   };
   steadySince(in3OnSince, opener.in(3));
   steadySince(oneLimitSince, opener.in(1) != opener.in(2));
+  steadySince(bothLimitsSince, opener.in(1) && opener.in(2));
+  steadySince(openAloneSince, opener.in(1) && !opener.in(2));
+  // As the gate sees its inputs: past its debounce, and a loop stall (a flash save or radio restart, up to ~1 s) that
+  // held off its next read.
+  uint32_t lag = 0;
+  auto steady = [&](uint32_t since) {
+    if (!lag) lag = (uint32_t)gate.get("debounce_ms") + 1200;
+    return since && (int32_t)(now - since) > (int32_t)lag;  // signed: a stamp is now | 1, a ms ahead of an even now
+  };
+  // The gate holds both limits after they have read together for 500 ms (BOTH_LIMITS_HOLD_MS): surely once they have
+  // for that plus the lag, maybe once they have read at all.
+  if (bothLimitsSince) {
+    closedUnprovenMaybe = true;
+    if (!closedUnprovenSure && steady(bothLimitsSince) && (int32_t)(now - bothLimitsSince) > (int32_t)lag + 500) closedUnprovenSure = true;
+  } else if (openAloneSince) {
+    closedUnprovenSure = false;
+    if (closedUnprovenMaybe && steady(openAloneSince)) closedUnprovenMaybe = false;
+  }
   // Availability: a command is refused only without AC and with no position to trust (no limit reading, and no pulse
-  // of ours under way, or both limits reading), as the gate sees its inputs: past its debounce, and a loop stall
-  // (a flash save or radio restart, up to ~1 s) that held off its next read.
+  // of ours under way, or both limits reading).
   if (!refused.empty() && gate.running()) {
-    uint32_t lag = (uint32_t)gate.get("debounce_ms") + 1200;
-    auto steady = [&](uint32_t since) { return since && now - since > lag; };
     for (int32_t id : refused) {
       if (!gate.get("power_sense")) violate(fmt("gate refused command %d with power_sense off", id));
       else if (steady(in3OnSince)) violate(fmt("gate refused command %d with AC present", id));
-      else if (steady(oneLimitSince)) violate(fmt("gate refused command %d while a limit read", id));
+      else if (steady(oneLimitSince) && !closedUnprovenMaybe) violate(fmt("gate refused command %d while a limit read", id));
       else {
         JsonDocument s = gate.status();
         if (s["gate"] == "no_power" && !(s["target"] | std::string()).empty())

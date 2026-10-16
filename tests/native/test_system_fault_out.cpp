@@ -360,12 +360,18 @@ TEST(fault_out_ac_lost_drops_both_after_the_hold) {
 }
 
 // [fault-out] Both limits read at once: the gate reads fault, and both boards drop D5 after the hold from when each saw
-// it; the limit released, both raise it at once.
+// it; the limit released, both raise it at once. (At the open limit: there, the open limit reading alone once the
+// closed one releases ends the fault. At the closed limit it would last until the gate next opens.)
 TEST(fault_out_gate_fault_drops_both_after_the_hold) {
   Site w;
   w.commission(faultOutOn());
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_OPEN_; }, 15000));
+  w.run(5000);
+  checkHealthy(w.gate);
+  checkHealthy(w.house);
   size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
-  w.opener.force[0] = 1;  // the open limit reads too
+  w.opener.force[1] = 1;  // the closed limit reads too
   Found gs = waitFor(w, w.gate, "gate_state", g0, 1000, GS_FAULT_);
   CHECK(gs.ok);
   Found hs = waitFor(w, w.house, "gate_state", h0, 2000, GS_FAULT_);
@@ -383,13 +389,13 @@ TEST(fault_out_gate_fault_drops_both_after_the_hold) {
   CHECK_EQ(hl.e.b, P_FAULT);
 
   size_t h1 = w.house.logs.size(), g1 = w.gate.logs.size();
-  w.opener.force[0] = -1;
-  Found gc = waitFor(w, w.gate, "gate_state", g1, 1000, GS_CLOSED_);
+  w.opener.force[1] = -1;
+  Found gc = waitFor(w, w.gate, "gate_state", g1, 1000, GS_OPEN_);
   CHECK(gc.ok);
   Found gh = find(w.gate, "health", g1, 1);
   CHECK(gh.ok);
   CHECK_EQ(gh.e.at, gc.e.at);
-  Found hc = waitFor(w, w.house, "gate_state", h1, 2000, GS_CLOSED_);
+  Found hc = waitFor(w, w.house, "gate_state", h1, 2000, GS_OPEN_);
   CHECK(hc.ok);
   Found hh = find(w.house, "health", h1, 1);
   CHECK(hh.ok);
@@ -511,11 +517,14 @@ TEST(fault_out_faults_shorter_than_the_hold_never_drop_it) {
   CHECK_STR(health(w.gate), "");
   CHECK_STR(health(w.house), "");
 
-  w.opener.force[0] = 1;  // both limits for 3 s
+  w.user(true);  // opened: a fault at the open limit ends when the closed limit releases
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_OPEN_; }, 15000));
+  CHECK_EQ(watch(w, 3000, bothHigh), 0);
+  w.opener.force[1] = 1;  // both limits for 3 s
   CHECK_EQ(watch(w, 1500, bothHigh), 0);
   CHECK_STR(health(w.gate), "fault");
   CHECK_EQ(watch(w, 1500, bothHigh), 0);
-  w.opener.force[0] = -1;
+  w.opener.force[1] = -1;
   CHECK_EQ(watch(w, 3000, bothHigh), 0);
   CHECK_STR(health(w.house), "");
 

@@ -31,7 +31,9 @@ and `firmware/GateLink/pins.h` in sync.
 
 - **CSW24UL**: set AUX relay A to *open limit* and AUX relay B to *closed limit* (per the LiftMaster manual)
   and wire their contacts to GATE IN1 / IN2 through the opto board (below). The closed-limit relay (AUX 2)
-  *energizes when not at the close limit*, so take IN2 from its **NC** contact; the open-limit relay from NO. K1 NO/COM → OPEN + COM,
+  *energizes when not at the close limit*, so take IN2 from its **NC** contact; the open-limit relay from NO. The
+  AUX limit relays switch only once the opener's travel limits are set, so a limit that never reads may be unset
+  limits rather than a wiring fault. K1 NO/COM → OPEN + COM,
   K2 NO/COM → CLOSE + COM. The OPEN/CLOSE inputs are shared with an AES Prime Edge cellular controller and a
   siren sensor, which is why the relays are only ever pulsed (default 500 ms), never held.
 - **Opto board:** a 4-channel PNP-output opto isolator (NOYITO MT-301R4P-P), OUT1–OUT4 → IN1–IN4, output

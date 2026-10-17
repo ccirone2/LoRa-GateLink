@@ -62,7 +62,7 @@ export function healthLine(s, { margin = null, peer = null } = {}) {
     return line('bad', `No link to the ${other}: check it has power and its antenna, and that both boards have the same key and radio settings; then Link → Ping.`);
   }
 
-  if (s.gate === 'no_power') return line('bad', 'The gate opener has no power and no limit reads: check the opener and its battery. The alarm shows the gate not closed meanwhile.');
+  if (s.gate === 'no_power') return line('bad', 'The gate opener has no power and no limit reads: check the opener and its battery (and that its travel limits are set). The alarm shows the gate not closed meanwhile.');
   if (s.gate === 'fault') return line('bad', 'Both gate limits read at once, or the closed one read straight after the open one (the opener restarting), and the open limit hasn’t read alone since: check the limit wiring and the opener’s AUX relay settings. Once fixed, a full opening (or a gate board restart) clears it. The alarm shows the gate not closed meanwhile.');
   if (health.includes('ctrl_sense')) {
     return line('bad', 'The controller’s power input (IN2) reads off while this board’s supply, the same 12 V, is good: check the IN2 opto and its wiring. The controller’s switch is ignored until it reads again.');

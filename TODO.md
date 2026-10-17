@@ -125,11 +125,6 @@ once its fix is merged and record it in the pull request.
   the house never heard (`missed_move`). Untested against a real 2GIG sensor and panel: at the house, take the house
   board's antenna off while the gate opens and closes (within the 100 s link timeout), put it back, and check
   Alarm.com logs the gate opened and closed. If the sensor or panel needs longer, raise `MISSED_OPEN_MS`.
-- [ ] **Troubleshooting: a limit that never reads may be unset limits.** On a real install the opener's AUX limit
-  relays only switch once the CSW24UL's travel limits have been learned, so a limit input that never goes active (at
-  either end of the travel) may mean the limits aren't set, not a wiring fault. Say so in the help text where an
-  installer would look: `docs/install.md`'s limit checks, `docs/hardware.md`, and the web console's I/O card or
-  wiring notes (`web/js/wiring.js`) and the health line for a gate stuck `no_power`/`between`.
 
 ## Supply chain
 

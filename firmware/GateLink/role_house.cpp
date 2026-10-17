@@ -254,7 +254,7 @@ void houseBegin() {
 }
 
 // IN2 and the board's supply share the controller's 12 V, so IN2 off long after the supply came back good is a dead
-// opto or a cut wire, not a power cut (the opto lags the supply by ~2.1 s into a cut, less on its return). It
+// opto or a cut wire, not a power cut (the opto drops ~1.9 s after the supply in a cut, and is back sooner on its return). It
 // only tells health.cpp (a dead IN2 otherwise just reads as a controller without power, its switch ignored, and
 // nothing alarms); the controller still counts as unpowered. senseLitAt is restamped every pass it doesn't hold, and
 // read only until senseDark is set, so it never ages past elapsed()'s range.

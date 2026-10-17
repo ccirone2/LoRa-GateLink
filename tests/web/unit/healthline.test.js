@@ -53,6 +53,8 @@ test('the gate’s state and power, the controller, start-up', () => {
   // A dead IN2 opto reads as no controller power too: the specific cause comes first.
   assert.equal(lvl(house({ ctrl_power: false, health: ['ctrl_sense'] })), 'bad');
   assert.match(txt(house({ ctrl_power: false, health: ['ctrl_sense'] })), /^The controller’s power input \(IN2\) reads off.*check the IN2 opto/);
+  // Bad before the gate on its battery (a warning).
+  assert.match(txt(house({ ctrl_power: false, health: ['ac', 'ctrl_sense'] })), /^The controller’s power input/);
   assert.match(txt(house({ health: ['starting'] })), /waiting for the gate’s first report/);
   assert.match(txt(gate({ health: ['starting'] })), /inputs are settling/);
   // Right after boot the link isn't up yet: starting, not a missing link; after half a minute, the missing link.

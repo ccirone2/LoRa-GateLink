@@ -3,6 +3,8 @@
 // same logic for `tools/gatelink.py survey`. Both are checked against tests/tools/fixtures/survey-vectors.json, so
 // change them together. Texts here are plain ASCII, as the command line prints the same ones.
 
+import { isNum } from './util.js';
+
 // SX1276 demodulation SNR floor per spreading factor (Semtech SX1276 datasheet), dB: below it a frame is lost.
 export const SNR_FLOOR = { 6: -5, 7: -7.5, 8: -10, 9: -12.5, 10: -15, 11: -17.5, 12: -20 };
 export const GOOD_DB = 15; // the weaker direction's 10th-percentile margin for "good"
@@ -23,7 +25,6 @@ export const FEW_PONGS = 20; // fewer answered pings than this: say the result i
 export const DIRECTIONS = ['here', 'peer'];
 const FIELDS = { here: ['rssi', 'snr', 'noise'], peer: ['peer_rssi', 'peer_snr', 'peer_noise'] };
 
-const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const minOf = (a) => (a.length ? Math.min(...a) : null);
 
 export const snrFloor = (sf) => SNR_FLOOR[sf] ?? null;

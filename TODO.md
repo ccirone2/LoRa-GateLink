@@ -138,9 +138,6 @@ once its fix is merged and record it in the pull request.
   `.bin` with `gh release verify-asset` (GitHub's attestation) rather than the release's own `.sha256`, once a release
   is immutable (v0.17.0 on); and build provenance attestations for the binary (`actions/attest-build-provenance`), if
   worth a third-party-free path to them.
-- [ ] **Bench hygiene** (threat model, low). Home Assistant TLS verified by default (`ha-token-tls-off`), a Host
-  check in `tools/bench-wiring/serve.py` (`bench-wiring-server`), a content security policy in `web/index.html` and
-  numeric coercion of `hist.get` fields (`board-output-xss`).
 
 ## Housekeeping
 

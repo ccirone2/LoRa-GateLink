@@ -11,6 +11,11 @@ const fakePath = fileURLToPath(new URL('../fake-serial.js', import.meta.url));
 export async function openConsole(page, boards = [{ role: 'house' }], options = {}) {
   await page.addInitScript((c) => { window.__fakeSerialConfig = c; }, { fixture, boards, ...options });
   await page.addInitScript({ path: fakePath });
+  // Anything the page's content security policy blocks (cspViolations).
+  await page.addInitScript(() => {
+    window.__csp = [];
+    document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
+  });
   page.dialogs = [];
   page.on('dialog', (d) => {
     page.dialogs.push(d.message());
@@ -28,6 +33,9 @@ export async function connect(page, role = 'house') {
   await item.click();
   await expect(page.locator('#devline')).toContainText(`· ${role}`);
 }
+
+// What the page's content security policy blocked so far.
+export const cspViolations = (page) => page.evaluate(() => window.__csp);
 
 // Requests the page sent to board i (the fake records them).
 export const requests = (page, i = 0) => page.evaluate((n) => window.__fake.boards[n].requests, i);

@@ -1,5 +1,5 @@
 // The Log, Link and Install tabs: decoded log lines, ping, remote diagnostics and writes, relay tests, link history.
-import { test, expect, openConsole, connect, requests, pushEvent } from './helpers.js';
+import { test, expect, openConsole, connect, requests, pushEvent, cspViolations } from './helpers.js';
 
 test('log events are shown decoded, and the download keeps the board’s own form', async ({ page }) => {
   await openConsole(page);
@@ -86,6 +86,19 @@ test('link history loads every page and draws the chart, tiles and table', async
   expect(csv[0]).toMatch(/^start,idx,tx,rx,/);
   await expect(page.locator('#histChart line.reset')).toHaveCount(0);
   await expect(page.locator('#histNote')).toContainText('kept across resets');
+  expect(await cspViolations(page)).toEqual([]); // the page runs whole under its own policy
+});
+
+test('link history takes only numbers from the board: markup in a field is never put in the page', async ({ page }) => {
+  const evil = '<img src=x onerror="window.__xss=1">';
+  await openConsole(page, [{ role: 'house', histBuckets: 3, histOverride: { tx: evil, rssi_avg: evil, boot: evil } }]);
+  await connect(page);
+  await page.locator('#tabbtn-link').click();
+  await page.locator('#btnHistLoad').click();
+  await expect(page.locator('#histTable tbody tr')).toHaveCount(3);
+  await expect(page.locator('#histBody img')).toHaveCount(0);
+  await expect(page.locator('#histTable')).not.toContainText('onerror');
+  expect(await page.evaluate(() => window.__xss)).toBeUndefined();
 });
 
 test('link history marks where the board reset, and the times before it as earlier', async ({ page }) => {

@@ -3,9 +3,9 @@
 // alarm from seeing the gate's real state or the gate from moving, then what to diagnose. Pure, so it is unit-tested
 // under Node: healthLine(status, peer) with peer = peerDiffs() (peer.js).
 import { FAIR_DB, sampleMargin, fmt1 } from './survey.js';
+import { isNum } from './util.js';
 
 const STARTUP_MS = 30000;
-const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const startingLine = (s) => ({ level: 'info',
   text: s.role === 'house' ? 'Starting up: waiting for the gate’s first report and the controller to settle.'
     : 'Starting up: the gate inputs are settling.' });

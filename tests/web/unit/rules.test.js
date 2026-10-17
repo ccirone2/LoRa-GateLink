@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
 const web = new URL('../../../web/', import.meta.url);
-const files = ['index.html', 'style.css', 'app.js', ...readdirSync(new URL('js/', web)).map((f) => `js/${f}`)];
+const files = ['index.html', 'style.css', 'app.js', 'nofile.js', ...readdirSync(new URL('js/', web)).map((f) => `js/${f}`)];
 
 test('naming rule: the page calls the house-side device "the controller", never by brand', () => {
   for (const f of files) {
@@ -23,4 +23,14 @@ test('every module is loaded as an ES module from the page', () => {
     const used = imported.has(f) || files.some((g) => g.startsWith('js/') && readFileSync(new URL(g, web), 'utf8').includes(`'./${f}'`));
     assert.ok(used, `web/js/${f} isn't imported by anything`);
   }
+});
+
+test('the page keeps its content security policy, so no script can be inline', () => {
+  const html = readFileSync(new URL('index.html', web), 'utf8');
+  const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/)?.[1];
+  assert.ok(csp, 'index.html has no CSP meta');
+  assert.match(csp, /script-src 'self';/);
+  assert.doesNotMatch(csp, /script-src[^;]*'unsafe-(inline|eval)'/);
+  assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)[^>]*>/, 'an inline <script> (the CSP blocks it)');
+  assert.doesNotMatch(html, /\son[a-z]+="/, 'an inline event handler (the CSP blocks it)');
 });

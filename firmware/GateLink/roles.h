@@ -93,6 +93,10 @@ bool houseDecided();
 uint8_t houseGateState();
 bool houseGateAcLost();
 bool houseGateRebootLoop();  // the gate's latest STATUS says it is in a reboot loop
+// IN2 has read off for CTRL_SENSE_DARK_MS while the board's supply (the same 12 V) was good: a dead IN2 opto or wire
+// (ctrl_power_sense and ctrl_power_pmic on, the charger answering).
+bool houseCtrlSenseDark();
+#define CTRL_SENSE_DARK_MS 30000UL
 
 void gateBegin();
 void gateLoop(uint32_t now);

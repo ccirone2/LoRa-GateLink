@@ -97,6 +97,31 @@ def _real_supply_cut(rig, m):
     rig.expect_no("gate", "cmd_rx", since=m)
 
 
+def test_dead_power_sense_is_ctrl_sense(powered):
+    """IN2 reads the controller unpowered while the board's own supply (the charger, read over I2C) stays good, as a
+    dead opto would: after 30 s the house lists health ctrl_sense, and it clears as soon as IN2 reads again. (On the
+    bench USB keeps the supply good.)"""
+    rig = powered
+    rig.expect_commands(0)
+    rig.house.config_set(ctrl_power_pmic=1)
+    st = rig.wait_house(5, ctrl_power=True)
+    if st.get("supply") is not True:
+        pytest.skip(f"the house's supply doesn't read good (supply {st.get('supply')!r}): the charger or USB power")
+    m = rig.mark()
+    rig.power.fake(True)
+    rig.wait_log("house", "ctrl_power", a=0, since=m, timeout=5)
+    assert "ctrl_sense" not in rig.house.status()["health"]
+    rig.wait_for(lambda: "ctrl_sense" in rig.house.status()["health"] or None, 40, "health ctrl_sense")
+    after = rig.mark() - m
+    rig.latency("IN2 dark -> health ctrl_sense (30 s)", after)
+    assert after >= 29, f"ctrl_sense {after:.1f} s after IN2 went dark, before its 30 s"
+    m2 = rig.mark()
+    rig.power.fake(False)
+    rig.wait_log("house", "ctrl_power", a=1, since=m2, timeout=5)
+    assert "ctrl_sense" not in rig.house.status()["health"]
+    rig.expect_no("gate", "cmd_rx", since=m)
+
+
 def test_controller_returns_at_wrong_level(powered):
     """After a power cut the controller boots at some level: inside the settle window that's sync, not a command,
     and the mismatch path then brings it back to the gate's state."""

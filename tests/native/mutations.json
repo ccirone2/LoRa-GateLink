@@ -2926,5 +2926,80 @@
     "replace": "  bool closed = gateState == GS_CLOSED;"
    }
   ]
+ },
+ {
+  "name": "fault_out_h16_ctrl_sense_ignored",
+  "invariant": "fault-out",
+  "why": "H16: a dead house IN2 opto (IN2 off while the board's supply, the same 12 V, is good) isn't a problem: the controller reads unpowered for good, its switch ignored, and nothing alarms",
+  "killed_by": [
+   "fault_out_house_in2_dark_with_its_supply_good_is_ctrl_sense"
+  ],
+  "edits": [
+   {
+    "file": "health.cpp",
+    "find": "  if (senseDark) p |= PROB_CTRL_SENSE;",
+    "replace": "  if (senseDark) p |= 0;"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h17_ctrl_sense_without_the_charger",
+  "invariant": "fault-out",
+  "why": "H17: ctrl_sense doesn't need the charger to answer: supplyGood() reads true when it never did, so on a board without it every controller power cut longer than 30 s reads as a dead opto",
+  "killed_by": [
+   "fault_out_ctrl_sense_needs_both_senses_and_the_charger"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "supplyKnown() && supplyGood() && !in2.active()",
+    "replace": "supplyGood() && !in2.active()"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h18_ctrl_sense_without_the_wait",
+  "invariant": "fault-out",
+  "why": "H18: ctrl_sense shows as soon as IN2 reads off with the supply good, so every power return (the opto lags the supply) flags it for a moment",
+  "killed_by": [
+   "fault_out_house_in2_dark_with_its_supply_good_is_ctrl_sense"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "elapsed(now, senseLitAt, CTRL_SENSE_DARK_MS)",
+    "replace": "elapsed(now, senseLitAt, 0)"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h19_ctrl_sense_without_ctrl_power_pmic",
+  "invariant": "fault-out",
+  "why": "H19: ctrl_sense ignores ctrl_power_pmic: a house board on a supply of its own (pmic off) reads every controller power cut longer than 30 s as a dead opto",
+  "killed_by": [
+   "fault_out_ctrl_sense_needs_both_senses_and_the_charger"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "cfg.ctrl_power_sense && cfg.ctrl_power_pmic && supplyKnown()",
+    "replace": "cfg.ctrl_power_sense && supplyKnown()"
+   }
+  ]
+ },
+ {
+  "name": "fault_out_h20_ctrl_sense_ignores_the_supply",
+  "invariant": "fault-out",
+  "why": "H20: ctrl_sense ignores whether the supply is good: a long 12 V cut (the house on its LiPo) reads as a dead opto and drops D5",
+  "killed_by": [
+   "fault_out_house_long_12v_cut_is_not_ctrl_sense"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "supplyKnown() && supplyGood() && !in2.active()",
+    "replace": "supplyKnown() && !in2.active()"
+   }
+  ]
  }
 ]

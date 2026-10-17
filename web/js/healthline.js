@@ -65,6 +65,9 @@ export function healthLine(s, { margin = null, peer = null } = {}) {
   if (s.gate === 'no_power') return line('bad', 'The gate opener has no power and no limit reads: check the opener and its battery. The alarm shows the gate not closed meanwhile.');
   if (s.gate === 'fault') return line('bad', 'Both gate limits read at once, or the closed one read straight after the open one (the opener restarting), and the open limit hasn’t read alone since: check the limit wiring and the opener’s AUX relay settings. Once fixed, a full opening (or a gate board restart) clears it. The alarm shows the gate not closed meanwhile.');
   if (health.includes('ac')) return line('warn', 'The gate is on its battery: AC power lost. Commands still work while a limit reads; check the opener’s mains supply.');
+  if (health.includes('ctrl_sense')) {
+    return line('bad', 'The controller’s power input (IN2) reads off while this board’s supply, the same 12 V, is good: check the IN2 opto and its wiring. The controller’s switch is ignored until it reads again.');
+  }
   if (s.role === 'house' && s.ctrl_power === false) return line('warn', 'The controller has no power: its switch is ignored until power returns.');
   if (starting) return startingLine(s);
 

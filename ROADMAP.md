@@ -111,7 +111,8 @@ rebooting), not only that it needs attention, and covers every problem that leav
 (`jamming-hides-state-until-link-timeout`).
 
 **Today.** Since 0.14.0 D5 (`fault_out`) drives one second 2GIG sensor for radio, link, AC, `no_power` and `fault`
-problems, and since 0.15.0 a reboot loop at either board (health `reboots`), all alike.
+problems, since 0.15.0 a reboot loop at either board (health `reboots`), and since 0.17.3 a dead house IN2 opto
+(`ctrl_sense`), all alike.
 
 **How.**
 - Add a travel timeout (jam): the house already gets `last_result` in STATUS.
@@ -120,8 +121,9 @@ problems, and since 0.15.0 a reboot loop at either board (health `reboots`), all
   up to 3 mA (5–10 mA recommended) and the SAMD core leaves high drive strength off, so either set it on D5 with
   ~330 Ω or add a transistor. Part of H1.
 
-**Open questions.** How long a jam stays latched; whether the house controller's own power (IN2, the board's supply)
-counts; how many sensors are worth their cost.
+**Open questions.** How long a jam stays latched; how many sensors are worth their cost. Settled 2026-10-17 (F14): the
+controller losing its power isn't a problem of its own (Alarm.com already shows the Z-Wave device unreachable), but IN2
+disagreeing with the board's supply is (`ctrl_sense`).
 
 ### F4: Warn before the opener's battery or mechanics fail
 
@@ -257,30 +259,25 @@ delay before closing), and dealers blocking devices they didn't sell.
 (`power-sense-degradation-silent`, `relay-held-welded-or-overlapping`).
 
 **Today.** Since 0.17.1 both limits reading at once holds the gate at `fault` until the open limit reads alone, so a
-stuck closed limit (`closed-limit-nc-fail-unsafe`) reads not closed from the gate's first full opening on. A dead gate
-IN3 isn't silent (it reads as AC lost: health `ac`, D5). A dead house IN2 opto reads as a controller without power:
-switch edges are ignored and nothing alarms. A welded relay contact is invisible.
+stuck closed limit (`closed-limit-nc-fail-unsafe`) reads not closed from the gate's first full opening on, and since
+0.17.2 closed straight from open reads `fault`. A dead gate IN3 isn't silent (it reads as AC lost: health `ac`, D5).
+Since 0.17.3 a dead house IN2 opto (IN2 off 30 s with the board's supply good) is health `ctrl_sense` (D5). A welded
+relay contact is invisible.
 
 **How.**
-- House: IN2 off while the board's own supply (`ctrl_power_pmic`, the same 12 V) has stayed good well past the
-  opto's ~2.1 s lag (say 30 s) is a health problem (D5). Only with both senses on and the board fed from the Shelly's
-  supply ([hardware.md](docs/hardware.md)); a USB cable keeps the supply good, so a bench power cut would trip it.
-  It answers part of F3's open question (does the controller's power count?): settle that with it.
 - A shared input held on while our coil is off: needs the opener's OPEN/CLOSE terminals sensed on an input (F15, or
   H1).
 - Keep the both-limits hold across a gate board restart (it is in RAM): a reset with a stuck closed limit and the gate
   part-open reads closed again until the next full opening. A flash write when it latches (outside a pulse) would keep
   it; weigh that against how rare a reset with a stuck limit is.
 
-**Cost / risk.** The IN2 check adds a health problem (status `health`, log `health`, the web console's health line).
-
 Decided 2026-10-15 (`/implement`, verdict *build smaller*): built the both-limits hold (0.17.1); not built, and not
 to be: a fault when the closed limit stays on after our OPEN pulse (a gate that doesn't move, the opener locked out or
 another controller holding CLOSE, is far likelier than a stuck limit with the gate stopped short of open, so it would
-mostly show a closed gate as not closed; the travel timeout already reports it, `last_result` `timeout`); a fault for
-closed reached without passing between (the only path to it found is the AUX relays dropping while the opener's
-controller restarts, unverified: TODO.md); a gate IN3 check (nothing at the gate says AC is there apart from IN3, and
+mostly show a closed gate as not closed; the travel timeout already reports it, `last_result` `timeout`); a gate IN3 check (nothing at the gate says AC is there apart from IN3, and
 a dead IN3 already alarms). Moved from rank 2 to 5: what is left serves diagnosis, not the gate's real state.
+Reversed 2026-10-16 (#139, 0.17.2): closed reached straight from open now reads `fault` after all, as the opener
+restarting is a path to it. Built 2026-10-17 (0.17.3): the house IN2 check, as health `ctrl_sense`.
 
 ### F15: Put the spare inputs to use
 

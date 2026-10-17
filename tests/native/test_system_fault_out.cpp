@@ -21,10 +21,12 @@ enum { MSG_STATUS_ = 5 };                // link.h MsgType
 enum { ST_STATE_ = 0, ST_INPUTS_ = 1 };  // roles.h STATUS layout
 enum { STI_AC_LOST_ = 0x40 };            // roles.h ST_INPUTS bit
 // health.h Problem bits (log `health` b)
-enum { P_STARTING = 0x01, P_RADIO = 0x02, P_LINK = 0x04, P_AC = 0x08, P_NO_POWER = 0x10, P_FAULT = 0x20 };
+enum { P_STARTING = 0x01, P_RADIO = 0x02, P_LINK = 0x04, P_AC = 0x08, P_NO_POWER = 0x10, P_FAULT = 0x20,
+  P_CTRL_SENSE = 0x80 };
 const int ANY = INT_MIN;
 const uint32_t HOLD_MS = 10000;  // fault_hold_s default
 const uint32_t SYNC_MS = 3000;   // sync_window_ms default: the house arms this long after the first STATUS
+const uint32_t DARK_MS = 30000;  // roles.h CTRL_SENSE_DARK_MS: IN2 off this long with the supply good
 
 // The site, failing the test (not aborting the run) on a monitor breach (as in test_system_gate_state.cpp).
 struct Site : World {
@@ -95,6 +97,17 @@ void runTo(World &w, uint32_t t) {
 
 int32_t since(uint32_t t, uint32_t t0) {
   return (int32_t)(t - t0);
+}
+
+// The house's IN2 opto fails dark (the controller's 12 V and the board's supply stay up), or with on = true lights
+// again.
+void opto(World &w, bool on) {
+  if (on) {
+    w.shelly.optoAt = (w.now + 1) | 1;
+    return;
+  }
+  w.shelly.optoUpMs = 3600000;  // stays dark
+  w.shelly.opto = false;
 }
 
 // Status `health`, as "a,b" ("" when healthy).
@@ -700,5 +713,87 @@ TEST(fault_out_hold_across_the_millis_wraps) {
     CHECK(waitFor(w, w.house, "health", h1, 3000, 1).ok);
     checkHealthy(w.house);
     checkHealthy(w.gate);
+  }
+}
+
+// [fault-out] [ctrl-power] The house's IN2 opto dies with the controller and the board's supply (the same 12 V) up:
+// the controller reads unpowered, so its switch is ignored, as before; after CTRL_SENSE_DARK_MS the house lists
+// ctrl_sense, and D5 drops fault_hold_s later. The opto back, both clear at once. Across the millis() wraps too.
+TEST(fault_out_house_in2_dark_with_its_supply_good_is_ctrl_sense) {
+  for (uint32_t F : { 0x00100000u, 0u, 0x80000000u }) {
+    Site w(F - 60000);
+    w.commission(faultOutOn());
+    checkHealthy(w.house);
+    runTo(w, F - 15000);
+    size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+    opto(w, false);
+    Found dn = waitFor(w, w.house, "ctrl_power", h0, 1000, 0);
+    CHECK(dn.ok);
+    CHECK(since(dn.e.at + DARK_MS, F) > 0);  // the wait straddles F
+    CHECK(w.house.status()["supply"] == true);
+    runTo(w, dn.e.at + DARK_MS - 10);
+    CHECK_STR(health(w.house), "");
+    CHECK_EQ(countSince(w.house, "health", h0), 0);
+    runTo(w, dn.e.at + DARK_MS + 10);
+    CHECK_STR(health(w.house), "ctrl_sense");
+    Found hl = waitFor(w, w.house, "health", h0, HOLD_MS + 1000, 0);
+    CHECK(hl.ok);
+    // Counted from the last pass that saw IN2 on, the one before its ctrl_power event.
+    CHECK_EQ(since(hl.e.at, dn.e.at), (int32_t)(DARK_MS + HOLD_MS - 1));
+    CHECK_EQ(hl.e.b, P_CTRL_SENSE);
+    CHECK(w.house.status()["ctrl_power"] == false);  // still unpowered: nothing it decides changes
+    CHECK(w.sensorClosed());
+    CHECK_EQ(countSince(w.gate, "health", g0), 0);
+    checkHealthy(w.gate);
+
+    size_t h1 = w.house.logs.size();
+    opto(w, true);
+    Found up = waitFor(w, w.house, "ctrl_power", h1, 1000, 1);
+    CHECK(up.ok);
+    Found hh = find(w.house, "health", h1, 1);
+    CHECK(hh.ok);
+    CHECK_EQ(hh.e.at, up.e.at);
+    checkHealthy(w.house);
+  }
+}
+
+// [fault-out] [ctrl-power] A real 12 V cut, however long, is never ctrl_sense: on its LiPo the house board's supply
+// drops ~0.2 s before the relay and ~1.9 s before the opto, and on its return the opto follows within 0.1 s. D5 stays
+// HIGH throughout (a controller without power isn't a problem of its own).
+TEST(fault_out_house_long_12v_cut_is_not_ctrl_sense) {
+  Site w;
+  w.commission(faultOutOn());
+  w.house.lipo = true;
+  size_t h0 = w.house.logs.size();
+  w.setRail12(false);
+  CHECK_EQ(watch(w, 2 * DARK_MS, [&] { return w.house.faultOut() == 1; }), 0);
+  CHECK(w.house.status()["ctrl_power"] == false);
+  CHECK(w.house.status()["supply"] == false);
+  CHECK_STR(health(w.house), "");
+  w.setRail12(true);
+  CHECK_EQ(watch(w, DARK_MS + HOLD_MS, [&] { return w.house.faultOut() == 1; }), 0);
+  CHECK(w.house.status()["ctrl_power"] == true);
+  CHECK_EQ(countSince(w.house, "health", h0), 0);
+  checkHealthy(w.house);
+}
+
+// [fault-out] [ctrl-power] Only with both senses on and the charger answering: with ctrl_power_sense off IN2 isn't
+// the controller's; with ctrl_power_pmic off (the board on another supply) or the charger silent, a good supply says
+// nothing about the 12 V.
+TEST(fault_out_ctrl_sense_needs_both_senses_and_the_charger) {
+  for (int v = 0; v < 3; v++) {
+    Site w;
+    if (v == 2) w.house.pmicKnown = false;
+    w.commission(faultOutOn([&](Board &b) {
+      if (b.idx != 0) return;
+      if (v == 0) CHECK(b.set("ctrl_power_sense", 0));
+      if (v == 1) CHECK(b.set("ctrl_power_pmic", 0));
+    }));
+    size_t h0 = w.house.logs.size();
+    opto(w, false);
+    CHECK_EQ(watch(w, DARK_MS + HOLD_MS + 1000, [&] { return w.house.faultOut() == 1; }), 0);
+    CHECK_STR(health(w.house), "");
+    CHECK_EQ(countSince(w.house, "health", h0), 0);
+    CHECK(w.house.status()["ctrl_power"] == (v == 0));
   }
 }

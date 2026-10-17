@@ -346,7 +346,8 @@ void houseLoop(uint32_t now) {
   // Resync the Shelly to the real gate if they disagree for too long
   // (e.g. a command was overridden by the siren input, or lost while the link was down).
   if (resyncing) {
-    if (elapsed(now, resyncUntil, 0)) {
+    // A K1 test pulse started meanwhile runs its length: setting K1 would cut it short.
+    if (elapsed(now, resyncUntil, 0) && !k1.pulsing()) {
       resyncing = false;
       driveK1(now, k1Target(now));
     }

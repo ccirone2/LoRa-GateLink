@@ -122,7 +122,10 @@ card ticks the steps it can see (role, key, the other board matching, the link, 
 - [ ] K1 NO/COM → OPEN + COM, K2 NO/COM → CLOSE + COM.
 - [ ] `in1_invert`–`in4_invert` off.
 - [ ] Status on the gate board: *closed* at the close limit, *open* at the open limit, *between* while it moves;
-  the I/O card shows IN1 (open limit) and IN2 (closed limit) lit at their limits.
+  the I/O card shows IN1 (open limit) and IN2 (closed limit) lit at their limits. A limit that never lights at
+  either end of the travel (the gate stays *between*, or *no power* with AC off) may mean the opener's travel limits
+  aren't set yet rather than a wiring fault: its AUX limit relays switch only at learned limits. Set the limits
+  (LiftMaster manual) before chasing the wiring.
 - [ ] AC power sense (`power_sense` on): unplug the AC supply: the I/O card shows IN3 (AC power) off, and OPEN
   and CLOSE still run on the opener's battery; plug it back. If IN3 isn't wired, turn `power_sense` off.
 - [ ] Install → Check the wiring → relay test, with someone watching the gate: K1 opens it, K2 closes it.

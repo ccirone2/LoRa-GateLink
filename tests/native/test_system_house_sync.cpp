@@ -995,6 +995,40 @@ TEST(house_sync_lost_command_resynced_after_mismatch_timeout) {
   CHECK(!w.alarmSwitch());
 }
 
+// [resync] [sync-window]
+TEST(house_sync_k1_relay_test_during_a_resync_runs_its_full_length) {
+  // A console test pulse of K1 asked for while a resync holds K1 at the Shelly's level: the resync's end waits for the
+  // pulse instead of cutting it short (K1 stays on the whole 2 s asked for), then K1 goes back to the gate's level.
+  // The Shelly's edges are syncs; the gate never moves.
+  Site w;
+  w.commission([](Board &b) { configureHouse(b, "mismatch_timeout_s", 10); });
+  w.drop = [](const AirFrame &f) { return f.from == 0 && f.type() == MSG_CMD_; };
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  w.user(true);
+  Found dr = waitFor(w, w.house, "cmd_dropped", h0, 15000);
+  CHECK(dr.ok);
+  w.drop = nullptr;
+  Found rs = waitFor(w, w.house, "resync", h0, 11000);
+  CHECK(rs.ok);
+  CHECK(w.house.coil(1));
+  w.run(200);
+  JsonDocument r = w.house.request("relay.test", "\"k\":1,\"ms\":2000");
+  CHECK(r["ok"] == true);
+  Found p = find(w.house, "pulse", h0, 1);
+  CHECK(p.ok);
+  CHECK_EQ(watch(w, p.e.at + 1999 - w.now, [&] { return w.house.coil(1); }), 0);  // past resync_ms (1000)
+  w.run(2);
+  CHECK(!w.house.coil(1));
+  CHECK(w.house.status()["resyncing"] == false);
+  w.run(5000);
+  CHECK(!w.house.coil(1));
+  CHECK(!w.alarmSwitch());
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0), 1);
+  CHECK_EQ(countSince(w.gate, "pulse", g0), 0);
+  CHECK(w.opener.atClosed());
+  CHECK(w.sensorClosed());
+}
+
 // [resync]
 TEST(house_sync_command_lost_while_the_link_was_down_resynced_after_it_returns) {
   // Nothing gets through for a while: the house declares the link down (link_timeout_s 15, heartbeat_s 5), the user

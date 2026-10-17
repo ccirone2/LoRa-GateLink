@@ -37,8 +37,6 @@ once its fix is merged and record it in the pull request.
   any earlier run. The test sends a burst of pings, so the gate may be holding back for the house's own frames.
   Check that test's timeline for what the gate heard while it waited.
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
-  - `pulse_ms` isn't in the test profile: `test_reboots.py` assumes 500 ms and `test_options.py` uses the saved
-    value. Add `pulse_ms: 500` to `PROFILE_GATE` (`gatelink/bench.py`) and check pulses against it.
   - Fixed sleeps that bet on timing: `test_reboots.py` (`sleep(0.2)` to catch the gate in its ~0.5 s bootloader;
     start from the UART `boot` event or `sim.restart` instead), `test_history.py` (`sleep(62)` against a 60 s
     bucket; poll until the bucket rolls), and the `sleep(2)`/`sleep(3)` before negative assertions (derive them from

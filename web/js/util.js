@@ -4,6 +4,9 @@
 export const $ = (id) => document.getElementById(id);
 // Escape text for innerHTML (element content and quoted attributes).
 export const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+export const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+// A value from the board that should be a number: anything else (a string, an object) becomes null, never markup.
+export const numOrNull = (v) => (isNum(v) ? v : null);
 export const cap = (t) => t[0].toUpperCase() + t.slice(1);
 export const yesNo = (v) => (v ? 'yes' : 'no');
 export const pill = (on) => `<span class="pill ${on ? 'on' : ''}">${on ? 'ON' : 'off'}</span>`;

@@ -315,7 +315,10 @@ any of this, on every reset but power-on (TODO.md, the house's warm-reset blip).
 
 ## Web console
 
-Plain ES modules, no build step. `web/app.js` starts the page and runs the connection (what happens on open, close and
+Plain ES modules, no build step. `web/index.html` carries a content security policy (scripts and data from the
+page's own site only, no inline script: `web/nofile.js`, the one classic script, says how to open a page loaded from a
+file), and board output reaches markup only escaped (`esc`) or as a number (`numOrNull`; `tests/web/unit/rules.test.js`
+keeps the policy). `web/app.js` starts the page and runs the connection (what happens on open, close and
 each board event); each card's module wires its own controls in its `init…()` and keeps its timers. In `web/js/`:
 `serial.js` transport, picker and reconnect; `board.js` the board's info reply, role, header line and title (cards that
 show info register `onInfo`, since they import `refreshInfo` from it; `serial.js` knows nothing of the tabs);

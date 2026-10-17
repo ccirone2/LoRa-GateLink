@@ -41,7 +41,8 @@
   const fire = (type, port) => listeners[type].forEach((f) => f({ type, target: port }));
 
   // resetAt: the bucket the board reset before (firmware 0.14.0 keeps the history across resets), or -1.
-  function histRows(n, resetAt = -1) {
+  // override: fields to replace in every row (a board sending what it shouldn't).
+  function histRows(n, resetAt = -1, override = {}) {
     const rows = [];
     for (let i = 0; i < n; i++) {
       const row = {
@@ -50,7 +51,7 @@
         mac_fail: 0, lbt_defers: 1, lbt_forced: 0, sessions: i === 0 ? 1 : 0, radio_faults: 0, down_s: i === n - 4 ? 90 : 0,
         rssi_min: -66, rssi_avg: -61.25, snr_min: 7.5, snr_avg: 9.25, noise_avg: -118, noise_max: -112, peer_n: 120,
         peer_rssi_min: -65, peer_rssi_avg: -60.5, peer_snr_min: 8, peer_snr_avg: 9, peer_noise_avg: -117, peer_noise_max: -111,
-        peer_retries: 0, peer_giveups: 0, peer_crc_err: 0,
+        peer_retries: 0, peer_giveups: 0, peer_crc_err: 0, ...override,
       };
       rows.push(fx.hist_fields.map((f) => row[f]));
     }
@@ -75,6 +76,7 @@
       this.log = spec.log || [];
       this.histN = spec.histBuckets ?? 30;
       this.histResetAt = spec.histResetAt ?? -1;
+      this.histOverride = spec.histOverride ?? {};
       this.requests = [];
       this.pings = 0;
       this.replyDelayMs = spec.replyDelayMs ?? 5;
@@ -201,7 +203,7 @@
         }
         case 'log.get': return ok({ log: clone(this.log), now: this.uptimeMs });
         case 'hist.get': {
-          const rows = histRows(this.histN, this.histResetAt);
+          const rows = histRows(this.histN, this.histResetAt, this.histOverride);
           const current = this.histN - 1;
           const from = req.from ?? 0;
           const n = Math.min(req.n ?? 12, 12);

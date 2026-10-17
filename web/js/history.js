@@ -1,7 +1,7 @@
 // The Link tab's history card: the board's hourly link record (hist.get, docs/console.md#link-history),
 // fetched page by page, drawn as one SVG of stacked panels on a shared time axis so one crosshair and tooltip serve
 // them all. The here/peer colours (--chart-here/--chart-peer) were chosen with a colour-blind palette check.
-import { $, esc, fmtDur, fmtNum, sum, niceScale, download } from './util.js';
+import { $, esc, fmtDur, fmtNum, sum, niceScale, download, numOrNull } from './util.js';
 import { S } from './state.js';
 import { toast, guard } from './ui.js';
 import { call, request } from './serial.js';
@@ -27,7 +27,9 @@ async function loadHistory() {
       if (!res.ok) {
         throw new Error(res.error === 'unknown cmd' ? 'This firmware has no link history (0.4.0 or later needed).' : res.error || 'hist.get failed');
       }
-      buckets.push(...res.rows.map((r) => Object.fromEntries(res.fields.map((f, i) => [f, r[i]]))));
+      // Every field is a number or null (docs/console.md#link-history): the chart and table put them in markup.
+      buckets.push(...res.rows.map((r) => Object.fromEntries(res.fields.map((f, i) => [f, numOrNull(r[i])]))));
+      res.current = numOrNull(res.current);
       // A bucket closing while we page moves `current` on: keep going until the last page reaches it.
       if (!res.rows.length || res.rows[res.rows.length - 1][0] >= res.current) break;
       from = res.rows[res.rows.length - 1][0] + 1;
@@ -36,7 +38,7 @@ async function loadHistory() {
     $('histPlot').classList.remove('loading');
   }
   hist = {
-    buckets, period: res.period_s, nowS: res.now_s, current: res.current, fetchedAt: Date.now(),
+    buckets, period: numOrNull(res.period_s), nowS: numOrNull(res.now_s), current: res.current, fetchedAt: Date.now(),
     peer: S.role === 'house', sf: S.params.sf, role: S.role, persist: res.persist === true,
     lastReset: lastReset(buckets),
   };

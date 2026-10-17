@@ -1,7 +1,7 @@
 // Formatting and chart helpers (web/js/util.js).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fmtDur, fmtFei, fmtNum, cmpVer, niceScale, wrapText, esc } from '../../../web/js/util.js';
+import { fmtDur, fmtFei, fmtNum, cmpVer, niceScale, wrapText, esc, numOrNull } from '../../../web/js/util.js';
 
 test('durations', () => {
   assert.equal(fmtDur(-1), 'never');
@@ -40,4 +40,12 @@ test('frequency error: signed Hz, with the crystal offset in ppm once the carrie
   assert.equal(fmtFei(null, 915e6), '—');
   assert.equal(fmtFei(457.6, 915e6), '+458 Hz (0.50 ppm)');
   assert.equal(fmtFei(-120), '-120 Hz');
+});
+
+test('board values that should be numbers stay numbers or become null', () => {
+  assert.equal(numOrNull(-42.25), -42.25);
+  assert.equal(numOrNull(0), 0);
+  for (const v of [null, undefined, '<img src=x onerror=alert(1)>', '5', NaN, Infinity, {}, [1], true]) {
+    assert.equal(numOrNull(v), null);
+  }
 });

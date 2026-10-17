@@ -28,7 +28,7 @@ def test_gate_reboot_mid_travel(rig):
     m = rig.mark()
     rig.ctrl.on()
     rig.wait_log("gate", "gate_state", a=GS["between"], b=CAUSE["lora"], since=m, timeout=15)
-    time.sleep(1)  # let the 500 ms pulse finish so the reset doesn't cut it short
+    time.sleep(rig.pulse_ms / 1000 + 0.5)  # let the pulse finish so the reset doesn't cut it short
     rig.reboot("gate")
     t_boot = rig.mark()
     rig.wait_gate("open", timeout=SIM_TRAVEL_S + 10)

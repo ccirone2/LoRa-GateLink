@@ -29,7 +29,7 @@ PROFILE_HOUSE = {"mismatch_timeout_s": 20, "ctrl_power_sense": 0, "ctrl_power_pm
                  "ctrl_confirm_ms": 3000, "ctrl_settle_ms": 10000}
 # The install's controller power sensing (firmware defaults): IN2 opto and the board's supply, short confirm.
 REAL_CTRL_POWER = {"ctrl_power_sense": 1, "ctrl_power_pmic": 1, "ctrl_confirm_ms": 500}
-PROFILE_GATE = {"power_sense": 1, "in1_invert": 0, "in2_invert": 0, "in3_invert": 0}
+PROFILE_GATE = {"pulse_ms": 500, "power_sense": 1, "in1_invert": 0, "in2_invert": 0, "in3_invert": 0}
 
 _ERRORS = (BoardError, GateSimError, ControllerError, KeyError, TypeError)
 
@@ -62,7 +62,7 @@ class Bench:
         if tx_power is not None:
             for n in ("house", "gate"):
                 self.profile[n]["tx_power"] = tx_power
-        self.pulse_ms = self.backup["gate"]["pulse_ms"]
+        self.pulse_ms = self.profile["gate"]["pulse_ms"]
         self.sim_travel_orig = sim.status()["travel"]
         self.latencies = defaultdict(list)
         self.facts = {}  # one-off measurements for the summary (RSSI, ping RTT, ...)

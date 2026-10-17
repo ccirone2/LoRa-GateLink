@@ -213,7 +213,12 @@ The fault output D5 (`fault_out`), polled after the roles: it reads their state 
 and the like, and nothing reads it back. The problems it tracks are bits (`Problem` in `health.h`; status `health`
 names them, log `health` carries them): the role hasn't decided yet since boot, the radio isn't working, the link is
 down, no AC power at the gate, the gate reads `no_power` or `fault`, a reboot loop (this board's, `appRebootLoop`, or
-on the house the gate's, from STATUS bit 7). What D5 does with them is a behavioural invariant (CLAUDE.md).
+on the house the gate's, from STATUS bit 7), and on the house a dead IN2 (`ctrl_sense`: `houseCtrlSenseDark`, IN2 off
+for `CTRL_SENSE_DARK_MS` (30 s) while the board's supply, which shares the controller's 12 V, reads good; with both
+`ctrl_power_sense` and `ctrl_power_pmic` on and the charger answering). That last one is only reported: the controller
+still counts as unpowered, as IN2 says. A real 12 V cut never shows it, since the supply drops ~0.2 s before the relay
+and ~1.9 s before the opto, and on its return the opto lights well inside 30 s. What D5 does with them is a behavioural
+invariant (CLAUDE.md).
 
 ## Console: `console.cpp` and `console_io.cpp`
 

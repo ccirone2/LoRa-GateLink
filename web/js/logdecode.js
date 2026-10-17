@@ -14,7 +14,8 @@ const CMD_HOLD = { 0: 'held command sent after all: the gate’s session answere
   2: 'held command dropped: the gate restarted (it may have run it)' };
 // The board's health problems (health.h Problem), in bit order: status `health` names them, log `health` b has the bits.
 export const PROBLEMS = { starting: 'starting up', radio: 'radio down', link: 'link down', ac: 'no AC power at the gate',
-  no_power: 'gate has no power', fault: 'gate limit fault', reboots: 'reboot loop' };
+  no_power: 'gate has no power', fault: 'gate limit fault', reboots: 'reboot loop',
+  ctrl_sense: 'controller power input dark with the supply good' };
 const problems = (bits) => Object.values(PROBLEMS).filter((_, i) => bits & (1 << i)).join(', ');
 // The loop's stages (app.cpp Stage), for `hang`.
 const HANG_STAGES = ['setup', 'relays', 'radio_recover', 'hist_save', 'console', 'supply', 'link', 'role', 'history', 'health', 'led', 'core'];

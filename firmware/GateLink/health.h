@@ -18,8 +18,9 @@ enum Problem : uint8_t {
   PROB_NO_POWER = 0x10,  // the gate reads no_power (no AC and no limit)
   PROB_FAULT = 0x20,     // the gate reads fault (both limits)
   PROB_REBOOTS = 0x40,   // this board is in a reboot loop (appRebootLoop); house: or the gate's STATUS says it is
+  PROB_CTRL_SENSE = 0x80,  // house: IN2 reads the controller unpowered while the supply it shares is good (dead opto)
 };
-#define PROBLEM_COUNT 7
+#define PROBLEM_COUNT 8
 
 void healthBegin();  // at boot, once the config is loaded: D5 LOW (fault_out on) or an input with its pull-down
 // Every loop pass, after the roles: re-evaluates the problems and drives D5 (also following a changed fault_out or

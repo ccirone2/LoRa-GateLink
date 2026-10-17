@@ -73,6 +73,8 @@ static uint32_t mismatchSince = 0;
 static bool checkSoon = false;  // boot, power return, command refused or overridden: resync at once if out of step
 static bool k1WasPulsing = false;
 static bool ctrlPower = true;
+static bool senseDark = false;   // IN2 off for CTRL_SENSE_DARK_MS while the supply it shares is good (health only)
+static uint32_t senseLitAt = 0;  // the last pass that didn't see that
 static uint8_t pendingAction = 0;  // user edge waiting out ctrl_confirm_ms (CLOSE only, see below) or the gate's clock
 static uint32_t pendingAt = 0;
 
@@ -122,6 +124,10 @@ bool houseGateAcLost() {
 
 bool houseGateRebootLoop() {
   return haveStatus && (gateInputs & STI_REBOOTS);
+}
+
+bool houseCtrlSenseDark() {
+  return senseDark;
 }
 
 // The gate's clock now, as far as its STATUS tells: false with no reading from its current session (it just restarted,
@@ -236,6 +242,8 @@ void houseBegin() {
   shellyLevel = in1.active();
   armed = false;
   armAt = 0;
+  senseDark = false;
+  senseLitAt = millis();
   ctrlPower = ctrlPowered();
   checkSoon = true;
   uint32_t now = millis();
@@ -245,7 +253,23 @@ void houseBegin() {
   applyOutputs(now);
 }
 
+// IN2 and the board's supply share the controller's 12 V, so IN2 off long after the supply came back good is a dead
+// opto or a cut wire, not a power cut (the opto drops ~1.9 s after the supply in a cut, and is back sooner on its return). It
+// only tells health.cpp (a dead IN2 otherwise just reads as a controller without power, its switch ignored, and
+// nothing alarms); the controller still counts as unpowered. senseLitAt is restamped every pass it doesn't hold, and
+// read only until senseDark is set, so it never ages past elapsed()'s range.
+static void updateSenseDark(uint32_t now) {
+  bool dark = cfg.ctrl_power_sense && cfg.ctrl_power_pmic && supplyKnown() && supplyGood() && !in2.active();
+  if (!dark) {
+    senseDark = false;
+    senseLitAt = now;
+  } else if (!senseDark && elapsed(now, senseLitAt, CTRL_SENSE_DARK_MS)) {
+    senseDark = true;
+  }
+}
+
 static void updateCtrlPower(uint32_t now) {
+  updateSenseDark(now);
   bool p = ctrlPowered();
   if (p == ctrlPower) return;
   ctrlPower = p;

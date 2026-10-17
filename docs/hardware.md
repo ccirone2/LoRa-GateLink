@@ -90,7 +90,10 @@ and `firmware/GateLink/pins.h` in sync.
   after a house boot) IN1 edges count as sync for at least `ctrl_settle_ms` (default 10 s), and up to
   `sync_window_ms` longer while the Shelly doesn't match K1 yet; one still out of step then is resynced at once. A
   Shelly that reboots internally without losing its supply isn't covered. Turn `ctrl_power_sense`
-  off if IN2 isn't wired.
+  off if IN2 isn't wired. A dead IN2 opto or a cut wire reads as a controller without power, its switch ignored; from
+  0.17.3 IN2 off for 30 s while the board's supply reads good is reported (health `ctrl_sense`, D5), since a real
+  12 V cut takes the supply down first. With a USB cable that carries power plugged in, the supply always reads good,
+  so a controller power cut over 30 s then shows `ctrl_sense` too.
 - **2GIG contact sensor**: any 2GIG-compatible door/window sensor with external terminal input. Wire K2 NO/COM
   to its terminals; name it "Gate" in Alarm.com. (`sensor_invert` flips the sense if needed.)
 

@@ -1215,7 +1215,8 @@ void World::monitor() {
 // (house: armed, the first STATUS plus sync_window_ms; gate: inputs settled, at least BOOT_SETTLE_MS after boot);
 // and never HIGH once a fault this monitor can see has lasted fault_hold_s (plus a margin for the input debounce):
 // a board's radio down; the house's link down, or the gate shown no_power or fault; the gate's AC (IN3) off with
-// power_sense, or its state fault. (The firmware counts more: the gate's link, the AC lost bit at the house.)
+// power_sense, or its state fault. (The firmware counts more: the gate's link, the AC lost bit and a dark IN2 at the
+// house.)
 void World::monitorFaultOut(int i) {
   Board &b = board(i);
   FaultTrack &t = ft[i];

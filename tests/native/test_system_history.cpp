@@ -277,6 +277,26 @@ TEST(history_clear_clears_the_flash_too) {
   w.checkClean();
 }
 
+// A period_s given that isn't a whole number in range is refused, and nothing is cleared: read as a default it
+// would clear the history at the old period (-60 doesn't fit a uint32_t, so `| histPeriod()` took the default).
+TEST(history_clear_refuses_a_period_that_is_not_an_integer) {
+  Site w;
+  w.commission();
+  clear60(w.gate);
+  w.run(2 * PERIOD * 1000 + 5000);
+  for (const char *bad : { "-60", "4294967356", "\"120\"", "120.5", "true" }) {
+    JsonDocument r = w.gate.request("hist.clear", std::string("\"period_s\":") + bad);
+    CHECK(r["ok"] == false);
+    CHECK(r["error"] == "period_s must be 60..3600");
+  }
+  CHECK_EQ(history(w.gate).current, 2);  // nothing cleared
+  CHECK(w.gate.request("hist.clear")["ok"] == true);  // none given: the period as it is
+  Hist h = history(w.gate);
+  CHECK_EQ(h.period, PERIOD);
+  CHECK_EQ(h.current, 0);
+  w.checkClean();
+}
+
 // [history-kept]
 TEST(history_log_wrap_erases_only_its_oldest_sector) {
   Site w;

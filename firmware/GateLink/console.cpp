@@ -242,7 +242,11 @@ static void handle(JsonDocument &req, ConsolePort &from) {
   } else if (!strcmp(cmd, "hist.get")) {
     histGet(res.as<JsonObject>(), req["from"] | -1, req["n"] | HIST_PAGE);
   } else if (!strcmp(cmd, "hist.clear")) {
-    HistClear r = histClear(req["period_s"] | histPeriod());
+    // One given must be a uint32 (0 is refused): as `| default`, -60 would clear at the old period.
+    uint32_t period = req["period_s"].isNull()           ? histPeriod()
+                      : req["period_s"].is<uint32_t>() ? req["period_s"].as<uint32_t>()
+                                                       : 0;
+    HistClear r = histClear(period);
     if (r == HIST_BAD_PERIOD) {
       res["ok"] = false;
       res["error"] = "period_s must be 60..3600";

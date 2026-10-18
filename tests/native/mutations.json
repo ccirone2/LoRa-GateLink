@@ -3048,5 +3048,20 @@
     "replace": "  keptFlags = kept ? memo->kept : 0;"
    }
   ]
+ },
+ {
+  "name": "gate_state_sl12_kept_hold_never_cleared",
+  "invariant": "state-from-limits",
+  "why": "SL12: the kept hold is only ever set, never cleared: after a repair and a full opening, a later crash reads fault again (a nuisance alert)",
+  "killed_by": [
+   "gate_state_cleared_hold_stays_cleared_through_a_crash_reset"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  appKeep(closedUnproven ? KEEP_CLOSED_UNPROVEN : 0);",
+    "replace": "  if (closedUnproven) appKeep(KEEP_CLOSED_UNPROVEN);"
+   }
+  ]
  }
 ]

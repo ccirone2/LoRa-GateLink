@@ -3001,5 +3001,67 @@
     "replace": "supplyKnown() && !in2.active()"
    }
   ]
+ },
+ {
+  "name": "gate_state_sl9_hold_not_kept_through_a_crash",
+  "invariant": "state-from-limits",
+  "why": "SL9: the both-limits hold isn't kept for the next boot: a crash with the gate part-open and the closed limit stuck reads closed",
+  "killed_by": [
+   "gate_state_stuck_closed_limit_hold_survives_a_crash_reset"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  appKeep(closedUnproven ? KEEP_CLOSED_UNPROVEN : 0);",
+    "replace": "  appKeep(0);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl10_hold_not_restored_at_boot",
+  "invariant": "state-from-limits",
+  "why": "SL10: the gate ignores the kept hold at boot: after a crash a stuck closed limit with the gate part-open reads closed",
+  "killed_by": [
+   "gate_state_stuck_closed_limit_hold_survives_a_crash_reset"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  closedUnproven = appKept() & KEEP_CLOSED_UNPROVEN;",
+    "replace": "  closedUnproven = false;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl11_hold_kept_through_a_deliberate_reset",
+  "invariant": "state-from-limits",
+  "why": "SL11: the hold is kept through every reset, a deliberate one too: the installer's reboot after a repair no longer clears it",
+  "killed_by": [
+   "gate_state_stuck_closed_limit_hold_survives_a_crash_reset",
+   "gate_state_stuck_closed_limit_reads_fault_after_the_first_full_open",
+   "house_sync_k1_energized_whenever_the_gate_is_not_closed"
+  ],
+  "edits": [
+   {
+    "file": "app.cpp",
+    "find": "  keptFlags = kept && crash ? memo->kept : 0;",
+    "replace": "  keptFlags = kept ? memo->kept : 0;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl12_kept_hold_never_cleared",
+  "invariant": "state-from-limits",
+  "why": "SL12: the kept hold is only ever set, never cleared: after a repair and a full opening, a later crash reads fault again (a nuisance alert)",
+  "killed_by": [
+   "gate_state_cleared_hold_stays_cleared_through_a_crash_reset"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  appKeep(closedUnproven ? KEEP_CLOSED_UNPROVEN : 0);",
+    "replace": "  if (closedUnproven) appKeep(KEEP_CLOSED_UNPROVEN);"
+   }
+  ]
  }
 ]

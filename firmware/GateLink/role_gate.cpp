@@ -53,7 +53,10 @@ static uint8_t heldTo = GS_UNKNOWN;
 // overlap (a glitch, the relays switching over on a controller reset) is only a moment's fault, not one held until the
 // gate next opens fully. A closed limit straight after open, the gate never between (fromOpen), is fault too, not held:
 // no travel is that quick, but the opener's controller restarting drops its AUX relays, releasing the open limit and
-// letting the closed one's NC contact read, for as long as the restart takes.
+// letting the closed one's NC contact read, for as long as the restart takes. The hold is kept through a crash (a
+// watchdog or brown-out reset, appKeep): unattended, the gate part-open would read closed again. A deliberate restart
+// (the console's reboot, the reset pin, an upload) clears it, the installer's way to clear it after a repair with the
+// gate closed, and a power-on can't keep it.
 #define BOTH_LIMITS_HOLD_MS 500
 static bool closedUnproven = false;
 static uint32_t bothSince = 0;  // when both limits started reading (0 = they don't)
@@ -165,6 +168,7 @@ static void pulse(Relay &r, Relay &other, uint8_t which, uint32_t now) {
 }
 
 void gateBegin() {
+  closedUnproven = appKept() & KEEP_CLOSED_UNPROVEN;  // kept through a crash; a deliberate restart clears it
   state = readState();
   cause = CAUSE_NONE;
   settling = true;
@@ -186,6 +190,7 @@ void gateLoop(uint32_t now) {
   } else if (elapsed(now, bothSince, BOTH_LIMITS_HOLD_MS)) {
     closedUnproven = true;  // a stamp that ages past 2^31 ms only sets it again
   }
+  appKeep(closedUnproven ? KEEP_CLOSED_UNPROVEN : 0);  // a crash mustn't drop it with the gate part-open
   // Only a real move clears fromOpen, neither limit reading for BETWEEN_HOLD_MS: relays dropping together pass
   // through both or neither for a moment.
   if (in1.active() || in2.active()) {

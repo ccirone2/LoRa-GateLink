@@ -267,9 +267,10 @@ relay contact is invisible.
 **How.**
 - A shared input held on while our coil is off: needs the opener's OPEN/CLOSE terminals sensed on an input (F15, or
   H1).
-- Keep the both-limits hold across a gate board restart (it is in RAM): a reset with a stuck closed limit and the gate
-  part-open reads closed again until the next full opening. A flash write when it latches (outside a pulse) would keep
-  it; weigh that against how rare a reset with a stuck limit is.
+- Keep the both-limits hold across a power-on of the gate board too (0.17.4 keeps it through a crash: a watchdog or
+  brown-out reset). A power cut that restarts the board with a stuck closed limit and the gate part-open reads closed
+  again until the next full opening. A flash write when it latches (outside a pulse) would keep it; weigh that against
+  how rare that is (both the cut and the stuck limit), and the flash format it adds.
 
 Decided 2026-10-15 (`/implement`, verdict *build smaller*): built the both-limits hold (0.17.1); not built, and not
 to be: a fault when the closed limit stays on after our OPEN pulse (a gate that doesn't move, the opener locked out or
@@ -277,7 +278,9 @@ another controller holding CLOSE, is far likelier than a stuck limit with the ga
 mostly show a closed gate as not closed; the travel timeout already reports it, `last_result` `timeout`); a gate IN3 check (nothing at the gate says AC is there apart from IN3, and
 a dead IN3 already alarms). Moved from rank 2 to 5: what is left serves diagnosis, not the gate's real state.
 Reversed 2026-10-16 (#139, 0.17.2): closed reached straight from open now reads `fault` after all, as the opener
-restarting is a path to it. Built 2026-10-17 (0.17.3): the house IN2 check, as health `ctrl_sense`.
+restarting is a path to it. Built 2026-10-17 (0.17.3): the house IN2 check, as health `ctrl_sense`. Built 2026-10-17 (0.17.4), smaller: the
+both-limits hold kept through a crash reset in the reset memo, not in the flash (a deliberate restart still clears it,
+the installer's way after a repair).
 
 ### F15: Put the spare inputs to use
 

@@ -420,6 +420,61 @@ TEST(gate_state_stuck_closed_limit_reads_fault_after_the_first_full_open) {
   CHECK(w.runUntil([&] { return w.houseSees() == GS_CLOSED_ && w.sensorClosed(); }, 5000));
 }
 
+// The both-limits hold survives a crash: a stuck closed limit, the gate part-open (the open limit released), then a
+// watchdog or brown-out reset reads fault from the first STATUS on, never closed. A deliberate reset (software, the
+// reset pin) clears it, as does a power-on: then the stuck limit reads closed until the next full opening, as before
+// the hold. ROADMAP F14, threat closed-limit-nc-fail-unsafe. [state-from-limits]
+TEST(gate_state_stuck_closed_limit_hold_survives_a_crash_reset) {
+  const uint8_t causes[] = { PM_RCAUSE_WDT, PM_RCAUSE_BOD33, PM_RCAUSE_SYST, PM_RCAUSE_EXT, 0 };  // 0: power-on
+  for (uint8_t rc : causes) {
+    Site w;
+    w.commission();
+    w.opener.force[1] = 1;
+    w.user(true);
+    CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
+    CHECK(w.runUntil([&] { return w.houseSees() == GS_FAULT_; }, 3000));
+    w.run(1000);  // both read past BOTH_LIMITS_HOLD_MS: held
+    w.opener.force[0] = 0;  // part-open: the open limit released, the stuck closed one still reading
+    w.run(2000);
+    CHECK_STR(str(w.gate.status(), "gate"), "fault");
+    size_t g0 = w.gate.logs.size();
+    if (rc) w.gate.reset(rc);
+    else w.gate.powerOn();
+    bool kept = rc == PM_RCAUSE_WDT || rc == PM_RCAUSE_BOD33;
+    if (kept) {
+      // From the boot on, the house never sees it closed: K2 stays open and K1 shows not closed.
+      CHECK_EQ(watch(w, 15000, [&] { return !w.sensorClosed() && w.house.coil(1); }), 0);
+      CHECK_EQ(countSince(w.gate, "gate_state", g0, GS_CLOSED_), 0);
+      CHECK_STR(str(w.gate.status(), "gate"), "fault");
+    } else {
+      w.run(1000);  // through the bootloader
+      CHECK(poll(w, [&] { return w.gate.status()["gate"] == "closed"; }, 8000));
+    }
+  }
+}
+
+// Once the open limit reads alone the hold is cleared for the next boot too: repaired, opened fully and closed, a crash
+// afterwards reads closed again, not a stale fault. [state-from-limits]
+TEST(gate_state_cleared_hold_stays_cleared_through_a_crash_reset) {
+  Site w;
+  w.commission();
+  w.opener.force[1] = 1;
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 15000));
+  w.run(1500);  // held
+  CHECK_STR(str(w.gate.status(), "gate"), "fault");
+  w.opener.force[1] = -1;  // repaired at the open limit: it reads alone
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_OPEN_; }, 3000));
+  w.run(MISMATCH_MS + 3000);  // the house settles with the gate open again
+  w.user(false);
+  CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 20000));
+  waitBoth(w, GS_CLOSED_, 3000);
+  w.gate.reset(PM_RCAUSE_WDT);
+  w.run(1000);  // through the bootloader
+  CHECK(poll(w, [&] { return w.gate.status()["gate"] == "closed"; }, 8000));
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_CLOSED_ && w.sensorClosed(); }, 8000));
+}
+
 // The opener's controller restarting with the gate open: its AUX relays drop, so the open limit releases and the closed
 // one's NC contact reads, for as long as the restart takes. No travel goes from open to closed without reading between:
 // the gate holds that closed as fault until the open limit reads alone again. The relays change in either order (both

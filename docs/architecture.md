@@ -151,7 +151,7 @@ D5 isn't involved (the move isn't a fault; the link history shows the outage).
 **A closed limit that has read alongside the open one** (0.17.1, ROADMAP F14). Both limits reading at once is
 `fault`, and once they have for `BOTH_LIMITS_HOLD_MS` (500 ms) `readState` keeps it `fault` while the closed limit
 reads, alone too, until the open limit has read alone
-(`closedUnproven`, updated in `gateLoop` as the limits are read; RAM only, so a restart forgets it). The closed limit is the AUX2 relay's NC contact
+(`closedUnproven`, updated in `gateLoop` as the limits are read; since 0.17.4 kept through a crash, a watchdog or brown-out reset, in the reset memo's `kept` flags (`appKeep`), but a deliberate restart (the console's `reboot`, the reset pin, an upload) or a power-on forgets it). The closed limit is the AUX2 relay's NC contact
 ([hardware.md](hardware.md)): it reads closed whenever that relay isn't energized (a failed coil or driver, the AUX
 setting left at "always off"), wherever the gate is. Before this a stuck one read `fault` only at the open limit and
 `closed` everywhere else, mid-travel too; now it is `fault` from the first full opening on, and the house shows not
@@ -280,13 +280,16 @@ the board supply (`supply.cpp`, polled every 5 ms before the roles; status `supp
 `activeRole`, not `cfg.role`, for runtime behaviour.
 
 The reset memo (0.15.0, ROADMAP F9) is 16 bytes in RAM that resets other than power-on keep (`boardKeep`), checked by a
-CRC-32 so a power-on's garbage reads as none. It carries two things to the next boot:
+CRC-32 so a power-on's garbage reads as none. It carries three things to the next boot:
 - **Where a watchdog reset hung.** The watchdog's early warning fires 4 s into a pass that hasn't kicked it, 4 s before
   the reset; its handler (`WDT_Handler` in `GateLink.ino`, then `appWatchdogWarning`) writes only the stacked program
   counter and `stage` (which step of `appLoop` was running, or `setup`) into the memo. After a watchdog reset the boot
   reports them (status `hang_stage`/`hang_pc`, log `hang`); any other reset ignores them, and a pass that runs again
   after a warning (a stall of 4–8 s that ended) drops them, so a later reset the warning never saw (interrupts off)
   isn't blamed on it. `hang_pc` is looked up in the build's `.elf` (`arm-none-eabi-addr2line`).
+- **The role's kept flags** (0.17.4, `appKeep`/`appKept`): read back only after a watchdog or brown-out reset, so a
+  crash doesn't drop what a deliberate restart should. The gate keeps its both-limits hold there
+  (`KEEP_CLOSED_UNPROVEN`).
 - **Reboot loops.** `crash_resets` counts watchdog and brown-out resets in a row, each within `REBOOT_SETTLE_MS` (1 h)
   of the boot before; a deliberate reset (software, the reset pin) or a power-on ends the run. Three or more, until
   this boot has run an hour, is `appRebootLoop()`: health `reboots`, so D5 stays LOW through the loop instead of

@@ -46,7 +46,7 @@ test('link down: what differs from the other board, else where to look', () => {
 
 test('the gate’s state and power, the controller, start-up', () => {
   assert.match(txt(house({ gate: 'no_power', health: ['no_power'] })), /^The gate opener has no power/);
-  assert.match(txt(house({ gate: 'fault', health: ['fault'] })), /^Both gate limits.*the closed one read straight after the open one \(the opener restarting\).*a full opening \(or a gate board restart\) clears it/);
+  assert.match(txt(house({ gate: 'fault', health: ['fault'] })), /^Both gate limits.*the closed one read straight after the open one \(the opener restarting\).*a full opening \(or restarting the gate board\) clears it/);
   assert.equal(lvl(gate({ health: ['ac'], ac_power: false })), 'warn');
   assert.match(txt(gate({ health: ['ac'] })), /on its battery.*Commands still work/);
   assert.match(txt(house({ ctrl_power: false })), /controller has no power/);

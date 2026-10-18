@@ -14,6 +14,11 @@ void appWatchdogWarning(uint32_t pc);
 // In a reboot loop: REBOOT_LOOP_RESETS watchdog or brown-out resets in a row, each within REBOOT_SETTLE_MS of the
 // boot before, and this boot hasn't run REBOOT_SETTLE_MS yet. Health problem `reboots`; the gate reports it in STATUS.
 bool appRebootLoop();
+// A few flags the role keeps for the boot after a crash (a watchdog or brown-out reset), in the reset memo: appKept()
+// is what the boot before last kept, 0 after a deliberate reset (software, the reset pin) or a power-on.
+uint8_t appKept();
+void appKeep(uint8_t flags);
+#define KEEP_CLOSED_UNPROVEN 0x01  // gate: the both-limits hold (role_gate.cpp closedUnproven)
 #define REBOOT_LOOP_RESETS 3
 #define REBOOT_SETTLE_MS 3600000UL
 

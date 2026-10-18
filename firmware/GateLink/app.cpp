@@ -55,7 +55,7 @@ struct ResetMemo {
   uint8_t streak;   // watchdog or brown-out resets in a row, each within REBOOT_SETTLE_MS of the boot before
   uint8_t settled;  // this boot has run REBOOT_SETTLE_MS
   uint8_t stage;    // the early warning's: the loop's stage then (STG_NONE: no warning pending)
-  uint8_t pad;
+  uint8_t kept;     // the role's flags (appKeep), for the next boot after a crash
   uint32_t pc;      // the early warning's: the program counter it interrupted
   uint32_t check;   // CRC-32 of the above
 };
@@ -65,6 +65,7 @@ static ResetMemo *memo;
 static uint8_t resetStreak;   // as the memo had it at boot (0 after a deliberate reset or power-on)
 static uint8_t resetStage = STG_NONE;  // after a watchdog reset with an early warning: where it hung
 static uint32_t resetPc;
+static uint8_t keptFlags;  // the boot before's appKeep flags, after a crash reset (else 0)
 static uint32_t bootMs;  // millis() at boot
 
 static uint32_t memoCheck() {
@@ -86,7 +87,18 @@ static void memoBegin(uint8_t rc) {
     resetStage = memo->stage;
     resetPc = memo->pc;
   }
-  *memo = ResetMemo{ MEMO_MAGIC, resetStreak, 0, STG_NONE, 0, 0, 0 };
+  keptFlags = kept && crash ? memo->kept : 0;
+  *memo = ResetMemo{ MEMO_MAGIC, resetStreak, 0, STG_NONE, keptFlags, 0, 0 };
+  memoSeal();
+}
+
+uint8_t appKept() {
+  return keptFlags;
+}
+
+void appKeep(uint8_t flags) {
+  if (!memo || memo->kept == flags) return;
+  memo->kept = flags;
   memoSeal();
 }
 

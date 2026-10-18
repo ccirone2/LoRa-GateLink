@@ -17,6 +17,7 @@ enum { ACT_OPEN_ = 1, ACT_CLOSE_ = 2 };                          // roles.h Acti
 enum { MSG_STATUS_ = 5 };                                        // link.h MsgType
 enum { RES_NO_POWER_ = 4 };                                      // link.h AckResult
 const uint32_t MISMATCH_MS = 75000;                              // mismatch_timeout_s default
+const uint32_t SYNC_MS = 3000;                                   // sync_window_ms default
 const int ANY = INT_MIN;
 
 // The site, failing the test (not aborting the run) on a monitor breach. world.cpp hands the breaches of a World to an
@@ -402,7 +403,7 @@ TEST(gate_state_stuck_closed_limit_reads_fault_after_the_first_full_open) {
   Found f = waitFor(w, w.gate, "gate_state", g0, 1000, GS_FAULT_);
   CHECK(f.ok);
   CHECK(w.runUntil([&] { return w.houseSees() == GS_FAULT_; }, 2000));
-  w.run(MISMATCH_MS + 3000);
+  w.run(SYNC_MS);  // K1 went on with the fault: a switch change inside its sync window is taken as its echo
   // Closed again, through the travel and at the limit: fault all along, the house never shows it closed.
   size_t g1 = w.gate.logs.size();
   w.user(false);
@@ -465,7 +466,7 @@ TEST(gate_state_cleared_hold_stays_cleared_through_a_crash_reset) {
   CHECK_STR(str(w.gate.status(), "gate"), "fault");
   w.opener.force[1] = -1;  // repaired at the open limit: it reads alone
   CHECK(w.runUntil([&] { return w.houseSees() == GS_OPEN_; }, 3000));
-  w.run(MISMATCH_MS + 3000);  // the house settles with the gate open again
+  w.run(SYNC_MS);  // past the sync window K1 opened on going on with the fault
   w.user(false);
   CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 20000));
   waitBoth(w, GS_CLOSED_, 3000);

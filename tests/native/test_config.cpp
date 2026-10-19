@@ -446,31 +446,53 @@ TEST(boot_counter_runs_out_instead_of_wrapping) {
 }
 
 // A read garbled by the radio module's MCU (extflash.h) returns zeros. No slot is ever written 0 (counts start at 1,
-// and one being written has bit 31 set), so a slot reading 0 is the bus, not the counter: no count this boot, and
-// nothing written or erased. Taken as slots, the zeros hid the largest count, which then came round again (session
+// and one being written has bit 31 set), so a slot that reads 0 again, with the chip's id garbled too, is the bus, not
+// the counter: no count this boot, and nothing written or erased (a read garbled once is read again). Taken as slots, the zeros hid the largest count, which then came round again (session
 // ids are drawn from it). Worse with the largest counts in the sector read garbled and the other one full: that one
 // held the largest count read, so the sector holding the real largest was erased as the older one, and every count
 // it held came round again.
 TEST(boot_counter_garbled_read_gives_no_count) {
   uint32_t last = 0;
   bootsCountUp(5, last);
-  flash.garbleReads = 1;  // sector 2's first page, where counts 1..5 are
+  flash.garbleReads = 1;  // sector 2's first page, where counts 1..5 are: read again
+  bootsCountUp(1, last);
+  CHECK_EQ(last, 6);
+  flash.garbleReads = 3;  // that page twice, and the id
   CHECK_EQ(configCountBoot(), 0);
-  CHECK_EQ(bootSlot(5), 0xFFFFFFFFu);
+  CHECK_EQ(bootSlot(6), 0xFFFFFFFFu);
   bootsCountUp(3, last);
-  CHECK_EQ(last, 8);
+  CHECK_EQ(last, 9);
 
   flash.reset();
   for (int i = 0; i < 1024; i++) putU32(flash.mem + 3 * EXTFLASH_SECTOR + 4 * i, 1 + i);  // sector 3 full: 1..1024
   for (int i = 0; i < 10; i++) setBootSlot(i, 1025 + i);                                  // sector 2: 1025..1034
   CHECK_EQ(configCountBoot(), 1035);
   int erases = flash.erases;
-  flash.garbleReads = 1;
+  flash.garbleReads = 3;
   CHECK_EQ(configCountBoot(), 0);
   CHECK_EQ(flash.erases, erases);
   CHECK_EQ(bootSlot(0), 1025);
   last = 1035;
   bootsCountUp(2000, last);
+}
+
+// Zeros the flash really holds read the same as a garbled bus, but the chip still gives its id. An erase cut short by
+// a power cut may leave a sector so: here sector 3 is full (1..1024) and the boot that erased sector 2 to go on lost
+// power. Taken for a garbled bus, every boot after returned 0 and wrote nothing, so nothing erased the zeros again:
+// the counter was gone for good. They're slots without a count: the sector is erased again and the count goes on.
+TEST(boot_counter_zeros_in_the_flash_are_not_a_garbled_bus) {
+  flash.reset();
+  for (int i = 0; i < 1024; i++) putU32(flash.mem + 3 * EXTFLASH_SECTOR + 4 * i, 1 + i);
+  memset(flash.mem + 2 * EXTFLASH_SECTOR, 0, EXTFLASH_SECTOR);
+  uint32_t last = 1024;
+  bootsCountUp(2000, last);
+
+  // Zeros in the sector holding the largest count (another program's data): passed over, the count goes on after it.
+  flash.reset();
+  for (int i = 0; i < 4; i++) setBootSlot(i, 0);
+  for (int i = 4; i < 10; i++) setBootSlot(i, 1 + i);
+  CHECK_EQ(configCountBoot(), 11);
+  CHECK_EQ(bootSlot(10), 11);
 }
 
 // A save of one setting re-reads the record to save on top of. If that read is garbled, the save must not start

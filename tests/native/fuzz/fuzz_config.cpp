@@ -88,8 +88,8 @@ static void fixCrcs() {
 }
 
 // Boot counter (config.cpp): 4-byte slots in sectors 2 and 3, each read up to its first unwritten slot; bit 31 set =
-// not committed (skipped). It gives no count (0) once it has run out, a committed slot reading BOOT_COUNT_MAX or more,
-// or when a slot reads 0, which no slot is ever written (a garbled read). A slot in the way: one of those. With
+// not committed (skipped), and so is one reading 0 (the chip answers: an erase cut short, not a garbled read). It gives
+// no count (0) once it has run out, a committed slot reading BOOT_COUNT_MAX or more: a slot in the way. With
 // `pastFree`, also past a sector's first unwritten slot, which the first boot may write, so the second reads on.
 #define BOOT_COUNT_MAX 0x7FFFFFFEu
 
@@ -99,7 +99,7 @@ static bool bootSlotInTheWay(bool pastFree) {
       const uint8_t *p = hal.flash.data() + a;
       uint32_t v = p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24;
       if (v == 0xFFFFFFFFu && !pastFree) break;
-      if (!v || (!(v & 0x80000000u) && v >= BOOT_COUNT_MAX)) return true;
+      if (!(v & 0x80000000u) && v >= BOOT_COUNT_MAX) return true;
     }
   }
   return false;

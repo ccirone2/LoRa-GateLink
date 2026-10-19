@@ -356,11 +356,27 @@ bool configSaveKey() {
 // with bit 31 set is skipped now too.) When the sector holding the largest value is full, the other one (all smaller
 // values) is erased and continues; a power cut during that erase still leaves the largest value in place. Past
 // BOOT_COUNT_MAX (2^31 boots, or an old torn slot that cleared bit 31 and read high) the counter has run out and
-// returns 0, as without the chip, rather than repeat a count. So does a scan that reads a slot as 0 (garbled).
+// returns 0, as without the chip, rather than repeat a count. So does a scan garbled on the bus (bootPage).
 #define BOOT_SECTOR0 REC_SECTORS
 static_assert(BOOT_SECTOR0 + 2 <= HLOG_SECTOR0, "the boot counter's sectors overlap the history log");
 #define BOOT_UNCOMMITTED 0x80000000u
 #define BOOT_COUNT_MAX 0x7FFFFFFEu  // uncommitted, 0x7FFFFFFF would read as an unwritten slot
+
+// Reads a page of slots; false if the read was garbled by the radio module's MCU (extflash.h): a slot read 0 twice
+// and the chip's id didn't read back either. No slot is ever written 0 (counts start at 1; one being written has bit
+// 31 set), and taken as slots a garble's zeros could hide the largest count, which would come round again, and with
+// it the session ids drawn from it. But an erase cut short may leave a sector at zeros, and so may another program's
+// data: with the chip answering, the zeros are what the flash holds, slots without a count (else the counter would
+// stop for good, as nothing would erase them again).
+static bool bootPage(uint32_t addr, uint8_t *buf) {
+  for (int tries = 0; tries < 2; tries++) {
+    extFlashRead(addr, buf, EXTFLASH_PAGE);
+    bool zero = false;
+    for (uint32_t i = 0; i < EXTFLASH_PAGE && !zero; i += 4) zero = !get32(buf + i);
+    if (!zero) return true;
+  }
+  return extFlashAnswers();
+}
 
 uint32_t configCountBoot() {
   if (!extFlashPresent()) return 0;
@@ -372,17 +388,13 @@ uint32_t configCountBoot() {
   for (int8_t s = 0; s < 2; s++) {
     uint32_t base = (BOOT_SECTOR0 + s) * EXTFLASH_SECTOR;
     for (uint32_t off = 0; off < EXTFLASH_SECTOR && freeSlot[s] < 0; off += sizeof(buf)) {
-      extFlashRead(base + off, buf, sizeof(buf));
+      if (!bootPage(base + off, buf)) return 0;  // no count this boot, and nothing written or erased
       for (uint32_t i = 0; i < sizeof(buf); i += 4) {
         uint32_t v = get32(buf + i);
         if (v == 0xFFFFFFFFu) {
           freeSlot[s] = (off + i) / 4;
           break;
         }
-        // No slot is ever written 0 (counts start at 1; one being written has bit 31 set): zeros are a read garbled
-        // by the radio module's MCU (extflash.h). They could hide the largest count, which would come round again,
-        // and with it the session ids drawn from it: no count this boot, and nothing written or erased.
-        if (!v) return 0;
         if (!(v & BOOT_UNCOMMITTED) && v > maxV) {
           maxV = v;
           maxSector = s;

@@ -23,7 +23,7 @@ without it. Versioning and the notes template: `docs/development.md` ("Versionin
    tag), whether CI passed on this commit, and which criteria are still open: that is the bench plan. If CI
    didn't pass on `main`, stop: fix it first.
 2. **Flash both boards with this `main`** (`/flash`, from this checkout, no local changes under `firmware/`).
-   `uv run tools/gatelink.py ports` must show both boards on X.Y.Z, key set, and the bench boards from the matrix
+   `uv run tools/gatelink.py ports` must show both boards on X.Y.Z with the same key id (`key <8 hex>`), and the bench boards from the matrix
    in `docs/release-criteria.md` (house `usb ...183013`, gate `usb ...0C301C`; never ...191117). Re-upload the
    GateSim if `tools/GateSim` changed since the last release.
 3. **Run the bench** for the release kind, from this checkout, with the web console disconnected

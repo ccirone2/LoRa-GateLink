@@ -29,9 +29,13 @@ and `firmware/GateLink/pins.h` in sync.
 
 ## Gate board
 
-- **CSW24UL**: set AUX relay A to *open limit* and AUX relay B to *closed limit* (per the LiftMaster manual)
-  and wire their contacts to GATE IN1 / IN2 through the opto board (below). The closed-limit relay (AUX 2)
-  *energizes when not at the close limit*, so take IN2 from its **NC** contact; the open-limit relay from NO. The
+- **CSW24UL**: set AUX relay 1 to *energizes at open limit* (switches 1-2-3 OFF OFF ON) and AUX relay 2 to
+  *energizes when not at close limit* (OFF ON OFF), per the opener's wiring diagram (01392401, "Auxiliary relays"),
+  and wire their contacts to GATE IN1 / IN2 through the opto board (below). The opener has no setting that energizes
+  a relay *at* the close limit: that is its only close-limit mode, so take IN2 from AUX 2's **NC** contact; the
+  open-limit relay from NO. The opener can say "closed" only by releasing that relay, and no wiring of it changes
+  that: its NO contact would make a cut wire or a dead opto read closed, and a relay of our own on its NC contact
+  stays on when AUX 2 never energizes. Only a sensor of its own on the leaf is independent of it (ROADMAP F12). The
   AUX limit relays switch only once the opener's travel limits are set, so a limit that never reads may be unset
   limits rather than a wiring fault. K1 NO/COM → OPEN + COM,
   K2 NO/COM → CLOSE + COM. The OPEN/CLOSE inputs are shared with an AES Prime Edge cellular controller and a
@@ -48,7 +52,8 @@ and `firmware/GateLink/pins.h` in sync.
   off"): IN2 then reads closed wherever the gate is. Since 0.17.1 the gate reads `fault` from the first time both
   limits read together for half a second (at the open limit, with such a fault) until IN1 reads with IN2 off, so after one full opening
   the alarm sees not closed; before it, nothing can tell. Check it at the install (threat model,
-  `closed-limit-nc-fail-unsafe`).
+  `closed-limit-nc-fail-unsafe`): relay 2's switches read OFF ON OFF (OFF OFF OFF, "relay always off", gives exactly
+  this failure), and with the gate part-open IN2 reads off.
 - **Gate IN3 = AC power sense** (`power_sense`, default on). An opto channel across the 120 VAC → 24 V supply
   (the one feeding the AES controller) drives IN3; the CSW24UL has battery backup and keeps running without AC.
   IN3 off → a command still runs while one limit reads (not `fault`) or reverses ours mid-travel (CLOSE from 0.15.1, OPEN from 0.15.2: cutting the AC mustn't

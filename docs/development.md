@@ -29,7 +29,7 @@ The web console is plain JS (ES modules) with no build step; its lint and tests 
 
 The Python tools, their tests and the bench suite share one environment, locked with hashes so every machine and CI
 run the same versions: `pyproject.toml` lists the dependencies (ruff 0.16.10 in its `dev` group) and `uv.lock` pins
-them. Install uv 0.12.21 or newer ([docs.astral.sh/uv](https://docs.astral.sh/uv/); `pyproject.toml` refuses an
+them. Install uv 0.12.22 or newer ([docs.astral.sh/uv](https://docs.astral.sh/uv/); `pyproject.toml` refuses an
 older one), then:
 
 ```sh

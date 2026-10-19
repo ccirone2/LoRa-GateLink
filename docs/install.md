@@ -115,7 +115,8 @@ card ticks the steps it can see (role, key, the other board matching, the link, 
 
 - [ ] Power: a 24 V→5 V buck from the opener's 24 V accessory output (battery-backed) or the AC 24 V supply (dies
   with AC: add a LiPo). MKR VIN is 5 V max.
-- [ ] CSW24UL: AUX relay A set to *open limit*, AUX relay B to *closed limit* (LiftMaster manual).
+- [ ] CSW24UL AUX relay switches (1-2-3): relay 1 OFF OFF ON (*energizes at open limit*), relay 2 OFF ON OFF
+  (*energizes when not at close limit*). Relay 2 at OFF OFF OFF (*always off*) reads closed wherever the gate is.
 - [ ] Opto board: OUT1–OUT4 → IN1–IN4 (OUT4 spare), output GND → board GND, output VCC → the board's **3.3 V only**. 24 V side:
   the accessory output's 24 V → AUX C; open-limit AUX NO → channel 1; closed-limit AUX **NC** → channel 2;
   channel 3 across the 24 V supply on AC (the one feeding the AES controller).

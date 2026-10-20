@@ -144,10 +144,11 @@ struct Sim {
 
 extern Sim *sim;
 
-// The fake SPI flash (sectors 0-19: config records, boot counter and the history log; config.h's flash map).
+// The fake SPI flash (sectors 0-35: config records, boot counter, the history log and the event journal; config.h's
+// flash map).
 struct FakeFlash {
   bool present = true;
-  uint8_t mem[20 * 4096];
+  uint8_t mem[36 * 4096];
   int garbleReads = 0;       // the next N reads (data or id) return zeros (bus garbled by the radio module's MCU)
   int failErases = 0;        // the next N erases fail (time out), leaving the sector as it was
   bool cutNextProgram = false;  // the next program writes only its first half and fails (power cut mid-save)

@@ -1094,8 +1094,11 @@ TEST(robustness_quiet_26_days_link_down_stays_down_and_stamps_stay_old) {
   CHECK_EQ(countSince(w.house, "link_up", h0), 0);
   CHECK_EQ(r.ons(HK2, k2), 0);
   // Each hop closes a history bucket, and its write to the flash stops the loop ~0.5 s (a status read meanwhile would
-  // see the board's clock past its last loop pass): let the last one end.
+  // see the board's clock past its last loop pass), as do the event journal's: let the last one end.
   r.run(1000);
+  CHECK(r.until([&] {
+    return (int32_t)(w.now - w.house.busyUntil) >= 0 && (int32_t)(w.now - w.gate.busyUntil) >= 0;
+  }, 2000));
   JsonDocument h = w.house.status(), gs = w.gate.status();
   CHECK(h["link_up"] == false);
   CHECK_IN(h["link"]["age_ms"] | -1, AGE_CAP, AGE_CAP + 5);  // held at the cap, not wrapped
@@ -1311,6 +1314,32 @@ TEST(robustness_gate_left_between_26_days_stays_stuck) {
   CHECK(r.until([&] { return w.houseSees() == GS_CLOSED_; }, 3000));
   CHECK(!hasProblem(w.house, "stuck"));
   CHECK(!hasProblem(w.gate, "stuck"));
+}
+
+// [wrap-safe] [event-log] 26 days past the 2^31 ms flip, then a move: its events are in the journal LOG_SAVE_WAIT_MS
+// later. (Here the gate's STATUS gives up in every hop, so it logs and writes all along; a site that logs nothing for
+// weeks leaves its last write that old, which log.cpp compares unsigned for that reason.)
+TEST(robustness_event_log_written_after_26_quiet_days) {
+  World w;
+  Guard g{ w };
+  w.commission();
+  Rec r(w);
+  r.run(11 * 60000);  // everything from commissioning written
+  quiet(r, 26ull * DAY, HOUR, 500);
+  CHECK(r.until([&] { return w.houseLinkUp(); }, 20000));
+  size_t ops = w.gate.flashOps.size();
+  w.extPress(true, 300);
+  CHECK(r.until([&] { return w.houseSees() == GS_OPEN_; }, 20000));
+  r.run(10 * 60000 + 5000);
+  bool wrote = false;
+  for (size_t i = ops; i < w.gate.flashOps.size(); i++)
+    if (w.gate.flashOps[i].op == 'P' && w.gate.flashOps[i].addr >= 20 * 4096) wrote = true;
+  CHECK(wrote);
+  JsonDocument j = w.gate.request("log.get", "\"rec\":1");
+  bool moved = false;
+  for (JsonVariantConst e : j["log"].as<JsonArrayConst>())
+    if (e["ev"] == "gate_state") moved = true;
+  CHECK(moved);
 }
 
 // [wrap-safe] [restarts]

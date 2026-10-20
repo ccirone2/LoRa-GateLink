@@ -9,6 +9,8 @@
 #include "roles.h"
 #include "history.h"
 #include "radio.h"
+#include "evlog.h"
+#include "log.h"
 
 #define LINE_MAX 1024  // a config.set with every param fits (a full import after a firmware upload)
 
@@ -228,17 +230,33 @@ static void handle(JsonDocument &req, ConsolePort &from) {
       houseRemoteSet(p->id, v);
     }
   } else if (!strcmp(cmd, "log.get")) {
-    static LogEntry entries[LOG_SIZE];
-    size_t n = logCopy(entries, LOG_SIZE);
+    // The ring in RAM, or with rec = k the flash journal's k-th newest record (one FlashAccess: blocksLoop).
+    uint16_t boot = (uint16_t)appBootCount();
     JsonArray arr = res["log"].to<JsonArray>();
-    for (size_t i = 0; i < n; i++) {
+    auto add = [&](const LogEntry &le) {
       JsonObject e = arr.add<JsonObject>();
-      e["t"] = entries[i].t;
-      e["ev"] = logCodeName(entries[i].code);
-      e["a"] = entries[i].a;
-      e["b"] = entries[i].b;
+      e["t"] = le.t;
+      e["ev"] = logCodeName(le.code);
+      e["a"] = le.a;
+      e["b"] = le.b;
+      if (le.rep) e["n"] = le.rep + 1;
+      if (le.boot != boot) e["boot"] = le.boot;
+    };
+    int32_t rec = req["rec"] | 0;
+    if (rec < 0 || rec > 0xFFFF) {
+      res["ok"] = false;
+      res["error"] = "rec must be 0..65535";
+    } else if (rec) {
+      LogEntry entries[ELOG_PER_REC];
+      uint8_t n = evLogGet(rec, entries);
+      for (uint8_t i = 0; i < n; i++) add(entries[i]);
+      res["rec"] = rec;
+      res["more"] = n > 0;
+    } else {
+      for (size_t i = 0; i < logCount(); i++) add(logAt(i));
     }
     res["now"] = millis();
+    res["boot"] = boot;
   } else if (!strcmp(cmd, "hist.get")) {
     histGet(res.as<JsonObject>(), req["from"] | -1, req["n"] | HIST_PAGE);
   } else if (!strcmp(cmd, "hist.clear")) {
@@ -334,9 +352,10 @@ static int checkCrc(const char *line, size_t len) {
 // wait (appRelaysPulsing), or the pulse would be held that much longer. config.set restarts the radio for a radio
 // param; it waits whatever it sets, which costs at most one pulse. hist.clear clears the history in the flash too.
 // reboot waits 100 ms after its reply before the reset drops the relays.
-static bool blocksLoop(const char *cmd) {
+static bool blocksLoop(JsonDocument &req) {
+  const char *cmd = req["cmd"] | "";
   return !strcmp(cmd, "config.set") || !strcmp(cmd, "config.save") || !strcmp(cmd, "config.reset")
-         || !strcmp(cmd, "hist.clear")
+         || !strcmp(cmd, "hist.clear") || (!strcmp(cmd, "log.get") && (req["rec"] | 0))
          || !strcmp(cmd, "key.set") || !strcmp(cmd, "reboot");
 }
 
@@ -369,7 +388,7 @@ static void poll(ConsolePort &p) {
     } else if (crc == 0 && p.id != CON_USB) {
       sendError(p, p.line, "crc required");
     } else if (deserializeJson(req, p.line) == DeserializationError::Ok) {
-      if (blocksLoop(req["cmd"] | "") && appRelaysPulsing()) return;  // keep it until the pulse is over
+      if (blocksLoop(req) && appRelaysPulsing()) return;  // keep it until the pulse is over
       handle(req, p);
     } else {
       sendError(p, p.line, "bad json");

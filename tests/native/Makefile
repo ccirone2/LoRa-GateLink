@@ -1,6 +1,6 @@
 # Host-compiled tests (see README.md). Needs g++ and the libraries the firmware builds with:
 #   make LIBS=<Arduino libraries directory>     (or CRYPTO=<Crypto/src> JSON=<ArduinoJson/src>)
-# tests:    link.cpp, config.cpp and histlog.cpp on their own (test_link.cpp, test_config.cpp, test_histlog.cpp)
+# tests:    link.cpp, config.cpp, histlog.cpp and evlog.cpp on their own (test_link.cpp, test_config.cpp, test_histlog.cpp)
 # systests: both boards' whole firmware in the simulated site (world.h; test_system*.cpp)
 # fuzz:     the fuzz corpus replayed as a regression test (g++; fuzzing itself needs clang, see fuzz/README.md)
 FW := ../../firmware/GateLink
@@ -20,15 +20,15 @@ CXXFLAGS := $(FLAGS) -Wall -Wextra -Werror $(WNO) -Istubs -I. -I$(FW) -isystem $
 CRYPTO_SRCS := Crypto Hash SHA256 BlockCipher AESCommon AES128
 
 # --- tests: link and config ------------------------------------------------------------------------------------
-SRCS := testing.cpp sim.cpp link_house.cpp link_gate.cpp test_link.cpp test_config.cpp test_histlog.cpp
-OBJS := $(SRCS:%.cpp=$(BUILD)/%.o) $(BUILD)/config.o $(BUILD)/histlog.o
+SRCS := testing.cpp sim.cpp link_house.cpp link_gate.cpp test_link.cpp test_config.cpp test_histlog.cpp test_evlog.cpp
+OBJS := $(SRCS:%.cpp=$(BUILD)/%.o) $(BUILD)/config.o $(BUILD)/histlog.o $(BUILD)/flashlog.o $(BUILD)/evlog.o
 LIB_OBJS := $(CRYPTO_SRCS:%=$(BUILD)/crypto_%.o)
 
 # --- systests: the firmware as a shared object, loaded once per board --------------------------------------------
 # Everything but the drivers (radio, flash, charger, console transport) and GateLink.ino, whose calls the test
 # program answers. -Bsymbolic keeps each copy's references inside it; -fno-gnu-unique lets dlclose really unload it
 # (a reset starts with fresh RAM).
-NODE_FW := app link role_gate role_house io log history histlog health console config
+NODE_FW := app link role_gate role_house io log history histlog flashlog evlog health console config
 NODE_OBJS := $(NODE_FW:%=$(BUILD)/node/%.o) $(BUILD)/node/api.o $(CRYPTO_SRCS:%=$(BUILD)/node/crypto_%.o)
 NODE_FLAGS := -fPIC -fno-gnu-unique
 SYS_SRCS := testing.cpp world.cpp $(wildcard test_system*.cpp)
@@ -82,6 +82,12 @@ $(BUILD)/config.o: $(FW)/config.cpp $(HEADERS) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD)/histlog.o: $(FW)/histlog.cpp $(HEADERS) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(BUILD)/flashlog.o: $(FW)/flashlog.cpp $(HEADERS) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(BUILD)/evlog.o: $(FW)/evlog.cpp $(HEADERS) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD)/node/%.o: $(FW)/%.cpp $(HEADERS) | $(BUILD)/node

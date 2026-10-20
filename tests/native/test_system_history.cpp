@@ -16,6 +16,7 @@
 namespace {
 
 const uint32_t HIST_BASE = 4 * 4096;  // histlog.h HLOG_SECTOR0: the log's first sector
+const uint32_t HIST_END = 20 * 4096;  // and HLOG_SECTORS later the event journal's (evlog.h)
 const uint32_t SLOT = 128;            // HLOG_SLOT
 const uint32_t PERIOD = 60;
 
@@ -87,7 +88,8 @@ uint32_t bootCount(Board &b) {
 std::vector<Board::FlashOp> histOps(const Board &b, size_t from, char op = 0) {
   std::vector<Board::FlashOp> out;
   for (size_t i = from; i < b.flashOps.size(); i++)
-    if (b.flashOps[i].addr >= HIST_BASE && (!op || b.flashOps[i].op == op)) out.push_back(b.flashOps[i]);
+    if (b.flashOps[i].addr >= HIST_BASE && b.flashOps[i].addr < HIST_END && (!op || b.flashOps[i].op == op))
+      out.push_back(b.flashOps[i]);
   return out;
 }
 

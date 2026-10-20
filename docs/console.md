@@ -52,7 +52,7 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 | `config.save` | | Writes the running config to flash |
 | `config.reset` | | Running config back to defaults at once (key cleared, so the link stops) and the saved config and key erased; `reboot_required` |
 | `key.set` | `key`: 32 hex chars | Sets and saves only the key; restarts the radio and sessions. The key can't be read back; `info` then reports its key id. A weak key is refused (see Weak keys, below) |
-| `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command, unless the gate is already at that limit or the opener is unpowered). Needs a role. On the gate, `busy` while that relay is pulsing already (or waiting out the interlock to start): a running pulse is never restarted. Testing the other relay cuts it short, as a reversal does |
+| `relay.test` | `k`: 1\|2, `ms`: 50–5000 (default 500) | Pulses a relay (a gate test pulse sets a target like a command, unless the gate is already at that limit or the opener is unpowered). Needs a role. On the gate, `busy` while that relay is pulsing already (or waiting out the interlock to start): a running pulse is never restarted. Testing the other relay cuts it short, as a reversal does. On the house a K1 test runs its length even during a resync, which ends after it |
 | `radio.ping` | | Sends a PING; a `pong` event follows if the peer answers. Needs a role, a key and a working radio |
 | `remote.diag` | | House only. Requests the gate's diagnostics; a `remote_diag` event follows |
 | `remote.set` | `name`, `value` (int) | House only, remote-writable params only. `busy` while one is pending; a `remote_set` event follows |

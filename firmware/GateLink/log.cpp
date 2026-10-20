@@ -4,16 +4,16 @@
 #include "crc32.h"
 #include "evlog.h"
 
-// The ring, in the RAM resets other than power-on keep (log.h). Its header is checked by a CRC; after a power-on (or
-// a bootloader that touched it) it reads as no ring.
+// The ring, in the RAM resets other than power-on keep (log.h). All of it is checked by a CRC (~0.3 ms an event):
+// after a power-on, or anything else that wrote there (a bootloader, other firmware), it reads as no ring.
 struct LogKeep {
   uint32_t magic;
   uint16_t head;     // where the next entry goes
   uint16_t count;    // entries held
   uint16_t unsaved;  // the newest this many aren't in the flash journal yet
   uint16_t pad;
-  uint32_t check;    // CRC-32 of the above
   LogEntry ring[LOG_SIZE];
+  uint32_t check;    // CRC-32 of the above
 };
 static_assert(sizeof(LogKeep) == 4 * LOG_KEEP_WORDS, "the kept ring is LOG_KEEP_WORDS");
 static_assert(4 + LOG_KEEP_WORDS == BOARD_KEEP_WORDS, "the reset memo (4 words), then the ring, fill the kept RAM");
@@ -23,6 +23,7 @@ static LogKeep *k;
 static uint16_t boot;          // this boot's count, low 16 bits
 static uint32_t unsavedSince;  // when the oldest unsaved entry was logged (as far as this boot knows)
 static uint32_t savedAt;       // the last write to the journal
+static uint32_t appended;      // entries this boot has added to the ring (logSave counts those added while it writes)
 
 static const char *const NAMES[] = {
   "boot", "radio_fail", "link_up", "link_down", "session", "mac_fail", "replay",
@@ -55,11 +56,18 @@ void logBegin(uint32_t bootCount) {
   seal();
 }
 
-// Repeats that can come in floods (forged or replayed frames, a busy channel, a chattering input) go into the newest
-// entry while it isn't in the journal yet, counted in rep, so a flood can't push everything else out of the ring.
-static bool coalesces(const LogEntry &last, LogCode code, int32_t a) {
-  if (last.code != code || last.rep == 255) return false;
-  return code == EV_MAC_FAIL || code == EV_REPLAY || code == EV_LBT_FORCED || (code == EV_INPUT && last.a == a);
+// Repeats that can come in floods (forged or replayed frames, a busy channel, a chattering input) go into an entry of
+// theirs among the newest COALESCE_BACK not in the journal yet, counted in rep, so a flood (even of two kinds in turn)
+// can't push everything else out of the ring. An input's entry keeps its first time and its latest level.
+#define COALESCE_BACK 4
+static LogEntry *coalesceInto(LogCode code, int32_t a) {
+  if (code != EV_MAC_FAIL && code != EV_REPLAY && code != EV_LBT_FORCED && code != EV_INPUT) return nullptr;
+  uint16_t back = k->unsaved < COALESCE_BACK ? k->unsaved : COALESCE_BACK;
+  for (uint16_t i = 1; i <= back; i++) {
+    LogEntry &e = k->ring[(k->head + LOG_SIZE - i) % LOG_SIZE];
+    if (e.code == code && e.rep < 255 && (code != EV_INPUT || e.a == a)) return &e;
+  }
+  return nullptr;
 }
 
 void logEvent(LogCode code, int32_t a, int32_t b) {
@@ -68,17 +76,18 @@ void logEvent(LogCode code, int32_t a, int32_t b) {
     consoleEmitLog(e);
     return;
   }
-  LogEntry &last = k->ring[(k->head + LOG_SIZE - 1) % LOG_SIZE];
-  if (k->unsaved && coalesces(last, code, a)) {
-    last.rep++;
+  if (LogEntry *c = coalesceInto(code, a)) {
+    c->rep++;
+    c->b = b;
   } else {
     if (!k->unsaved) unsavedSince = e.t;
     k->ring[k->head] = e;
     k->head = (k->head + 1) % LOG_SIZE;
     if (k->count < LOG_SIZE) k->count++;
     if (k->unsaved < k->count) k->unsaved++;
-    seal();
+    appended++;
   }
+  seal();
   consoleEmitLog(e);
 }
 
@@ -106,10 +115,13 @@ bool logSaveDue(uint32_t now) {
 // stay in the ring only. Any left waiting are older than unsavedSince says already: they follow a gap later.
 void logSave(uint32_t now) {
   uint8_t n = k->unsaved < ELOG_PER_REC ? k->unsaved : ELOG_PER_REC;
+  uint16_t left = k->unsaved - n;
   LogEntry batch[ELOG_PER_REC];
   for (uint8_t i = 0; i < n; i++) batch[i] = logAt(k->count - k->unsaved + i);
-  evLogAppend(batch, n);
-  k->unsaved -= n;
+  uint32_t before = appended;
+  evLogAppend(batch, n);  // its radio restart may log (radio_fail): those entries are unsaved too
+  uint32_t added = appended - before;
+  k->unsaved = left + added < k->count ? left + added : k->count;
   seal();
   savedAt = now;
 }

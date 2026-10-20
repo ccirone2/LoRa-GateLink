@@ -230,7 +230,7 @@ static void handle(JsonDocument &req, ConsolePort &from) {
       houseRemoteSet(p->id, v);
     }
   } else if (!strcmp(cmd, "log.get")) {
-    // The ring in RAM, or with rec = k the flash journal's k-th newest record (one FlashAccess: blocksLoop).
+    // The ring in RAM, or with `before` the flash journal's newest record before that lseq (one FlashAccess: blocksLoop).
     uint16_t boot = (uint16_t)appBootCount();
     JsonArray arr = res["log"].to<JsonArray>();
     auto add = [&](const LogEntry &le) {
@@ -242,16 +242,16 @@ static void handle(JsonDocument &req, ConsolePort &from) {
       if (le.rep) e["n"] = le.rep + 1;
       if (le.boot != boot) e["boot"] = le.boot;
     };
-    int32_t rec = req["rec"] | 0;
-    if (rec < 0 || rec > 0xFFFF) {
+    JsonVariant before = req["before"];
+    if (!before.isNull() && (!before.is<uint32_t>() || !before.as<uint32_t>())) {
       res["ok"] = false;
-      res["error"] = "rec must be 0..65535";
-    } else if (rec) {
+      res["error"] = "before must be 1..4294967295";
+    } else if (!before.isNull()) {
       LogEntry entries[ELOG_PER_REC];
-      uint8_t n = evLogGet(rec, entries);
+      uint32_t seq = 0;
+      uint8_t n = evLogGet(before.as<uint32_t>(), entries, seq);
       for (uint8_t i = 0; i < n; i++) add(entries[i]);
-      res["rec"] = rec;
-      res["more"] = n > 0;
+      if (n) res["seq"] = seq;
     } else {
       for (size_t i = 0; i < logCount(); i++) add(logAt(i));
     }
@@ -355,7 +355,7 @@ static int checkCrc(const char *line, size_t len) {
 static bool blocksLoop(JsonDocument &req) {
   const char *cmd = req["cmd"] | "";
   return !strcmp(cmd, "config.set") || !strcmp(cmd, "config.save") || !strcmp(cmd, "config.reset")
-         || !strcmp(cmd, "hist.clear") || (!strcmp(cmd, "log.get") && (req["rec"] | 0))
+         || !strcmp(cmd, "hist.clear") || (!strcmp(cmd, "log.get") && !req["before"].isNull())
          || !strcmp(cmd, "key.set") || !strcmp(cmd, "reboot");
 }
 

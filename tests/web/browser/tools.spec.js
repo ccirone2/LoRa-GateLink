@@ -36,14 +36,23 @@ test('older events come from the flash journal, a record at a time, with their b
   await page.locator('#btnLogGet').click();
   await expect(page.locator('#logView')).toContainText('boot 9');
   await page.locator('#btnLogOlder').click();
-  await expect(page.locator('#logView')).toContainText('journal record 1 (2 entries)');
+  await expect(page.locator('#logView')).toContainText('journal record 2 (2 entries)');
   await expect(page.locator('#logView')).toContainText('[boot 8 5s] K1 pulsed for 500 ms');
   await expect(page.locator('#logView')).toContainText('(×40)');
   await page.locator('#btnLogOlder').click();
   await expect(page.locator('#logView')).toContainText('[boot 7 1s] booted (watchdog reset), role gate');
   await page.locator('#btnLogOlder').click();
   await expect(page.locator('#logView')).toContainText('no older entries');
-  expect((await requests(page)).filter((r) => r.cmd === 'log.get').map((r) => r.rec ?? 0)).toEqual([0, 1, 2, 3]);
+  expect((await requests(page)).filter((r) => r.cmd === 'log.get').map((r) => r.before ?? 0)).toEqual([0, 4294967295, 2, 1]);
+});
+
+test('Older on firmware before the journal says so instead of paging its ring', async ({ page }) => {
+  await openConsole(page, [{ role: 'gate', noJournal: true, log: [{ t: 1200, ev: 'pulse', a: 1, b: 500 }] }]);
+  await connect(page, 'gate');
+  await page.locator('#tabbtn-log').click();
+  await page.locator('#btnLogOlder').click();
+  await expect(page.locator('#logView')).toContainText('keeps no journal');
+  await expect(page.locator('#logView')).not.toContainText('journal record');
 });
 
 test('ping shows round trip, both ends and the frequency error; another board clears them', async ({ page }) => {

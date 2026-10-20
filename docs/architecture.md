@@ -313,11 +313,13 @@ any of this, on every reset but power-on (TODO.md, the house's warm-reset blip).
 - `supply.cpp`: the board's VIN power good, read from the BQ24195L charger over I2C (read-only).
 - `io.cpp`: `Input` (debounced, internal pull-down, active HIGH) and `Relay` (non-blocking pulses, optionally
   delayed; `gapLeft` for the interlock).
-- `log.cpp`: the event log, a ring of `LOG_SIZE` entries in the kept RAM (after the reset memo, its header checked by
-  a CRC), so a crash or a reboot loses none; written to the flash journal (`evlog.cpp`, sectors 20–35) in records of
+- `log.cpp`: the event log, a ring of `LOG_SIZE` entries in the kept RAM (after the reset memo, all of it checked by a
+  CRC), so a crash or a reboot loses none; written to the flash journal (`evlog.cpp`, sectors 20–35) in records of
   14 from `appLoop`, never during a relay pulse (`logSave`, after `histSave`: one flash access a pass), once 14 are
   waiting or the oldest has waited 10 min, at most once a minute so a flood can't keep the radio off the air; repeats
-  of the flood-prone events coalesce into the newest unwritten entry (`rep`). Its two stamps are compared as unsigned
+  of the flood-prone events coalesce into an entry of theirs among the newest 4 unwritten (`rep`; an input's keeps its
+  latest level), and `logSave` counts what its own radio restart logs while it writes. The journal is paged by a
+  cursor, a record's `lseq` (`log.get` `before`), reading only headers until the record it returns. Its two stamps are compared as unsigned
   ages (a quiet site may log nothing for weeks). The `LogCode` order in `log.h` and the names in `NAMES` are part of
   the console contract ([console.md](console.md), `web/js/logdecode.js`, the e2e suite). The kept ring isn't in
   arduino-cli's "Global variables" figure (nor `tools/fw_size.py`'s budget): ~1 KB more than it shows.

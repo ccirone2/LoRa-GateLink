@@ -35,6 +35,10 @@ static bool readSlot(const FlashLog &l, uint16_t s, uint8_t *buf, size_t n) {
   return extFlashAnswers();
 }
 
+bool flogHead(const FlashLog &l, uint16_t s, uint8_t *buf) {
+  return readSlot(l, s, buf, 8);
+}
+
 FlogRead flogRead(const FlashLog &l, uint16_t s, uint8_t *buf) {
   uint16_t len = flogRecLen(l);
   if (!readSlot(l, s, buf, len)) return FL_GARBLED;

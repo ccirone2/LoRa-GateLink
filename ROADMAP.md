@@ -70,7 +70,7 @@ settings, and `hist.get` serves only the 96 hourly buckets a boot loads into RAM
 (three weeks).
 
 **How.** Let the house page:
-- the gate's log, its flash journal included (`log.get` with `rec`, since 0.19.0);
+- the gate's log, its flash journal included (`log.get` with `before`, since 0.19.0);
 - its link history, and older buckets of either board's history from the flash log, read in batches since each read
   takes the radio off the air ~0.5 s (or keep slimmer buckets in RAM, 68 B now, or 2 h ones: a `config.get` reply
   takes ~5 KB of heap);
@@ -338,7 +338,7 @@ answer a second still reaches it. Left out of the event log (0.19.0) to keep tha
 the gate.
 
 **Today.** The log is a list of coded events from one board, stamped with its uptime and boot number; since 0.19.0
-it is kept across resets in a flash journal (`log.get` with `rec`), but nothing dates it.
+it is kept across resets in a flash journal (`log.get` with `before`), but nothing dates it.
 
 **How.** The event journal as a readable timeline, dated by the time the web console records when it connects (the
 event log left wall-clock time out: uptime and boot number order events, but don't date them), e.g. "14:02 Opened from the controller, open in 14 s", "03:10 Moved
@@ -456,7 +456,7 @@ resets.
 
 **Today.** A field incident has to be reproduced by hand on the bench.
 
-**How.** Load a board's exported log (its event journal, `log.get` with `rec`) and link history into the host
+**How.** Load a board's exported log (its event journal, `log.get` with `before`) and link history into the host
 simulation.
 
 ## Development environment

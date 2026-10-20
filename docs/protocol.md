@@ -159,7 +159,7 @@ stopped (never while a relay pulses).
 Both logs are `flashlog.cpp`'s: the same record envelope, `magic(2) fmt(1) kind(1) lseq(4) idx(4) aux(2) 0(2) data
 crc(4)`, in slots written in turn, found and written the same way (below, for the history log). The event journal's
 slots are a page (256 bytes), 256 in all, its magic `EL`; each record's data is 14 entries of 16 bytes,
-`t(4) code(1) rep(1) boot(2) a(4) b(4)`, `aux` the number used, the rest 0xFF. `log.get` with `rec` reads back from the
+`t(4) code(1) rep(1) boot(2) a(4) b(4)`, `aux` the number used, the rest 0xFF. `log.get` with `before` reads back from the
 newest record, passing over torn ones, to an erased slot.
 
 The history log is cut into 128-byte slots written in turn, two to a page and 512 in all, each holding one record:

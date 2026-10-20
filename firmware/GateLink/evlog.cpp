@@ -52,24 +52,35 @@ bool evLogAppend(const LogEntry *e, uint8_t n) {
   return flogWrite(lg, ELOG_FMT, KIND_EVENTS, 0, n, data);
 }
 
-// Back from the newest slot: records written before one another, so their lseqs fall; a torn or failed write is passed
-// over, and an erased slot (never written, or the sector the next record will erase) or a rise in lseq (the oldest,
-// already overwritten in part) ends the log.
-uint8_t evLogGet(uint16_t k, LogEntry *out) {
-  if (!lg.on || !k) return 0;
+// Back from the newest slot: records written before one another, so their lseqs fall. Only each slot's header is read
+// until one older than `before`, which is read in full; one that isn't valid (a torn or failed write) is passed over.
+// An erased slot (never written, or the sector the next record will erase) or a rise in lseq (the oldest, already
+// overwritten in part) ends the log.
+uint8_t evLogGet(uint32_t before, LogEntry *out, uint32_t &seq) {
+  if (!lg.on) return 0;
   FlashAccess fa;
   uint16_t slots = flogSlots(lg);
   uint8_t buf[FLOG_MAX_REC];
   uint32_t lastSeq = lg.nextSeq;
   for (uint16_t j = 1; j < slots; j++) {
-    FlogRead r = flogRead(lg, (lg.head + slots - j) % slots, buf);
-    if (r == FL_INVALID) continue;
-    if (r != FL_VALID || flogGet32(buf + 4) >= lastSeq) return 0;
-    lastSeq = flogGet32(buf + 4);
+    uint16_t s = (lg.head + slots - j) % slots;
+    if (!flogHead(lg, s, buf)) return 0;
+    if (flogGet16(buf) != lg.magic) {
+      if (flogGet32(buf) == 0xFFFFFFFFu) return 0;  // erased
+      continue;
+    }
+    uint32_t q = flogGet32(buf + 4);
+    if (q >= lastSeq) {  // the oldest, overwritten in part; or a torn write's header, which reads as anything
+      if (flogRead(lg, s, buf) == FL_VALID) return 0;
+      continue;
+    }
+    lastSeq = q;
+    if (q >= before) continue;
+    if (flogRead(lg, s, buf) != FL_VALID) continue;
     uint16_t n = flogGet16(buf + 12);
     if (buf[2] != ELOG_FMT || buf[3] != KIND_EVENTS || !n || n > ELOG_PER_REC) continue;
-    if (--k) continue;
     for (uint16_t i = 0; i < n; i++) getEntry(buf + FLOG_HDR + i * ELOG_ENTRY, out[i]);
+    seq = q;
     return n;
   }
   return 0;

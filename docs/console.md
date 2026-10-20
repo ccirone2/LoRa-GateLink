@@ -56,7 +56,7 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 | `radio.ping` | | Sends a PING; a `pong` event follows if the peer answers. Needs a role, a key and a working radio |
 | `remote.diag` | | House only. Requests the gate's diagnostics; a `remote_diag` event follows |
 | `remote.set` | `name`, `value` (int) | House only, remote-writable params only. `busy` while one is pending; a `remote_set` event follows |
-| `log.get` | `rec`: 0–65535 (default 0) | `log`: the ring buffer (64 entries: `t`, `ev`, `a`, `b`, and `n` when a flood was coalesced into it: how many times it came; `boot` when it is from an earlier boot: that boot's count, low 16 bits), `now` (board millis), `boot` (this boot's count). With `rec` = k > 0: the flash journal's k-th newest record instead (up to 14 entries, oldest first), `rec`, and `more` (false past the oldest record); held while a relay pulses, as it reads the flash. See Event log, below |
+| `log.get` | `before`: 1–4294967295 (optional) | `log`: the ring buffer (64 entries: `t`, `ev`, `a`, `b`, and `n` when a flood was coalesced into it: how many times it came; `boot` when it is from an earlier boot: that boot's count, low 16 bits), `now` (board millis), `boot` (this boot's count). With `before`: the flash journal's newest record written before that sequence number instead (4294967295: the newest of all; up to 14 entries, oldest first) and its `seq`, the `before` for the next older one; an empty `log` and no `seq` past the oldest. Held while a relay pulses, as it reads the flash. See Event log, below |
 | `hist.get` | `from` (bucket number, default the oldest), `n` (1–12, default 12) | One page of the link history (below): `period_s`, `now_s`, `oldest`, `current`, `persist`, `fields`, `rows` |
 | `hist.clear` | `period_s` (60–3600, default unchanged) | Empties the history, in RAM and in the SPI flash, and restarts it at bucket 0. The period is kept with the history, across resets, until the next `hist.clear` (3600 on a board that has none). Held while a relay pulses, and fails as a save does if the flash wasn't cleared (below; a reset would then bring the old history back) |
 | `reboot` | | Replies, then resets the board 100 ms later (USB re-enumerates). Held while a relay pulses, like a save (below) |
@@ -219,15 +219,18 @@ Unsolicited lines carry `"event"` instead of `"id"`:
 ## Event log
 
 Each event (`{"event":"log"}` above) also goes into a ring of the newest 64 in RAM, which every reset but a power-on
-keeps (a watchdog or brown-out reset, a `reboot`, the reset pin, an upload), and from there into a journal in the SPI
+keeps (a watchdog or brown-out reset, a `reboot`, the reset pin; an upload of other firmware usually moves it, and the
+ring then starts empty), and from there into a journal in the SPI
 flash (sectors 20–35, about 3,500 entries; [protocol.md](protocol.md#spi-flash)), so a power cut loses only the
 entries not written yet. They are written 14 to a record, once 14 are waiting or the oldest has waited 10 minutes, at
 most once a minute and never while a relay pulses: each write takes the radio off the air ~0.5 s. After a reset other
-than power-on, what the boot before left unwritten goes out at once. `log.get` reads the ring; `log.get` with `rec`
-pages back through the journal, a record at a time (each read ~0.5 s off the air too). Entries from an earlier boot
+than power-on, what the boot before left unwritten goes out at once. `log.get` reads the ring; `log.get` with `before`
+pages back through the journal, a record at a time, by a cursor (each record's sequence number), so records written
+meanwhile don't shift the pages (each read ~0.5 s off the air too). Entries from an earlier boot
 carry its number (`boot`, as `info.boot_count`), and `t` is that boot's uptime. Floods (`mac_fail`, `replay`,
-`lbt_forced`, and an `input` chattering) are coalesced: while an entry isn't written yet, the same event right after
-it counts into it (`n`, up to 256) instead of taking a new one, so a flood can't push everything else out of the ring
+`lbt_forced`, and an `input` chattering) are coalesced: the same event counts into an entry of its own among the
+newest 4 not written yet (`n`, up to 256; an input's keeps its first time and its latest level) instead of taking a new
+one, so even two kinds in turn take an entry each, so a flood can't push everything else out of the ring
 or keep the radio busy writing. Every event still goes out on the console as it happens. From 0.19.0.
 
 ## Log events

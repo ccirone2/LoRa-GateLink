@@ -33,6 +33,8 @@ inline uint16_t flogRecLen(const FlashLog &l) {
 }
 // Reads slot s's record into buf (flogRecLen bytes).
 FlogRead flogRead(const FlashLog &l, uint16_t s, uint8_t *buf);
+// Reads slot s's first 8 bytes (magic to lseq) into buf; false if the read was garbled.
+bool flogHead(const FlashLog &l, uint16_t s, uint8_t *buf);
 // At boot, inside a FlashAccess: finds the newest valid record (its slot, or -1 for none) and reads it into top, then
 // sets where the next one goes (after it, past any torn ones, up to the next sector) and turns the log on. False if a
 // read was garbled (the log stays off until the next boot). buf is scratch.

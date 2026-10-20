@@ -42,6 +42,9 @@ once its fix is merged and record it in the pull request.
   came up in its bootloader (COM18) and flashed fine. The house board (…183013) never did. Find out whether it is that
   board, its cable or hub port (swap them), or the touch landing during something the firmware does after a run (the
   suite restoring config), and whether `flash.py` can recover without a hand on the cable.
+- [ ] **Flaky web test: `status.spec.js` "a status from older firmware without link or io fields still renders".**
+  It failed once on 2026-10-20 in a full `npm test` (`toHaveText`), on the `f1-event-log` branch, which doesn't
+  touch the status card, and passed on the next full run. Find what it races.
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
   - Fixed sleeps that bet on timing: `test_reboots.py` (`sleep(0.2)` to catch the gate in its ~0.5 s bootloader;
     start from the UART `boot` event or `sim.restart` instead), `test_history.py` (`sleep(62)` against a 60 s

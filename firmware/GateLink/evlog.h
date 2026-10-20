@@ -18,6 +18,8 @@ void evLogBegin();
 bool evLogOn();
 // Appends a record of n (1..ELOG_PER_REC) entries. False if it wasn't written or didn't read back intact.
 bool evLogAppend(const LogEntry *e, uint8_t n);
-// Reads the k-th newest record (k = 1 the newest) into out (ELOG_PER_REC entries), oldest entry first; the number of
-// entries, or 0 if there is no such record (fewer were written, or the log is off). One FlashAccess.
-uint8_t evLogGet(uint16_t k, LogEntry *out);
+// Reads the newest record written before lseq `before` (UINT32_MAX: the newest of all) into out (ELOG_PER_REC entries),
+// oldest entry first, and its lseq into seq, the cursor for the next older one; the number of entries, or 0 if there is
+// none (the oldest was passed, or the log is off). A cursor rather than a position, so records written between two
+// calls don't shift the pages. One FlashAccess.
+uint8_t evLogGet(uint32_t before, LogEntry *out, uint32_t &seq);

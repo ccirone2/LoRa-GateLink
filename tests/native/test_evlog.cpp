@@ -31,10 +31,22 @@ static void appendAll(uint32_t from, uint32_t to) {
     if (!append(r)) throw Failure("append " + std::to_string(r) + " failed on a healthy chip");
 }
 
+// The k-th newest record (k = 1 the newest), followed back by the cursor as log.get does: its entries, or 0.
+static uint8_t getK(uint16_t k, LogEntry *out) {
+  uint32_t before = UINT32_MAX, seq = 0;
+  uint8_t n = 0;
+  for (uint16_t i = 0; i < k; i++) {
+    n = evLogGet(before, out, seq);
+    if (!n) return 0;
+    before = seq;
+  }
+  return n;
+}
+
 // The k-th newest record read back is record r, with n entries.
 static void checkGet(uint16_t k, uint32_t r, uint8_t n = ELOG_PER_REC) {
   LogEntry out[ELOG_PER_REC];
-  CHECK_EQ(evLogGet(k, out), n);
+  CHECK_EQ(getK(k, out), n);
   std::vector<LogEntry> want = rec(r, n);
   for (uint8_t i = 0; i < n; i++) {
     CHECK_EQ(out[i].t, want[i].t);
@@ -48,7 +60,7 @@ static void checkGet(uint16_t k, uint32_t r, uint8_t n = ELOG_PER_REC) {
 
 static uint8_t get(uint16_t k) {
   LogEntry out[ELOG_PER_REC];
-  return evLogGet(k, out);
+  return getK(k, out);
 }
 
 TEST(ev_log_blank_has_nothing_and_starts_in_its_first_sector) {
@@ -144,6 +156,25 @@ TEST(ev_log_keeps_to_its_own_sectors) {
   for (uint32_t a = 0; a < BASE; a++)
     if (flash.mem[a] != 0xFF) throw Failure("the journal wrote below its first sector");
   CHECK_EQ(flash.erases - erases, 2 * ELOG_SECTORS + 1);
+}
+
+// The cursor is an lseq, so records written between two pages don't shift them: paging on after a write goes on
+// from where it was, and the new record is the newest.
+TEST(ev_log_cursor_is_stable_across_writes) {
+  flash.reset();
+  evLogBegin();
+  appendAll(0, 4);
+  LogEntry out[ELOG_PER_REC];
+  uint32_t seq = 0;
+  CHECK_EQ(evLogGet(UINT32_MAX, out, seq), ELOG_PER_REC);
+  CHECK_EQ(out[0].a, 4);
+  uint32_t first = seq;
+  appendAll(5, 6);
+  CHECK_EQ(evLogGet(first, out, seq), ELOG_PER_REC);
+  CHECK_EQ(out[0].a, 3);  // the record before the first page's, not record 4 again
+  CHECK_EQ(evLogGet(UINT32_MAX, out, seq), ELOG_PER_REC);
+  CHECK_EQ(out[0].a, 6);
+  CHECK_EQ(evLogGet(1, out, seq), 0);  // nothing before the first record
 }
 
 TEST(ev_log_without_the_chip) {

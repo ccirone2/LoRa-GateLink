@@ -15,25 +15,34 @@ export const showLogEntry = (e) => {
   logLine(`[${when(e)}] ${decodeLog(e, S.meta)}${times}`, '', `[${when(e)}] ${rawLog(e)}`);
 };
 
-let olderRec = 0;  // the journal record the Older button fetched last (0: none since Fetch)
+// The Older button's cursor: the journal record it showed last (its lseq; the next press asks for the one before), or
+// null to start from the newest. A cursor, not a count, so records the board writes meanwhile don't shift the pages.
+const NEWEST = 4294967295;
+let olderBefore = null;
+export const resetLogPaging = () => { olderBefore = null; };
 
 export function initLog() {
   hooks.onRawLine = (line) => { if ($('logRaw').checked) logLine(line, 'raw'); };
   $('btnLogGet').onclick = guard(async () => {
     const res = await call('log.get');
-    logLine(`--- board log (${res.log.length} entries, boot ${res.boot}, board uptime ${fmtDur(res.now)}) ---`);
+    const boot = res.boot !== undefined ? `, boot ${res.boot}` : '';
+    logLine(`--- board log (${res.log.length} entries${boot}, board uptime ${fmtDur(res.now)}) ---`);
     res.log.forEach(showLogEntry);
-    olderRec = 0;
+    resetLogPaging();
   });
   // The flash journal, newest record first: each press shows the next older one, its entries oldest first.
   $('btnLogOlder').onclick = guard(async () => {
-    const res = await call('log.get', { rec: olderRec + 1 });
+    const res = await call('log.get', { before: olderBefore ?? NEWEST });
+    if (res.seq === undefined && res.log.length) {  // before 0.19.0 log.get ignores `before`: that's its RAM ring
+      logLine('--- this board’s firmware keeps no journal (0.19.0 on): Fetch board log shows all it has ---');
+      return;
+    }
     if (!res.log.length) {
       logLine('--- no older entries in the board’s journal ---');
       return;
     }
-    olderRec++;
-    logLine(`--- journal record ${olderRec} (${res.log.length} entries) ---`);
+    olderBefore = res.seq;
+    logLine(`--- journal record ${res.seq} (${res.log.length} entries) ---`);
     res.log.forEach(showLogEntry);
   });
   $('btnLogClear').onclick = clearLog;

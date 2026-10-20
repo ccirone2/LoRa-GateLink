@@ -3104,8 +3104,8 @@
   "edits": [
    {
     "file": "log.cpp",
-    "find": "  if (k->unsaved && coalesces(last, code, a)) {",
-    "replace": "  if (k->unsaved && coalesces(last, code, a) && false) {"
+    "find": "  if (LogEntry *c = coalesceInto(code, a)) {",
+    "replace": "  if (LogEntry *c = coalesceInto(code, a); c && false) {"
    }
   ]
  },

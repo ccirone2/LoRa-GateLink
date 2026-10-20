@@ -60,19 +60,21 @@ std::vector<Ev> ring(Board &b) {
   return entries(r);
 }
 
-// Every record in the journal, newest first, flattened oldest entry first within each.
+// Every record in the journal, followed back by the cursor as the web console does, flattened oldest entry first.
 std::vector<Ev> journal(Board &b) {
   std::vector<Ev> out;
-  for (int k = 1;; k++) {
-    JsonDocument r = b.request("log.get", "\"rec\":" + std::to_string(k));
+  uint32_t before = UINT32_MAX;
+  for (;;) {
+    JsonDocument r = b.request("log.get", "\"before\":" + std::to_string(before));
     CHECK(r["ok"] == true);
-    CHECK_EQ(r["rec"].as<int>(), k);
     std::vector<Ev> e = entries(r);
     if (e.empty()) {
-      CHECK(r["more"] == false);
+      CHECK(r["seq"].isNull());
       return out;
     }
-    CHECK(r["more"] == true);
+    uint32_t seq = r["seq"];
+    CHECK(seq < before);
+    before = seq;
     out.insert(out.begin(), e.begin(), e.end());
   }
 }
@@ -210,20 +212,42 @@ TEST(event_log_flood_coalesced_and_written_at_most_once_a_minute) {
   CHECK(w.houseLinkUp());
 }
 
-// [event-log] log.get rec: beyond the journal, an empty page; out of range, refused.
-TEST(event_log_get_rec_arguments) {
+// [event-log] log.get before: past the oldest record, an empty page with no cursor; 0 or not a uint32, refused.
+TEST(event_log_get_before_arguments) {
   Site w;
   w.commission();
-  JsonDocument r = w.gate.request("log.get", "\"rec\":60000");
+  JsonDocument r = w.gate.request("log.get", "\"before\":1");
   CHECK(r["ok"] == true);
   CHECK(r["log"].as<JsonArrayConst>().size() == 0);
-  CHECK(r["more"] == false);
-  for (const char *bad : { "-1", "65536" }) {
-    JsonDocument e = w.gate.request("log.get", std::string("\"rec\":") + bad);
+  CHECK(r["seq"].isNull());
+  for (const char *bad : { "0", "-1", "4294967296", "\"9\"" }) {
+    JsonDocument e = w.gate.request("log.get", std::string("\"before\":") + bad);
     CHECK(e["ok"] == false);
-    CHECK(e["error"] == "rec must be 0..65535");
+    CHECK(e["error"] == "before must be 1..4294967295");
   }
   JsonDocument all = w.gate.request("log.get");
   CHECK(all["ok"] == true);
   CHECK(all["boot"].as<uint32_t>() == bootCount(w.gate));
+}
+
+// [event-log] A chattering input coalesces into one entry that keeps its first time and its latest level: the gate's
+// AC sense dropping and coming back reads as back, not as still off.
+TEST(event_log_coalesced_input_keeps_its_latest_level) {
+  Site w;
+  w.commission();
+  w.run(WAIT_MS + 4 * GAP_MS);  // nothing waiting
+  int inputs = w.gate.count("input");
+  for (int i = 0; i < 6; i++) {  // AC off and on, three times
+    w.opener.force[2] = i % 2 ? 1 : 0;
+    w.run(600);
+  }
+  w.opener.force[2] = -1;
+  w.run(600);
+  CHECK_EQ(w.gate.count("input") - inputs, 6);  // every edge still an event on the console
+  std::vector<Ev> in;
+  for (const Ev &e : ring(w.gate))
+    if (e.ev == "input" && e.a == 3) in.push_back(e);
+  CHECK_EQ(in.size(), 1u);
+  CHECK(in[0].n >= 6);
+  CHECK_EQ(in[0].b, 1);  // its latest level: AC back
 }

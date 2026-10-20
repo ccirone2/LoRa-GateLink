@@ -50,7 +50,9 @@ The boot counter is kept in the SPI flash, apart from the config record (so `con
 4-byte slot per boot, written in two steps, the count with its top bit set and then that bit cleared, so a slot torn
 by a power cut (bits left at 1) is recognised and skipped. It never returns a count twice; should it ever run out
 (2^31 boots, or a slot torn by older firmware that reads that high) it returns 0, as it does for a read garbled on the
-bus (a slot reading 0, which no slot is ever written), which could hide the largest count. Past a million boots, from
+bus (a slot reading 0, which no slot is ever written, twice, with the chip's id garbled too), which could hide the
+largest count. Zeros the chip really holds (an erase cut short by a power cut) are slots without a count (since
+0.17.5; before, the counter returned 0 from then on). Past a million boots, from
 the 16th id in one boot, or without a count (no flash chip, a garbled read), ids are random as before: radio noise
 hashed with a per-boot seed (the count and the chip's serial number). If the radio failed to initialise at boot, the session is drawn again
 once it comes up, before anything is sent.

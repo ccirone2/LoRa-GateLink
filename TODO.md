@@ -36,6 +36,12 @@ once its fix is merged and record it in the pull request.
   `20261015-073644`; both 5 dBm runs, none of the three at 17 dBm), but not in the full suite (`20261015-074616`) or
   any earlier run. The test sends a burst of pings, so the gate may be holding back for the house's own frames.
   Check that test's timeline for what the gate heard while it waited.
+- [ ] **The bench gate board drops off USB on the 1200-baud touch.** Twice on 2026-10-19 (…0C301C on COM21, both
+  times right after a full suite run) `tools/flash.py` reported `didn't come back as a bootloader port`, and the
+  board showed no USB device at all, neither its app port nor a bootloader one, until its cable was replugged. It then
+  came up in its bootloader (COM18) and flashed fine. The house board (…183013) never did. Find out whether it is that
+  board, its cable or hub port (swap them), or the touch landing during something the firmware does after a run (the
+  suite restoring config), and whether `flash.py` can recover without a hand on the cable.
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
   - Fixed sleeps that bet on timing: `test_reboots.py` (`sleep(0.2)` to catch the gate in its ~0.5 s bootloader;
     start from the UART `boot` event or `sim.restart` instead), `test_history.py` (`sleep(62)` against a 60 s

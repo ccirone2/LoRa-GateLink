@@ -57,6 +57,8 @@ test('health problems follow health.cpp, in bit order', () => {
   assert.equal(decodeLog({ ev: 'health', a: 0, b: 1 }), 'fault output low: needs attention (starting up)');
   assert.equal(decodeLog({ ev: 'health', a: 0, b: 0x100 }), 'fault output low: needs attention (gate stuck between its limits)');
   assert.equal(decodeLog({ ev: 'health', a: -1, b: 0 }), 'fault output off (D5 an input again)');
+  assert.equal(rawLog({ ev: 'replay', a: 3, b: 90, n: 40 }), 'replay a=3 b=90 n=40');
+  assert.equal(rawLog({ ev: 'pulse', a: 1, b: 500 }), 'pulse a=1 b=500');
 });
 
 test('reset causes as the firmware names them', () => {

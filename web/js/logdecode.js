@@ -82,4 +82,4 @@ export function decodeLog(e, meta = []) {
 }
 
 // The board's own form, kept in the downloaded log.
-export const rawLog = (e) => `${e.ev} a=${e.a} b=${e.b}`;
+export const rawLog = (e) => `${e.ev} a=${e.a} b=${e.b}` + (e.n > 1 ? ` n=${e.n}` : '');

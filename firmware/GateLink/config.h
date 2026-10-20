@@ -79,7 +79,8 @@ struct ParamDef {
 };
 
 // The SPI flash (extflash.h), in 4 KB sectors: 0-1 the config records and 2-3 the boot counter (config.cpp), 4-19 the
-// link history log (histlog.cpp). The rest is unused. Uploads don't touch it.
+// link history log (histlog.cpp), 20-35 the event journal (evlog.cpp). The rest is unused (kept for a staged firmware
+// image, ROADMAP F7). Uploads don't touch it.
 //
 // Every access holds the radio module in reset (extflash.h), which resets the radio: a FlashAccess around it restarts
 // the radio afterwards (about 0.5 s off the air, in LoRa.begin()'s reset delays, with the loop stopped).

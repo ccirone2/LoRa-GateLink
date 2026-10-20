@@ -14,7 +14,8 @@ import re
 import sys
 
 # The MKR WAN 1310 (SAMD21G18A): 256 KB flash (the bootloader takes 8 KB), 32 KB RAM.
-# Static RAM (globals) is capped so the stack and heap keep 8 KB: a config.get reply alone takes ~5 KB of heap.
+# Static RAM (globals) is capped so the stack and heap keep 8 KB: a config.get reply alone takes ~5 KB of heap. The
+# figure leaves out the .noinit section (board.h's kept RAM: the reset memo and log.cpp's ring, ~1 KB).
 FLASH_MAX = 160 * 1024
 RAM_MAX = 24 * 1024
 

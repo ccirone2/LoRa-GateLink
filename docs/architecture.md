@@ -202,8 +202,8 @@ noise floor (`radioNoiseDbm`; a reading is kept only if no frame followed it by 
 a preamble a few symbols late and peer frames showed up as noise peaks) and counts link-down seconds (`appLinkUp`,
 shared with the LED and the house's `linkUp`). The house adds the gate's side from STATUS (`histPeer`).
 
-Each completed bucket is appended to the SPI flash (`histlog.cpp`, sectors 4–19: config sectors 0–1, boot counter
-2–3), once and never during a relay pulse (`histSave`, in `appLoop`), and boot loads the newest back, so a reset
+Each completed bucket is appended to the SPI flash (`histlog.cpp`, sectors 4–19, on `flashlog.cpp`: config sectors
+0–1, boot counter 2–3, event journal 20–35), once and never during a relay pulse (`histSave`, in `appLoop`), and boot loads the newest back, so a reset
 loses only the bucket in progress (each bucket carries its `boot`). Diagnostics only: nothing may read it to make a
 decision.
 
@@ -299,7 +299,7 @@ CRC-32 so a power-on's garbage reads as none. It carries three things to the nex
   too. The hour and the count are constants, not settings. A loop of power-on resets (a supply collapsing completely)
   isn't counted here; at the gate the house sees it as a link that keeps dropping.
 
-The memo lives in an orphan `.noinit` section (NOBITS, so neither loaded nor zeroed; ld places it after `.bss`): the
+The memo, and after it `log.cpp`'s ring, live in an orphan `.noinit` section (NOBITS, so neither loaded nor zeroed; ld places it after `.bss`): the
 core's linker script has none, and the bootloader only uses the bottom of RAM and a stack below 0x20007C00. The
 watchdog is driven directly (8 s, the early warning at 4 s, from a 1.024 kHz GCLK2), not through Adafruit SleepyDog,
 whose `WDT_Handler` turns the watchdog off on an early warning. The 0.5 s double-tap wait in the bootloader runs before
@@ -313,8 +313,17 @@ any of this, on every reset but power-on (TODO.md, the house's warm-reset blip).
 - `supply.cpp`: the board's VIN power good, read from the BQ24195L charger over I2C (read-only).
 - `io.cpp`: `Input` (debounced, internal pull-down, active HIGH) and `Relay` (non-blocking pulses, optionally
   delayed; `gapLeft` for the interlock).
-- `log.cpp`: the event log, a ring of `LOG_SIZE` entries; the `LogCode` order in `log.h` and the names in `NAMES`
-  are part of the console contract ([console.md](console.md), `web/js/logdecode.js`, the e2e suite).
+- `log.cpp`: the event log, a ring of `LOG_SIZE` entries in the kept RAM (after the reset memo, its header checked by
+  a CRC), so a crash or a reboot loses none; written to the flash journal (`evlog.cpp`, sectors 20–35) in records of
+  14 from `appLoop`, never during a relay pulse (`logSave`, after `histSave`: one flash access a pass), once 14 are
+  waiting or the oldest has waited 10 min, at most once a minute so a flood can't keep the radio off the air; repeats
+  of the flood-prone events coalesce into the newest unwritten entry (`rep`). Its two stamps are compared as unsigned
+  ages (a quiet site may log nothing for weeks). The `LogCode` order in `log.h` and the names in `NAMES` are part of
+  the console contract ([console.md](console.md), `web/js/logdecode.js`, the e2e suite). The kept ring isn't in
+  arduino-cli's "Global variables" figure (nor `tools/fw_size.py`'s budget): ~1 KB more than it shows.
+- `flashlog.cpp`: the record log both flash logs use (`histlog.cpp`'s history, `evlog.cpp`'s journal): slots in a run
+  of sectors written in turn, erasing a sector on entering it; the newest found at boot by `lseq`; torn records passed
+  over ([protocol.md](protocol.md#spi-flash)).
 - `pins.h`: the pin map ([hardware.md](hardware.md) and the web console's `WIRING` table follow it). `crc32.h`: the
   CRC-32 of the config record, the history log's records and the console's request check.
 

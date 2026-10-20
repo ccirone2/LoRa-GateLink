@@ -59,7 +59,7 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
   dropping at their bench delays, booting when power returns); the house board's VIN on that rail and the charger's
   power good lagging it; the gate board's feed; LiPos; the radio channel (airtime, half duplex, preamble detection for
   listen-before-talk, collisions, `drop`/`corrupt` hooks, frames of our own with `airSend`); each board's SPI flash
-  (sectors 0–19), which survives resets, with every erase and program in `flashOps` and faults to inject
+  (sectors 0–35), which survives resets, with every erase and program in `flashOps` and faults to inject
   (`cutNextProgram`: a write torn by a power cut; `failPrograms`: writes that fail; `flashPresent`).
 - **Monitors** (`World::monitor`, `World::onLog`) check the invariants all the time: gate relays pulsed only, never
   both, 100 ms interlock, without AC a pulse only while one limit reads or one of ours is under way, and a command refused only without AC and with no position to trust (availability); every command traced to a user action and every gate pulse to a command or
@@ -144,6 +144,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `link-auth` | A session verifies only on an answer to its whole 128-bit challenge; payloads are encrypted under a key derived from the current link key, never an older one | `tests` (`test_link.cpp`) |
 | `missed-move` | A move the house never heard (the gate's count of departures from closed advanced while the sensor showed closed) opens the sensor for 5 s; nothing else does: a move it heard, a link loss that already opened it, a gate reboot | `link` |
 | `busy-channel` | Listen-before-talk: frames get through a busy neighbour's gaps, and never start into a frame heard | `link` |
+| `event-log` | The event log's ring survives every reset but power-on and goes to the flash journal at once after one; a flood is coalesced into one entry with its count and the journal is written at most once a minute | `eventlog` |
 | `history-kept` | Each completed history bucket is written to the flash once (a failing chip costs one try per bucket) and a reset loads them back as they were; a write torn by a power cut is skipped and nothing else lost; the log wraps by erasing only its oldest sector; `hist.clear` clears the flash too | `history` |
 | `fault-out` | D5 (`fault_out`): untouched while off; HIGH only while healthy, LOW once a problem has lasted `fault_hold_s` and at once after a reset until the board has decided; recovery raises it at once; it commands nothing | `fault_out`, `reboots` |
 

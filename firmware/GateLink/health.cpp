@@ -8,18 +8,16 @@
 #include "radio.h"
 #include "roles.h"
 
-static uint8_t problems = PROB_STARTING;  // as of the last poll
+static uint16_t problems = PROB_STARTING;  // as of the last poll
 static bool healthy = false;  // D5's level with fault_out on: LOW from boot until the first pass with no problem
 static bool troubled = false;  // a run of problems is going on, since troubleSince
 static uint32_t troubleSince = 0;
 static int8_t driven = -1;  // D5 as driven: 1 HIGH, 0 LOW, -1 an input (fault_out off)
 
-// elapsed() is signed: a stamp left alone for 2^31 ms (~24.8 days) would read as in the future. A problem that goes
-// on that long (a dead link) moves its stamp along instead.
-#define STAMP_CAP_MS 0x40000000UL
+// elapsed() is signed (STAMP_CAP_MS, link.h): a problem that goes on for weeks (a dead link) moves its stamp along.
 
-static uint8_t evaluate(bool linkUp) {
-  bool decided = false, ac = true, reboots = appRebootLoop(), senseDark = false;
+static uint16_t evaluate(uint32_t now, bool linkUp) {
+  bool decided = false, ac = true, reboots = appRebootLoop(), senseDark = false, stuck = false;
   uint8_t gs = GS_UNKNOWN;
   if (activeRole == ROLE_HOUSE) {
     decided = houseDecided();
@@ -27,12 +25,14 @@ static uint8_t evaluate(bool linkUp) {
     gs = houseGateState();
     reboots = reboots || houseGateRebootLoop();
     senseDark = houseCtrlSenseDark();
+    stuck = houseGateStuck(now);
   } else if (activeRole == ROLE_GATE) {
     decided = gateDecided();
     ac = gateAcPresent();
     gs = gateCurrentState();
+    stuck = gateStuck(now);
   }
-  uint8_t p = 0;
+  uint16_t p = 0;
   if (!decided) p |= PROB_STARTING;
   if (!radioOk()) p |= PROB_RADIO;
   if (!linkUp) p |= PROB_LINK;
@@ -41,6 +41,7 @@ static uint8_t evaluate(bool linkUp) {
   if (gs == GS_FAULT) p |= PROB_FAULT;
   if (reboots) p |= PROB_REBOOTS;
   if (senseDark) p |= PROB_CTRL_SENSE;
+  if (stuck) p |= PROB_STUCK;
   return p;
 }
 
@@ -69,7 +70,7 @@ void healthBegin() {
 }
 
 void healthPoll(uint32_t now, bool linkUp) {
-  problems = evaluate(linkUp);
+  problems = evaluate(now, linkUp);
   if (!problems) {
     troubled = false;
     healthy = true;  // recovery raises D5 at once
@@ -86,12 +87,13 @@ void healthPoll(uint32_t now, bool linkUp) {
   drive();
 }
 
-uint8_t healthProblems() {
+uint16_t healthProblems() {
   return problems;
 }
 
 const char *healthName(uint8_t bit) {
-  static const char *const n[] = { "starting", "radio", "link", "ac", "no_power", "fault", "reboots", "ctrl_sense" };
+  static const char *const n[] = { "starting", "radio", "link", "ac", "no_power", "fault", "reboots", "ctrl_sense",
+                                    "stuck" };
   static_assert(sizeof(n) / sizeof(n[0]) == PROBLEM_COUNT, "a name per Problem");
   return bit < PROBLEM_COUNT ? n[bit] : "?";
 }

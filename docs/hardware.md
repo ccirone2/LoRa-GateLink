@@ -110,7 +110,7 @@ The house shows `no_power`, `fault` and a lost link the way it shows an open gat
 the Alarm.com switch turns on. To have the alarm system report "gate needs attention" separately, either board can
 drive D5 (`fault_out`, off by default): HIGH while the board is healthy, LOW once a problem has lasted `fault_hold_s`
 (default 10 s), and LOW after a reset until the board has started up. The problems each board counts (its radio, the
-link, AC power at the gate, `no_power`, `fault`, a reboot loop) are listed in [console.md](console.md#fault-output); status `health`
+link, AC power at the gate, `no_power`, `fault`, a reboot loop, a dead IN2 opto, a gate stuck between its limits) are listed in [console.md](console.md#fault-output); status `health`
 shows them, and log `health` each change of D5.
 
 - **D5 is a 3.3 V logic output good for a few mA.** Drive an opto or a relay module's input with it, never a relay

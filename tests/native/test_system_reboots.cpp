@@ -29,13 +29,6 @@ struct Site : World {
   }
 };
 
-bool hasProblem(Board &b, const char *name) {
-  JsonDocument s = b.status();
-  for (JsonVariantConst v : s["health"].as<JsonArrayConst>())
-    if (v == name) return true;
-  return false;
-}
-
 // Resets b with `rcause` and waits until it has booted again (its `boot` log).
 void resetAndBoot(World &w, Board &b, uint8_t rcause) {
   size_t n = b.logs.size();

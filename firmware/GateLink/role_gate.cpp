@@ -42,6 +42,9 @@ static uint32_t houseSession = 0;  // the house session we last reported to
 static bool houseVerified = false;  // the link had verified the house at the last pass
 static bool settling = true;  // after boot: tracking the inputs silently, see BOOT_SETTLE_MS
 static uint32_t bootAt = 0, steadySince = 0;
+// While the state is between: since when, or since our last pulse (a reversal, or a move from a stop), whichever is
+// later; kept at most STAMP_CAP_MS old (link.h). gateStuck times it.
+static uint32_t stuckSince = 0;
 static uint32_t heldAt = 0;  // when the inputs started reading a held move (heldTo) we don't report yet (0 = not)
 static uint8_t heldTo = GS_UNKNOWN;
 // Both limits have read at once since the open limit last read alone: the closed limit isn't trusted (fault). It comes
@@ -142,7 +145,7 @@ static void setTarget(uint8_t want, uint32_t now) {
   // When reversing before the gate left its limit, the earlier pulse is still what moves it off that limit.
   if (state != want && (state == GS_OPEN || state == GS_CLOSED)) leaving = state;
   target = want;
-  targetSince = now;
+  targetSince = stuckSince = now;
   lastResult = TR_NONE;
 }
 
@@ -172,7 +175,7 @@ void gateBegin() {
   state = readState();
   cause = CAUSE_NONE;
   settling = true;
-  bootAt = steadySince = millis();
+  bootAt = steadySince = stuckSince = millis();
   clockBase = bootAt;
   clockOrigin = ((uint64_t)radioRandom32() << 15 ^ radioRandom32()) & ((1ULL << 47) - 1);
 }
@@ -257,6 +260,8 @@ void gateLoop(uint32_t now) {
   } else if (spareChanged) {
     sendStatus(now);
   }
+  if (state != GS_BETWEEN) stuckSince = now;
+  else if (elapsed(now, stuckSince, STAMP_CAP_MS)) stuckSince = now - STAMP_CAP_MS;
 
   // The house verified: a new session (it rebooted: its command ids restart, so forget the last one), or ours started
   // over (a key or radio setting) and verified it again. Report now either way, so the house restores K1/K2 and has our
@@ -484,6 +489,10 @@ uint8_t gateCurrentState() {
 
 bool gateAcPresent() {
   return acPower();
+}
+
+bool gateStuck(uint32_t now) {
+  return state == GS_BETWEEN && elapsed(now, stuckSince, (uint32_t)cfg.travel_timeout_s * 1000);
 }
 
 void gateDebugRebootAfterCmd() {

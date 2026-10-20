@@ -367,3 +367,11 @@ bool poll(World &w, const std::function<bool()> &cond, uint32_t maxMs, uint32_t 
 
 // The shared link key (16 bytes) commission() gives both boards.
 extern const uint8_t TEST_KEY[16];
+
+// b's status `health` lists the problem `name` (health.cpp healthName).
+inline bool hasProblem(Board &b, const char *name) {
+  JsonDocument s = b.status();
+  for (JsonVariantConst v : s["health"].as<JsonArrayConst>())
+    if (v == name) return true;
+  return false;
+}

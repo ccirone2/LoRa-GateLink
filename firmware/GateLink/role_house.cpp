@@ -57,6 +57,10 @@ static bool sensorClosed = false;  // as applyOutputs last decided
 static uint32_t missedUntil = 0;  // the sensor shows a missed move until then (0 = it doesn't)
 static uint8_t lastEnd = GS_UNKNOWN;  // last limit reached (OPEN/CLOSED), held while BETWEEN
 static uint32_t betweenSince = 0;
+// What houseGateStuck times: betweenSince, but started over by any STATUS that may begin a move this board didn't see
+// begin (a new target or command, a gate restart, the first after a link outage), so it never runs ahead of the gate's.
+static uint32_t stuckSince = 0;
+static uint16_t gateCmdId = 0;  // the gate's last command id taken (ST_CMD_ID), as its latest STATUS said
 
 static bool linkUp = false;
 static bool armed = false;      // user commands accepted
@@ -128,6 +132,10 @@ bool houseGateRebootLoop() {
 
 bool houseCtrlSenseDark() {
   return senseDark;
+}
+
+bool houseGateStuck(uint32_t now) {
+  return linkUp && haveStatus && gateState == GS_BETWEEN && elapsed(now, stuckSince, travelTimeoutMs());
 }
 
 // The gate's clock now, as far as its STATUS tells: false with no reading from its current session (it just restarted,
@@ -281,14 +289,14 @@ static void updateCtrlPower(uint32_t now) {
   }
 }
 
-// elapsed() is signed, so a time stamp left alone for 2^31 ms (~24.8 days) reads as in the future. Keep the ones
-// that can sit unused that long (no controller power changes, a dead link, a gate left between) from getting there.
-#define STAMP_CAP_MS 0x40000000UL
+// elapsed() is signed (STAMP_CAP_MS, link.h): keep the stamps that can sit unused for weeks (no controller power
+// changes, a dead link, a gate left between) from reading as in the future.
 
 static void capStamps(uint32_t now) {
   if (elapsed(now, settleUntil, 0)) settleUntil = now;  // passed: no longer holds a sync window open
   if (mismatchSince && elapsed(now, mismatchSince, STAMP_CAP_MS)) mismatchSince = (now - STAMP_CAP_MS) | 1;
   if (elapsed(now, betweenSince, STAMP_CAP_MS)) betweenSince = now - STAMP_CAP_MS;
+  if (elapsed(now, stuckSince, STAMP_CAP_MS)) stuckSince = now - STAMP_CAP_MS;
   if (statusAt && elapsed(now, statusAt, STAMP_CAP_MS)) statusAt = (now - STAMP_CAP_MS) | 1;  // else it reads as fresh
   if (clockSession && elapsed(now, clockAt, CLOCK_MAX_AGE_MS)) clockSession = 0;
 }
@@ -409,6 +417,8 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   cmdUnreported = false;
   uint8_t prevState = gateState;
   uint8_t prevResult = gateResult;
+  uint8_t prevTarget = gateTarget;
+  uint16_t prevCmdId = gateCmdId;
   gateState = m.payload[ST_STATE];
   gateInputs = m.payload[ST_INPUTS];
   gateCause = m.payload[ST_CAUSE];
@@ -417,6 +427,7 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   gateRssi = (int16_t)getU16(m.payload + ST_RSSI);
   gateSnr = (int8_t)m.payload[ST_SNR];
   gateTarget = m.payload[ST_TARGET];
+  gateCmdId = getU16(m.payload + ST_CMD_ID);
   gateHeartbeat = getU16(m.payload + ST_HEARTBEAT);
   gateTravel = getU16(m.payload + ST_TRAVEL);
   PeerReport r = { gateRssi, gateSnr, 0, 0, 0, 0, 0 };
@@ -447,6 +458,9 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   if (gateState == GS_OPEN || gateState == GS_CLOSED) lastEnd = gateState;
   else if (gateState != GS_BETWEEN) lastEnd = GS_UNKNOWN;  // fault/no power (no AC, no limit): show not-closed
   if (gateState == GS_BETWEEN && prevState != GS_BETWEEN) betweenSince = now;
+  // Our pulse may have moved it on: a new target (one ending: not), or a command taken (the same target again).
+  bool moved = (gateTarget != prevTarget && gateTarget != GS_UNKNOWN) || gateCmdId != prevCmdId;
+  if (gateState == GS_BETWEEN && (prevState != GS_BETWEEN || !sameSession || !linkUp || moved)) stuckSince = now;
   // Command overridden (e.g. siren holding the gate open): resync the Shelly right away. A mismatch held off through
   // the travel (holdingTravel()) never started: check it as soon as nothing is in the way.
   if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT) {

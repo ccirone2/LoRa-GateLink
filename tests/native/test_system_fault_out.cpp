@@ -22,7 +22,7 @@ enum { ST_STATE_ = 0, ST_INPUTS_ = 1 };  // roles.h STATUS layout
 enum { STI_AC_LOST_ = 0x40 };            // roles.h ST_INPUTS bit
 // health.h Problem bits (log `health` b)
 enum { P_STARTING = 0x01, P_RADIO = 0x02, P_LINK = 0x04, P_AC = 0x08, P_NO_POWER = 0x10, P_FAULT = 0x20,
-  P_CTRL_SENSE = 0x80 };
+  P_CTRL_SENSE = 0x80, P_STUCK = 0x100 };
 const int ANY = INT_MIN;
 const uint32_t HOLD_MS = 10000;  // fault_hold_s default
 const uint32_t SYNC_MS = 3000;   // sync_window_ms default: the house arms this long after the first STATUS
@@ -415,6 +415,127 @@ TEST(fault_out_gate_fault_drops_both_after_the_hold) {
   CHECK_EQ(hh.e.at, hc.e.at);
   checkHealthy(w.gate);
   checkHealthy(w.house);
+}
+
+// [fault-out] Our OPEN and the gate jams just off its closed limit: each board lists `stuck` once it has read between
+// for travel_timeout_s (60 s: the gate from its own state, the house from the STATUS that said so) and drops D5
+// fault_hold_s later. The house already shows it not closed; nothing is commanded for it. Freed and closed by someone
+// else, the closed limit clears it at once.
+TEST(fault_out_gate_stuck_between_drops_both_after_the_travel_timeout) {
+  const uint32_t TRAVEL_MS = 60000;  // travel_timeout_s default
+  Site w;
+  w.commission(faultOutOn());
+  w.opener.stuck = true;
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  w.user(true);
+  Found gs = waitFor(w, w.gate, "gate_state", g0, 3000, GS_BETWEEN_);
+  CHECK(gs.ok);
+  Found hs = waitFor(w, w.house, "gate_state", h0, 2000, GS_BETWEEN_);
+  CHECK(hs.ok);
+  runTo(w, gs.e.at + TRAVEL_MS - 10);
+  CHECK_STR(health(w.gate), "");
+  CHECK_STR(health(w.house), "");
+  runTo(w, hs.e.at + TRAVEL_MS + 10);
+  CHECK_STR(health(w.gate), "stuck");
+  CHECK_STR(health(w.house), "stuck");
+  Found gl = waitFor(w, w.gate, "health", g0, HOLD_MS + 1000, 0);
+  CHECK(gl.ok);
+  CHECK_IN(since(gl.e.at, gs.e.at), (int32_t)(TRAVEL_MS + HOLD_MS - 1), (int32_t)(TRAVEL_MS + HOLD_MS));
+  CHECK_EQ(gl.e.b, P_STUCK);
+  Found hl = waitFor(w, w.house, "health", h0, 2000, 0);
+  CHECK(hl.ok);
+  CHECK_IN(since(hl.e.at, hs.e.at), (int32_t)(TRAVEL_MS + HOLD_MS - 1), (int32_t)(TRAVEL_MS + HOLD_MS));
+  CHECK_EQ(hl.e.b, P_STUCK);
+  CHECK(!w.sensorClosed());
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0), 1);
+
+  size_t h1 = w.house.logs.size(), g1 = w.gate.logs.size();
+  w.opener.stuck = false;
+  w.extPress(false, 300);
+  Found gc = waitFor(w, w.gate, "gate_state", g1, 3000, GS_CLOSED_);
+  CHECK(gc.ok);
+  Found gh = find(w.gate, "health", g1, 1);
+  CHECK(gh.ok);
+  CHECK_EQ(gh.e.at, gc.e.at);
+  Found hc = waitFor(w, w.house, "gate_state", h1, 2000, GS_CLOSED_);
+  CHECK(hc.ok);
+  Found hh = find(w.house, "health", h1, 1);
+  CHECK(hh.ok);
+  CHECK_EQ(hh.e.at, hc.e.at);
+  w.run(5000);
+  checkHealthy(w.gate);
+  checkHealthy(w.house);
+}
+
+// [fault-out] `stuck` times the gate's latest move, not the first: a reversal pulsed 40 s into a jam starts it over on
+// both boards (the house from the STATUS with the new target), so a gate kept moving by our commands isn't stuck until
+// travel_timeout_s after the last. And the house never says it from a report it may have lost since: not while the
+// link is down, and timed again from the first STATUS after the link returns (the gate may have moved meanwhile).
+TEST(fault_out_stuck_timed_from_the_last_move_and_never_from_a_stale_report) {
+  const uint32_t TRAVEL_MS = 60000;
+  Site w;
+  w.commission(faultOutOn(shortLinkTimeout));
+  w.opener.stuck = true;
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  w.user(true);
+  Found gs = waitFor(w, w.gate, "gate_state", g0, 3000, GS_BETWEEN_);
+  CHECK(gs.ok);
+  runTo(w, gs.e.at + 40000);
+  size_t g1 = w.gate.logs.size();
+  w.user(false);  // reversed: our CLOSE pulse, the gate still between
+  Found p = waitFor(w, w.gate, "pulse", g1, 5000, 2);
+  CHECK(p.ok);
+  runTo(w, gs.e.at + TRAVEL_MS + 5000);
+  CHECK_STR(health(w.gate), "");
+  CHECK_STR(health(w.house), "");
+  runTo(w, p.e.at + TRAVEL_MS - 10);
+  CHECK_STR(health(w.gate), "");
+  runTo(w, p.e.at + TRAVEL_MS + 2000);  // the house, from the STATUS that carried the CLOSE target
+  CHECK_STR(health(w.gate), "stuck");
+  CHECK_STR(health(w.house), "stuck");
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0), 2);
+
+  // The link lost: link, never stuck, on the house.
+  size_t h2 = w.house.logs.size();
+  w.drop = [](const AirFrame &) { return true; };
+  Found down = waitFor(w, w.house, "link_down", h2, 20000);
+  CHECK(down.ok);
+  CHECK_STR(health(w.house), "link");
+  w.drop = nullptr;
+  Found up = waitFor(w, w.house, "link_up", h2, 20000);
+  CHECK(up.ok);
+  w.run(1000);
+  CHECK_STR(health(w.house), "");
+  CHECK_STR(health(w.gate), "stuck");
+  runTo(w, up.e.at + TRAVEL_MS + 2000);
+  CHECK_STR(health(w.house), "stuck");
+}
+
+// [fault-out] A gate board restarting mid-jam: neither board says stuck until travel_timeout_s after its boot (the
+// house from the new session's first STATUS), so the two never disagree for a whole travel.
+TEST(fault_out_stuck_starts_over_with_a_gate_restart) {
+  const uint32_t TRAVEL_MS = 60000;
+  Site w;
+  w.commission(faultOutOn());
+  w.opener.stuck = true;
+  size_t g0 = w.gate.logs.size();
+  w.user(true);
+  CHECK(waitFor(w, w.gate, "gate_state", g0, 3000, GS_BETWEEN_).ok);
+  w.run(TRAVEL_MS + 2000);
+  CHECK_STR(health(w.gate), "stuck");
+  CHECK_STR(health(w.house), "stuck");
+  size_t g1 = w.gate.logs.size();
+  w.gate.reset(PM_RCAUSE_SYST);
+  Found boot = waitFor(w, w.gate, "boot", g1, 2000);
+  CHECK(boot.ok);
+  CHECK(w.runUntil([&] { return w.gate.status()["settling"] == false && w.houseLinkUp(); }, 20000));
+  w.run(1000);
+  CHECK(!hasProblem(w.gate, "stuck"));
+  CHECK(!hasProblem(w.house, "stuck"));
+  runTo(w, boot.e.at + TRAVEL_MS + 12000);
+  CHECK_STR(health(w.gate), "stuck");
+  CHECK_STR(health(w.house), "stuck");
+  CHECK_EQ(countSince(w.gate, "pulse", g1), 0);
 }
 
 // [fault-out] A radio that resets and then doesn't start again (radio_fail 2, then 0 on every retry): that board drops

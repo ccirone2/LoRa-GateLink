@@ -55,6 +55,7 @@ test('health problems follow health.cpp, in bit order', () => {
   assert.equal(decodeLog({ ev: 'health', a: 1, b: 0 }), 'fault output high: healthy');
   assert.equal(decodeLog({ ev: 'health', a: 0, b: 0x0c }), 'fault output low: needs attention (link down, no AC power at the gate)');
   assert.equal(decodeLog({ ev: 'health', a: 0, b: 1 }), 'fault output low: needs attention (starting up)');
+  assert.equal(decodeLog({ ev: 'health', a: 0, b: 0x100 }), 'fault output low: needs attention (gate stuck between its limits)');
   assert.equal(decodeLog({ ev: 'health', a: -1, b: 0 }), 'fault output off (D5 an input again)');
 });
 

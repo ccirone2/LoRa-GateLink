@@ -56,7 +56,7 @@ answered `bad crc` and the request isn't run. The web console doesn't send one; 
 | `radio.ping` | | Sends a PING; a `pong` event follows if the peer answers. Needs a role, a key and a working radio |
 | `remote.diag` | | House only. Requests the gate's diagnostics; a `remote_diag` event follows |
 | `remote.set` | `name`, `value` (int) | House only, remote-writable params only. `busy` while one is pending; a `remote_set` event follows |
-| `log.get` | | `log`: the ring buffer (64 entries: `t`, `ev`, `a`, `b`), `now` (board millis) |
+| `log.get` | `before`: 1–4294967295 (optional) | `log`: the ring buffer (64 entries: `t`, `ev`, `a`, `b`, and `n` when a flood was coalesced into it: how many times it came; `boot` when it is from an earlier boot: that boot's count, low 16 bits), `now` (board millis), `boot` (this boot's count). With `before`: the flash journal's newest record written before that sequence number instead (4294967295: the newest of all; up to 14 entries, oldest first) and its `seq`, the `before` for the next older one; an empty `log` and no `seq` past the oldest. Held while a relay pulses, as it reads the flash. See Event log, below |
 | `hist.get` | `from` (bucket number, default the oldest), `n` (1–12, default 12) | One page of the link history (below): `period_s`, `now_s`, `oldest`, `current`, `persist`, `fields`, `rows` |
 | `hist.clear` | `period_s` (60–3600, default unchanged) | Empties the history, in RAM and in the SPI flash, and restarts it at bucket 0. The period is kept with the history, across resets, until the next `hist.clear` (3600 on a board that has none). Held while a relay pulses, and fails as a save does if the flash wasn't cleared (below; a reset would then bring the old history back) |
 | `reboot` | | Replies, then resets the board 100 ms later (USB re-enumerates). Held while a relay pulses, like a save (below) |
@@ -88,7 +88,7 @@ or reads older than the newest this boot has written or loaded; `config.save` wr
 clears that.
 Each save re-initialises the radio (the flash chip shares its bus): about 0.5 s off the air, which the link's
 retries cover. Saving, and restarting the radio, stops the loop for up to ~1 s, so while a relay pulse runs (or
-waits for its interlock start) `config.set`, `config.save`, `config.reset`, `hist.clear`, `key.set` and `reboot` wait in the port's
+waits for its interlock start) `config.set`, `config.save`, `config.reset`, `hist.clear`, `key.set`, `reboot` and `log.get` (a journal read) wait in the port's
 buffer and are answered after it (at most the pulse's length, 5 s for a `relay.test`); a held relay would
 otherwise stay on until the save was done (or, for `reboot`, until the reset 100 ms after its reply). A radio that
 faulted (`radio_fail` 1 or 2) stays down until the pulse is over too, and is restarted then.
@@ -215,6 +215,23 @@ Unsolicited lines carry `"event"` instead of `"id"`:
 | `pong` | `ping_id`, `rtt_ms`, `rssi`, `snr`, `peer_rssi`, `peer_snr`, `fei` (Hz, as in status) | Answer to `radio.ping` |
 | `remote_diag` | `fw`, `uptime_s`, `counters` (`tx`, `rx`, `mac_fail`, `replay`, `retries`, `giveups`), `params` (the gate's remote-writable params) | Answer to `remote.diag` |
 | `remote_set` | `acked`, `ok` (the gate accepted and saved it), `applied` (accepted, maybe not saved: it reverts when the gate reboots) | Outcome of `remote.set` |
+
+## Event log
+
+Each event (`{"event":"log"}` above) also goes into a ring of the newest 64 in RAM, which every reset but a power-on
+keeps (a watchdog or brown-out reset, a `reboot`, the reset pin; an upload of other firmware usually moves it, and the
+ring then starts empty), and from there into a journal in the SPI
+flash (sectors 20–35, about 3,500 entries; [protocol.md](protocol.md#spi-flash)), so a power cut loses only the
+entries not written yet. They are written 14 to a record, once 14 are waiting or the oldest has waited 10 minutes, at
+most once a minute and never while a relay pulses: each write takes the radio off the air ~0.5 s. After a reset other
+than power-on, what the boot before left unwritten goes out at once. `log.get` reads the ring; `log.get` with `before`
+pages back through the journal, a record at a time, by a cursor (each record's sequence number), so records written
+meanwhile don't shift the pages (each read ~0.5 s off the air too). Entries from an earlier boot
+carry its number (`boot`, as `info.boot_count`), and `t` is that boot's uptime. Floods (`mac_fail`, `replay`,
+`lbt_forced`, and an `input` chattering) are coalesced: the same event counts into an entry of its own among the
+newest 4 not written yet (`n`, up to 256; an input's keeps its first time and its latest level) instead of taking a new
+one, so even two kinds in turn take an entry each, so a flood can't push everything else out of the ring
+or keep the radio busy writing. Every event still goes out on the console as it happens. From 0.19.0.
 
 ## Log events
 

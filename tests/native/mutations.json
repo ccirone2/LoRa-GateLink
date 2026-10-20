@@ -2558,8 +2558,8 @@
   "edits": [
    {
     "file": "app.cpp",
-    "find": "  if (histSaveDue() && !appRelaysPulsing()) histSave();",
-    "replace": "  if (histSaveDue()) histSave();"
+    "find": "  if (!appRelaysPulsing()) {\n    if (histSaveDue()) histSave();",
+    "replace": "  if (histSaveDue()) histSave();\n  if (!appRelaysPulsing()) {\n    if (false) {}"
    }
   ]
  },
@@ -2573,8 +2573,8 @@
   "edits": [
    {
     "file": "console.cpp",
-    "find": "         || !strcmp(cmd, \"hist.clear\")\n",
-    "replace": ""
+    "find": "         || !strcmp(cmd, \"hist.clear\") || (",
+    "replace": "         || ("
    }
   ]
  },
@@ -2587,9 +2587,9 @@
   ],
   "edits": [
    {
-    "file": "histlog.cpp",
-    "find": "  if (get16(buf) != MAGIC || get32(buf + REC_LEN - 4) != crc32(buf, REC_LEN - 4)) return R_INVALID;",
-    "replace": "  if (get16(buf) != MAGIC) return R_INVALID;"
+    "file": "flashlog.cpp",
+    "find": "  if (flogGet16(buf) != l.magic || flogGet32(buf + len - 4) != crc32(buf, len - 4)) return FL_INVALID;",
+    "replace": "  if (flogGet16(buf) != l.magic) return FL_INVALID;"
    }
   ]
  },
@@ -2602,9 +2602,9 @@
   ],
   "edits": [
    {
-    "file": "histlog.cpp",
-    "find": "  while (head % PER_SECTOR) {",
-    "replace": "  while (head % PER_SECTOR && head == SLOTS) {"
+    "file": "flashlog.cpp",
+    "find": "  while (l.head % perSector(l)) {",
+    "replace": "  while (l.head % perSector(l) && l.head == slots) {"
    }
   ]
  },
@@ -2617,9 +2617,9 @@
   ],
   "edits": [
    {
-    "file": "histlog.cpp",
-    "find": "  if (head % PER_SECTOR == 0 && !extFlashEraseSector(addr)) return false;",
-    "replace": "  if (head % PER_SECTOR == 0 && !extFlashEraseSector(slotAddr((head + SLOTS - 1) % SLOTS))) return false;"
+    "file": "flashlog.cpp",
+    "find": "  bool ok = l.head % perSector(l) || extFlashEraseSector(addr);",
+    "replace": "  bool ok = l.head % perSector(l) || extFlashEraseSector(slotAddr(l, (l.head + flogSlots(l) - 1) % flogSlots(l)));"
    }
   ]
  },
@@ -2633,7 +2633,7 @@
   ],
   "edits": [
    {
-    "file": "histlog.cpp",
+    "file": "flashlog.cpp",
     "find": "    while (i > 0 && candSeq[i - 1] < q) {",
     "replace": "    while (i > 0 && candSeq[i - 1] < q && q == 0) {"
    }
@@ -2694,7 +2694,7 @@
   ],
   "edits": [
    {
-    "file": "histlog.cpp",
+    "file": "flashlog.cpp",
     "find": "  return extFlashAnswers();",
     "replace": "  return false;"
    }
@@ -3061,6 +3061,69 @@
     "file": "role_gate.cpp",
     "find": "  appKeep(closedUnproven ? KEEP_CLOSED_UNPROVEN : 0);",
     "replace": "  if (closedUnproven) appKeep(KEEP_CLOSED_UNPROVEN);"
+   }
+  ]
+ },
+ {
+  "name": "event_log_e1_journal_written_during_a_pulse",
+  "invariant": "no-stall-in-pulse",
+  "why": "E1: a batch of events is written to the flash while a relay pulses: the loop stops ~0.5 s, so the pulse runs that much long",
+  "killed_by": [
+   "event_log_never_writes_during_a_pulse"
+  ],
+  "edits": [
+   {
+    "file": "app.cpp",
+    "find": "    else if (logSaveDue(now)) logSave(now);\n  }",
+    "replace": "  }\n  if (!histSaveDue() && logSaveDue(now)) logSave(now);"
+   }
+  ]
+ },
+ {
+  "name": "event_log_e2_ring_not_kept",
+  "invariant": "event-log",
+  "why": "E2: the ring starts empty at every boot, so a crash or a reboot loses the events that led to it",
+  "killed_by": [
+   "event_log_ring_survives_a_reset_and_goes_to_the_journal_at_once"
+  ],
+  "edits": [
+   {
+    "file": "log.cpp",
+    "find": "  if (!kept) {",
+    "replace": "  if (!kept || true) {"
+   }
+  ]
+ },
+ {
+  "name": "event_log_e3_flood_not_coalesced",
+  "invariant": "event-log",
+  "why": "E3: each replayed frame takes an entry of its own, so a flood pushes everything else out of the ring",
+  "killed_by": [
+   "event_log_flood_coalesced_and_written_at_most_once_a_minute"
+  ],
+  "edits": [
+   {
+    "file": "log.cpp",
+    "find": "  if (LogEntry *c = coalesceInto(code, a)) {",
+    "replace": "  if (LogEntry *c = coalesceInto(code, a); c && false) {"
+   }
+  ]
+ },
+ {
+  "name": "event_log_e4_no_gap_between_writes",
+  "invariant": "event-log",
+  "why": "E4: the journal is written as often as batches fill, so a flood of varied events keeps the radio off the air",
+  "killed_by": [
+   "gate_relays_interlock_after_the_other_pulse_ended_by_itself",
+   "gate_relays_interlock_holds_under_rapid_alternating_tests",
+   "house_power_settle_user_edge_just_inside_window_ignored",
+   "robustness_quiet_26_days_link_down_stays_down_and_stamps_stay_old"
+  ],
+  "edits": [
+   {
+    "file": "log.cpp",
+    "find": "  return now - savedAt >= LOG_SAVE_GAP_MS && (",
+    "replace": "  return (k->unsaved >= 1 || now - savedAt >= LOG_SAVE_GAP_MS) && ("
    }
   ]
  }

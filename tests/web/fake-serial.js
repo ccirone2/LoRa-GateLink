@@ -74,6 +74,9 @@
       this.keyReady = this.setKey(this.key);
       this.hasKeyId = verAtLeast(this.fw, fx.key.since_fw); // older firmware reports no key_id
       this.log = spec.log || [];
+      this.journal = spec.journal || [];
+      this.noJournal = spec.noJournal ?? false;  // firmware before 0.19.0: log.get ignores `before`
+      this.boot = spec.boot ?? 7;
       this.histN = spec.histBuckets ?? 30;
       this.histResetAt = spec.histResetAt ?? -1;
       this.histOverride = spec.histOverride ?? {};
@@ -201,7 +204,13 @@
           this.emit({ event: 'remote_set', acked: true, ok: true, applied: true });
           return ok();
         }
-        case 'log.get': return ok({ log: clone(this.log), now: this.uptimeMs });
+        case 'log.get': {
+          if (req.before === undefined || this.noJournal) return ok({ log: clone(this.log), now: this.uptimeMs, boot: this.boot });
+          // spec.journal: records oldest first, record i's lseq i + 1
+          const i = Math.min(req.before - 1, this.journal.length) - 1;
+          if (i < 0) return ok({ log: [], now: this.uptimeMs, boot: this.boot });
+          return ok({ log: clone(this.journal[i]), seq: i + 1, now: this.uptimeMs, boot: this.boot });
+        }
         case 'hist.get': {
           const rows = histRows(this.histN, this.histResetAt, this.histOverride);
           const current = this.histN - 1;

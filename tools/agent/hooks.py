@@ -436,7 +436,8 @@ def stop_findings(root, base=None):
                 "change or a new feature; docs/development.md \"Versioning\").")))
 
     tested = [f for f in changed if f in (FW + "link.cpp", FW + "link.h", FW + "config.cpp", FW + "config.h",
-                                          FW + "extflash.cpp", FW + "histlog.cpp", FW + "histlog.h")]
+                                          FW + "extflash.cpp", FW + "histlog.cpp", FW + "histlog.h",
+                                          FW + "flashlog.cpp", FW + "flashlog.h", FW + "evlog.cpp", FW + "evlog.h")]
     if tested and not touched("tests/native/"):
         out.append(Finding("native-tests", tested, (
             f"{names(tested)} changed but nothing under tests/native: extend the host tests (`make -C "

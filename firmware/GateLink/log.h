@@ -42,16 +42,32 @@ enum LogCode : uint8_t {
   EV_COUNT
 };
 
+// 16 bytes, also as kept in RAM across resets and in the flash journal (evlog.cpp).
 struct LogEntry {
-  uint32_t t;
+  uint32_t t;     // millis() in the boot it was logged in
   uint8_t code;
+  uint8_t rep;    // times it came again right after, coalesced into this entry (floods: logEvent)
+  uint16_t boot;  // that boot's count (appBootCount, low 16 bits; 0 without one)
   int32_t a;
   int32_t b;
 };
 
 #define LOG_SIZE 64
+// The ring in RAM every reset but power-on keeps (boardKeep, after the reset memo): the newest LOG_SIZE events,
+// those not written to the flash journal yet among them, so a crash or a reboot loses none of them.
+#define LOG_KEEP_WORDS (4 + LOG_SIZE * 4)
 
+// At boot, before the first logEvent: takes the ring the boot before left (checked), else starts it empty.
+void logBegin(uint32_t bootCount);
 void logEvent(LogCode code, int32_t a = 0, int32_t b = 0);
 const char *logCodeName(uint8_t code);
-// Iterate oldest->newest. Returns number of entries copied.
-size_t logCopy(LogEntry *out, size_t max);
+// The ring, oldest first: i < logCount().
+size_t logCount();
+const LogEntry &logAt(size_t i);
+// Writing the ring's unsaved entries to the flash journal (evlog.h), from the loop, never while a relay pulses: due
+// once ELOG_PER_REC are waiting, or the oldest has waited LOG_SAVE_WAIT_MS, at most once per LOG_SAVE_GAP_MS (a flood
+// can't keep the radio off the air). One record per call.
+#define LOG_SAVE_WAIT_MS 600000UL
+#define LOG_SAVE_GAP_MS 60000UL
+bool logSaveDue(uint32_t now);
+void logSave(uint32_t now);

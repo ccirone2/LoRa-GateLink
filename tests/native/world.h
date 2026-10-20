@@ -77,7 +77,7 @@ struct Board {
   uint32_t clockMs = 0, clockUs = 0, busyUntil = 0;
   bool wdtBite = false;  // the watchdog would have reset it: done once the call into the firmware returns
   uint32_t kickAt = 0;  // last watchdog reset (board millis)
-  uint32_t keep[4] = {};  // boardKeep() (BOARD_KEEP_WORDS): kept across reset(), garbage after powerOn()
+  uint32_t keep[4 + 260] = {};  // boardKeep() (BOARD_KEEP_WORDS): kept across reset(), garbage after powerOn()
   uint64_t prng = 1;    // random()
   uint64_t rng = 1;     // radioRandom32()
   uint32_t stuckRng = 0;  // nonzero: radioRandom32() returns this every time (a dead entropy source)
@@ -112,7 +112,7 @@ struct Board {
   int16_t rssi = -60, noise = -118;
   float snr = 9.0f;
 
-  // SPI flash (sectors 0..19: config records, boot counter, history log; config.h's flash map)
+  // SPI flash (sectors 0..35: config records, boot counter, history log, event journal; config.h's flash map)
   bool flashPresent = true;
   std::vector<uint8_t> flash;
   uint32_t eraseMs = 45;  // datasheet typical (max 400)

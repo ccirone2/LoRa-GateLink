@@ -336,7 +336,7 @@ void radioAddEntropy(const void *data, size_t len) {
 // --- extflash.h --------------------------------------------------------------------------------------------------------
 static void flashRange(uint32_t addr, size_t len) {
   if (addr > HAL_FLASH_BYTES || len > HAL_FLASH_BYTES - addr)
-    halTrap("flash access at 0x%x+%zu, beyond sectors 0..19", addr, len);
+    halTrap("flash access at 0x%x+%zu, beyond sectors 0..35", addr, len);
 }
 
 void extFlashHoldModem() {

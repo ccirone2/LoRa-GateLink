@@ -33,54 +33,32 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | 2 | B1 | Repeatable RF tests | S | |
 | 3 | F3 | Tell the alarm what kind of trouble it is | M | |
 | 4 | F14 | Catch faults the inputs alone don't show | S | |
-| 5 | F1 | Keep the event log across resets | M | |
-| 6 | F2 | See the gate's log, history and status from the house | L | F1 for the log |
-| 7 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 8 | F7 | Update the gate's firmware without visiting it | XL | F1, F2 |
+| 5 | F2 | See the gate's log, history and status from the house | L | |
+| 6 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
+| 7 | F7 | Update the gate's firmware without visiting it | XL | F2 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 9 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 10 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 11 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 12 | C2 | Answer "what happened last night?" | M | F1, F2 |
-| 13 | F11 | Firmware ready for a second board | M | |
-| 14 | B2 | Test attacks over real RF | M | B1 |
-| 15 | B3 | Reach the host-only fault paths on the bench | M | |
-| 16 | D2 | Run the bench automatically, safely | M | |
-| 17 | F18 | Stop casual actuation over USB | M | |
-| 18 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 19 | F5 | Change radio settings without stranding the link | L | |
-| 20 | F13 | Work with controllers that pulse | L | |
+| 8 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 9 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
+| 10 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 11 | C2 | Answer "what happened last night?" | M | F2 |
+| 12 | F11 | Firmware ready for a second board | M | |
+| 13 | B2 | Test attacks over real RF | M | B1 |
+| 14 | B3 | Reach the host-only fault paths on the bench | M | |
+| 15 | D2 | Run the bench automatically, safely | M | |
+| 16 | F18 | Stop casual actuation over USB | M | |
+| 17 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 18 | F5 | Change radio settings without stranding the link | L | |
+| 19 | F13 | Work with controllers that pulse | L | |
+| 20 | F21 | Count replay floods, and stop answering them | S | |
 | **Tier 4: later, or waiting on a decision** | | | | |
 | 21 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
 | 22 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
 | 23 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
 | 24 | C4 | Check a board still runs genuine firmware | M | |
-| 25 | B6 | Turn field incidents into tests | M | F1 |
+| 25 | B6 | Turn field incidents into tests | M | |
 | 26 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
-
-### F1: Keep the event log across resets
-
-**Goal.** What happened before a reset, a power cut or an attack can still be read afterwards: the developer and
-installer get a lasting record of events, not just the hourly link history.
-
-**Today.** The hourly history persists in flash since 0.14.0, but log events live only in a 64-entry RAM ring stamped
-with `millis()`: a reset loses them, and a flood of replayed frames overwrites them
-(`replay-flood-erases-evidence-and-reflects`).
-
-**How.**
-- Write events to the unused flash sectors from 20 up (config 0–1, boot counter 2–3, history 4–19) with
-  `histlog.cpp`'s record envelope; leave room for F7's staged image when allocating them.
-- Stamp each event with the boot count and uptime; record wall-clock time when the web console connects, so the
-  console can show real times.
-- Keep the RAM ring in `.noinit` memory, so the last events before a watchdog reset are written at the next boot.
-- Let `log.get` page older entries.
-- Keep a replay flood's evidence: coalesce repeated flood events into one entry with a count, add replays to the
-  history bucket (a `HLOG_FMT` bump), and limit how often a memo'd seq is re-ACKed.
-
-**Cost / risk.** Each flash access stalls the loop ~0.5 s with the radio off the air, so batch the writes and never
-write during a pulse (as `histSave`). A PATCH. C2 shows it as a timeline.
 
 ### F2: See the gate's log, history and status from the house
 
@@ -92,7 +70,7 @@ settings, and `hist.get` serves only the 96 hourly buckets a boot loads into RAM
 (three weeks).
 
 **How.** Let the house page:
-- the gate's log (from flash once F1 exists);
+- the gate's log, its flash journal included (`log.get` with `before`, since 0.19.0);
 - its link history, and older buckets of either board's history from the flash log, read in batches since each read
   takes the radio off the air ~0.5 s (or keep slimmer buckets in RAM, 68 B now, or 2 h ones: a `config.get` reply
   takes ~5 KB of heap);
@@ -178,7 +156,7 @@ gate box for an update. The biggest saving in field effort.
 **Today.** Every update means opening the gate box and connecting over USB.
 
 **How.**
-- Stage the image in the SPI flash (~120 KB of the free sectors, allocated with F1).
+- Stage the image in the SPI flash (~120 KB of sectors 36 up, left free for it).
 - Accept only Ed25519-signed images (the Crypto library has it), with the private key off both boards: an unsigned or
   link-key-signed path would be a remote takeover route.
 - The house sends, and only to a gate that has reported its version. Apply only when the gate is idle with AC on,
@@ -186,8 +164,8 @@ gate box for an update. The biggest saving in field effort.
 - Pace it so the link keeps working: a ~120 KB image at SF9 / 500 kHz (~7 kbps raw) is ~2.5 minutes before protocol
   overhead.
 
-**Cost / risk.** The most work and the most risk here: a failed update strands a board at the gate. Do F1 and F2 first
-so a failed update can be diagnosed. It needs a bootloader stage that copies the staged image into place. Give
+**Cost / risk.** The most work and the most risk here: a failed update strands a board at the gate. Do F2 first (the
+event journal is in since 0.19.0) so a failed update can be diagnosed. It needs a bootloader stage that copies the staged image into place. Give
 it its own threat-model section, and host-test power cuts mid-copy.
 
 **Open questions.** Does Arduino's SFU loader support this board (not confirmed)?
@@ -336,6 +314,22 @@ remote.*, debug.*) need proof of the key, leaving status, logs and history open.
 **How.** An enclosure switch at the gate (IN4, or an H1 input), reported in STATUS, shown by the house as
 needs-attention and logged.
 
+### F21: Count replay floods, and stop answering them
+
+**Goal.** A replay flood is measured over days, not only seen in the event log, and costs the board no airtime
+(`replay-flood-erases-evidence-and-reflects`).
+
+**Today.** Since 0.19.0 the event log coalesces a flood into a few entries with their counts, kept in the flash
+journal, and the hourly link history counts MAC failures, but not replays. A replayed frame whose seq is still in
+the ACK memo is ACKed again every time (`resendAck`, `link.cpp`), without a limit.
+
+**How.**
+- Count replays in the history bucket (an `HLOG_FMT` bump; `HIST_DEPTH` is RAM-bound: check `free_ram`).
+- Re-ACK a memo'd seq at most once a second, as HELLO answers are.
+
+**Cost / risk.** Small. The re-ACK limit must not cost a real retry its ACK: the sender retries over seconds, so one
+answer a second still reaches it. Left out of the event log (0.19.0) to keep that change to the log.
+
 ## Web console
 
 ### C2: Answer "what happened last night?"
@@ -343,9 +337,11 @@ needs-attention and logged.
 **Goal.** The installer or developer reads the site's recent events as a story, from the house, without a laptop at
 the gate.
 
-**Today.** The log is a list of coded events from one board, lost at a reset.
+**Today.** The log is a list of coded events from one board, stamped with its uptime and boot number; since 0.19.0
+it is kept across resets in a flash journal (`log.get` with `before`), but nothing dates it.
 
-**How.** The F1 journal as a readable timeline, e.g. "14:02 Opened from the controller, open in 14 s", "03:10 Moved
+**How.** The event journal as a readable timeline, dated by the time the web console records when it connects (the
+event log left wall-clock time out: uptime and boot number order events, but don't date them), e.g. "14:02 Opened from the controller, open in 14 s", "03:10 Moved
 locally (keypad or other controller)", readable remotely through the house via F2. (The naming rule applies: no brand
 names in `web/`.)
 
@@ -460,7 +456,8 @@ resets.
 
 **Today.** A field incident has to be reproduced by hand on the bench.
 
-**How.** Load a board's exported log (the F1 journal) and link history into the host simulation.
+**How.** Load a board's exported log (its event journal, `log.get` with `before`) and link history into the host
+simulation.
 
 ## Development environment
 

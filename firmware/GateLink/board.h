@@ -8,6 +8,7 @@ void boardKick();         // watchdog reset (8 s)
 void boardReset();        // software reset; never returns on the board
 uint32_t boardFreeRam();  // bytes between the heap's high-water mark and the stack
 // Words of RAM that every reset but power-on leaves as they were (.noinit on the MKR; the host simulation keeps them
-// across a reset). After power-on they hold garbage, so check what you read (app.cpp's reset memo carries a CRC).
-#define BOARD_KEEP_WORDS 4
+// across a reset). After power-on they hold garbage, so check what you read: app.cpp's reset memo (the first 4 words)
+// and log.cpp's ring (the rest, LOG_KEEP_WORDS) each carry a CRC.
+#define BOARD_KEEP_WORDS (4 + 260)
 uint32_t *boardKeep();

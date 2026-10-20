@@ -17,8 +17,9 @@ typedef std::vector<uint8_t> Bytes;
 // Pins (pins.h, with A1..A4 as stubs/Arduino.h numbers them)
 enum : uint8_t { HP_K1 = 1, HP_K2 = 2, HP_LED = 6, HP_IN1 = 16, HP_IN2, HP_IN3, HP_IN4, HP_COUNT = 32 };
 
-// Sectors 0..19: config records (0, 1), the boot counter (2, 3) and the history log (4..19): config.h's flash map
-#define HAL_FLASH_BYTES (20 * 4096u)
+// Sectors 0..35: config records (0, 1), the boot counter (2, 3), the history log (4..19) and the event journal
+// (20..35): config.h's flash map
+#define HAL_FLASH_BYTES (36 * 4096u)
 #define HAL_WATCHDOG_MS 8000
 #define HAL_INTERLOCK_MS 100  // role_gate.cpp INTERLOCK_MS
 #define HAL_PULSE_SLACK_MS 50

@@ -82,7 +82,7 @@ Board::Board(World &w, int idx, const char *name) : w(w), idx(idx), name(name) {
     soCopies.files.push_back(so);
     copied[idx] = true;
   }
-  flash.assign(20 * 4096, 0xFF);
+  flash.assign(36 * 4096, 0xFF);
   for (int i = 0; i < 4; i++) serial[i] = 0x5EED0000u + idx * 16 + i;
   rng = 0x9E3779B97F4A7C15ULL + idx;
   holdUpMs = idx == 0 ? 100 : 600;  // bench: house ~0.1 s, gate ~0.6 s without a LiPo
@@ -138,7 +138,7 @@ void Board::powerOn() {
   dropOutputs(*this);
   state = BOOTLOADER;
   resetCause = PM_RCAUSE_POR;
-  for (int i = 0; i < 4; i++) keep[i] = serial[i] ^ (boots * 0x9E3779B9u);  // RAM after power-on: garbage
+  for (size_t i = 0; i < sizeof(keep) / 4; i++) keep[i] = serial[i % 4] ^ ((boots + i) * 0x9E3779B9u);  // garbage
   bootAt = w.now + 30;
   busyUntil = w.now;
   w.trace.add(w.now, name + ": power on");

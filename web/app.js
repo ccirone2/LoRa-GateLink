@@ -18,7 +18,7 @@ import { refreshStatus, renderStatus, pollStatus, resetPoll, clearVerdicts, POLL
 import { resetPeer } from './js/peer.js';
 import { initConfig, loadConfig, markUnsaved, dirtyCount } from './js/config.js';
 import { initSecurity } from './js/security.js';
-import { initLog, showLogEntry } from './js/log.js';
+import { initLog, showLogEntry, resetLogPaging } from './js/log.js';
 import { initWiring } from './js/wiring.js';
 import { initPing, onPong, resetPing, stopPing } from './js/ping.js';
 import { initSurvey, surveyPong, resetSurvey, stopSurvey } from './js/surveycard.js';
@@ -58,6 +58,7 @@ serial.hooks.onOpen = async ({ otherBoard, port }) => {
     resetPing();
     resetSurvey();
     resetRemote();
+    resetLogPaging();
   }
   resetPeer();
   setConnected(true);

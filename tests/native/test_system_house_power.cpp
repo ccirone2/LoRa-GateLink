@@ -1092,6 +1092,8 @@ TEST(house_power_settle_window_not_shortened_by_k1_change) {
   runTo(w, P + 20000 + SYNC_MS - 5);
   CHECK(syncWindow(w));
   runTo(w, P + 20000 + SYNC_MS + 5);
+  // A flash write may hold the loop then (the event journal, ~0.5 s): the window is read once the house is out of it.
+  CHECK(w.runUntil([&] { return (int32_t)(w.now - w.house.busyUntil) >= 0; }, 1000));
   CHECK(!syncWindow(w));
   CHECK_EQ(countSince(w.house, "ctrl", h1), 0);
   CHECK_EQ(w.house.count("cmd_sent"), cmds);

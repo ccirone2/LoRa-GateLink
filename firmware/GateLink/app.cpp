@@ -15,6 +15,7 @@
 #include "history.h"
 #include "health.h"
 #include "crc32.h"
+#include "evlog.h"
 
 Input in1, in2, in3, in4;
 Relay k1, k2;
@@ -59,7 +60,7 @@ struct ResetMemo {
   uint32_t pc;      // the early warning's: the program counter it interrupted
   uint32_t check;   // CRC-32 of the above
 };
-static_assert(sizeof(ResetMemo) == 4 * BOARD_KEEP_WORDS, "the reset memo fills the kept RAM");
+static_assert(sizeof(ResetMemo) == 16, "the reset memo is the kept RAM's first 4 words (log.cpp's ring follows)");
 #define MEMO_MAGIC 0x6D656D6FUL
 static ResetMemo *memo;
 static uint8_t resetStreak;   // as the memo had it at boot (0 after a deliberate reset or power-on)
@@ -337,11 +338,13 @@ void appSetup(uint8_t rc, const uint32_t serial[4]) {
   in2.begin(PIN_IN2, cfg.in2_invert);
   in3.begin(PIN_IN3, cfg.in3_invert);
   in4.begin(PIN_IN4, cfg.in4_invert);
+  logBegin(bootCount);  // the ring the boot before left (a crash, a reboot), before this boot's first event
   logEvent(EV_BOOT, resetCause, activeRole);
   if (resetStage != STG_NONE) logEvent(EV_HANG, resetPc, resetStage);
   logEvent(EV_CFG, configSource(), configDropped());
   healthBegin();  // fault_out: D5 LOW until the role has decided
   histBegin(bootCount);  // the history kept in the flash
+  evLogBegin();          // and the event journal
   supplyBegin();
   boardKick();
 
@@ -373,9 +376,13 @@ void appLoop() {
   // loop ~0.5 s, and Relay::update couldn't end the pulse meanwhile (nor start one waiting out the interlock).
   stage = STG_RADIO_RECOVER;
   if (radioRecoverDue() && !appRelaysPulsing()) radioRecover();
-  // Likewise a completed history bucket's write to the flash (~0.5 s, the radio restarted): it waits for the pulse.
+  // Likewise a completed history bucket's write to the flash (~0.5 s, the radio restarted), or a batch of events (one
+  // write a pass at most): it waits for the pulse.
   stage = STG_HIST_SAVE;
-  if (histSaveDue() && !appRelaysPulsing()) histSave();
+  if (!appRelaysPulsing()) {
+    if (histSaveDue()) histSave();
+    else if (logSaveDue(now)) logSave(now);
+  }
   stage = STG_CONSOLE;
   consolePoll();
   stage = STG_SUPPLY;

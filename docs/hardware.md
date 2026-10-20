@@ -121,8 +121,8 @@ shows them, and log `health` each change of D5.
   Since D5 has to be driven HIGH to keep the loop closed, a dead board, a reset, a cut wire or a dead relay module
   opens it too. Name it e.g. "Gate link trouble" in Alarm.com, set to report a trouble or notification rather than an
   intrusion.
-- **Which board:** the house's D5 covers what matters to the alarm (the link, and the gate's AC, `no_power`, `fault`
-  and reboot loop as its STATUS reports them), so most installs wire only the house. At the gate the same output can feed a
+- **Which board:** the house's D5 covers what matters to the alarm (the link, and the gate's AC, `no_power`, `fault`,
+  reboot loop and a gate stuck between its limits, as its STATUS reports them), so most installs wire only the house. At the gate the same output can feed a
   sensor near the opener, which also covers the gate board itself going dead.
 - Set `fault_out` on the board whose D5 is wired; it applies at once. It isn't remote-writable (it's a wiring
   decision); `fault_hold_s` can also be set on the gate from the house. With `fault_out` off, D5 stays an input with

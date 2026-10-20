@@ -1,6 +1,8 @@
 """Board resets (power blips, watchdog): nothing may be commanded by a reboot, and state recovers."""
 import time
 
+import pytest
+
 from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S
 from gatelink.flows import open_via_ctrl
 from gatelink_client.wire import ACT_OPEN, CAUSE, GS
@@ -20,6 +22,32 @@ def test_gate_reboot_at_rest(rig):
     rig.expect_no("house", "link_down", since=m)
     rig.expect_no("house", "gate_state", since=m)
     rig.expect_no("gate", "pulse", since=m)
+
+
+def test_event_log_kept_across_a_reboot(rig):
+    """The event log's ring survives a reset on the real board (its bootloader runs in between), and what wasn't in the
+    flash journal yet goes there at once after the boot (0.19.0 on)."""
+    before = rig.gate.log_get()
+    if "boot" not in before:
+        pytest.skip("firmware before 0.19.0 keeps no event log across resets")
+    rig.expect_commands(0)
+    boot0, last = before["boot"], before["log"][-1]
+    rig.reboot("gate")
+    rig.wait_for(lambda: rig.gate.status()["link"]["verified"] or None, 20, "gate session verified")
+    after = rig.gate.log_get()
+    assert after["boot"] == (boot0 + 1) & 0xFFFFFFFF
+    kept = [e for e in after["log"] if e.get("boot") == boot0 & 0xFFFF]
+    assert any(e["ev"] == last["ev"] and e["t"] == last["t"] for e in kept), "the boot before's newest entry is kept"
+    time.sleep(2)  # the journal write of the boot before's unsaved entries: at the first loop pass not in a pulse
+    cursor, found = 0xFFFFFFFF, False
+    for _ in range(6):
+        rec = rig.gate.log_get(before=cursor)
+        if not rec["log"]:
+            break
+        found = found or any(e.get("boot") == boot0 & 0xFFFF and e["ev"] == last["ev"] and e["t"] == last["t"]
+                             for e in rec["log"])
+        cursor = rec["seq"]
+    assert found, "the boot before's newest entry is in the flash journal"
 
 
 def test_gate_reboot_mid_travel(rig):

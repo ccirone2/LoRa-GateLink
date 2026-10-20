@@ -322,8 +322,10 @@ class Board:
                 applied += res["applied"]
         return applied
 
-    def log_get(self):
-        return self.request("log.get")
+    def log_get(self, before=None):
+        """The event log's RAM ring; with `before` (an lseq, 0xFFFFFFFF for the newest), a flash journal record
+        instead, its `seq` the cursor for the next older one (firmware 0.19.0 on)."""
+        return self.request("log.get") if before is None else self.request("log.get", before=before)
 
     def history(self):
         """The link history (hist.get, every page), oldest bucket first, each a dict keyed by the reply's `fields`.

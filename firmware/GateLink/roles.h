@@ -97,8 +97,9 @@ bool houseGateRebootLoop();  // the gate's latest STATUS says it is in a reboot 
 // (ctrl_power_sense and ctrl_power_pmic on, the charger answering).
 bool houseCtrlSenseDark();
 #define CTRL_SENSE_DARK_MS 30000UL
-// The gate has reported between for longer than its travel_timeout_s: stopped short of a limit (an obstruction, the
-// opener's entrapment lockout, a stop button). Only reported (health `stuck`): the gate's state says not closed already.
+// The gate has reported between for longer than its travel_timeout_s since it started moving, or since our last pulse
+// moved it on: stopped short of a limit (an obstruction, the opener's entrapment lockout, a stop button). False while
+// the link is down (that report may be stale). Only reported (health `stuck`): the gate already reads not closed.
 bool houseGateStuck(uint32_t now);
 
 void gateBegin();
@@ -114,4 +115,4 @@ uint32_t gateLinkTimeoutMs();  // nothing heard from the house for this long: th
 bool gateDecided();
 uint8_t gateCurrentState();
 bool gateAcPresent();
-bool gateStuck(uint32_t now);  // between for longer than travel_timeout_s, as houseGateStuck
+bool gateStuck(uint32_t now);  // between for longer than travel_timeout_s since it began or our last pulse

@@ -103,3 +103,6 @@ inline uint64_t getU48(const uint8_t *p) { return getU32(p) | (uint64_t)getU16(p
 // Signed elapsed-time check: safe across millis() wrap, and when t was stamped slightly after `now` (handlers
 // called from linkPoll use millis(), the loop's `now` is older).
 inline bool elapsed(uint32_t now, uint32_t t, uint32_t ms) { return (int32_t)(now - t) >= (int32_t)ms; }
+// So a stamp left alone for 2^31 ms (~24.8 days) would read as in the future: one that can sit unused that long is
+// kept at most this old.
+#define STAMP_CAP_MS 0x40000000UL

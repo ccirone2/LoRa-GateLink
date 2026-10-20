@@ -453,14 +453,6 @@ void wrapLink(uint32_t F) {
   w.checkClean();
 }
 
-// Status `health` lists `problem`.
-static bool hasHealth(Board &b, const char *problem) {
-  JsonDocument s = b.status();
-  for (JsonVariantConst v : s["health"].as<JsonArrayConst>())
-    if (v == problem) return true;
-  return false;
-}
-
 // A gate jammed off its closed limit 30 s before F: the house holds K1 at the closed level for travel_timeout_s, which
 // ends 30 s after F, then shows not-closed, and lists health `stuck` from then (the gate, from its own between, too);
 // the controller following K1 is a sync, not a command.
@@ -484,8 +476,8 @@ void wrapHold(uint32_t F) {
   CHECK(r.e[HK1][k1].on);
   CHECK_IN(r.e[HK1][k1].at - hb.e.at, TRAVEL_MS - 2, TRAVEL_MS + 5);
   CHECK(rel(r.e[HK1][k1].at, F) > 0);
-  CHECK(hasHealth(w.house, "stuck"));
-  CHECK(hasHealth(w.gate, "stuck"));
+  CHECK(hasProblem(w.house, "stuck"));
+  CHECK(hasProblem(w.gate, "stuck"));
   CHECK(r.until([&] { return w.alarmSwitch(); }, 500));
   r.run(SYNC_MS + 500);
   CHECK(w.house.coil(1));
@@ -501,8 +493,8 @@ void wrapHold(uint32_t F) {
   w.opener.stuck = false;
   w.extPress(false, 300);
   CHECK(waitFor(r, w.house, "gate_state", h1, 3000, GS_CLOSED_).ok);
-  CHECK(!hasHealth(w.house, "stuck"));
-  CHECK(!hasHealth(w.gate, "stuck"));
+  CHECK(!hasProblem(w.house, "stuck"));
+  CHECK(!hasProblem(w.gate, "stuck"));
   CHECK(r.until([&] { return !w.alarmSwitch(); }, 500));
   checkAgree(w);
   CHECK_EQ(countSince(w.house, "cmd_sent", h0), 0);
@@ -1295,8 +1287,10 @@ static void relinkAfterQuiet(bool houseReboots, uint32_t days) {
   w.checkClean();
 }
 
-// [wrap-safe] A gate left jammed between for 26 days stays health `stuck` on both boards (each between stamp is kept
-// at most STAMP_CAP_MS old, or past 2^31 ms it would read as just started); a limit clears it at once.
+// [wrap-safe] A gate left jammed between for 26 days stays health `stuck` on the gate throughout (its stamp kept at most
+// STAMP_CAP_MS old, or past 2^31 ms it would read as just started), and on the house once the link has been back for
+// travel_timeout_s after each hop (an hour without STATUS is a link outage, which starts the house's timing over); a
+// limit clears it at once.
 TEST(robustness_gate_left_between_26_days_stays_stuck) {
   World w;
   Guard g{ w };
@@ -1305,17 +1299,18 @@ TEST(robustness_gate_left_between_26_days_stays_stuck) {
   w.opener.stuck = true;
   w.extPress(true, 300);
   CHECK(r.until([&] { return w.houseSees() == GS_BETWEEN_; }, 3000));
-  CHECK(!hasHealth(w.house, "stuck"));
+  CHECK(!hasProblem(w.house, "stuck"));
   r.run(TRAVEL_MS + 1000);
-  quiet(r, 26ull * DAY, HOUR, 500, [&] {
-    CHECK(hasHealth(w.house, "stuck"));
-    CHECK(hasHealth(w.gate, "stuck"));
-  });
+  quiet(r, 26ull * DAY, HOUR, 500, [&] { CHECK(hasProblem(w.gate, "stuck")); });
+  CHECK(r.until([&] { return w.houseLinkUp(); }, 20000));
+  r.run(TRAVEL_MS + 2000);
+  CHECK(hasProblem(w.house, "stuck"));
+  CHECK(hasProblem(w.gate, "stuck"));
   w.opener.stuck = false;
   w.extPress(false, 300);
   CHECK(r.until([&] { return w.houseSees() == GS_CLOSED_; }, 3000));
-  CHECK(!hasHealth(w.house, "stuck"));
-  CHECK(!hasHealth(w.gate, "stuck"));
+  CHECK(!hasProblem(w.house, "stuck"));
+  CHECK(!hasProblem(w.gate, "stuck"));
 }
 
 // [wrap-safe] [restarts]

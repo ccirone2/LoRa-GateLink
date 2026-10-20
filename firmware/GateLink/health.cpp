@@ -14,9 +14,7 @@ static bool troubled = false;  // a run of problems is going on, since troubleSi
 static uint32_t troubleSince = 0;
 static int8_t driven = -1;  // D5 as driven: 1 HIGH, 0 LOW, -1 an input (fault_out off)
 
-// elapsed() is signed: a stamp left alone for 2^31 ms (~24.8 days) would read as in the future. A problem that goes
-// on that long (a dead link) moves its stamp along instead.
-#define STAMP_CAP_MS 0x40000000UL
+// elapsed() is signed (STAMP_CAP_MS, link.h): a problem that goes on for weeks (a dead link) moves its stamp along.
 
 static uint16_t evaluate(uint32_t now, bool linkUp) {
   bool decided = false, ac = true, reboots = appRebootLoop(), senseDark = false, stuck = false;

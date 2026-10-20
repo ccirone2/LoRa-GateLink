@@ -155,7 +155,7 @@ of D5 with the problems then as bits:
 | 32 | `fault` | the gate reports `fault` | the gate reads `fault` (both limits, held as above) |
 | 64 | `reboots` | in a reboot loop itself, or the gate's STATUS says it is (`remote.reboot_loop`) | in a reboot loop: three watchdog or brown-out resets in a row, each within an hour of the boot before, until a boot has run an hour (status `crash_resets`; from 0.15.0) |
 | 128 | `ctrl_sense` | IN2 has read the controller unpowered for 30 s while this board's supply (the same 12 V) is good: a dead IN2 opto or wire (with `ctrl_power_sense` and `ctrl_power_pmic` on; from 0.17.3) | — |
-| 256 | `stuck` | the gate has reported `between` for longer than its `travel_timeout_s`, timed from the STATUS that said so and again from any that may start a new move (a new target, a gate restart, the first after a link outage); not while the link is down (from 0.18.0) | the gate has read `between` for longer than `travel_timeout_s` since it left a limit or our last pulse (from 0.18.0) |
+| 256 | `stuck` | the gate has reported `between` for longer than its `travel_timeout_s`, timed from the STATUS that said so and again from any that may start a new move (a new target or command, a gate restart, the first after a link outage); not while the link is down (from 0.18.0) | the gate has read `between` for longer than `travel_timeout_s` since it left a limit or our last pulse (from 0.18.0) |
 
 A gate `stuck` has stopped short of both limits: an obstruction, the opener's entrapment lockout (which a command
 can't clear), a broken arm, or someone pressing stop. Only reported: the house already shows it not closed, and

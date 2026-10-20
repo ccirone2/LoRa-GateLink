@@ -58,8 +58,9 @@ static uint32_t missedUntil = 0;  // the sensor shows a missed move until then (
 static uint8_t lastEnd = GS_UNKNOWN;  // last limit reached (OPEN/CLOSED), held while BETWEEN
 static uint32_t betweenSince = 0;
 // What houseGateStuck times: betweenSince, but started over by any STATUS that may begin a move this board didn't see
-// begin (a new target, a gate restart, the first after a link outage), so it never runs ahead of the gate's own.
+// begin (a new target or command, a gate restart, the first after a link outage), so it never runs ahead of the gate's.
 static uint32_t stuckSince = 0;
+static uint16_t gateCmdId = 0;  // the gate's last command id taken (ST_CMD_ID), as its latest STATUS said
 
 static bool linkUp = false;
 static bool armed = false;      // user commands accepted
@@ -417,6 +418,7 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   uint8_t prevState = gateState;
   uint8_t prevResult = gateResult;
   uint8_t prevTarget = gateTarget;
+  uint16_t prevCmdId = gateCmdId;
   gateState = m.payload[ST_STATE];
   gateInputs = m.payload[ST_INPUTS];
   gateCause = m.payload[ST_CAUSE];
@@ -425,6 +427,7 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   gateRssi = (int16_t)getU16(m.payload + ST_RSSI);
   gateSnr = (int8_t)m.payload[ST_SNR];
   gateTarget = m.payload[ST_TARGET];
+  gateCmdId = getU16(m.payload + ST_CMD_ID);
   gateHeartbeat = getU16(m.payload + ST_HEARTBEAT);
   gateTravel = getU16(m.payload + ST_TRAVEL);
   PeerReport r = { gateRssi, gateSnr, 0, 0, 0, 0, 0 };
@@ -455,8 +458,9 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   if (gateState == GS_OPEN || gateState == GS_CLOSED) lastEnd = gateState;
   else if (gateState != GS_BETWEEN) lastEnd = GS_UNKNOWN;  // fault/no power (no AC, no limit): show not-closed
   if (gateState == GS_BETWEEN && prevState != GS_BETWEEN) betweenSince = now;
-  bool newTarget = gateTarget != prevTarget && gateTarget != GS_UNKNOWN;  // our pulse moving it on (one ending: not)
-  if (gateState == GS_BETWEEN && (prevState != GS_BETWEEN || !sameSession || !linkUp || newTarget)) stuckSince = now;
+  // Our pulse may have moved it on: a new target (one ending: not), or a command taken (the same target again).
+  bool moved = (gateTarget != prevTarget && gateTarget != GS_UNKNOWN) || gateCmdId != prevCmdId;
+  if (gateState == GS_BETWEEN && (prevState != GS_BETWEEN || !sameSession || !linkUp || moved)) stuckSince = now;
   // Command overridden (e.g. siren holding the gate open): resync the Shelly right away. A mismatch held off through
   // the travel (holdingTravel()) never started: check it as soon as nothing is in the way.
   if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT) {

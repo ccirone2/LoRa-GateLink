@@ -130,6 +130,10 @@ bool houseCtrlSenseDark() {
   return senseDark;
 }
 
+bool houseGateStuck(uint32_t now) {
+  return haveStatus && gateState == GS_BETWEEN && elapsed(now, betweenSince, travelTimeoutMs());
+}
+
 // The gate's clock now, as far as its STATUS tells: false with no reading from its current session (it just restarted,
 // or its link did, and hasn't reported yet), or none for CLOCK_MAX_AGE_MS (capStamps).
 static bool gateClockNow(uint32_t now, uint64_t &clock) {

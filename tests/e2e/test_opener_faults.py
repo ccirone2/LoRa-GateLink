@@ -199,7 +199,8 @@ def test_power_loss_mid_travel(rig):
 
 
 def test_jammed_gate(rig):
-    """The gate leaves closed and jams: travel timeout, house ends showing open (not closed)."""
+    """The gate leaves closed and jams: travel timeout, house ends showing open (not closed), and once it has been
+    between for travel_timeout_s both boards list health stuck (from 0.18.0)."""
     rig.sim.fault("stuck")
     rig.expect_commands(1)
     m = rig.mark()
@@ -208,10 +209,13 @@ def test_jammed_gate(rig):
     rig.wait_log("gate", "gate_state", a=GS["between"], b=CAUSE["lora"], since=m, timeout=5)
     # K2 opens at once; K1 holds "closed" until the house's own travel timeout, then shows open.
     rig.wait_house(10, gate="between", io__k2=False, io__k1=False)
+    assert "stuck" not in rig.gate.status()["health"] and "stuck" not in rig.house.status()["health"]
     t = rig.wait_log("gate", "travel_timeout", a=GS["open"], since=m, timeout=TRAVEL_TIMEOUT_S + 5)
     rig.wait_gate("between", last_result="timeout", timeout=5)
     rig.wait_house(10, gate="between", io__k1=True, io__k2=False, ctrl=True)
     rig.latency("command -> travel timeout reported", t["t"] - rig.logs("house", "cmd_sent", since=m)[0]["t"])
+    rig.wait_for(lambda: "stuck" in rig.gate.status()["health"] or None, 10, "gate health stuck")
+    rig.wait_for(lambda: "stuck" in rig.house.status()["health"] or None, 10, "house health stuck")
 
 
 def test_opener_ignores_command(rig):

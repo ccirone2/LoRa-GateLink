@@ -106,16 +106,16 @@ model (payloads are encrypted since 0.16.0). C2 uses this data.
 
 ### F3: Tell the alarm what kind of trouble it is
 
-**Goal.** The homeowner's alarm app says which problem the gate has (jammed, AC lost, link lost, a board stuck
+**Goal.** The homeowner's alarm app says which problem the gate has (stuck, AC lost, link lost, a board stuck
 rebooting), not only that it needs attention, and covers every problem that leaves the gate unattended
 (`jamming-hides-state-until-link-timeout`).
 
 **Today.** Since 0.14.0 D5 (`fault_out`) drives one second 2GIG sensor for radio, link, AC, `no_power` and `fault`
 problems, since 0.15.0 a reboot loop at either board (health `reboots`), and since 0.17.3 a dead house IN2 opto
-(`ctrl_sense`), all alike.
+(`ctrl_sense`), and since 0.18.0 a gate stopped between its limits for longer than its `travel_timeout_s` (`stuck`),
+all alike.
 
 **How.**
-- Add a travel timeout (jam): the house already gets `last_result` in STATUS.
 - A sensor per problem class, e.g. AC lost vs link lost.
 - Hardware: an AQY212EH PhotoMOS (~$2) could replace the relay module, plus $25–35 per extra 2GIG sensor. It needs
   up to 3 mA (5–10 mA recommended) and the SAMD core leaves high drive strength off, so either set it on D5 with
@@ -124,6 +124,14 @@ problems, since 0.15.0 a reboot loop at either board (health `reboots`), and sin
 **Open questions.** How long a jam stays latched; how many sensors are worth their cost. Settled 2026-10-17 (F14): the
 controller losing its power isn't a problem of its own (Alarm.com already shows the Z-Wave device unreachable), but IN2
 disagreeing with the board's supply is (`ctrl_sense`).
+
+Decided 2026-10-19 (`/implement`, verdict *build smaller*): the jam part built as health `stuck` (0.18.0), the gate
+`between` for longer than `travel_timeout_s`, on each board from its own view (no STATUS change), cleared at once by a
+limit: it needs no latch, and it catches a gate stopped by anyone, not only after our command. Not built: a trouble
+for our command timing out with the gate still at its limit (the opener locked out, a photo-eye blocked, another
+controller holding an input). Telling that from an override to the other limit needs a new STATUS result (both boards
+together), the alarm switch already flips back to the real state when it happens, and a blocked photo-eye would make
+it a nuisance until the next command succeeds.
 
 ### F4: Warn before the opener's battery or mechanics fail
 

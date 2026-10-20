@@ -24,6 +24,8 @@
 // closed waits too, the time over for each reading: the closed limit's NC contact reads closed until a restarting
 // opener energizes its AUX2 relay, and IN3 may settle after it. On battery that costs a close 3 s of reading not closed.
 #define BETWEEN_HOLD_MS 500
+// elapsed() is signed: a stamp left alone for 2^31 ms (~24.8 days) would read as in the future (a gate left between).
+#define STAMP_CAP_MS 0x40000000UL
 
 static uint8_t state = GS_UNKNOWN;
 static uint8_t cause = CAUSE_NONE;
@@ -42,6 +44,7 @@ static uint32_t houseSession = 0;  // the house session we last reported to
 static bool houseVerified = false;  // the link had verified the house at the last pass
 static bool settling = true;  // after boot: tracking the inputs silently, see BOOT_SETTLE_MS
 static uint32_t bootAt = 0, steadySince = 0;
+static uint32_t betweenSince = 0;  // while the state is between: since when (at most STAMP_CAP_MS ago)
 static uint32_t heldAt = 0;  // when the inputs started reading a held move (heldTo) we don't report yet (0 = not)
 static uint8_t heldTo = GS_UNKNOWN;
 // Both limits have read at once since the open limit last read alone: the closed limit isn't trusted (fault). It comes
@@ -172,7 +175,7 @@ void gateBegin() {
   state = readState();
   cause = CAUSE_NONE;
   settling = true;
-  bootAt = steadySince = millis();
+  bootAt = steadySince = betweenSince = millis();
   clockBase = bootAt;
   clockOrigin = ((uint64_t)radioRandom32() << 15 ^ radioRandom32()) & ((1ULL << 47) - 1);
 }
@@ -257,6 +260,8 @@ void gateLoop(uint32_t now) {
   } else if (spareChanged) {
     sendStatus(now);
   }
+  if (state != GS_BETWEEN) betweenSince = now;
+  else if (elapsed(now, betweenSince, STAMP_CAP_MS)) betweenSince = now - STAMP_CAP_MS;
 
   // The house verified: a new session (it rebooted: its command ids restart, so forget the last one), or ours started
   // over (a key or radio setting) and verified it again. Report now either way, so the house restores K1/K2 and has our
@@ -484,6 +489,10 @@ uint8_t gateCurrentState() {
 
 bool gateAcPresent() {
   return acPower();
+}
+
+bool gateStuck(uint32_t now) {
+  return state == GS_BETWEEN && elapsed(now, betweenSince, (uint32_t)cfg.travel_timeout_s * 1000);
 }
 
 void gateDebugRebootAfterCmd() {

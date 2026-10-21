@@ -224,7 +224,8 @@ ring then starts empty), and from there into a journal in the SPI
 flash (sectors 20–35, about 3,500 entries; [protocol.md](protocol.md#spi-flash)), so a power cut loses only the
 entries not written yet. They are written 14 to a record, once 14 are waiting or the oldest has waited 10 minutes, at
 most once a minute and never while a relay pulses: each write takes the radio off the air ~0.5 s. After a reset other
-than power-on, what the boot before left unwritten goes out at once. `log.get` reads the ring; `log.get` with `before`
+than power-on, what the boot before left unwritten starts going out at once: a record at once, the rest a
+minute apart. `log.get` reads the ring; `log.get` with `before`
 pages back through the journal, a record at a time, by a cursor (each record's sequence number), so records written
 meanwhile don't shift the pages (each read ~0.5 s off the air too). Entries from an earlier boot
 carry its number (`boot`, as `info.boot_count`), and `t` is that boot's uptime. Floods (`mac_fail`, `replay`,

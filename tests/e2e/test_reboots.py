@@ -26,28 +26,37 @@ def test_gate_reboot_at_rest(rig):
 
 def test_event_log_kept_across_a_reboot(rig):
     """The event log's ring survives a reset on the real board (its bootloader runs in between), and what wasn't in the
-    flash journal yet goes there at once after the boot (0.19.0 on)."""
+    flash journal yet starts going there at once after the boot (0.19.0 on): a record's worth (14 entries, oldest
+    first) at once, the rest a minute apart. So the entry looked for is the oldest one not written yet."""
     before = rig.gate.log_get()
     if "boot" not in before:
         pytest.skip("firmware before 0.19.0 keeps no event log across resets")
     rig.expect_commands(0)
-    boot0, last = before["boot"], before["log"][-1]
+    boot0, ring = before["boot"], before["log"]
+
+    def same(e, f):
+        return e["ev"] == f["ev"] and e["t"] == f["t"] and e["a"] == f["a"]
+
+    # The journal's newest entry, found in the ring: the one after it is the oldest not written (none: the ring's
+    # oldest, as the rest has left it); the ring's newest when nothing waits.
+    written = rig.gate.log_get(before=0xFFFFFFFF)["log"]
+    k = next((k for k in range(len(ring) - 1, -1, -1) if written and same(ring[k], written[-1])), -1)
+    target = ring[min(k + 1, len(ring) - 1)]
     rig.reboot("gate")
     rig.wait_for(lambda: rig.gate.status()["link"]["verified"] or None, 20, "gate session verified")
     after = rig.gate.log_get()
     assert after["boot"] == (boot0 + 1) & 0xFFFFFFFF
     kept = [e for e in after["log"] if e.get("boot") == boot0 & 0xFFFF]
-    assert any(e["ev"] == last["ev"] and e["t"] == last["t"] for e in kept), "the boot before's newest entry is kept"
+    assert any(same(e, ring[-1]) for e in kept), "the boot before's newest entry is kept"
     time.sleep(2)  # the journal write of the boot before's unsaved entries: at the first loop pass not in a pulse
     cursor, found = 0xFFFFFFFF, False
     for _ in range(6):
         rec = rig.gate.log_get(before=cursor)
         if not rec["log"]:
             break
-        found = found or any(e.get("boot") == boot0 & 0xFFFF and e["ev"] == last["ev"] and e["t"] == last["t"]
-                             for e in rec["log"])
+        found = found or any(e.get("boot") == boot0 & 0xFFFF and same(e, target) for e in rec["log"])
         cursor = rec["seq"]
-    assert found, "the boot before's newest entry is in the flash journal"
+    assert found, "the boot before's oldest unwritten entry is in the flash journal"
 
 
 def test_gate_reboot_mid_travel(rig):

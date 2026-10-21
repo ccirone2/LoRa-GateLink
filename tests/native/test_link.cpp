@@ -85,6 +85,75 @@ TEST(lost_ack_is_answered_from_the_memo_not_reprocessed) {
   CHECK(s.house.acks.back().acked);
 }
 
+TEST(every_resend_is_answered_at_the_most_retries) {
+  // The house at the most resends there are (retries 10), every ACK lost but the last: each resend is re-ACKed from
+  // the memo, so the cap on re-ACKs (0.19.1, F21) never costs a real retry its answer.
+  Sim s;
+  s.house.cfg.retries = 10;
+  CHECK(s.handshake());
+  s.drop = [&](const AirFrame &f) { return f.from == 1 && f.type() == MSG_ACK && s.sent(s.house, MSG_CMD).size() <= 10; };
+  s.house.sendReliable(SLOT_CMD, MSG_CMD, CMD_OPEN, 10000);
+  CHECK(s.runUntil([&] { return !s.house.pending(SLOT_CMD); }, 11000));
+  CHECK_EQ(s.sent(s.house, MSG_CMD).size(), 11);
+  CHECK_EQ(s.sent(s.gate, MSG_ACK).size(), 11);
+  CHECK(s.house.acks.back().acked);
+  CHECK_EQ(s.gate.rxCount(MSG_CMD), 1);
+  CHECK_EQ(s.gate.stats().replay, 0);
+}
+
+TEST(replayed_copies_of_a_memod_frame_are_answered_at_most_10_times) {
+  // A recorded frame whose seq is still in the ACK memo, replayed over and over: the first 10 copies (as many as a
+  // sender's resends can be) are re-ACKed, the rest are replays, counted and logged, and draw no transmission.
+  Sim s;
+  CHECK(s.handshake());
+  s.house.sendReliable(SLOT_CMD, MSG_CMD, CMD_OPEN, 10000);
+  CHECK(s.runUntil([&] { return !s.house.pending(SLOT_CMD); }, 5000));
+  CHECK_EQ(s.sent(s.gate, MSG_ACK).size(), 1);
+  Bytes f = last(s.sent(s.house, MSG_CMD))->b;
+  for (int i = 0; i < 14; i++) {
+    s.inject(s.gate, f);
+    s.run(300);
+  }
+  CHECK_EQ(s.gate.rxCount(MSG_CMD), 1);
+  CHECK_EQ(s.sent(s.gate, MSG_ACK).size(), 11);
+  CHECK_EQ(s.gate.stats().replay, 4);
+  CHECK_EQ(s.gate.count(EV_REPLAY), 4);
+}
+
+TEST(held_copies_count_toward_the_same_10) {
+  // A CFG_SET answered later (linkAckLater): the house's 10 resends are held quietly, and 3 replayed copies on top
+  // are replays, counted and logged. The answer, once given, keeps that count: no resend is left to re-ACK.
+  Sim s;
+  s.house.cfg.retries = 10;
+  CHECK(s.handshake());
+  uint32_t heldSeq = 0;
+  s.gate.onRx = [&](Node &n, const RxMsg &m) {
+    if (m.type != MSG_CFG_SET) return;
+    heldSeq = m.seq;
+    n.ackLater(m.seq);
+  };
+  s.house.sendReliable(SLOT_CFG, MSG_CFG_SET, { 9, 4, 0, 0, 0 }, 10000);
+  CHECK(s.runUntil([&] { return s.sent(s.house, MSG_CFG_SET).size() == 11; }, 11000));
+  s.run(300);
+  CHECK_EQ(s.gate.stats().replay, 0);
+  Bytes f = last(s.sent(s.house, MSG_CFG_SET))->b;
+  for (int i = 0; i < 3; i++) {
+    s.inject(s.gate, f);
+    s.run(300);
+  }
+  CHECK_EQ(s.gate.stats().replay, 3);
+  CHECK_EQ(s.gate.count(EV_REPLAY), 3);
+  CHECK(s.sent(s.gate, MSG_ACK).empty());
+  s.gate.ack(heldSeq, RES_OK);
+  s.run(300);
+  CHECK_EQ(s.sent(s.gate, MSG_ACK).size(), 1);
+  s.inject(s.gate, f);
+  s.run(300);
+  CHECK_EQ(s.sent(s.gate, MSG_ACK).size(), 1);
+  CHECK_EQ(s.gate.stats().replay, 4);
+  CHECK_EQ(s.gate.rxCount(MSG_CFG_SET), 1);
+}
+
 TEST(ack_later_holds_retransmits_quietly) {
   // The gate takes a CFG_SET but answers only later (a relay pulse running, 0.13.2): the house's retries are
   // neither re-processed, answered nor counted as replays, and the late ACK carries the real result.

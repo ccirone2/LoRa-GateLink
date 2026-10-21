@@ -49,14 +49,13 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | 17 | F16 | Ignore a Shelly that reboots without losing power | M | |
 | 18 | F5 | Change radio settings without stranding the link | L | |
 | 19 | F13 | Work with controllers that pulse | L | |
-| 20 | F21 | Count replay floods, and stop answering them | S | |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 21 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
-| 22 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 23 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 24 | C4 | Check a board still runs genuine firmware | M | |
-| 25 | B6 | Turn field incidents into tests | M | |
-| 26 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 20 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
+| 21 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 22 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
+| 23 | C4 | Check a board still runs genuine firmware | M | |
+| 24 | B6 | Turn field incidents into tests | M | |
+| 25 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -313,22 +312,6 @@ remote.*, debug.*) need proof of the key, leaving status, logs and history open.
 
 **How.** An enclosure switch at the gate (IN4, or an H1 input), reported in STATUS, shown by the house as
 needs-attention and logged.
-
-### F21: Count replay floods, and stop answering them
-
-**Goal.** A replay flood is measured over days, not only seen in the event log, and costs the board no airtime
-(`replay-flood-erases-evidence-and-reflects`).
-
-**Today.** Since 0.19.0 the event log coalesces a flood into a few entries with their counts, kept in the flash
-journal, and the hourly link history counts MAC failures, but not replays. A replayed frame whose seq is still in
-the ACK memo is ACKed again every time (`resendAck`, `link.cpp`), without a limit.
-
-**How.**
-- Count replays in the history bucket (an `HLOG_FMT` bump; `HIST_DEPTH` is RAM-bound: check `free_ram`).
-- Re-ACK a memo'd seq at most once a second, as HELLO answers are.
-
-**Cost / risk.** Small. The re-ACK limit must not cost a real retry its ACK: the sender retries over seconds, so one
-answer a second still reaches it. Left out of the event log (0.19.0) to keep that change to the log.
 
 ## Web console
 

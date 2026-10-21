@@ -143,14 +143,15 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `freshness` | A command runs only before its deadline, which the house stamps in the gate's clock (64 bits: no wrap brings an old one back): a late, played-back or undated one never pulses | `link`, `robustness` |
 | `link-auth` | A session verifies only on an answer to its whole 128-bit challenge; payloads are encrypted under a key derived from the current link key, never an older one | `tests` (`test_link.cpp`) |
 | `missed-move` | A move the house never heard (the gate's count of departures from closed advanced while the sensor showed closed) opens the sensor for 5 s; nothing else does: a move it heard, a link loss that already opened it, a gate reboot | `link` |
+| `replay` | A frame is taken at most once; a copy of one whose seq is still in the ACK memo is re-ACKed at most 10 times (a sender's most resends), then counted as a replay and not answered | `link` |
 | `busy-channel` | Listen-before-talk: frames get through a busy neighbour's gaps, and never start into a frame heard | `link` |
-| `event-log` | The event log's ring survives every reset but power-on and goes to the flash journal at once after one; a flood is coalesced into one entry with its count and the journal is written at most once a minute | `eventlog` |
+| `event-log` | The event log's ring survives every reset but power-on and starts going to the flash journal at once after one; a flood is coalesced into one entry with its count and the journal is written at most once a minute | `eventlog` |
 | `history-kept` | Each completed history bucket is written to the flash once (a failing chip costs one try per bucket) and a reset loads them back as they were; a write torn by a power cut is skipped and nothing else lost; the log wraps by erasing only its oldest sector; `hist.clear` clears the flash too | `history` |
 | `fault-out` | D5 (`fault_out`): untouched while off; HIGH only while healthy, LOW once a problem has lasted `fault_hold_s` and at once after a reset until the board has decided; recovery raises it at once; it commands nothing | `fault_out`, `reboots` |
 
 ## Mutation testing (`mutations.json`, `tools/mutate.py`)
 
-A test that can't fail proves nothing. `mutations.json` lists 183 ways to break the invariants above, each an exact
+A test that can't fail proves nothing. `mutations.json` lists 188 ways to break the invariants above, each an exact
 text edit to the firmware (`find` must occur once) with the invariant it breaks, why, and the tests that killed it
 (`killed_by`). `tools/mutate.py` applies each to a scratch copy of `firmware/GateLink`, rebuilds the host tests
 against it (`make FW=`) and runs its `killed_by` tests, then, if they all pass, the whole suite: a mutation is

@@ -26,28 +26,44 @@ def test_gate_reboot_at_rest(rig):
 
 def test_event_log_kept_across_a_reboot(rig):
     """The event log's ring survives a reset on the real board (its bootloader runs in between), and what wasn't in the
-    flash journal yet goes there at once after the boot (0.19.0 on)."""
+    flash journal yet starts going there at once after the boot (0.19.0 on): a record's worth (14 entries, oldest
+    first) at once, the rest a minute apart. So the first record written after the reset starts with the boot before's
+    entries, whenever any were left unwritten."""
     before = rig.gate.log_get()
     if "boot" not in before:
         pytest.skip("firmware before 0.19.0 keeps no event log across resets")
     rig.expect_commands(0)
-    boot0, last = before["boot"], before["log"][-1]
+    boot0, newest = before["boot"], before["log"][-1]
+    # The journal's newest record before the reset (seq 0: none). Read twice: one read in a full suite once came back
+    # with an older record (TODO.md), which made every record since look new. (A record written between the reads
+    # differs too.)
+    tops = [rig.gate.log_get(before=0xFFFFFFFF) for _ in range(2)]
+    top = max(tops, key=lambda r: r.get("seq", 0))
+    seq0 = top.get("seq", 0)
+    if tops[0].get("seq", 0) != tops[1].get("seq", 0):
+        rig.timeline.add("test", "note", text=f"journal newest: seq {tops[0].get('seq')}, then {tops[1].get('seq')}")
     rig.reboot("gate")
     rig.wait_for(lambda: rig.gate.status()["link"]["verified"] or None, 20, "gate session verified")
     after = rig.gate.log_get()
     assert after["boot"] == (boot0 + 1) & 0xFFFFFFFF
     kept = [e for e in after["log"] if e.get("boot") == boot0 & 0xFFFF]
-    assert any(e["ev"] == last["ev"] and e["t"] == last["t"] for e in kept), "the boot before's newest entry is kept"
+    assert any(e["ev"] == newest["ev"] and e["t"] == newest["t"] for e in kept), "the boot before's newest entry is kept"
     time.sleep(2)  # the journal write of the boot before's unsaved entries: at the first loop pass not in a pulse
-    cursor, found = 0xFFFFFFFF, False
-    for _ in range(6):
+    # The records written since (newest first, back to the one that was newest before the reset).
+    since, cursor, reached = [], 0xFFFFFFFF, False
+    for _ in range(8):
         rec = rig.gate.log_get(before=cursor)
-        if not rec["log"]:
+        if not rec["log"] or rec["seq"] <= seq0:
+            reached = True
             break
-        found = found or any(e.get("boot") == boot0 & 0xFFFF and e["ev"] == last["ev"] and e["t"] == last["t"]
-                             for e in rec["log"])
+        since.append(rec)
         cursor = rec["seq"]
-    assert found, "the boot before's newest entry is in the flash journal"
+    assert since, f"a record written after the reset (newest before it: seq {seq0})"
+    assert reached, f"the walk back reaches the record from before the reset (seq {seq0}): {[r['seq'] for r in since]}"
+    first = since[-1]["log"]
+    # Nothing left unwritten (the boot before's newest entry was already in the journal): it starts with this boot's.
+    none_left = any(e["ev"] == newest["ev"] and e["t"] == newest["t"] for e in top["log"])
+    assert first[0].get("boot") == boot0 & 0xFFFF or (none_left and first[0]["ev"] == "boot"),         f"the first record after the reset starts with the boot before's entries: {first}"
 
 
 def test_gate_reboot_mid_travel(rig):

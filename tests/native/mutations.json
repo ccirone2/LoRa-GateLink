@@ -3126,5 +3126,20 @@
     "replace": "  return (k->unsaved >= 1 || now - savedAt >= LOG_SAVE_GAP_MS) && ("
    }
   ]
+ },
+ {
+  "name": "link_f21_reack_without_limit",
+  "invariant": "replay",
+  "why": "F21: a memo'd seq is re-ACKed for every copy, so a replay flood makes the board transmit an ACK for each",
+  "killed_by": [
+   "link_replayed_command_in_the_ack_memo_is_answered_at_most_10_times"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "      if (m.reacks >= REACK_MAX) return false;\n",
+    "replace": ""
+   }
+  ]
  }
 ]

@@ -1281,6 +1281,7 @@ def hlog_slots(repo):
 C, CON, PRO, HW, BT, DEV = ("CLAUDE.md", "docs/console.md", "docs/protocol.md", "docs/hardware.md",
                             "docs/bench-testing.md", "docs/development.md")
 ARCH = "docs/architecture.md"
+THR, NAT = "docs/threat-model.md", "tests/native/README.md"
 R, E2E, SET = "README.md", "tests/e2e/README.md", "web/js/settings.js"
 CI, REL, BENCH = ".github/workflows/ci.yml", ".github/workflows/release.yml", "tests/e2e/gatelink/bench.py"
 LIBS = (("LoRa", "`LoRa` (sandeepmistry)"), ("Crypto", "`Crypto` (rweather)"),
@@ -1328,6 +1329,10 @@ FACTS = [
       Q(ARCH, r"answers at most one (\w+) second from the verified session", s)),
     Fact("HELLO interval cap", f"{FW}/link.cpp", value=hello_base_max,
          quotes=(Q(ARCH, r"the base doubling to (\d+) s", s),)),
+    D("REACK_MAX", f"{FW}/link.cpp", Q(ARCH, r"`REACK_MAX` \((\d+)\)"), Q(THR, r"re-ACKed \(or held, [^)]*\) at most (\d+) times"),
+      Q(NAT, r"re-ACKed at most (\d+) times")),
+    Fact("retries' maximum", f"{FW}/config.cpp", value=lambda repo: next(p.max for p in parse_params(repo) if p.name == "retries"),
+         quotes=(Q(f"{FW}/link.cpp", r"#define REACK_MAX (\d+)"), Q(ARCH, r"`retries` is at most\s+(\d+)"))),
     D("TXQ_LEN", f"{FW}/link.cpp", Q(PRO, r"queued (\w+) deep"), Q(ARCH, r"wait in a (\d+)-deep queue")),
     D("TAG_LEN", f"{FW}/link.cpp", Q(PRO, r"truncated to (\d+) bytes"), Q(ARCH, r"truncated to (\d+) bytes")),
     D("RX_AGE_CAP_MS", f"{FW}/link.cpp", Q(CON, rf"tops out at ~{NUM} days", lambda v: v / 86400000, approx=True)),

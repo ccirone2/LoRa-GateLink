@@ -108,9 +108,11 @@ as soon as a frame heard ends (within `CAPPED_SLOT_MS`, 3 ms; mid-gap it would r
 backoff has passed after all, and a busy channel still holds it. Counters: status `link.lbt_defers`/`lbt_forced`.
 
 **ACK memo.** Already-accepted retransmits are re-ACKed from an ACK memo, not re-processed, at most `REACK_MAX` (10)
-times each since 0.19.1: as many resends as a sender can make (`retries` is at most 10), so a real one always gets
-its answer, while further copies are replays (counted, logged `replay`) and draw no ACK, so a recorded frame replayed
-over and over doesn't make the board transmit for each (not one re-ACK a second, which the first resends, 0.3 s
+times each since 0.19.1 (held copies, below, count too): as many resends as a sender can make (`retries` is at most
+10), so a real one always gets its answer, while further copies are replays (counted, logged `replay`) and draw no
+ACK, so a recorded frame replayed over and over doesn't make the board transmit for each. Replays sent before a real
+resend can take its place, but an attacker who can keep the sender from hearing the first ACK could as well jam
+every ACK (not one re-ACK a second, which the first resends, 0.3 s
 apart, would run into). A message answered later
 (`linkAckLater`: the gate's remote config writes during a relay pulse) holds its retransmits quietly until its
 `linkAck`; one refused (`linkRefuse`: a fifth such write) is neither ACKed nor remembered, as if lost, so its resend

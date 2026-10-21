@@ -263,7 +263,7 @@ _JSON_KEY = re.compile(r'JsonObject\s+(?P<obj>\w+)\s*=\s*(?P<op>\w+)\["(?P<ok>\w
                        r'|JsonObject\s+(?P<item>\w+)\s*=\s*(?P<ia>\w+)\.add<JsonObject>\(\)'
                        r'|(?P<var>\w+)\["(?P<key>\w+)"\]'
                        r'|(?P<nvar>\w+)\[(?P<names>\w+)\[\w+\]\]'
-                       r'|\b(?P<call>[A-Za-z_]\w*)\(\s*(?P<carg>\w+)\s*\)')
+                       r'|\b(?P<call>[A-Za-z_]\w*)\(\s*(?P<carg>\w+)\s*[,)]')
 
 
 def json_tree(body, root, resolve=None):
@@ -1026,7 +1026,7 @@ def command_blocks(repo):
 
 def reply_tree(repo, block):
     """Keys a command's reply carries: res["..."] in its branch, and what the helpers it hands `res` write."""
-    tree = json_tree(block, "res")
+    tree = json_tree(block, "res", helpers(repo))
     for m in re.finditer(r"\b(\w+)\(\s*res\s*(?:\.as<JsonObject>\(\)\s*)?[,)]", block):
         try:
             tree.update(fw_json(repo, m.group(1))[1])

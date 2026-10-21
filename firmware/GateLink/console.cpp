@@ -46,6 +46,19 @@ struct LineWriter {
 
 static uint32_t usbCutLines = 0;
 
+// A line out on a port: after a cut line, a newline first, so the host drops only the cut one (ConsolePort::lineCut).
+static LineWriter lineBegin(ConsolePort &p) {
+  LineWriter w = { p.id };
+  if (p.lineCut) w.write('\n');
+  return w;
+}
+
+static void lineEnd(ConsolePort &p, LineWriter &w) {
+  w.write('\n');
+  p.lineCut = !conIoLineEnd(p.id);
+  if (p.lineCut && p.id == CON_USB) usbCutLines++;
+}
+
 // A reply goes back to the port that asked (`to`), events to every open port.
 static void send(JsonDocument &doc, ConsolePort *to = nullptr) {
   ConsolePort *const ports[2] = { &usbPort, &uartPort };
@@ -55,8 +68,7 @@ static void send(JsonDocument &doc, ConsolePort *to = nullptr) {
   bool serialized = false;
   for (ConsolePort *p : ports) {
     if ((to && p != to) || !conIoOpen(p->id)) continue;
-    LineWriter w = { p->id };
-    if (p->lineCut) w.write('\n');
+    LineWriter w = lineBegin(*p);
     if (!fits) {
       serializeJson(doc, w);
     } else {
@@ -64,10 +76,51 @@ static void send(JsonDocument &doc, ConsolePort *to = nullptr) {
       serialized = true;
       w.write((const uint8_t *)out, n);
     }
-    w.write('\n');
-    p->lineCut = !conIoLineEnd(p->id);
-    if (p->lineCut && p->id == CON_USB) usbCutLines++;
+    lineEnd(*p, w);
   }
+}
+
+static void fillEntry(JsonObject e, const LogEntry &le, uint16_t boot) {
+  e["t"] = le.t;
+  e["ev"] = logCodeName(le.code);
+  e["a"] = le.a;
+  e["b"] = le.b;
+  if (le.rep) e["n"] = le.rep + 1;
+  if (le.boot != boot) e["boot"] = le.boot;
+}
+
+// Writes an object but for its closing brace, so members can follow it.
+struct OpenObjectWriter {
+  LineWriter &w;
+  int held;  // the last byte, not written yet (-1: none)
+  size_t write(uint8_t c) {
+    if (held >= 0) w.write((uint8_t)held);
+    held = c;
+    return 1;
+  }
+  size_t write(const uint8_t *data, size_t n) {
+    for (size_t i = 0; i < n; i++) write(data[i]);
+    return n;
+  }
+};
+
+// log.get's reply with the ring: res (id, ok, now, boot) plus the `log` array, streamed an entry at a time. Built as one
+// document, 64 entries from an earlier boot (each with `boot`; `n` too when coalesced) took a slot pool (~1 KB) of
+// heap more than config.get, the largest reply otherwise (free_ram 1283 B against 2315 B, 0.19.0 on the bench).
+static void sendLogRing(JsonDocument &res, ConsolePort &to, uint16_t boot) {
+  if (!conIoOpen(to.id)) return;
+  LineWriter w = lineBegin(to);
+  OpenObjectWriter head = { w, -1 };
+  serializeJson(res, head);
+  w.write((const uint8_t *)",\"log\":[", 8);
+  JsonDocument e;
+  for (size_t i = 0; i < logCount(); i++) {
+    if (i) w.write(',');
+    fillEntry(e.to<JsonObject>(), logAt(i), boot);
+    serializeJson(e, w);
+  }
+  w.write((const uint8_t *)"]}", 2);
+  lineEnd(to, w);
 }
 
 uint32_t consoleUsbCutLines() {
@@ -232,31 +285,27 @@ static void handle(JsonDocument &req, ConsolePort &from) {
   } else if (!strcmp(cmd, "log.get")) {
     // The ring in RAM, or with `before` the flash journal's newest record before that lseq (one FlashAccess: blocksLoop).
     uint16_t boot = (uint16_t)appBootCount();
-    JsonArray arr = res["log"].to<JsonArray>();
-    auto add = [&](const LogEntry &le) {
-      JsonObject e = arr.add<JsonObject>();
-      e["t"] = le.t;
-      e["ev"] = logCodeName(le.code);
-      e["a"] = le.a;
-      e["b"] = le.b;
-      if (le.rep) e["n"] = le.rep + 1;
-      if (le.boot != boot) e["boot"] = le.boot;
-    };
+    res["now"] = millis();
+    res["boot"] = boot;
     JsonVariant before = req["before"];
-    if (!before.isNull() && (!before.is<uint32_t>() || !before.as<uint32_t>())) {
+    if (before.isNull()) {
+      sendLogRing(res, from, boot);
+      return;
+    }
+    if (!before.is<uint32_t>() || !before.as<uint32_t>()) {
       res["ok"] = false;
       res["error"] = "before must be 1..4294967295";
-    } else if (!before.isNull()) {
+    } else {
+      JsonArray arr = res["log"].to<JsonArray>();
       LogEntry entries[ELOG_PER_REC];
       uint32_t seq = 0;
       uint8_t n = evLogGet(before.as<uint32_t>(), entries, seq);
-      for (uint8_t i = 0; i < n; i++) add(entries[i]);
+      for (uint8_t i = 0; i < n; i++) {
+        JsonObject e = arr.add<JsonObject>();
+        fillEntry(e, entries[i], boot);
+      }
       if (n) res["seq"] = seq;
-    } else {
-      for (size_t i = 0; i < logCount(); i++) add(logAt(i));
     }
-    res["now"] = millis();
-    res["boot"] = boot;
   } else if (!strcmp(cmd, "hist.get")) {
     histGet(res.as<JsonObject>(), req["from"] | -1, req["n"] | HIST_PAGE);
   } else if (!strcmp(cmd, "hist.clear")) {

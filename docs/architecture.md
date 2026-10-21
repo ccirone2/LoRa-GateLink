@@ -245,6 +245,12 @@ endpoint's BK1RDY is clear: streamed per character, bytes went missing, and a lo
 `USBDevice.send()` wait on a transfer-complete flag its own USB interrupt clears, which dropped the rest of the line
 after 70 ms. Status `usb_cut` counts lines lost on USB.
 
+A reply is built as one `JsonDocument` on the heap, whose high-water mark is what status `free_ram` reports. The
+largest is `config.get` (its setting names linked, not copied), except that `log.get`'s ring of 64 entries is streamed
+one entry's document at a time (`sendLogRing`, 0.19.1): built whole, a ring of entries from an earlier boot (each with
+its `boot`) took another ~1 KB slot pool and left 1283 B. The suite's preflight builds each of these replies before
+reading `free_ram`.
+
 This is the contract the web console depends on (and its fake board in `tests/web/fake-serial.js`), as do the e2e
 suite and `tools/gatelink_client/`; change them together, with [console.md](console.md) (`tools/check_contract.py`
 checks the enums, log event names and commands against the suite and that doc).

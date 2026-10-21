@@ -128,6 +128,70 @@ TEST(event_log_ring_survives_a_reset_and_goes_to_the_journal_at_once) {
   }
 }
 
+// [event-log] The ring reply is streamed an entry at a time (0.19.1: as one document, a ring of earlier-boot entries
+// took ~1 KB of heap more than config.get): a full ring from the boot before, coalesced floods among it, still comes
+// back whole and in order, with the request's id, `now` and `boot`.
+TEST(event_log_full_ring_from_the_boot_before_reads_back_whole) {
+  const size_t RING = 64;  // LOG_SIZE
+  Site w;
+  w.commission();
+  for (int i = 0; i < 16; i++) {
+    w.user(i % 2 == 0);
+    CHECK(w.runUntil([&] { return w.houseSees() == (i % 2 == 0 ? GS_OPEN_ : GS_CLOSED_); }, 20000));
+    w.run(10000);  // past the sync window the move opened
+  }
+  for (int i = 0; i < 3; i++) {  // replays at the gate: one entry, n 3
+    CHECK(w.house.request("debug.replay")["sent"] == true);
+    w.run(500);
+  }
+  uint32_t boot0 = bootCount(w.gate);
+  std::vector<Ev> before = ring(w.gate);
+  CHECK_EQ(before.size(), (size_t)RING);
+  w.gate.reset(PM_RCAUSE_SYST);
+  CHECK(w.runUntil([&] { return w.gate.running(); }, 2000));
+  w.run(3000);
+  JsonDocument r = w.gate.request("log.get");
+  CHECK(r["ok"] == true);
+  CHECK(!r["id"].isNull());
+  CHECK_EQ(r["boot"].as<uint32_t>(), boot0 + 1);
+  CHECK(r["now"].as<uint32_t>() > 0);
+  std::vector<Ev> after = entries(r);
+  CHECK_EQ(after.size(), (size_t)RING);
+  // The boot before's entries, as they were, in order, then this boot's.
+  size_t k = 0;
+  while (k < after.size() && after[k].boot == (int)boot0) k++;
+  CHECK(k > RING / 2);
+  if (k == 0) return;
+  CHECK(after[k - 1].ev == "replay" && after[k - 1].n == 3);
+  for (size_t i = 0; i < k; i++) {
+    const Ev &x = after[i], &y = before[before.size() - k + i];
+    CHECK(x.ev == y.ev && x.t == y.t && x.a == y.a && x.b == y.b && x.n == y.n);
+  }
+  for (size_t i = k; i < after.size(); i++) CHECK_EQ(after[i].boot, -1);
+}
+
+// [event-log] The streamed ring reply echoes a request id of any length (a 300-character string), whole: one line that
+// parses, with the id and the entries.
+TEST(event_log_ring_reply_echoes_a_long_id) {
+  Site w;
+  w.commission();
+  std::string id(300, 'x');
+  size_t lines0 = w.gate.lines.size();
+  auto reply = [&] {
+    for (size_t i = lines0; i < w.gate.lines.size(); i++)
+      if (w.gate.lines[i].find("\"log\":[") != std::string::npos) return w.gate.lines[i];
+    return std::string();
+  };
+  w.gate.send("{\"id\":\"" + id + "\",\"cmd\":\"log.get\"}");
+  CHECK(w.runUntil([&] { return !reply().empty(); }, 1000));
+  JsonDocument r;
+  CHECK(!deserializeJson(r, reply()));
+  CHECK(r["id"] == id);
+  CHECK(r["ok"] == true);
+  CHECK(r["log"].size() > 0);
+  CHECK(!r["now"].isNull() && !r["boot"].isNull());
+}
+
 // [event-log] A power cut loses only what hadn't been written: the oldest unsaved entry waits at most 10 min.
 TEST(event_log_power_cut_loses_only_the_unsaved_entries) {
   Site w;

@@ -35,8 +35,10 @@ def test_bench_safe_settings(bench):
 
 
 # Bytes the heap's high-water mark must leave below the stack (status free_ram) once each board has built its largest
-# replies: every hist.get page, then config.get. A full history page followed by config.get left the house 795 B on
-# 0.14.0 before the setting names were linked rather than copied (1771 B after).
+# replies: every hist.get page, config.get, the event log's ring and a journal record (log.get). A full history page
+# followed by config.get left the house 795 B on 0.14.0 before the setting names were linked rather than copied (1771 B
+# after); on 0.19.0 a ring of entries from an earlier boot (each with its `boot`) left 1283 B against config.get's
+# 2315 B, until 0.19.1 streamed that reply an entry at a time.
 MIN_FREE_RAM = 1024
 
 
@@ -45,9 +47,11 @@ def test_free_ram_after_the_largest_replies(bench):
         b = getattr(bench, name)
         b.history()
         b.config_get()
+        if "boot" in b.log_get():  # 0.19.0 on: a journal record too
+            b.log_get(before=0xFFFFFFFF)
         free = b.status()["free_ram"]
-        bench.facts[f"free_ram after hist.get and config.get ({name})"] = f"{free} B"
-        assert free >= MIN_FREE_RAM, (f"{name}: {free} B between heap and stack after hist.get and config.get "
+        bench.facts[f"free_ram after hist.get, config.get and log.get ({name})"] = f"{free} B"
+        assert free >= MIN_FREE_RAM, (f"{name}: {free} B between heap and stack after hist.get, config.get and log.get "
                                       f"(at least {MIN_FREE_RAM}): a larger reply could reach the stack")
 
 

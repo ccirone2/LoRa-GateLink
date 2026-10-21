@@ -244,6 +244,8 @@ def test_both_limits_active(rig):
     rig.wait_log("gate", "gate_state", a=GS["fault"], since=m, timeout=5)
     rig.wait_house(10, gate="fault", io__k2=False, io__k1=True)
     rig.wait_ctrl(True, timeout=30)
+    # Both limits held past the gate's BOTH_LIMITS_HOLD_MS (500 ms, then latched): the controller can follow K1 sooner.
+    time.sleep(1)
     m2 = rig.mark()
     rig.sim.fault("none")
     rig.expect_no("gate", "gate_state", seconds=3, since=m2)

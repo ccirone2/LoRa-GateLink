@@ -1,5 +1,5 @@
 // The Status tab: gate state, link loss, the house's view of the gate, the tab title.
-import { test, expect, openConsole, connect, pushEvent, fixture } from './helpers.js';
+import { test, expect, openConsole, connect, pushStatus, fixture } from './helpers.js';
 
 const houseStatus = (over = {}) => ({ ...fixture.status_common, role: 'house', ...fixture.status_house, ...over });
 
@@ -25,7 +25,7 @@ test('house: an unpowered controller shows its edges are ignored', async ({ page
 test('house: a STATUS event updates the page at once', async ({ page }) => {
   await openConsole(page);
   await connect(page);
-  await pushEvent(page, { event: 'status', status: houseStatus({ gate: 'between', cause: 'lora', target: 'open' }) });
+  await pushStatus(page, houseStatus({ gate: 'between', cause: 'lora', target: 'open' }));
   await expect(page.locator('#gateState')).toHaveText('between');
   await expect(page.locator('#gateCause')).toHaveText('lora');
   await expect(page.locator('#gateTarget')).toHaveText('open');
@@ -34,7 +34,7 @@ test('house: a STATUS event updates the page at once', async ({ page }) => {
 test('house: with the link down the last gate state shows as stale, not live', async ({ page }) => {
   await openConsole(page);
   await connect(page);
-  await pushEvent(page, { event: 'status', status: houseStatus({ link_up: false }) });
+  await pushStatus(page, houseStatus({ link_up: false }));
   await expect(page.locator('#gateState')).toHaveClass(/stale/);
   await expect(page.locator('#gateStale')).toBeVisible();
   await expect(page.locator('#lnkUp')).toHaveText('down');
@@ -56,13 +56,14 @@ test('health: ok with the fault output off, then problems and D5 as the board re
   await openConsole(page);
   await connect(page);
   await expect(page.locator('#bHealth')).toHaveText('ok · D5 off');
-  // A problem inside fault_hold_s: listed, D5 still high.
-  await pushEvent(page, { event: 'status', status: houseStatus({ fault_out: true, health: ['link'] }) });
+  // fault_out turned on (the fake's polls report D5 from it), then a problem inside fault_hold_s: listed, D5 still high.
+  await page.evaluate(() => { window.__fake.boards[0].params.fault_out = 1; });
+  await pushStatus(page, houseStatus({ fault_out: true, health: ['link'] }));
   await expect(page.locator('#bHealth')).toHaveText('link down · D5 high');
   await expect(page.locator('#bHealth .bad')).toHaveText('link down');
-  await pushEvent(page, { event: 'status', status: houseStatus({ fault_out: false, health: ['ac', 'no_power'] }) });
+  await pushStatus(page, houseStatus({ fault_out: false, health: ['ac', 'no_power'] }));
   await expect(page.locator('#bHealth')).toHaveText('no AC power at the gate, gate has no power · D5 low');
-  await pushEvent(page, { event: 'status', status: houseStatus({ fault_out: true, health: [] }) });
+  await pushStatus(page, houseStatus({ fault_out: true, health: [] }));
   await expect(page.locator('#bHealth')).toHaveText('ok · D5 high');
 });
 
@@ -77,7 +78,7 @@ test('health: fault_out turned on shows on the next status poll', async ({ page 
 test('a status from older firmware without link or io fields still renders', async ({ page }) => {
   await openConsole(page);
   await connect(page);
-  await pushEvent(page, { event: 'status', status: { role: 'house', fw: '0.3.0', gate: 'open', link_up: true } });
+  await pushStatus(page, { role: 'house', fw: '0.3.0', gate: 'open', link_up: true });
   await expect(page.locator('#gateState')).toHaveText('open');
   await expect(page.locator('#lnkCrc')).toHaveText('—');
   await expect(page.locator('#bHealth')).toHaveText('—');
@@ -89,7 +90,7 @@ test('the health line sums up the site, most important first', async ({ page }) 
   const line = page.locator('#healthLine');
   await expect(line).toHaveText('All good: link up, gate closed.');
   await expect(line).toHaveClass(/good/);
-  await pushEvent(page, { event: 'status', status: houseStatus({ link_up: false, health: ['link'] }) });
+  await pushStatus(page, houseStatus({ link_up: false, health: ['link'] }));
   await expect(line).toHaveText(/^No link to the gate/);
   await expect(line).toHaveClass(/bad/);
   // The counters behind it are a click away.

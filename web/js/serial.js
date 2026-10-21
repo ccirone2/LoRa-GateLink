@@ -310,7 +310,8 @@ export async function rebootAndReconnect() {
   expectBoard = was;
 }
 
-// The firmware update hands the port it reset into the bootloader: the board comes back there.
+// The firmware update hands the port it reset into the bootloader, where the board comes back (null: started from the
+// bootloader, so only the connect event can find it).
 export const expectBack = (p) => { lastPort = p; };
 
 // Waits for p, but no longer than ms: stream calls on a device that vanished can stay pending for good.

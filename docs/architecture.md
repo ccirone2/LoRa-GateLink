@@ -386,6 +386,8 @@ Notable pieces:
 
 - Auto-reconnect (`startReconnect`/`tryReconnect`: after a reboot or unexpected drop, reopen the already-granted
   port for 30 s; the Web Serial `connect` event identifies the returning board since both boards share VID/PID).
+  After an update started from the bootloader there is no port to reopen (`expectBack(null)`): the one connected
+  last may be the other board's, so only the `connect` event finds the updated one.
 - `disconnect()` must await both stream pipes before `port.close()` or the port stays open and blocks uploads.
 - The Install tab is driven by the `WIRING` table (keep it in sync with `pins.h` and the role behaviour).
 - 0/1 params without a `SELECTS` entry render as toggle checkboxes, so read/write form fields through

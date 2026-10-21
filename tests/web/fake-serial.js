@@ -276,6 +276,7 @@
     async forget() { this.granted = false; }
 
     onBytes(chunk) {
+      if (this.board.spec.bootloader) return this.onBootBytes(typeof chunk === 'string' ? enc.encode(chunk) : chunk);
       this.inbuf += typeof chunk === 'string' ? chunk : dec.decode(chunk);
       let i;
       while ((i = this.inbuf.indexOf('\n')) >= 0) {
@@ -289,6 +290,57 @@
         Promise.resolve(this.board.handle(req)).then((res) => {
           if (res) setTimeout(() => this.push(res), this.board.replyDelayMs);
         });
+      }
+    }
+
+    // A board in its bootloader (spec.bootloader): the SAM-BA commands web/js/samba.js sends. A reset starts the
+    // image written, reporting the version in its marker, as an app port after spec.bootMs.
+    onBootBytes(bytes) {
+      const b = this.board;
+      b.flash ??= new Uint8Array(0x40000).fill(0xff);
+      for (const x of bytes) {
+        if (this.sbLeft > 0) {
+          this.sbData.push(x);
+          if (--this.sbLeft === 0) b.ram = Uint8Array.from(this.sbData);
+        } else if (x !== 0x23) {
+          this.sbCmd = (this.sbCmd || '') + String.fromCharCode(x);
+        } else {
+          this.samba(this.sbCmd || '');
+          this.sbCmd = '';
+        }
+      }
+    }
+
+    samba(c) {
+      const b = this.board;
+      const reply = (t) => { try { this.ctrl.enqueue(enc.encode(`${t}\n\r`)); } catch { /* cancelled */ } };
+      const [addr, len] = c.slice(1).split(',').map((h) => parseInt(h, 16));
+      switch (c[0]) {
+        case 'N': return reply('');
+        case 'V': return reply('v2.0 [Arduino:XYZ] fake');
+        case 'X': b.flash.fill(0xff, addr); return reply('X');
+        case 'S': this.sbLeft = len; this.sbData = []; return undefined;
+        case 'Y':
+          if (len) b.flash.set(b.ram.subarray(0, len), addr);
+          return reply('Y');
+        case 'Z': {
+          let crc = 0;
+          for (const x of b.flash.subarray(addr, addr + len)) {
+            crc ^= x << 8;
+            for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+          }
+          return reply(`Z${crc.toString(16).toUpperCase().padStart(8, '0')}#`);
+        }
+        case 'W': {
+          const text = new TextDecoder('latin1').decode(b.flash);
+          const at = text.indexOf('GATELINK_FW=');
+          if (at >= 0) b.fw = /^[0-9.]+[0-9]/.exec(text.slice(at + 12, at + 28))[0];
+          b.spec.bootloader = false;
+          b.restart();
+          this.replug(b.spec.bootMs ?? 300);
+          return undefined;
+        }
+        default: return reply('?');
       }
     }
 

@@ -42,6 +42,12 @@ export const requests = (page, i = 0) => page.evaluate((n) => window.__fake.boar
 
 // Pushes an unsolicited line from board i, as the firmware would.
 export const pushEvent = (page, ev, i = 0) => page.evaluate(([e, n]) => window.__fake.ports[n].push(e), [ev, i]);
+// Pushes a status from board i and makes it what the board answers its polls with too, as firmware would: else a poll
+// (every POLL_MS) landing before a test's checks renders the board's earlier status again.
+export const pushStatus = (page, status, i = 0) => page.evaluate(([s, n]) => {
+  window.__fake.boards[n].status = s;
+  window.__fake.ports[n].push({ event: 'status', status: s });
+}, [status, i]);
 export const pushLine = (page, text, i = 0) => page.evaluate(([t, n]) => window.__fake.ports[n].pushLine(t), [text, i]);
 
 export { fixture, expect };

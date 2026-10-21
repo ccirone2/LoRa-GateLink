@@ -22,6 +22,10 @@ static_assert(HDR_LEN + TAG_LEN == LINK_OVERHEAD, "link.h LINK_OVERHEAD");
 // A HELLO is answered at most this often from the verified session, and from all other sessions together. The
 // peer's own retries are further apart (HELLO_INTERVAL_MS plus a few frames), so only replays are dropped.
 #define HELLO_ANSWER_GAP_MS 1000
+// A memo'd seq is re-ACKed at most this often: the most resends a sender makes (the `retries` param's maximum), so
+// every real resend still gets its answer, and copies beyond that are replays (counted and logged as such), which
+// would otherwise make us transmit an ACK for each.
+#define REACK_MAX 10
 
 // Listen-before-talk state of one frame waiting to go (clearToSend).
 struct Lbt {
@@ -56,6 +60,7 @@ struct AckMemo {
   bool pending;  // accepted, answer still to come (linkAckLater): retransmits are held, not answered
   uint32_t seq;
   uint8_t result;
+  uint8_t reacks;  // re-ACKs sent (REACK_MAX at most)
 };
 
 static RxHandler rxHandler;
@@ -497,12 +502,12 @@ static AckMemo *ackMemo(uint32_t seq) {
 }
 
 void linkAck(uint32_t seq, uint8_t result) {
-  *ackMemo(seq) = { true, false, seq, result };
+  *ackMemo(seq) = { true, false, seq, result, 0 };
   sendAck(seq, result);
 }
 
 void linkAckLater(uint32_t seq) {
-  *ackMemo(seq) = { true, true, seq, 0 };
+  *ackMemo(seq) = { true, true, seq, 0, 0 };
 }
 
 void linkRefuse(uint32_t seq) {
@@ -523,11 +528,14 @@ static void handleAck(const uint8_t *p, uint8_t len) {
 }
 
 // Re-ACK a retransmission we already accepted (our ACK was lost), or hold it quietly while its answer is still to
-// come (linkAckLater). False if it isn't in the memo.
+// come (linkAckLater). False if it isn't in the memo, or it has had its REACK_MAX re-ACKs (a replay).
 static bool resendAck(uint32_t seq) {
   for (auto &m : acks) {
     if (m.valid && m.seq == seq) {
-      if (!m.pending) sendAck(seq, m.result);
+      if (m.pending) return true;
+      if (m.reacks >= REACK_MAX) return false;
+      m.reacks++;
+      sendAck(seq, m.result);
       return true;
     }
   }

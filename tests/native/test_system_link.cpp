@@ -157,6 +157,31 @@ TEST(link_command_held_on_a_replayed_hello_keeps_its_backoff) {
 
 static uint32_t seqOf(const Bytes &f) { return f[9] | f[10] << 8 | f[11] << 16 | (uint32_t)f[12] << 24; }
 
+// [replay] A command recorded and replayed while its seq is still in the gate's ACK memo: the gate never runs it again,
+// and re-ACKs it only as often as a sender can resend (10, the most `retries` allows); the rest are replays, counted
+// and logged, that draw no transmission (0.19.1, ROADMAP F21). Before, each copy was answered with an ACK.
+TEST(link_replayed_command_in_the_ack_memo_is_answered_at_most_10_times) {
+  const uint8_t CMD = 4, ACK = 3;
+  World w;
+  w.commission();
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 20000));
+  w.run(5000);
+  Bytes cmd = w.sent(w.house, CMD).back()->b;
+  size_t acks = w.sent(w.gate, ACK).size();
+  int pulses = w.gate.count("pulse"), replays = w.gate.count("replay");
+  for (int i = 0; i < 14; i++) {
+    w.inject(w.gate, cmd);
+    w.run(300);
+  }
+  CHECK_EQ(w.sent(w.gate, ACK).size(), acks + 10);
+  CHECK_EQ(w.gate.count("replay"), replays + 4);
+  CHECK(w.gate.status()["link"]["replay"] == 4);
+  CHECK_EQ(w.gate.count("pulse"), pulses);
+  CHECK(w.opener.atOpen());
+  CHECK(w.houseLinkUp());
+}
+
 // [sensor-closed-only-known] A STATUS kept from the house (jammed at it while recorded) and played back once the gate
 // has opened (threat model withheld-gate-frames-replayed). The link takes it, a seq it hasn't seen inside its window,
 // but it's older than the last STATUS the house took, so it changes nothing: the house goes on showing open, the

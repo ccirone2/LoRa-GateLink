@@ -46,6 +46,13 @@ once its fix is merged and record it in the pull request.
   raised `PermissionError(13, 'A device attached to the system is not functioning.', None, 31)` configuring the port,
   yet the board had reset into its bootloader (COM18, COM19), and `flash.py <bin> <bootloader port>` flashed it with
   no replug. `flash.py` could catch that and go on looking for the bootloader port.
+- [ ] **`log.get` with `before` once returned an older journal record than the newest.** In a full suite on
+  2026-10-20 (0.19.1, run `20261020-212219`), `test_event_log_kept_across_a_reboot` read the gate's newest record ~7 s
+  into a boot, yet the record written at that boot's start (within its first 256 ms) had a higher seq. Five reboots
+  read alone after it never showed it. A candidate: `evLogGet` passes over a record whose full read fails (a CRC
+  mismatch or a garbled read: `continue`) and returns the one before, silently, so the web console's Older would skip
+  it too. Find whether reads fail there (count them), and whether a failed read should end the page with an error
+  rather than skip. Diagnostics only: nothing decides from the log. The test now reads twice.
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
   - Fixed sleeps that bet on timing: `test_reboots.py` (`sleep(0.2)` to catch the gate in its ~0.5 s bootloader;
     start from the UART `boot` event or `sim.restart` instead), `test_history.py` (`sleep(62)` against a 60 s

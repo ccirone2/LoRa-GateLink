@@ -34,14 +34,9 @@ def test_event_log_kept_across_a_reboot(rig):
         pytest.skip("firmware before 0.19.0 keeps no event log across resets")
     rig.expect_commands(0)
     boot0, newest = before["boot"], before["log"][-1]
-    # The journal's newest record before the reset (seq 0: none). Read twice: one read in a full suite once came back
-    # with an older record (TODO.md), which made every record since look new. (A record written between the reads
-    # differs too.)
-    tops = [rig.gate.log_get(before=0xFFFFFFFF) for _ in range(2)]
-    top = max(tops, key=lambda r: r.get("seq", 0))
+    # The journal's newest record before the reset (seq 0: none).
+    top = rig.gate.log_get(before=0xFFFFFFFF)
     seq0 = top.get("seq", 0)
-    if tops[0].get("seq", 0) != tops[1].get("seq", 0):
-        rig.timeline.add("test", "note", text=f"journal newest: seq {tops[0].get('seq')}, then {tops[1].get('seq')}")
     rig.reboot("gate")
     rig.wait_for(lambda: rig.gate.status()["link"]["verified"] or None, 20, "gate session verified")
     after = rig.gate.log_get()
@@ -63,7 +58,11 @@ def test_event_log_kept_across_a_reboot(rig):
     first = since[-1]["log"]
     # Nothing left unwritten (the boot before's newest entry was already in the journal): it starts with this boot's.
     none_left = any(e["ev"] == newest["ev"] and e["t"] == newest["t"] for e in top["log"])
-    assert first[0].get("boot") == boot0 & 0xFFFF or (none_left and first[0]["ev"] == "boot"),         f"the first record after the reset starts with the boot before's entries: {first}"
+    # Starting with an earlier boot's entries: the boot before wrote nothing in its first seconds, though its first
+    # record was due at once (TODO.md, "A boot sometimes writes nothing to the event journal").
+    assert first[0].get("boot") == boot0 & 0xFFFF or (none_left and first[0]["ev"] == "boot"), (
+        f"the first record after the reset starts with the boot before's entries (boot {boot0}, newest before the "
+        f"reset seq {seq0}; since: {[r['seq'] for r in since]}): {first}")
 
 
 def test_gate_reboot_mid_travel(rig):

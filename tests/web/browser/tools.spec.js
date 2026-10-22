@@ -118,6 +118,32 @@ test('link history loads every page and draws the chart, tiles and table', async
   expect(await cspViolations(page)).toEqual([]); // the page runs whole under its own policy
 });
 
+test('link history reads by keyboard: Home and End from no bucket go to the oldest and the newest', async ({ page }) => {
+  await openConsole(page, [{ role: 'house', histBuckets: 5 }]);
+  await connect(page);
+  await page.locator('#tabbtn-link').click();
+  await page.locator('#btnHistLoad').click();
+  await expect(page.locator('#histTable tbody tr')).toHaveCount(5);
+  const chart = page.locator('#histChart');
+  const tipTitle = page.locator('#histTip .tt');
+  // The table lists the newest first, and its Start column is the tooltip's start time.
+  const starts = await page.locator('#histTable tbody tr td:first-child').allTextContents();
+  const at = async (key) => {
+    await chart.press(key);
+    await expect(page.locator('#histTip')).toBeVisible();
+    return (await tipTitle.textContent()).split('–')[0];
+  };
+  await chart.focus();
+  expect(await at('Home')).toBe(starts[4]);
+  await chart.press('Escape');
+  expect(await at('End')).toBe(starts[0]);
+  await chart.press('Escape');
+  expect(await at('ArrowLeft')).toBe(starts[0]); // the first arrow shows the newest
+  expect(await at('ArrowLeft')).toBe(starts[1]);
+  await chart.press('Escape');
+  expect(await at('ArrowRight')).toBe(starts[0]);
+});
+
 test('link history takes only numbers from the board: markup in a field is never put in the page', async ({ page }) => {
   const evil = '<img src=x onerror="window.__xss=1">';
   await openConsole(page, [{ role: 'house', histBuckets: 3, histOverride: { tx: evil, rssi_avg: evil, boot: evil } }]);

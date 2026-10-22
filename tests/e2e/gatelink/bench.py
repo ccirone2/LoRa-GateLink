@@ -295,6 +295,9 @@ class Bench:
             self.sim.close_gate()
             self.wait_for(lambda: self.sim.status()["state"] == "closed", SIM_TRAVEL_S + 5, "simulator closed")
         self.wait_gate("closed", timeout=10)
+        # The house must have heard it too: until then an OFF edge is a user CLOSE (the house still thinks the gate is
+        # between). A STATUS 0.84 s late after a jam made one (run 20261020-233514).
+        self.wait_house(10, gate="closed")
         if self.house.status()["ctrl"]:
             self.ctrl.off()  # gate already closed: the house suppresses this, no command
         self.wait_house(45, "house settled (gate closed, controller off and synced, armed, no window open)",

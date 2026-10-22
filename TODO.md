@@ -165,6 +165,15 @@ once its fix is merged and record it in the pull request.
   of travel: the gate reads `fault` if it and the closed limit disagree for 5 s, so a slow gate with a sensor that
   closes early would read fault on every close. Then turn `closed_sense` on and run the install checks (docs/install.md).
 
+## Agent tooling
+
+- [ ] **Cloud sessions can't run the browser tests as pinned.** `@playwright/test` 1.63.0 looks for
+  `chromium_headless_shell-1243`, but the cloud image has revision 1194 (`/opt/pw-browsers`), so `npm test` fails at
+  launch there (2026-10-22, #165; it passed through a throwaway config setting `launchOptions.executablePath:
+  '/opt/pw-browsers/chromium'`). Have `tests/web/playwright.config.js` or `tools/agent/cloud_setup.sh` fall back to
+  that path when the pinned browser is missing. The same night the SessionStart setup had died after its arduino-cli
+  download without writing `setup.done`; rerunning `tools/agent/cloud_setup.sh` finished it.
+
 ## Supply chain
 
 - [ ] **Release binaries: what's left** (threat model `pages-malicious-firmware`, `release-asset-mutable`). The

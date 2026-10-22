@@ -13,8 +13,8 @@ ARDUINO_CLI_VERSION=1.5.1
 ARDUINO_CLI_SHA256=28a8e119c498a25607821c36cb2dc49e8463941b261a0d99091baa7bc692dd2b  # Linux_64bit, from its release
 CORES=("arduino:samd@1.8.14" "arduino:avr@1.8.8")
 LIBS=("LoRa@0.8.0" "Crypto@0.4.0" "FlashStorage@1.0.0" "ArduinoJson@7.4.3")
-UV_VERSION=0.12.23
-UV_SHA256=9167d72b3319674b6303c4cbe071854bba13ebdf3d76b1a7cbdc175471fb66d6  # x86_64-unknown-linux-gnu, from its release
+UV_VERSION=0.12.24
+UV_SHA256=b4dfaef47d491a7296981f8374a4595f55dbf84e8937c8ecd2983574d8bb3da6  # x86_64-unknown-linux-gnu, from its release
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 state="${XDG_CACHE_HOME:-$HOME/.cache}/gatelink"

@@ -285,14 +285,14 @@ def test_limit_chatter_debounced(rig):
 
 def _in4_follows_ch4(rig):
     """Whether the closed sensor is wired: gate IN4 follows the GateSim's CH4 off and back (closed_sense still off)."""
-    for mode, want in (("off", False), ("auto", True)):
-        rig.sim.relays([(4, mode)], 0)
-        deadline = time.monotonic() + 3
-        while rig.gate.status()["io"]["in4"] != want:
-            if time.monotonic() > deadline:
-                rig.sim.relays([(4, "auto")], 0)
-                return False
-            time.sleep(0.2)
+    try:
+        for mode, want in (("off", False), ("auto", True)):
+            rig.sim.relays([(4, mode)], 0)
+            rig.wait_gate("closed", timeout=3, io__in4=want)
+    except AssertionError:
+        return False
+    finally:
+        rig.sim.relay_auto()
     return True
 
 
@@ -309,10 +309,9 @@ def test_closed_sensor_catches_a_failed_closed_limit(rig):
         rig.wait_gate("closed", timeout=5)
         m = rig.mark()
         rig.sim.relays([(4, "off")], 0)
-        rig.wait_log("gate", "gate_state", a=GS["between"], since=m, timeout=3)
+        between = rig.wait_log("gate", "gate_state", a=GS["between"], since=m, timeout=3)
         rig.wait_house(5, io__k2=False)
         fault = rig.wait_log("gate", "gate_state", a=GS["fault"], since=m, timeout=8)
-        between = rig.logs("gate", "gate_state", since=m)[0]
         held_s = (fault["t"] - between["t"]) / 1000
         assert 4.0 <= held_s <= 5.0, f"fault {held_s:.2f} s after between, expected ~4.5 (5 s from the sensor's drop)"
         rig.wait_house(10, gate="fault", io__k2=False)
@@ -330,7 +329,7 @@ def test_closed_sensor_catches_a_failed_closed_limit(rig):
         rig.wait_house(10, gate="fault", io__k2=False, io__k1=True)
         rig.expect_no("gate", "gate_state", a=GS["closed"], since=m3)
     finally:
-        rig.sim.relays([(2, "auto"), (4, "auto")], 0)
+        rig.sim.relay_auto()
         rig.gate.config_set(closed_sense=0)
     rig.sim.close_gate()
     rig.wait_gate("closed", timeout=SIM_TRAVEL_S + 10)

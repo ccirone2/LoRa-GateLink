@@ -185,9 +185,8 @@ struct Opener {
   bool stuck = false;  // jams just off the limit it leaves
   bool deaf = false;   // ignores its OPEN/CLOSE inputs (GateSim fault "deaf")
   int force[4] = { -1, -1, -1, -1 };  // gate IN1..IN4 forced off/on (-1 follows the model)
-  bool in4 = false;
-  // A closed sensor on the leaf (F12: a reed and magnet, wetted by the opener's 24 V like the limits) drives
-  // IN4 in place of `in4`: on within reedMs of travel from closed, moving or not. -1: none fitted.
+  // A closed sensor on the leaf (F12: a reed and magnet, wetted by the opener's 24 V like the limits) on IN4: on
+  // within reedMs of travel from closed, moving or not. -1: none fitted (IN4 off unless forced).
   int32_t reedMs = -1;
   // Inputs, debounced like the GateSim (20 ms)
   struct Sense {

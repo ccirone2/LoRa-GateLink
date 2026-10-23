@@ -654,7 +654,7 @@ void wrapGlitch(uint32_t F) {
     w.shelly.optoAt = 0;
     w.opener.force[1] = limitOff ? 0 : -1;
     w.opener.force[2] = acOff ? 0 : -1;
-    w.opener.in4 = in4;
+    w.opener.force[3] = in4 ? 1 : -1;
     r.step();
   }
   r.run(5000);

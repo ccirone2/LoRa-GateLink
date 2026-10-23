@@ -1,6 +1,6 @@
 {
   "title": "GateLink bench wiring",
-  "updated": "2026-10-11",
+  "updated": "2026-10-23",
   "statuses": {
     "connected": "In place and confirmed (by eye, a meter, or the e2e suite)",
     "unverified": "Believed to be in place (from the docs) but not confirmed yet",
@@ -167,7 +167,7 @@
     {
       "id": "rig",
       "name": "4-Ch Relay Module",
-      "note": "CH1/CH3 cut supplies (power rig, NC); CH2 mirrors house K1 to the controller (NO); CH4 spare, nothing wired. Coils from the Uno 5 V (JD-VCC)",
+      "note": "CH1/CH3 cut supplies (power rig, NC); CH2 mirrors house K1 to the controller (NO); CH4 is the gate's closed sensor (NO: a released coil reads not closed). Coils from the Uno 5 V (JD-VCC)",
       "top": [
         "JD-VCC",
         "GND"
@@ -190,7 +190,7 @@
         "CH3 COM",
         "CH3 NC",
         "CH4 COM",
-        "CH4 NC"
+        "CH4 NO"
       ],
       "bench": true
     },
@@ -551,6 +551,12 @@
       "signal": "Opto input 3 return"
     },
     {
+      "from": "gate_opto:4−",
+      "bus": "gnd_g",
+      "status": "planned",
+      "signal": "Opto input 4 return"
+    },
+    {
       "from": "gate_buck:OUT +",
       "bus": "v5_g",
       "status": "connected",
@@ -703,9 +709,9 @@
       "from": "uno:D10",
       "to": "rig:IN4",
       "status": "connected",
-      "signal": "CH4 drive (spare)",
+      "signal": "Closed sensor drive (CH4)",
       "color": "purple",
-      "note": "Drive only: the GateSim holds D10 off; CH4's contacts are unused"
+      "note": "GateSim drives CH4 as the leaf's closed sensor: on within 300 ms of travel from closed (relay 4 forces it)"
     },
     {
       "from": "rig:JD-VCC",
@@ -752,6 +758,13 @@
       "cut": 3
     },
     {
+      "from": "rig:CH4 COM",
+      "bus": "v24",
+      "status": "planned",
+      "signal": "Wetting (closed sensor)",
+      "color": "red"
+    },
+    {
       "from": "sim_relays:CH1 NO",
       "to": "gate_opto:1+",
       "status": "connected",
@@ -776,9 +789,12 @@
       "color": "purple"
     },
     {
-      "from": "gate_opto:4+",
-      "status": "open",
-      "signal": "Spare"
+      "from": "rig:CH4 NO",
+      "to": "gate_opto:4+",
+      "status": "planned",
+      "signal": "Closed sensor (IN4, closed_sense)",
+      "color": "purple",
+      "note": "Planned 2026-10-23 (F12): the reed's contact"
     },
     {
       "from": "gate_opto:OUT1",
@@ -805,8 +821,9 @@
     {
       "from": "gate_opto:OUT4",
       "to": "gate:IN4 (A4)",
-      "status": "open",
-      "signal": "Spare"
+      "status": "planned",
+      "signal": "Closed sensor",
+      "color": "purple"
     },
     {
       "from": "gate:K1 NO",

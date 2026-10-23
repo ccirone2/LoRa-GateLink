@@ -13,7 +13,7 @@
 // program flash (FlashStorage, a struct image checked against CFG_VERSION), which every upload erases.
 
 #define CFG_MAGIC 0x47544C4Bu  // "GTLK"
-#define CFG_VERSION 7
+#define CFG_VERSION 8
 
 const char FW_MARKER[] = FW_MARKER_PREFIX FW_VERSION;
 Config cfg;
@@ -58,6 +58,8 @@ const ParamDef PARAMS[] = {
   // Not remote: whether D5 drives anything is a decision about the install's wiring.
   { 32, "fault_out", &Config::fault_out, 0, 1, 0 },
   { 33, "fault_hold_s", &Config::fault_hold_s, 0, 600, P_REMOTE },
+  // Not remote: whether IN4 has a sensor is the install's wiring, and turning it off drops the second check.
+  { 34, "closed_sense", &Config::closed_sense, 0, 1, 0 },
 };
 const size_t PARAM_COUNT = sizeof(PARAMS) / sizeof(PARAMS[0]);
 
@@ -241,6 +243,7 @@ void configDefaults(Config &c) {
   c.cmd_ttl_s = 10;
   c.debounce_ms = 50;
   c.power_sense = 1;
+  c.closed_sense = 0;  // on only once a sensor is fitted: without one, the gate would never read closed
   c.pulse_ms = 500;
   c.travel_timeout_s = 60;
   c.ctrl_sync = 1;

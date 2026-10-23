@@ -128,7 +128,7 @@ that its early warning saw coming (4 s into the stall, 4 s before the reset), wh
   `link_timeout_eff_s`, `armed`, `ctrl` (controller level), `ctrl_power`, `sync_window`, `resyncing`, `cmd_id`,
   `cmd_pending`, `cmd_result` (ACK result: 0 ok, 1 already, 2 rejected, 4 no AC power, position unknown, 6 past its deadline; −1 none, −2 gave up)
   and `remote` (the gate's `uptime_s`, `rssi`, `snr`, `heartbeat_s`, `open_limit`, `close_limit`, `k1`, `k2`,
-  `in3`, `in4`, `ac_power` (from gate firmware 0.7.0; true from older gates), `reboot_loop` (the gate's `reboots`
+  `in3`, `in4` (the gate's closed sensor where it has `closed_sense` on, from 0.20.0), `ac_power` (from gate firmware 0.7.0; true from older gates), `reboot_loop` (the gate's `reboots`
   problem, STATUS bit 7; from gate firmware 0.15.0, false from older gates); from gate firmware 0.4.0 also its `retries`, `giveups`, `crc_err` (running totals, low 16 bits)
   and `noise` (its average since the previous STATUS; null if it had no sample); from gate firmware 0.13.0 also its
   `travel_timeout_s`, which the house then uses for its travel hold).

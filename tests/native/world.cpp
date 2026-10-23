@@ -747,7 +747,7 @@ bool Opener::in(int n) const {
     case 1: return atOpen();
     case 2: return atClosed();  // the closed-limit relay's NC contact, wetted by the opener's 24 V
     case 3: return ac;
-    default: return in4;
+    default: return reedMs < 0 ? in4 : alive() && pos <= reedMs;
   }
 }
 
@@ -1069,6 +1069,8 @@ void World::onLog(Board &b, const LogEv &e) {
       // Gate state comes only from its limit inputs.
       if (e.a == GS_OPEN_ && !opener.in(1)) violate("gate reported open with the open limit off");
       if (e.a == GS_CLOSED_ && !opener.in(2)) violate("gate reported closed with the closed limit off");
+      // With a closed sensor fitted (the tests turn closed_sense on with it), closed needs it too. F12.
+      if (e.a == GS_CLOSED_ && opener.reedMs >= 0 && !opener.in(4)) violate("gate reported closed with the closed sensor off");
       if (e.a == GS_CLOSED_ && closedUnprovenSure)
         violate("gate reported closed after both limits read, before the open limit read alone");
     }

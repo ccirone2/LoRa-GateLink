@@ -255,7 +255,7 @@ ACK result codes (`AckResult`; a gap is a retired code, never reused):
 | 2 | 0x04 | `STI_K1` | K1 on (OPEN) |
 | 3 | 0x08 | `STI_K2` | K2 on (CLOSE) |
 | 4 | 0x10 | `STI_IN3` | AC power sense |
-| 5 | 0x20 | `STI_IN4` | IN4 (spare) |
+| 5 | 0x20 | `STI_IN4` | IN4: the closed sensor with `closed_sense` on (since 0.20.0), else spare |
 | 6 | 0x40 | `STI_AC_LOST` | no AC power: IN3 off with `power_sense` on (since 0.7.0) |
 | 7 | 0x80 | `STI_REBOOTS` | the gate is in a reboot loop (health `reboots`) (since 0.15.0) |
 

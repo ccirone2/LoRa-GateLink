@@ -68,7 +68,7 @@ static_assert(DIAG_HDR == 19, "DIAG header changed: both boards must be updated 
 extern Input in1, in2, in3, in4;
 extern Relay k1, k2;
 
-// Debounce IN3/IN4 (gate IN3 = AC power sense) and log edges. Returns true if either changed.
+// Debounce IN3/IN4 (gate IN3 = AC power sense, IN4 the closed sensor) and log edges. Returns true if either changed.
 bool updateSpareInputs(uint32_t now);
 
 const char *gateStateName(uint8_t s);

@@ -1508,3 +1508,123 @@ TEST(gate_state_ac_edge_on_the_hold_expiry_reads_no_power) {
     }
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// [state-from-limits] A second closed sensor on the leaf (closed_sense, IN4; F12, threat
+// closed-limit-nc-fail-unsafe): closed reads only while it and the closed limit agree, and a lasting disagreement reads
+// fault. The monitor (world.cpp) fails any closed reported with the sensor off.
+
+namespace {
+
+// Commissions the site with a reed that reads within reedMs of travel from closed, and closed_sense as given.
+void commissionReed(World &w, int32_t reedMs, int sense = 1) {
+  w.opener.reedMs = reedMs;
+  w.commission([&](Board &b) {
+    if (b.idx == 1) CHECK(b.set("closed_sense", sense));
+  });
+}
+
+}  // namespace
+
+// The threat itself: the closed limit's relay failed (its NC contact reads closed wherever the gate is) and the gate is
+// pushed part-open by hand. Without the sensor nothing tells it from closed; with it, between at once and fault once
+// the two have disagreed for 5 s, and the house shows not closed throughout. [state-from-limits]
+TEST(gate_state_closed_sense_stuck_closed_limit_part_open_never_reads_closed) {
+  for (int sense = 0; sense < 2; sense++) {
+    Site w;
+    commissionReed(w, 200, sense);
+    w.opener.force[1] = 1;
+    w.run(2000);
+    size_t g0 = w.gate.logs.size();
+    uint32_t t0 = w.now;
+    w.opener.pos = w.opener.travelMs / 2;
+    if (!sense) {
+      w.limits.sensorTruth = false;  // the gap F12 closes: the contact sensor stays closed with the gate part-open
+      w.run(10000);
+      CHECK_EQ(countSince(w.gate, "gate_state", g0), 0);
+      CHECK_STR(str(w.gate.status(), "gate"), "closed");
+      CHECK(w.sensorClosed());
+      continue;
+    }
+    Found b = waitFor(w, w.gate, "gate_state", g0, 2000, GS_BETWEEN_);
+    CHECK(b.ok);
+    CHECK(w.runUntil([&] { return !w.sensorClosed(); }, 2000));
+    Found f = waitFor(w, w.gate, "gate_state", g0, 6000, GS_FAULT_);
+    CHECK(f.ok);
+    CHECK(f.e.t - t0 >= 5050 && f.e.t - t0 <= 5060);  // debounced 50 ms after the move, then 5 s apart
+    CHECK(w.runUntil([&] { return w.houseSees() == GS_FAULT_; }, 2000));
+    CHECK_EQ(watch(w, 10000, [&] { return !w.sensorClosed(); }), 0);
+    CHECK_STR(str(w.gate.status(), "gate"), "fault");
+  }
+}
+
+// The sensor failing (a magnet knocked off, a cut wire) with the gate closed: not closed, fault after 5 s, and closed
+// again once it reads. [state-from-limits]
+TEST(gate_state_closed_sense_failed_sensor_reads_fault_until_it_reads) {
+  Site w;
+  commissionReed(w, 200);
+  size_t g0 = w.gate.logs.size();
+  w.opener.force[3] = 0;
+  Found f = waitFor(w, w.gate, "gate_state", g0, 7000, GS_FAULT_);
+  CHECK(f.ok);
+  CHECK(find(w.gate, "gate_state", g0, GS_BETWEEN_).ok);
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_FAULT_ && !w.sensorClosed(); }, 2000));
+  size_t g1 = w.gate.logs.size();
+  w.opener.force[3] = -1;
+  Found c = waitFor(w, w.gate, "gate_state", g1, 2000, GS_CLOSED_);
+  CHECK(c.ok);
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_CLOSED_ && w.sensorClosed(); }, 5000));
+}
+
+// A sensor stuck reading closed is caught as soon as the gate leaves closed: the sensor without the closed limit is a
+// disagreement too, fault 5 s on, mid-travel or at the open limit. Closing then reads closed again (both agree).
+// [state-from-limits]
+TEST(gate_state_closed_sense_stuck_sensor_reads_fault_once_the_gate_leaves) {
+  Site w;
+  commissionReed(w, 200);
+  w.opener.force[3] = 1;
+  size_t g0 = w.gate.logs.size();
+  w.user(true);
+  Found b = waitFor(w, w.gate, "gate_state", g0, 15000, GS_BETWEEN_);
+  CHECK(b.ok);
+  Found f = waitFor(w, w.gate, "gate_state", g0, 7000, GS_FAULT_);
+  CHECK(f.ok);
+  CHECK(f.e.t - b.e.t >= 4400 && f.e.t - b.e.t <= 4600);  // between was reported 500 ms into the disagreement
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 10000));
+  w.run(1000);
+  CHECK_STR(str(w.gate.status(), "gate"), "fault");
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_FAULT_; }, 2000));
+  w.run(SYNC_MS);
+  w.user(false);
+  waitBoth(w, GS_CLOSED_, 20000);
+  CHECK(w.sensorClosed());
+}
+
+// In normal travel the sensor and the limit part only between their switching points: a sensor that reads 3 s of
+// travel before the limit (and goes off 3 s after it, opening) never reads fault, and the gate reads closed only at
+// the limit. [state-from-limits]
+TEST(gate_state_closed_sense_normal_travel_is_never_a_fault) {
+  Site w;
+  commissionReed(w, 3000);
+  size_t g0 = w.gate.logs.size();
+  for (int i = 0; i < 2; i++) {
+    openByUser(w);
+    w.user(false);
+    waitBoth(w, GS_CLOSED_, 20000);
+    CHECK(w.sensorClosed());
+    w.run(4000);
+  }
+  CHECK_EQ(countSince(w.gate, "gate_state", g0, GS_FAULT_), 0);
+  CHECK_EQ(countSince(w.gate, "gate_state", g0, GS_CLOSED_), 2);
+}
+
+// closed_sense off: IN4 is a spare again, whatever it reads. [state-from-limits]
+TEST(gate_state_closed_sense_off_ignores_in4) {
+  Site w;
+  commissionReed(w, 200, 0);
+  size_t g0 = w.gate.logs.size();
+  w.opener.force[3] = 0;
+  w.run(8000);
+  CHECK_EQ(countSince(w.gate, "gate_state", g0), 0);
+  CHECK_STR(str(w.gate.status(), "gate"), "closed");
+}

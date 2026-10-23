@@ -151,6 +151,11 @@ once its fix is merged and record it in the pull request.
   the house never heard (`missed_move`). Untested against a real 2GIG sensor and panel: at the house, take the house
   board's antenna off while the gate opens and closes (within the 100 s link timeout), put it back, and check
   Alarm.com logs the gate opened and closed. If the sensor or panel needs longer, raise `MISSED_OPEN_MS`.
+- [ ] **Fit the closed sensor at the gate (0.20.0, `closed_sense`).** The second closed sensor closes
+  `closed-limit-nc-fail-unsafe` only once it is fitted: an outdoor magnetic contact on the leaf, wetted from the
+  opener's accessory 24 V into opto channel 4 (docs/hardware.md). Check on site that it closes within the last inches
+  of travel: the gate reads `fault` if it and the closed limit disagree for 5 s, so a slow gate with a sensor that
+  closes early would read fault on every close. Then turn `closed_sense` on and run the install checks (docs/install.md).
 
 ## Supply chain
 

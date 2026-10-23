@@ -603,7 +603,7 @@ ST_MEANING = {
 STI_MEANING = {
     "STI_K1": "K1 on (OPEN)",
     "STI_K2": "K2 on (CLOSE)",
-    "STI_IN4": "IN4 (spare)",
+    "STI_IN4": "IN4: the closed sensor with `closed_sense` on (since 0.20.0), else spare",
     "STI_AC_LOST": "no AC power: IN3 off with `power_sense` on",
     "STI_REBOOTS": "the gate is in a reboot loop (health `reboots`)",
 }

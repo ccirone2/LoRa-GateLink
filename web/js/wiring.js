@@ -4,7 +4,7 @@ import { $, esc, wrapText } from './util.js';
 
 export const IO_LABELS = {
   house: { in1: 'IN1 · Controller input', in2: 'IN2 · Controller power', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
-  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Closed limit', in3: 'IN3 · AC power', in4: 'IN4 · spare', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
+  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Closed limit', in3: 'IN3 · AC power', in4: 'IN4 · Closed sensor', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
   unset: { in1: 'IN1', in2: 'IN2', in3: 'IN3', in4: 'IN4', k1: 'K1', k2: 'K2' },
 };
 
@@ -54,7 +54,7 @@ export const WIRING = {
         rows: [['K2 NO', 'CLOSE'], ['K2 COM', 'COM']] },
       { name: 'Opto board outputs (PNP)', hint: 'Output side powered from 3.3 V only', kind: 'in',
         rows: [['IN1 (A1)', 'OUT1 · open limit'], ['IN2 (A2)', 'OUT2 · closed limit'], ['IN3 (A3)', 'OUT3 · AC 24 V supply'],
-          ['IN4 (A4)', 'OUT4 · spare'], [V33, 'VCC (output side)'], ['GND', 'GND (output side)']] },
+          ['IN4 (A4)', 'OUT4 · closed sensor (optional)'], [V33, 'VCC (output side)'], ['GND', 'GND (output side)']] },
       FAULT_OUTPUT,
       { name: '24 V → 5 V buck', hint: 'Fed from the opener’s 24 V accessory output or the AC 24 V supply', kind: 'pwr',
         rows: [['VIN (5 V)', '+5 V out'], ['GND', '0 V out']] },
@@ -67,7 +67,7 @@ export const WIRING = {
       'VIN is 5 V max. Never connect the opener’s 24 V directly to the board.',
       'Use the relays’ NO/COM contacts only. Add TVS or RC suppression on long field runs.',
       'Keep the antenna vertical and outside any metal enclosure.',
-      'IN4 (A4) is spare, reserved for future use. It is shown and logged but doesn’t affect behaviour yet.',
+      'IN4 (A4) takes an optional second closed sensor: a magnetic contact on the gate leaf, closed when the gate is closed, wetted from the opener’s 24 V accessory output into opto channel 4. Mount it to close only in the last inches of travel. With <code>closed_sense</code> on, the gate reads closed only while it and the closed limit agree, so a failed closed-limit relay can’t make an open gate read closed; if they disagree for 5 s it reads fault. Without the sensor leave <code>closed_sense</code> off: IN4 is then spare, shown and logged only.',
       FAULT_NOTE,
     ],
   },

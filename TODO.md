@@ -46,9 +46,9 @@ once its fix is merged and record it in the pull request.
   raised `PermissionError(13, 'A device attached to the system is not functioning.', None, 31)` configuring the port,
   yet the board had reset into its bootloader (COM18, COM19), and `flash.py <bin> <bootloader port>` flashed it with
   no replug. `flash.py` could catch that and go on looking for the bootloader port.
-  On 2026-10-22, the house (…183013), with no suite before it: the touch worked and the bootloader came up on COM19,
+  On 2026-10-22, the house (â€¦183013), with no suite before it: the touch worked and the bootloader came up on COM19,
   but bossac reported `No device found on COM19`; `flash.py <bin> COM19` a moment later flashed it. So the bootloader
-  port can show up before it answers: `flash.py` could retry bossac once after a short wait. The same day the gate (…0C301C)
+  port can show up before it answers: `flash.py` could retry bossac once after a short wait. The same day the gate (â€¦0C301C)
   dropped off USB entirely again on the touch (no app or bootloader port), after probe scripts and a flash.
 - [ ] **A boot sometimes writes nothing to the event journal in its first seconds.** After a reset, what the boot
   before left unwritten goes to the journal at the first loop pass (`logSaveDue`: `savedAt` and `unsavedSince` are set

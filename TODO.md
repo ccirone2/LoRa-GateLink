@@ -52,7 +52,8 @@ once its fix is merged and record it in the pull request.
   dropped off USB entirely again on the touch (no app or bootloader port), after probe scripts and a flash.
 - [ ] **A boot sometimes writes nothing to the event journal in its first seconds.** After a reset, what the boot
   before left unwritten goes to the journal at the first loop pass (`logSaveDue`: `savedAt` and `unsavedSince` are set
-  back at `logBegin`). Twice in a full suite (0.19.1 run `20261020-212219`, 0.19.3-dev run `20261022-172334`) the
+  back at `logBegin`). Three times in a full suite (0.19.1 run `20261020-212219`, 0.19.3-dev run `20261022-172334`,
+  0.20.0 run `20261023-160222`: boot 533 left boot 532's entries for the next boot; the rerun passed) the
   boot that `test_gate_reboot_at_rest` started wrote nothing in its ~7 s before the next test's reset, and
   `test_event_log_kept_across_a_reboot` failed. The gate's journal afterwards shows it (run `20261022-172334`):
   record 299 holds boot 500's last 13 entries and boot 501's `boot`, so boot 502 wrote it; record 300 holds entries

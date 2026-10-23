@@ -1069,9 +1069,6 @@ void World::onLog(Board &b, const LogEv &e) {
       // Gate state comes only from its limit inputs.
       if (e.a == GS_OPEN_ && !opener.in(1)) violate("gate reported open with the open limit off");
       if (e.a == GS_CLOSED_ && !opener.in(2)) violate("gate reported closed with the closed limit off");
-      // With closed_sense on, closed needs the closed sensor (IN4) too. F12.
-      if (e.a == GS_CLOSED_ && !opener.in(4) && gate.get("closed_sense"))
-        violate("gate reported closed with the closed sensor off");
       if (e.a == GS_CLOSED_ && closedUnprovenSure)
         violate("gate reported closed after both limits read, before the open limit read alone");
     }
@@ -1079,6 +1076,18 @@ void World::onLog(Board &b, const LogEv &e) {
 }
 
 void World::monitor() {
+  // With closed_sense on, closed needs the closed sensor (IN4) too (F12): the gate stays closed with it off no longer
+  // than its input lag and the 500 ms between hold.
+  if (gateView == GS_CLOSED_ && !opener.in(4) && gate.running()) {
+    if (!closedNoSensorSince) {
+      closedNoSensorSince = now | 1;
+    } else if (closedNoSensorSince != 0x7FFFFFFF && after(now, closedNoSensorSince + 700) && gate.get("closed_sense")) {
+      violate("gate kept closed with the closed sensor off");
+      closedNoSensorSince = 0x7FFFFFFF;
+    }
+  } else if (closedNoSensorSince != 0x7FFFFFFF) {
+    closedNoSensorSince = 0;
+  }
   // One limit reading (not fault); the stamp is dropped once old, so it can't wrap into the future.
   if (opener.in(1) != opener.in(2)) limitAt = now | 1;
   else if (limitAt && (int32_t)(now - limitAt) > 1000) limitAt = 0;

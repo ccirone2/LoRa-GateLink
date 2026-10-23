@@ -120,7 +120,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 | `relay-test-target` | A relay test sets a target only if the gate isn't already at that limit (and the opener has power) | `gate_relays` |
 | `no-stall-in-pulse` | Nothing that stops the loop (a flash save, a radio restart, a history write, a reboot's wait) runs while a pulse does | `gate_relays`, `history` |
 | `watchdog` | The loop stays well inside the 8 s watchdog; one console request per port per pass | `gate_relays`, `robustness` |
-| `state-from-limits` | Gate state comes only from the opener's limit inputs, never from our last command | `gate_state` |
+| `state-from-limits` | Gate state comes only from the opener's limit inputs (and the closed sensor, with `closed_sense`), never from our last command | `gate_state` |
 | `cause` | `lora` only while our pulse's target is being reached; `timeout` at the opposite limit; else `external` | `gate_state` |
 | `boot-settle` | The gate's first STATUS waits for steady inputs (`BOOT_SETTLE_MS`, at most 10 s); a boot has no cause | `gate_state` |
 | `between-hold` | A move into `between` is held `BETWEEN_HOLD_MS` (`BOOT_SETTLE_MS` out of `no_power`) | `gate_state` |

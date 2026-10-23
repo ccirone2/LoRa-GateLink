@@ -1,9 +1,11 @@
 """Opener-side failures, injected with the GateSim: power loss, a jammed or deaf opener, bad limit signals."""
+import contextlib
 import time
 
 import pytest
 
 from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink.gatesim import GateSimError
 from gatelink_client.wire import ACT_CLOSE, ACT_OPEN, CAUSE, GS, RES_NO_POWER
 
 TRAVEL_TIMEOUT_S = PROFILE_COMMON["travel_timeout_s"]
@@ -289,10 +291,11 @@ def _in4_follows_ch4(rig):
         for mode, want in (("off", False), ("auto", True)):
             rig.sim.relays([(4, mode)], 0)
             rig.wait_gate("closed", timeout=3, io__in4=want)
-    except AssertionError:
+    except (AssertionError, GateSimError):  # not wired, or a GateSim sketch without relay 4
         return False
     finally:
-        rig.sim.relay_auto()
+        with contextlib.suppress(GateSimError):
+            rig.sim.relays([(4, "auto")], 0)
     return True
 
 

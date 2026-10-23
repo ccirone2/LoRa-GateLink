@@ -63,7 +63,9 @@ and `firmware/GateLink/pins.h` in sync.
   points. With `closed_sense` on, the gate reads closed only while both read, so a failed AUX2 relay
   (`closed-limit-nc-fail-unsafe`) can no longer make an open gate read closed; a cut wire, a dead channel or a
   knocked-off magnet reads `fault` with the gate closed (not closed at the house: fail safe). Turn it on only once the
-  sensor is fitted: without one the gate never reads closed. Check it at the install: with the gate closed the I/O
+  sensor is fitted: without one the gate never reads closed. A closed limit the sensor doesn't confirm counts as no
+  limit, so without AC (on the opener's battery) commands are then refused, as in `no_power` or `fault`; and a gate
+  stopped in the sensor's last inches reads `fault` after 5 s, as it would read `stuck` once its travel timeout passed. Check it at the install: with the gate closed the I/O
   card shows IN2 and IN4 lit; part-open by hand, IN4 goes off; unplug the sensor with the gate closed and the gate
   reads `fault` 5 s later.
 - **Gate IN3 = AC power sense** (`power_sense`, default on). An opto channel across the 120 VAC → 24 V supply

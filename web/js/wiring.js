@@ -4,7 +4,7 @@ import { $, esc, wrapText } from './util.js';
 
 export const IO_LABELS = {
   house: { in1: 'IN1 · Controller input', in2: 'IN2 · Controller power', in3: 'IN3 · spare', in4: 'IN4 · spare', k1: 'K1 · Controller sync', k2: 'K2 · Contact sensor' },
-  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Closed limit', in3: 'IN3 · AC power', in4: 'IN4 · Closed sensor', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
+  gate: { in1: 'IN1 · Open limit', in2: 'IN2 · Closed limit', in3: 'IN3 · AC power', in4: 'IN4 · Closed sensor (if fitted)', k1: 'K1 · OPEN pulse', k2: 'K2 · CLOSE pulse' },
   unset: { in1: 'IN1', in2: 'IN2', in3: 'IN3', in4: 'IN4', k1: 'K1', k2: 'K2' },
 };
 
@@ -63,7 +63,7 @@ export const WIRING = {
       'K1/K2 go in parallel with whatever else is already on the opener’s OPEN/CLOSE inputs. GateLink only pulses them (<code>pulse_ms</code>) and never holds them, so the other devices keep working.',
       'All gate inputs go through a PNP-output opto board. Power its output side from the board’s 3.3 V, never 5 V or 24 V: a PNP output passes that voltage straight to the input pin. A lit opto drives its input to 3.3 V (active); a dead opto, missing 24 V or cut wire reads off.',
       'Opto input side (24 V): wet each limit contact from the opener’s 24 V accessory output — 24 V to AUX C; the open-limit relay’s NO to channel 1, and the closed-limit relay’s <strong>NC</strong> to channel 2 (it energizes when not at the close limit) — and connect the third channel across the AC-powered 24 V supply (not the battery-backed accessory output). Follow the opto board’s input markings for the common. Set the opener’s AUX relay switches (1-2-3): relay 1 to OFF OFF ON (<em>energizes at open limit</em>), relay 2 to OFF ON OFF (<em>energizes when not at close limit</em>); relay 2 left at OFF OFF OFF (<em>always off</em>) reads closed wherever the gate is. The AUX limit relays switch only once the opener’s travel limits are set: a limit that never reads may be unset limits rather than wiring.',
-      'Gate state comes only from the limit inputs. IN3 senses AC power: without it, commands run only while a limit reads. The opener runs on its battery, so a limit that still reads is trusted; with none reading the gate shows “no power” (it may be moving, or the opener may be dead) rather than between. Set <code>power_sense</code> to 0 if IN3 isn’t wired.',
+      'Gate state comes only from the limit inputs (with <code>closed_sense</code>, the closed sensor on IN4 too), never from GateLink’s own commands. IN3 senses AC power: without it, commands run only while a limit reads. The opener runs on its battery, so a limit that still reads is trusted; with none reading the gate shows “no power” (it may be moving, or the opener may be dead) rather than between. Set <code>power_sense</code> to 0 if IN3 isn’t wired.',
       'VIN is 5 V max. Never connect the opener’s 24 V directly to the board.',
       'Use the relays’ NO/COM contacts only. Add TVS or RC suppression on long field runs.',
       'Keep the antenna vertical and outside any metal enclosure.',

@@ -138,9 +138,11 @@ async function flashFirmware(fw) {
   let sb = null;
   try {
     let boot = isBootPort(target) ? target : null;
+    // The board comes back on the port it was reset from. From the bootloader only its connect event finds it: the
+    // port connected last may be the other board's.
+    expectBack(boot ? null : target);
     if (!boot) {
       if (S.port) await disconnect(true);
-      expectBack(target);
       fwStep('Restarting the board into its bootloader…');
       // The firmware's USB serial resets into the bootloader when DTR drops at 1200 baud.
       await target.open({ baudRate: 1200 });

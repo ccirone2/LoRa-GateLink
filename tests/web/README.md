@@ -50,8 +50,10 @@ test('…', async ({ page }) => {
 (`unplug`, `plug`, `replug`, `push`, `pushLine`). Dialogs are accepted unless `openConsole(…, { dismissDialogs: true })`;
 their texts are in `page.dialogs`.
 
-Flashing itself needs the real bootloader and stays a bench check (`docs/bench-testing.md`); the image checks before it
-are covered here.
+A board with `bootloader: true` is in its bootloader: its port has the bootloader's PID and answers the SAM-BA
+commands `web/js/samba.js` sends, and its reset starts the image written (reporting the version in its marker) as an
+app port after `bootMs`. That covers the page's side of an update; the real bootloader and its timing stay a bench
+check (`docs/bench-testing.md`).
 
 When the console protocol changes, change `fake-serial.js` and `fixtures/firmware.json` with it
 ([docs/architecture.md](../../docs/architecture.md), "Console").

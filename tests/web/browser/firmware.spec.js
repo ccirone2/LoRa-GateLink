@@ -1,5 +1,5 @@
-// The firmware card's image checks, all before anything touches the board (flashing itself needs the bootloader: a
-// bench check).
+// The firmware card: its image checks, all before anything touches the board, and an update over the fake
+// bootloader (fake-serial.js; the real one is a bench check).
 import { test, expect, openConsole, connect } from './helpers.js';
 
 // A minimal application image: vector table (stack pointer in RAM, reset handler in flash above the bootloader).
@@ -96,4 +96,21 @@ test('Install latest offers the bundled release, checks it, then asks', async ({
   await expect.poll(() => page.dialogs.length).toBe(1); // checks passed: asked to flash, and declined
   expect(page.dialogs[0]).toContain('Flash firmware 0.14.0 to this house board (running 0.13.6)?');
   expect(await touched(page)).toBe(false);
+});
+
+test('flashing a board already in its bootloader reconnects to it, not to the board connected before', async ({ page }) => {
+  // The gate was double-tapped into its bootloader; the house was connected earlier and is still plugged in. The
+  // gate's new firmware takes longer to start than the reconnect's first try.
+  await openConsole(page, [{ role: 'house', fw: '0.14.0' }, { role: 'gate', fw: '0.13.6', bootloader: true, bootMs: 2500 }]);
+  await connect(page, 'house');
+  await page.locator('#btnDisconnect').click();
+  await expect(page.locator('#devline')).toHaveText('not connected');
+  const houseOpens = () => page.evaluate(() => window.__fake.ports[0].opens.length);
+  const before = await houseOpens();
+  await page.locator('#tabbtn-board').click();
+  await page.locator('#fwFile').setInputFiles({ name: 'GateLink.bin', mimeType: 'application/octet-stream', buffer: image() });
+  await expect(page.locator('#devline')).toContainText('· gate', { timeout: 10000 });
+  await expect(page.locator('#fwStep')).toHaveText('Updated to 0.14.0. Role, config and key kept.');
+  expect(page.dialogs).toEqual(['Flash firmware 0.14.0 to the selected board? Relays release and the link is down for about a minute.']);
+  expect(await houseOpens()).toBe(before); // the house was left alone
 });

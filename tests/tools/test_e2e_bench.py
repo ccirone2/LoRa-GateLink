@@ -86,3 +86,48 @@ def test_baseline_link_is_up_in_the_gate_s_current_session(link_up, verified, po
     assert bool(b._link_current()) is ok
     assert b.gate.asked == link_up, "the gate is asked only once the house has the link up"
     assert pings == ([False] if link_up and verified else [])
+
+
+class UptimeBoard:
+    """A board whose status reports `uptime(host_t)` at the bench's host clock."""
+
+    def __init__(self, clock, uptime):
+        self.clock, self.uptime = clock, uptime
+        self.dropped = 0
+
+    def status(self):
+        return {"uptime_ms": int(self.uptime(self.clock[0])), "link": {"mac_fail": 0, "replay": 0}, "usb_cut": 0,
+                "reset_cause": 1}
+
+
+def reset_bench(gate_uptime):
+    clock = [100.0]
+    b = bench_mod.Bench.__new__(bench_mod.Bench)
+    b.timeline = Timeline()
+    b.timeline.now = lambda: clock[0]
+    b.house = UptimeBoard(clock, lambda t: 600_000 + t * 1000)
+    b.gate = UptimeBoard(clock, gate_uptime)
+    b.pulse_ms = 500
+    b.anomalies = []
+    b.begin_test("t")
+    return b, clock
+
+
+@pytest.mark.parametrize("gate_uptime, reset", [
+    (lambda t: (t - 95) * 1000, False),         # up 5 s at the start, no reset
+    (lambda t: (t - 110) * 1000 if t >= 110 else (t - 95) * 1000, True),  # reset 10 s in: still past the 5 s at start
+    (lambda t: (t - 165) * 1000 if t >= 165 else 900_000, True),          # reset 5 s before the end
+])
+def test_invariant_check_catches_a_reset_whose_uptime_outgrew_the_start(gate_uptime, reset):
+    """A board reset during a test whose USB port didn't drop (requests over the UART) is caught by its uptime alone:
+    it must be compared with the uptime the board would have had, not only the one at the start, or a board that had
+    just booted then (after a reboot or power test) and reset early in the test reads as never reset."""
+    b, clock = reset_bench(gate_uptime)
+    since = b.mark()
+    snap = b.snapshot()
+    clock[0] += 70
+    if reset:
+        with pytest.raises(AssertionError, match="gate reset during the test"):
+            b.check_invariants(since, snap)
+    else:
+        b.check_invariants(since, snap)

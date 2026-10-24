@@ -116,6 +116,9 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
   overlap). Every gate pulse directly follows a received command for that relay (OPEN = K1, CLOSE = K2) or is a
   relay test the scenario issued; a commanded pulse is `pulse_ms` long, and the simulator measured it at that
   length (a relay test at its requested length), ±80 ms. House K2 never reads closed unless the gate is closed.
+  House K1 is energized exactly when the gate isn't closed, while the house reports a limit, `no_power` or `fault`
+  (not mid-travel, where it holds the limit left; not during a resync or a house K1 relay test; not with `ctrl_sync`
+  0).
   No board resets or radio faults. No MAC failures or replays. The house sent exactly the number of commands the
   scenario expects. The opener saw no press the gate didn't log as a pulse (relay chatter, e.g. while a board
   powers up or down).

@@ -131,3 +131,48 @@ def test_invariant_check_catches_a_reset_whose_uptime_outgrew_the_start(gate_upt
             b.check_invariants(since, snap)
     else:
         b.check_invariants(since, snap)
+
+
+def k1_bench(events):
+    """A Bench whose timeline holds `events` (host s, src, kind, fields), for the K1 check alone."""
+    clock = [0.0]
+    b = bench_mod.Bench.__new__(bench_mod.Bench)
+    b.timeline = Timeline()
+    b.timeline.now = lambda: clock[0]
+    b.profile = {"house": {"resync_ms": 1000}}
+    b.begin_test("t")
+    for t, src, kind, fields in events:
+        clock[0] = t
+        b.timeline.add(src, kind, **fields)
+    problems = []
+    b._check_k1(0.0, problems)
+    return problems
+
+
+def st(gate, k1):
+    return "house", "status", {"gate": gate, "k1": k1, "k2": gate == "closed", "cause": None, "ctrl": k1}
+
+
+@pytest.mark.parametrize("events, bad", [
+    ([(1, *st("closed", False)), (2, *st("open", True)), (3, *st("no_power", True)), (4, *st("fault", True))], 0),
+    ([(1, *st("open", False))], 1),  # K1 left off with the gate open
+    ([(1, *st("closed", True))], 1),  # K1 on with the gate closed
+    ([(1, *st("between", False)), (2, *st("between", True)), (3, *st("unknown", True))], 0),  # the travel hold
+    ([(1, "house", "log", {"ev": "resync", "a": 1, "b": 0}), (1.5, *st("open", False)), (3, *st("open", False))], 1),
+    ([(1, "test", "action", {"relay_test": "house", "k": 1, "ms": 500}), (1.2, *st("closed", True))], 0),
+    ([(1, "test", "action", {"relay_test": "house", "k": 2, "ms": 500}), (1.2, *st("closed", True))], 1),
+])
+def test_k1_check_follows_the_gate_outside_travel_resync_and_relay_tests(events, bad):
+    assert len(k1_bench(events)) == bad
+
+
+def test_k1_check_skips_a_test_with_ctrl_sync_off():
+    b = bench_mod.Bench.__new__(bench_mod.Bench)
+    b.timeline = Timeline()
+    b.profile = {"house": {"resync_ms": 1000}}
+    b.begin_test("t")
+    b.allow_k1_free()
+    b.timeline.add(*st("open", False)[:2], **st("open", False)[2])
+    problems = []
+    b._check_k1(0.0, problems)
+    assert problems == []

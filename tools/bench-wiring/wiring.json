@@ -553,7 +553,7 @@
     {
       "from": "gate_opto:4−",
       "bus": "gnd_g",
-      "status": "planned",
+      "status": "connected",
       "signal": "Opto input 4 return"
     },
     {
@@ -760,7 +760,7 @@
     {
       "from": "rig:CH4 COM",
       "bus": "v24",
-      "status": "planned",
+      "status": "connected",
       "signal": "Wetting (closed sensor)",
       "color": "red"
     },
@@ -791,10 +791,10 @@
     {
       "from": "rig:CH4 NO",
       "to": "gate_opto:4+",
-      "status": "planned",
+      "status": "connected",
       "signal": "Closed sensor (IN4, closed_sense)",
       "color": "purple",
-      "note": "Planned 2026-10-23 (F12): the reed's contact"
+      "note": "Planned 2026-10-23 (F12): the reed's contact. Wired 2026-10-24; confirmed by test_closed_sensor_catches_a_failed_closed_limit (run 20261024-165156)"
     },
     {
       "from": "gate_opto:OUT1",
@@ -821,7 +821,7 @@
     {
       "from": "gate_opto:OUT4",
       "to": "gate:IN4 (A4)",
-      "status": "planned",
+      "status": "connected",
       "signal": "Closed sensor",
       "color": "purple"
     },

@@ -23,13 +23,6 @@ once its fix is merged and record it in the pull request.
 
 ## Bench and field tests
 
-- [ ] **Wire the bench closed sensor and run its scenario (0.20.0, `closed_sense`).** The GateSim drives the reed on
-  D10 (rig CH4), but nothing carries it to the gate board yet, so `test_closed_sensor_catches_a_failed_closed_limit`
-  skips. Wire rig CH4 COM to +24 V, CH4 NO to gate opto input 4+, opto input 4- to the 24 V return and opto OUT4 to
-  gate IN4 (A4) (the planned wires in `tools/bench-wiring/wiring.json`), then run
-  `uv run pytest tests/e2e -v -k test_closed_sensor_catches_a_failed_closed_limit` and mark the wires connected. The
-  host tests cover the logic (`gate_state_closed_sense_*` in `tests/native/test_system_gate_state.cpp`); this checks
-  the real opto channel and the 5 s fault on the board.
 - [ ] **A rebooted gate's session is verified slowly at 17 dBm on the bench.** After a gate reboot the house accepted
   the new session within 1.4–1.9 s at 5 dBm, but in 1.5–4.2 s at 17 dBm (and once over 7.8 s, run
   `20261014-231116`), on 0.15.2 as well (1.5–4.2 s, `20261013-144010`). While the house still has the old session

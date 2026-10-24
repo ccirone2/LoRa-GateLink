@@ -24,6 +24,11 @@ def _clear(rig, period_s=PERIOD_S):
         b.request("hist.clear", period_s=period_s)
 
 
+def _rolled(rig, board, period_s=60):
+    """Wait for the first bucket after a clear to close: polled, not a fixed sleep against the board's clock."""
+    rig.wait_for(lambda: board.history()[1]["current"] >= 1, period_s + 10, f"{board.name}: bucket 0 closed")
+
+
 def test_history_counts(rig):
     """The bucket in progress counts what the status totals count, with levels and both directions filled in."""
     s0 = {n: rig.board(n).status()["link"] for n in ("house", "gate")}
@@ -73,7 +78,7 @@ def test_history_rollover_and_paging(rig):
     """With a 60 s bucket the first one closes on time, the next starts, and hist.get pages by `from`/`n`."""
     try:
         _clear(rig, 60)
-        time.sleep(62)
+        _rolled(rig, rig.house)
         buckets, head = rig.house.history()
         assert head["period_s"] == 60 and head["current"] == 1 and head["oldest"] == 0, head
         assert [b["idx"] for b in buckets] == [0, 1]
@@ -100,7 +105,7 @@ def test_history_kept_across_a_reboot(rig):
     with the boot it was recorded in, and the numbering (and the 60 s period) goes on from them."""
     try:
         _clear(rig, 60)
-        time.sleep(62)
+        _rolled(rig, rig.gate)
         before, head = rig.gate.history()
         assert head["persist"] is True, f"gate history not kept in its flash: {head}"
         assert [b["idx"] for b in before] == [0, 1], before

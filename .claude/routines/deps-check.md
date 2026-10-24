@@ -22,7 +22,9 @@ environment (`uv.lock`); this routine covers what it can't read, and checks on i
    advisories) is tonight's subject, whatever else is pending.
 3. **Development tooling Dependabot doesn't cover** (uv and gcovr in `ci.yml`, uv in `tools/agent/cloud_setup.sh`):
    bump one per pull request when its checks still pass (`uv run ruff check tests tools`, fixing new findings; for
-   uv, the new release's SHA-256 from its checksums file, and its version in all three places). Keep exact pins and versions at least two weeks old; update `docs/development.md` with them. An open Dependabot pull request with
+   uv, the new release's SHA-256 from its checksums file, and its version in all three places). Keep exact pins and versions at least two weeks old; update `docs/development.md` with them. Batch them: bump uv or
+   gcovr only when the pin is four weeks or more behind, or a newer release fixes something we use (a security or
+   bug fix in its changelog), since every pull request waits on the owner (uv was bumped five times in ten days). An open Dependabot pull request with
    failing CI: say what fails and why in the summary (a fix belongs on its branch, by a working session).
 4. **Firmware cores and libraries, and arduino-cli, are never bumped by a routine**: they change the binary on the
    gate (arduino-cli runs the build: prototypes, library discovery, linking) and need the bench and a release. Add or

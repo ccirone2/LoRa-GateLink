@@ -177,7 +177,3 @@ once its fix is merged and record it in the pull request.
   `python tools/gatelink.py key backup <dir>` and keep its passphrase in the password manager; then
   check `python tools/gatelink.py ports` shows the same key id on both boards as `key id` does for the
   file ([docs/key-management.md](docs/key-management.md)). The install pair gets its own key, generated there.
-- [ ] **Nightly routines: the first week.** The routines in `.claude/routines/` run, and since the cloud environment
-  got full network access (2026-10-12) their setup installs everything: on 2026-10-13 `setup.done` read `ok`, the
-  bug-sweep ran the host tests (#112) and the deps-check reached the Arduino library index (#113). Left: watch the
-  first week's pull requests (to about 2026-10-19) and tune the routine files.

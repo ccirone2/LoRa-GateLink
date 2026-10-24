@@ -57,22 +57,6 @@ once its fix is merged and record it in the pull request.
   but bossac reported `No device found on COM19`; `flash.py <bin> COM19` a moment later flashed it. So the bootloader
   port can show up before it answers: `flash.py` could retry bossac once after a short wait. The same day the gate (…0C301C)
   dropped off USB entirely again on the touch (no app or bootloader port), after probe scripts and a flash.
-- [ ] **A boot sometimes writes nothing to the event journal in its first seconds.** After a reset, what the boot
-  before left unwritten goes to the journal at the first loop pass (`logSaveDue`: `savedAt` and `unsavedSince` are set
-  back at `logBegin`). Four times in a full suite (0.19.1 run `20261020-212219`, 0.19.3-dev run `20261022-172334`,
-  0.20.0 runs `20261023-160222` and `20261024-094510`: boots 533 and 544 left the boot before's entries for the next
-  boot; each rerun passed) the
-  boot that `test_gate_reboot_at_rest` started wrote nothing in its ~7 s before the next test's reset, and
-  `test_event_log_kept_across_a_reboot` failed. The gate's journal afterwards shows it (run `20261022-172334`):
-  record 299 holds boot 500's last 13 entries and boot 501's `boot`, so boot 502 wrote it; record 300 holds entries
-  from boots 501, 502 and 503, so boot 503 wrote it; boot 501, whose newest read 298 at ~6.5 s, wrote nothing. So
-  `log.get` read right; it was taken for a misread at first (a read glitch passing the newest over), and a re-read
-  fix built for that was dropped. Not reproduced alone (2026-10-22): five rounds of a reboot after ~12 events, the
-  same with the bench profile's `config.set`, and the two tests after `test_normal` or `test_history`, all wrote the
-  first record at once. Nothing found in the code holds `logSave` back at boot: `appRelaysPulsing`, a history save
-  due (`histSaveDue`, `saveNext == cur` after `histBegin`), `evLogOn` (on: the read returned a record). Next: log
-  when `logSave` runs and what `evLogAppend` returned (a debug build), and run the full suite until it shows.
-  Diagnostics only (the ring keeps the entries across resets; only a power cut in that window loses them).
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
   - Fixed sleeps that bet on timing: the `sleep(2)`/`sleep(3)` before negative assertions (derive them from the
     profile).

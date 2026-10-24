@@ -71,3 +71,8 @@ const LogEntry &logAt(size_t i);
 #define LOG_SAVE_GAP_MS 60000UL
 bool logSaveDue(uint32_t now);
 void logSave(uint32_t now);
+// For log.get: ring entries not in the journal yet, and this boot's journal writes and failed ones (a failing chip, or
+// a boot that seems to write nothing: one left more than a record's worth writes the rest a minute later).
+uint16_t logUnsaved();
+uint16_t logSaves();
+uint16_t logSaveFails();

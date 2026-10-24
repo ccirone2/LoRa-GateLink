@@ -289,6 +289,9 @@ static void handle(JsonDocument &req, ConsolePort &from) {
     res["boot"] = boot;
     JsonVariant before = req["before"];
     if (before.isNull()) {
+      res["unsaved"] = logUnsaved();
+      res["saves"] = logSaves();
+      res["save_fails"] = logSaveFails();
       sendLogRing(res, from, boot);
       return;
     }

@@ -24,6 +24,7 @@ static uint16_t boot;          // this boot's count, low 16 bits
 static uint32_t unsavedSince;  // when the oldest unsaved entry was logged (as far as this boot knows)
 static uint32_t savedAt;       // the last write to the journal
 static uint32_t appended;      // entries this boot has added to the ring (logSave counts those added while it writes)
+static uint16_t saves, saveFails;  // journal writes this boot, and those that failed (diagnostics: log.get)
 
 static const char *const NAMES[] = {
   "boot", "radio_fail", "link_up", "link_down", "session", "mac_fail", "replay",
@@ -95,6 +96,18 @@ const char *logCodeName(uint8_t code) {
   return code < EV_COUNT ? NAMES[code] : "?";
 }
 
+uint16_t logUnsaved() {
+  return k ? k->unsaved : 0;
+}
+
+uint16_t logSaves() {
+  return saves;
+}
+
+uint16_t logSaveFails() {
+  return saveFails;
+}
+
 size_t logCount() {
   return k ? k->count : 0;
 }
@@ -119,7 +132,9 @@ void logSave(uint32_t now) {
   LogEntry batch[ELOG_PER_REC];
   for (uint8_t i = 0; i < n; i++) batch[i] = logAt(k->count - k->unsaved + i);
   uint32_t before = appended;
-  evLogAppend(batch, n);  // its radio restart may log (radio_fail): those entries are unsaved too
+  bool ok = evLogAppend(batch, n);  // its radio restart may log (radio_fail): those entries are unsaved too
+  if (saves < 0xFFFF) saves++;
+  if (!ok && saveFails < 0xFFFF) saveFails++;
   uint32_t added = appended - before;
   k->unsaved = left + added < k->count ? left + added : k->count;
   seal();

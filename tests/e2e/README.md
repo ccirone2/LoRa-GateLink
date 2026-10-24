@@ -113,7 +113,8 @@ Without the bench connected, every test is skipped. If `test_00_preflight` fails
 - **Baseline.** Each test starts from the same point: opener powered, gate closed, controller off, house armed
   and in sync.
 - **Invariant checks after every test.** OPEN and CLOSE are never pulsed together (the simulator reports any
-  overlap). Every gate pulse directly follows a received command for that relay (OPEN = K1, CLOSE = K2) or is a
+  overlap), and neither is pressed within 60 ms of the other's release (the 100 ms interlock less the serial jitter;
+  the closest gap seen goes in the summary). Every gate pulse directly follows a received command for that relay (OPEN = K1, CLOSE = K2) or is a
   relay test the scenario issued; a commanded pulse is `pulse_ms` long, and the simulator measured it at that
   length (a relay test at its requested length), ±80 ms. House K2 never reads closed unless the gate is closed.
   House K1 is energized exactly when the gate isn't closed, while the house reports a limit, `no_power` or `fault`

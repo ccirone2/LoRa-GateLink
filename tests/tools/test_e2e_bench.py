@@ -176,3 +176,15 @@ def test_k1_check_skips_a_test_with_ctrl_sync_off():
     problems = []
     b._check_k1(0.0, problems)
     assert problems == []
+
+
+@pytest.mark.parametrize("gap_ms, bad", [(100, 0), (65, 0), (40, 1), (0, 1)])
+def test_interlock_gap_check_flags_a_press_soon_after_the_other_release(gap_ms, bad):
+    """OPEN released at 10 s (held 500 ms); CLOSE pressed `gap_ms` later, its release reported 300 ms after that."""
+    b = bench_mod.Bench.__new__(bench_mod.Bench)
+    b.facts = {}
+    releases = {1: [(10.0, 500)], 2: [(10.0 + gap_ms / 1000 + 0.3, 300)]}
+    problems = []
+    b._check_interlock_gap(releases, problems)
+    assert len(problems) == bad
+    assert b.facts["closest relay interlock gap (ms)"] == gap_ms

@@ -16,6 +16,8 @@ SIM_DEBOUNCE_MS = 20  # GateSim SENSE_DEBOUNCE_MS
 # A status poll inside a wait: replies take ~0.1 s, so a lost one (a USB stall cut the line) mustn't use up the wait.
 WAIT_STATUS_S = 1.5
 PULSE_TOL_MS = 60  # measured pulse vs requested: relay operate/release and loop timing on both ends
+INTERLOCK_MS = 100  # role_gate.cpp: no pulse within this of the other relay releasing
+INTERLOCK_TOL_MS = 40  # the two events' serial delays (each press's own delay cancels) and the contacts' make/break
 # Same order of timings as the defaults (heartbeat < link timeout, travel timeout < mismatch timeout), shorter.
 # The rest are the firmware defaults (config.cpp), pinned because scenarios rely on them: the limit-chatter test
 # needs debounce_ms > the GateSim's 30 ms flicker steps, and the waits assume the default windows.
@@ -435,6 +437,7 @@ class Bench:
             if (len(parts) == 3 and parts[0] == "release" and parts[1] in ("open", "close")
                     and e["t"] - int(parts[2]) / 1000 >= since):
                 releases[1 if parts[1] == "open" else 2].append((e["t"], int(parts[2])))
+        self._check_interlock_gap(releases, problems)
         tol = PULSE_TOL_MS + SIM_DEBOUNCE_MS
         # The gate's supply cut by the power rig: a pulse it overlapped ends when the board goes down.
         gate_cuts = [e["t"] for e in self.timeline.select(src="sim", kind="evt", since=since) if e["line"] == "rail gate off"]
@@ -458,6 +461,24 @@ class Bench:
             for t, held in left:
                 problems.append(f"opener {'OPEN' if k == 1 else 'CLOSE'} input pressed {held} ms at "
                                 f"{t - held / 1000:.3f}s with no gate pulse logged (relay chatter?)")
+
+    def _check_interlock_gap(self, releases, problems):
+        """No press starts within INTERLOCK_MS of the other input's release (CLAUDE.md: a contact can make before the
+        other breaks). A press started at its release's host time less the length held, so the serial delay and the
+        GateSim's debounce cancel out of each press; the closest gap seen goes in the summary."""
+        presses = [(k, t - held / 1000, t) for k, rs in releases.items() for t, held in rs]
+        for k, start, _ in presses:
+            for o, _, end in presses:
+                gap = round((start - end) * 1000)
+                if o == k or gap < 0:
+                    continue  # an overlap is the simulator's `evt pulse both`
+                if gap < 1000:
+                    best = self.facts.get("closest relay interlock gap (ms)")
+                    self.facts["closest relay interlock gap (ms)"] = gap if best is None else min(best, gap)
+                if gap < INTERLOCK_MS - INTERLOCK_TOL_MS:
+                    problems.append(f"opener {'OPEN' if k == 1 else 'CLOSE'} pressed {gap} ms after "
+                                    f"{'OPEN' if o == 1 else 'CLOSE'} released, at {start:.3f}s "
+                                    f"(interlock {INTERLOCK_MS} ms)")
 
     def _check_k2(self, since, problems):
         """House K2 (contact sensor) reads closed only while the gate is known closed. The status event is sent

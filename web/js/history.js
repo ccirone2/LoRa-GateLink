@@ -323,11 +323,11 @@ function histPointer(e) {
 function histKey(e) {
   if (!hist?.buckets.length) return;
   const n = hist.buckets.length;
-  const at = histAt < 0 ? n - 1 : histAt;
+  const at = histAt < 0 ? n : histAt; // none yet: either arrow starts at the newest
   const next = { ArrowLeft: at - 1, ArrowRight: at + 1, Home: 0, End: n - 1 }[e.key];
   if (e.key === 'Escape') histAt = -1;
   else if (next === undefined) return;
-  else histAt = Math.min(n - 1, Math.max(0, histAt < 0 ? n - 1 : next));
+  else histAt = Math.min(n - 1, Math.max(0, next));
   e.preventDefault();
   drawHistHover();
 }

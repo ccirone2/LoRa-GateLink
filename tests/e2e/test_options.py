@@ -164,6 +164,7 @@ def test_ctrl_sync_off(rig):
     rig.expect_commands(0)
     m = rig.mark()
     try:
+        rig.allow_k1_free()
         rig.house.config_set(ctrl_sync=0)
         rig.sim.open_gate()
         rig.wait_house(SIM_TRAVEL_S + 10, gate="open", io__k2=False)

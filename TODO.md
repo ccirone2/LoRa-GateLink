@@ -59,8 +59,9 @@ once its fix is merged and record it in the pull request.
   dropped off USB entirely again on the touch (no app or bootloader port), after probe scripts and a flash.
 - [ ] **A boot sometimes writes nothing to the event journal in its first seconds.** After a reset, what the boot
   before left unwritten goes to the journal at the first loop pass (`logSaveDue`: `savedAt` and `unsavedSince` are set
-  back at `logBegin`). Three times in a full suite (0.19.1 run `20261020-212219`, 0.19.3-dev run `20261022-172334`,
-  0.20.0 run `20261023-160222`: boot 533 left boot 532's entries for the next boot; the rerun passed) the
+  back at `logBegin`). Four times in a full suite (0.19.1 run `20261020-212219`, 0.19.3-dev run `20261022-172334`,
+  0.20.0 runs `20261023-160222` and `20261024-094510`: boots 533 and 544 left the boot before's entries for the next
+  boot; each rerun passed) the
   boot that `test_gate_reboot_at_rest` started wrote nothing in its ~7 s before the next test's reset, and
   `test_event_log_kept_across_a_reboot` failed. The gate's journal afterwards shows it (run `20261022-172334`):
   record 299 holds boot 500's last 13 entries and boot 501's `boot`, so boot 502 wrote it; record 300 holds entries
@@ -79,8 +80,6 @@ once its fix is merged and record it in the pull request.
     (GateSim `evt pulse both`), not a pulse starting less than `INTERLOCK_MS` (100 ms) after the other relay
     released. Checking the gap needs the GateSim to report each press's start time (it reports the release and the
     length held).
-  - The checks after every test cover K2 but not K1 (wiring K1 to the suite is ROADMAP B5): add one comparing house K1 with the gate state, allowing for
-    `holdingTravel` and the sync window.
   - Not covered on the bench: `openSyncWindow` never shortening a window, the `settleUntil` floor, and a controller
     that toggles on SW edges (a scenario with `in1_invert` would do). The host system tests cover them since the
     host simulation; keep the bench gap only if a real-hardware angle remains.

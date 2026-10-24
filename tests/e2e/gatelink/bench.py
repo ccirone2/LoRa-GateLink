@@ -264,10 +264,15 @@ class Bench:
         self._allowed_counters = set()
         self._expected_cmds = (0, 0)
         self._k2_free = False
+        self._k1_free = False
 
     def allow_k2_inverted(self):
         """The test changes sensor_invert: skip the "K2 closed only when the gate is closed" check."""
         self._k2_free = True
+
+    def allow_k1_free(self):
+        """The test turns ctrl_sync off: skip the "K1 shows the gate" check."""
+        self._k1_free = True
 
     def allow_reboot(self, name):
         self._allowed_reboot.add(name)
@@ -350,6 +355,7 @@ class Bench:
                 problems.append(f"opener saw OPEN and CLOSE together at {e['t']}s (K1/K2 interlock broken)")
         self._check_pulses(since, problems)
         self._check_k2(since, problems)
+        self._check_k1(since, problems)
         for n in ("house", "gate"):
             for e in self.timeline.logs(n, "radio_fail", since):
                 problems.append(f"{n} radio_fail at {e['t']}s (a={e['a']})")
@@ -465,6 +471,24 @@ class Bench:
                 if any(r["t"] <= e["t"] <= r["t"] + r["ms"] / 1000 + 0.5 for r in tests):
                     continue
                 problems.append(f"house K2 read closed with the gate {e['gate']} at {e['t']}s")
+
+    def _check_k1(self, since, problems):
+        """House K1 (the controller's SW input) shows the gate: energized unless it is closed, whenever the house
+        knows a limit, AC lost or a fault (CLAUDE.md). Mid-travel (`between`) K1 holds the limit the gate left, so it
+        isn't checked; nor during a resync (K1 cycled for resync_ms) or a house K1 relay test."""
+        if self._k1_free:
+            return
+        resyncs = self.logs("house", "resync", since)
+        resync_s = self.profile["house"]["resync_ms"] / 1000 if resyncs else 0
+        free = [(e["t"], e["t"] + resync_s + 0.5) for e in resyncs]
+        free += [(e["t"], e["t"] + e["ms"] / 1000 + 0.5)
+                 for e in self.timeline.select(src="test", kind="action", since=since)
+                 if e.get("relay_test") == "house" and e["k"] == 1]
+        for e in self.timeline.select(src="house", kind="status", since=since):
+            if e["gate"] not in ("open", "closed", "no_power", "fault") or e["k1"] is None:
+                continue
+            if e["k1"] != (e["gate"] != "closed") and not any(a - 0.1 <= e["t"] <= b for a, b in free):
+                problems.append(f"house K1 {'on' if e['k1'] else 'off'} with the gate {e['gate']} at {e['t']}s")
 
     # --- summary ----------------------------------------------------------------------------------------------
     def latency_rows(self):

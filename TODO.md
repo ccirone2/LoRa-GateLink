@@ -166,10 +166,9 @@ once its fix is merged and record it in the pull request.
 ## Supply chain
 
 - [ ] **Release binaries: what's left** (threat model `pages-malicious-firmware`, `release-asset-mutable`). The
-  rulesets on `main` and `v*` tags and immutable releases are on (2026-10-14). Left: Pages could check the bundled
-  `.bin` with `gh release verify-asset` (GitHub's attestation) rather than the release's own `.sha256`, once a release
-  is immutable (v0.17.0 on); and build provenance attestations for the binary (`actions/attest-build-provenance`), if
-  worth a third-party-free path to them.
+  rulesets on `main` and `v*` tags and immutable releases are on (2026-10-14). Pages checks the `.bin` it bundles against
+  GitHub's release attestation (`gh release verify-asset`, 2026-10-24). Left: build provenance attestations for the
+  binary (`actions/attest-build-provenance`), if worth a third-party-free path to them.
 
 ## Housekeeping
 

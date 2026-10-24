@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  attestations: read  # gh release verify-asset
   pages: write
   id-token: write
 
@@ -71,9 +72,12 @@ jobs:
             exit 0
           fi
           f="GateLink-$tag.bin"
-          # Check it against the checksum published with the release (attached since v0.13.0), so a damaged or
-          # swapped download isn't deployed with a checksum of its own.
-          if gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$f.sha256" --dir "$RUNNER_TEMP"; then
+          # Check it, so a damaged or swapped download isn't deployed with a checksum of its own: against GitHub's
+          # signed release attestation for an immutable release (v0.17.0 on), whose files can't be replaced; else
+          # against the checksum published with it (attached since v0.13.0), which shares the release's trust root.
+          if [ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isImmutable -q .isImmutable)" = true ]; then
+            gh release verify-asset "$tag" "web/firmware/$f" --repo "$GITHUB_REPOSITORY"
+          elif gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$f.sha256" --dir "$RUNNER_TEMP"; then
             (cd web/firmware && sha256sum -c "$RUNNER_TEMP/$f.sha256")
           else
             echo "::warning::$tag has no $f.sha256 (released before v0.13.0); deploying it unchecked"

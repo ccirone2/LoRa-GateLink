@@ -76,10 +76,6 @@ once its fix is merged and record it in the pull request.
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
   - Fixed sleeps that bet on timing: the `sleep(2)`/`sleep(3)` before negative assertions (derive them from the
     profile).
-  - The interlock check (`check_invariants` in `tests/e2e/gatelink/bench.py`) only catches OPEN and CLOSE overlapping
-    (GateSim `evt pulse both`), not a pulse starting less than `INTERLOCK_MS` (100 ms) after the other relay
-    released. Checking the gap needs the GateSim to report each press's start time (it reports the release and the
-    length held).
   - Not covered on the bench: `openSyncWindow` never shortening a window, the `settleUntil` floor, and a controller
     that toggles on SW edges (a scenario with `in1_invert` would do). The host system tests cover them since the
     host simulation; keep the bench gap only if a real-hardware angle remains.

@@ -33,7 +33,7 @@ numbers above that HELLO_ACK's are accepted, each once, so recorded frames can't
 32-frame sliding window tolerates reordering between retried messages. A HELLO from an unknown session (a restarted peer, or a replayed old one) is challenged, but the
 verified session stays in place until the new one answers. A challenge is good for 10 s after the last HELLO that
 carried it, so an answer recorded earlier can't be played back later. A challenge is the link key's HMAC of the
-challenger's session, a count and radio noise (16 bytes of it): distinct for every challenge and unpredictable
+challenger's session, a count and 32 bits of radio noise, cut to 16 bytes: distinct for every challenge and unpredictable
 without the key. With 32 bits (before 0.16.0), answers recorded over weeks (old HELLOs replayed to make a board
 challenge, and the live peer's answers recorded) could come to match a later challenge, re-verify a superseded
 session and let its recorded frames through.

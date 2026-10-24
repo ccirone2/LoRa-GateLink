@@ -128,9 +128,9 @@ TEST(event_log_ring_survives_a_reset_and_goes_to_the_journal_at_once) {
   }
 }
 
-// [event-log] The ring reply counts what isn't in the journal yet and this boot's journal writes (0.20.1, TODO.md: a
-// boot that writes nothing): after a reset the boot before's unsaved entries go out at once, and a failed write is
-// counted (its entries stay in the ring only).
+// [event-log] The ring reply counts what isn't in the journal yet and this boot's journal writes (0.20.1): after a
+// reset the boot before's unsaved entries go out at once, and a failed write is counted (its entries stay in the ring
+// only).
 TEST(event_log_ring_reply_counts_unsaved_entries_and_journal_writes) {
   Site w;
   w.commission();

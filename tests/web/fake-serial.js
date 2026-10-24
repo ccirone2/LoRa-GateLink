@@ -205,7 +205,10 @@
           return ok();
         }
         case 'log.get': {
-          if (req.before === undefined || this.noJournal) return ok({ log: clone(this.log), now: this.uptimeMs, boot: this.boot });
+          if (this.noJournal) return ok({ log: clone(this.log), now: this.uptimeMs, boot: this.boot });
+          if (req.before === undefined) {
+            return ok({ log: clone(this.log), now: this.uptimeMs, boot: this.boot, unsaved: 0, saves: 0, save_fails: 0 });
+          }
           // spec.journal: records oldest first, record i's lseq i + 1
           const i = Math.min(req.before - 1, this.journal.length) - 1;
           if (i < 0) return ok({ log: [], now: this.uptimeMs, boot: this.boot });

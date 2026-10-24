@@ -128,6 +128,35 @@ TEST(event_log_ring_survives_a_reset_and_goes_to_the_journal_at_once) {
   }
 }
 
+// [event-log] The ring reply counts what isn't in the journal yet and this boot's journal writes (0.20.1, TODO.md: a
+// boot that writes nothing): after a reset the boot before's unsaved entries go out at once, and a failed write is
+// counted (its entries stay in the ring only).
+TEST(event_log_ring_reply_counts_unsaved_entries_and_journal_writes) {
+  Site w;
+  w.commission();
+  Board &b = w.board(1);
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_OPEN_; }, 20000));
+  w.run(3000);
+  JsonDocument r = b.request("log.get");
+  CHECK(r["unsaved"].as<int>() > 0);  // the move, waiting for a record's worth or 10 min
+  b.reset(PM_RCAUSE_SYST);
+  CHECK(w.runUntil([&] { return b.running(); }, 2000));
+  w.run(3000);
+  r = b.request("log.get");
+  CHECK_EQ(r["saves"].as<int>(), 1);  // counted from this boot
+  CHECK_EQ(r["save_fails"].as<int>(), 0);
+  CHECK(r["unsaved"].as<int>() <= 2);  // only what came after the write (the session)
+  w.user(false);  // something unsaved again, written once it has waited 10 min
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_CLOSED_; }, 20000));
+  b.failPrograms = 1;
+  w.run(WAIT_MS + 5000);
+  r = b.request("log.get");
+  CHECK_EQ(r["saves"].as<int>(), 2);
+  CHECK_EQ(r["save_fails"].as<int>(), 1);
+  CHECK_EQ(r["unsaved"].as<int>(), 0);  // not retried: those are in the ring only
+}
+
 // [event-log] The ring reply is streamed an entry at a time (0.19.1: as one document, a ring of earlier-boot entries
 // took ~1 KB of heap more than config.get): a full ring from the boot before, coalesced floods among it, still comes
 // back whole and in order, with the request's id, `now` and `boot`.

@@ -34,6 +34,10 @@ def test_event_log_kept_across_a_reboot(rig):
         pytest.skip("firmware before 0.19.0 keeps no event log across resets")
     rig.expect_commands(0)
     boot0, newest = before["boot"], before["log"][-1]
+    # 0.20.1 on: what this boot has written to the journal, for the miss below (none yet with entries waiting, seconds
+    # after the boot, is the miss happening now; a failed write says the flash, not the save, is at fault).
+    counts = {k: before.get(k) for k in ("unsaved", "saves", "save_fails", "now")}
+    rig.note(f"gate journal before the reset: {counts}")
     # The journal's newest record before the reset (seq 0: none).
     top = rig.gate.log_get(before=0xFFFFFFFF)
     seq0 = top.get("seq", 0)
@@ -62,7 +66,7 @@ def test_event_log_kept_across_a_reboot(rig):
     # record was due at once (TODO.md, "A boot sometimes writes nothing to the event journal").
     assert first[0].get("boot") == boot0 & 0xFFFF or (none_left and first[0]["ev"] == "boot"), (
         f"the first record after the reset starts with the boot before's entries (boot {boot0}, newest before the "
-        f"reset seq {seq0}; since: {[r['seq'] for r in since]}): {first}")
+        f"reset seq {seq0}; since: {[r['seq'] for r in since]}; that boot's journal {counts}): {first}")
 
 
 def test_gate_reboot_mid_travel(rig):

@@ -70,8 +70,10 @@ once its fix is merged and record it in the pull request.
   fix built for that was dropped. Not reproduced alone (2026-10-22): five rounds of a reboot after ~12 events, the
   same with the bench profile's `config.set`, and the two tests after `test_normal` or `test_history`, all wrote the
   first record at once. Nothing found in the code holds `logSave` back at boot: `appRelaysPulsing`, a history save
-  due (`histSaveDue`, `saveNext == cur` after `histBegin`), `evLogOn` (on: the read returned a record). Next: log
-  when `logSave` runs and what `evLogAppend` returned (a debug build), and run the full suite until it shows.
+  due (`histSaveDue`, `saveNext == cur` after `histBegin`), `evLogOn` (on: the read returned a record). Since 0.20.1
+  `log.get` reports the ring's `unsaved` entries and the boot's journal `saves` and `save_fails`, and the test notes
+  them before its reset (and in its failure message): run the full suite until it shows, and read whether the boot
+  wrote nothing (`saves` 0) or failed to (`save_fails`).
   Diagnostics only (the ring keeps the entries across resets; only a power cut in that window loses them).
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
   - Fixed sleeps that bet on timing: the `sleep(2)`/`sleep(3)` before negative assertions (derive them from the

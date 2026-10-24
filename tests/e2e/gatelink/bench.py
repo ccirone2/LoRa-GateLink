@@ -431,13 +431,16 @@ class Bench:
         if end > self.mark():
             time.sleep(end - self.mark())
         releases = {1: [], 2: []}  # relay -> [(t, held ms)]
+        pressed = {1: [], 2: []}  # relay -> [t of its `evt pulse` line]
         for e in self.timeline.select(src="sim", kind="evt", since=since):
             parts = e["line"].split()
+            if len(parts) == 2 and parts[0] == "pulse" and parts[1] in ("open", "close"):
+                pressed[1 if parts[1] == "open" else 2].append(e["t"])
             # A press that began before the test (`since`) belongs to the one before.
             if (len(parts) == 3 and parts[0] == "release" and parts[1] in ("open", "close")
                     and e["t"] - int(parts[2]) / 1000 >= since):
                 releases[1 if parts[1] == "open" else 2].append((e["t"], int(parts[2])))
-        self._check_interlock_gap(releases, problems)
+        self._check_interlock_gap(releases, problems, pressed)
         tol = PULSE_TOL_MS + SIM_DEBOUNCE_MS
         # The gate's supply cut by the power rig: a pulse it overlapped ends when the board goes down.
         gate_cuts = [e["t"] for e in self.timeline.select(src="sim", kind="evt", since=since) if e["line"] == "rail gate off"]
@@ -462,11 +465,16 @@ class Bench:
                 problems.append(f"opener {'OPEN' if k == 1 else 'CLOSE'} input pressed {held} ms at "
                                 f"{t - held / 1000:.3f}s with no gate pulse logged (relay chatter?)")
 
-    def _check_interlock_gap(self, releases, problems):
+    def _check_interlock_gap(self, releases, problems, pressed=None):
         """No press starts within INTERLOCK_MS of the other input's release (CLAUDE.md: a contact can make before the
-        other breaks). A press started at its release's host time less the length held, so the serial delay and the
-        GateSim's debounce cancel out of each press; the closest gap seen goes in the summary."""
-        presses = [(k, t - held / 1000, t) for k, rs in releases.items() for t, held in rs]
+        other breaks). A press started at its release's host time less the length held, or at its `evt pulse` line's
+        if that came sooner: a line only ever arrives late (one read can carry several), so the earlier estimate is
+        the closer one. The GateSim's debounce cancels out of each press; the closest gap seen goes in the summary."""
+        def start(k, t, held):
+            s = t - held / 1000
+            lines = [p for p in (pressed or {}).get(k, ()) if s - 1.0 <= p <= t]
+            return min([s] + lines[-1:])
+        presses = [(k, s, s + held / 1000) for k, rs in releases.items() for t, held in rs for s in [start(k, t, held)]]
         for k, start, _ in presses:
             for o, _, end in presses:
                 gap = round((start - end) * 1000)

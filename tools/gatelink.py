@@ -662,7 +662,6 @@ def main(argv=None):
     p.add_argument("--json", metavar="FILE", help="also write the full report (settings, samples, verdict) here")
     p.set_defaults(fn=cmd_survey)
 
-    argv = sys.argv[1:] if argv is None else argv
     # Anything else is `<target> <cmd> [key=value ...]`.
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] not in ("ports", "snapshot", "restore", "rftest", "survey", "key", "-h", "--help"):

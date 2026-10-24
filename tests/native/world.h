@@ -320,7 +320,8 @@ struct World {
     bool reported = false;
   } gk[2];
   uint32_t k2WrongSince = 0;
-  uint32_t closedNoSensorSince = 0;  // the gate known closed with its closed sensor (IN4) off (0: not; sentinel once reported)
+  // The gate known closed with its closed sensor (IN4) off (0: not; 0xFFFFFFFF once checked, 0x7FFFFFFF once reported).
+  uint32_t closedNoSensorSince = 0;
   uint32_t limitAt = 0;  // the last time exactly one of the gate's limits read active (0: over 1 s ago)
   uint32_t gatePulseAt = 0;  // the last gate relay pulse's start (0: over travel_timeout_s ago)
   uint32_t in3OnSince = 0;       // since when the gate's IN3 (AC) has read on (0: off; capped at a minute's age)

@@ -1077,15 +1077,20 @@ void World::onLog(Board &b, const LogEv &e) {
 
 void World::monitor() {
   // With closed_sense on, closed needs the closed sensor (IN4) too (F12): the gate stays closed with it off no longer
-  // than its input lag and the 500 ms between hold.
+  // than its input lag and the 500 ms between hold. The setting is read once per spell (CHECKED after), not each ms.
+  const uint32_t REPORTED = 0x7FFFFFFF, CHECKED = 0xFFFFFFFF;
   if (gateView == GS_CLOSED_ && !opener.in(4) && gate.running()) {
     if (!closedNoSensorSince) {
       closedNoSensorSince = now | 1;
-    } else if (closedNoSensorSince != 0x7FFFFFFF && after(now, closedNoSensorSince + 700) && gate.get("closed_sense")) {
-      violate("gate kept closed with the closed sensor off");
-      closedNoSensorSince = 0x7FFFFFFF;
+    } else if (closedNoSensorSince != REPORTED && closedNoSensorSince != CHECKED
+               && after(now, closedNoSensorSince + 700)) {
+      closedNoSensorSince = CHECKED;
+      if (gate.get("closed_sense")) {
+        violate("gate kept closed with the closed sensor off");
+        closedNoSensorSince = REPORTED;
+      }
     }
-  } else if (closedNoSensorSince != 0x7FFFFFFF) {
+  } else if (closedNoSensorSince != REPORTED) {
     closedNoSensorSince = 0;
   }
   // One limit reading (not fault); the stamp is dropped once old, so it can't wrap into the future.

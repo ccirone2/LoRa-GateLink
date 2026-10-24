@@ -30,12 +30,12 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
 | 1 | B1 | Repeatable RF tests | S | |
 | 2 | F3 | Tell the alarm what kind of trouble it is | M | |
-| 3 | F14 | Catch faults the inputs alone don't show | S | |
-| 4 | F2 | See the gate's log, history and status from the house | L | |
-| 5 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4's parts |
-| 6 | F7 | Update the gate's firmware without visiting it | XL | F2 |
+| 3 | F2 | See the gate's log, history and status from the house | L | |
+| 4 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4's parts |
+| 5 | F7 | Update the gate's firmware without visiting it | XL | F2 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 7 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 6 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 7 | F14 | Catch faults the inputs alone don't show | S | an input (H1) |
 | 8 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4 where no closed sensor is fitted) |
 | 9 | B5 | Let the suite check D5, K1 and supply dips | S | |
 | 10 | C2 | Answer "what happened last night?" | M | F2 |
@@ -234,12 +234,8 @@ Since 0.17.3 a dead house IN2 opto (IN2 off 30 s with the board's supply good) i
 relay contact is invisible.
 
 **How.**
-- A shared input held on while our coil is off: needs the opener's OPEN/CLOSE terminals sensed on an input (F15, or
-  H1).
-- Keep the both-limits hold across a power-on of the gate board too (0.17.4 keeps it through a crash: a watchdog or
-  brown-out reset). A power cut that restarts the board with a stuck closed limit and the gate part-open reads closed
-  again until the next full opening. A flash write when it latches (outside a pulse) would keep it; weigh that against
-  how rare that is (both the cut and the stuck limit), and the flash format it adds.
+- A shared input held on while our coil is off: needs the opener's OPEN/CLOSE terminals sensed on an input (H1: the
+  gate has no spare one since F12).
 
 Decided 2026-10-15 (`/implement`, verdict *build smaller*): built the both-limits hold (0.17.1); not built, and not
 to be: a fault when the closed limit stays on after our OPEN pulse (a gate that doesn't move, the opener locked out or
@@ -250,6 +246,11 @@ Reversed 2026-10-16 (#139, 0.17.2): closed reached straight from open now reads 
 restarting is a path to it. Built 2026-10-17 (0.17.3): the house IN2 check, as health `ctrl_sense`. Built 2026-10-17 (0.17.4), smaller: the
 both-limits hold kept through a crash reset in the reset memo, not in the flash (a deliberate restart still clears it,
 the installer's way after a repair).
+Decided 2026-10-23 (`/implement`, verdict *rewrite the item*): the power-on hold dropped. With the closed sensor on
+(`closed_sense`, F12, 0.20.0) a stuck closed limit with the gate part-open reads `between`, then `fault`, never
+closed, after any restart; without it, a flash record for a power cut on top of a stuck limit isn't worth its format.
+What is left, a welded contact on the shared opener inputs, needs those inputs sensed, and the gate's four are all in
+use (IN4 went to the closed sensor), so it waits on H1. Moved from rank 3 to 7: diagnosis only, and blocked on hardware.
 
 ### F15: Put the spare inputs to use
 

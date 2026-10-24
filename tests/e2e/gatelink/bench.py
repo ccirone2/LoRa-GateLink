@@ -325,10 +325,22 @@ class Bench:
         snap = {}
         for n in ("house", "gate"):
             b = self.board(n)
+            asked = self.timeline.now()
             st = b.status()
-            snap[n] = {"uptime": st["uptime_ms"], "mac_fail": st["link"]["mac_fail"],
-                       "replay": st["link"]["replay"], "dropped": b.dropped, "usb_cut": st.get("usb_cut", 0)}
+            # The board read its uptime between `asked` and `took` (host s).
+            snap[n] = {"uptime": st["uptime_ms"], "asked": asked, "took": self.timeline.now(),
+                       "mac_fail": st["link"]["mac_fail"], "replay": st["link"]["replay"], "dropped": b.dropped,
+                       "usb_cut": st.get("usb_cut", 0)}
         return snap
+
+    @staticmethod
+    def _reset_between(start, end):
+        """A board's uptime grew less than the host time between the two reads: it restarted. Only the uptime
+        falling would miss a reset early in a test on a board that had just booted (its new uptime outgrows the
+        old one), when its USB port didn't drop either (requests over the UART). Slack: 0.5 s plus 0.2 % for the
+        board's clock."""
+        host_ms = (end["asked"] - start["took"]) * 1000
+        return end["uptime"] - start["uptime"] < host_ms - 500 - host_ms * 0.002
 
     def check_invariants(self, since, snap):
         """CLAUDE.md's behavioural invariants, checked over everything the test caused."""
@@ -355,7 +367,7 @@ class Bench:
             for n in ("house", "gate"):
                 if n in self._allowed_reboot:
                     continue
-                if end[n]["uptime"] < snap[n]["uptime"] or end[n]["dropped"] != snap[n]["dropped"]:
+                if self._reset_between(snap[n], end[n]) or end[n]["dropped"] != snap[n]["dropped"]:
                     problems.append(f"{n} reset during the test (reset_cause {self.board(n).status()['reset_cause']})")
                 elif n not in self._allowed_counters and end[n]["mac_fail"] != snap[n]["mac_fail"]:
                     problems.append(f"{n} mac_fail went {snap[n]['mac_fail']} -> {end[n]['mac_fail']}")
@@ -363,7 +375,7 @@ class Bench:
                 # Lines cut short on USB: what reached us, and what the board counted (only when the host left a
                 # packet untaken for 70 ms; it restarts from 0 at a reset).
                 seen = sum(1 for e in self.timeline.select(src=n, kind="raw", since=since) if "via" not in e)
-                cut = end[n]["usb_cut"] - (snap[n]["usb_cut"] if end[n]["uptime"] >= snap[n]["uptime"] else 0)
+                cut = end[n]["usb_cut"] - (0 if self._reset_between(snap[n], end[n]) else snap[n]["usb_cut"])
                 if seen or cut:
                     self.anomalies.append(f"{self.test_name}: {n} USB lines cut: {seen} received, "
                                           f"{cut} counted by the board (usb_cut)")

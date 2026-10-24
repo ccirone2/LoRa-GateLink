@@ -28,32 +28,31 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | Rank | Id | Item | Effort | Needs first |
 |---|---|---|---|---|
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
-| 1 | B1 | Repeatable RF tests | S | |
-| 2 | F3 | Tell the alarm what kind of trouble it is | M | |
-| 3 | F2 | See the gate's log, history and status from the house | L | |
-| 4 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4's parts |
-| 5 | F7 | Update the gate's firmware without visiting it | XL | F2 |
+| 1 | F3 | Tell the alarm what kind of trouble it is | M | |
+| 2 | F2 | See the gate's log, history and status from the house | L | |
+| 3 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4's parts |
+| 4 | F7 | Update the gate's firmware without visiting it | XL | F2 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 6 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 7 | F14 | Catch faults the inputs alone don't show | S | an input (H1) |
-| 8 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4 where no closed sensor is fitted) |
-| 9 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 10 | C2 | Answer "what happened last night?" | M | F2 |
-| 11 | F11 | Firmware ready for a second board | M | |
-| 12 | B2 | Test attacks over real RF | M | B1 |
-| 13 | B3 | Reach the host-only fault paths on the bench | M | |
-| 14 | D2 | Run the bench automatically, safely | M | |
-| 15 | F18 | Stop casual actuation over USB | M | |
-| 16 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 17 | F5 | Change radio settings without stranding the link | L | |
-| 18 | F13 | Work with controllers that pulse | L | |
+| 5 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 6 | F14 | Catch faults the inputs alone don't show | S | an input (H1) |
+| 7 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4 where no closed sensor is fitted) |
+| 8 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 9 | C2 | Answer "what happened last night?" | M | F2 |
+| 10 | F11 | Firmware ready for a second board | M | |
+| 11 | B2 | Test attacks over real RF | M | a shielded box |
+| 12 | B3 | Reach the host-only fault paths on the bench | M | |
+| 13 | D2 | Run the bench automatically, safely | M | |
+| 14 | F18 | Stop casual actuation over USB | M | |
+| 15 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 16 | F5 | Change radio settings without stranding the link | L | |
+| 17 | F13 | Work with controllers that pulse | L | |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 19 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
-| 20 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 21 | F15 | Put the spare inputs to use | S | allocate inputs first (F19, F14) |
-| 22 | C4 | Check a board still runs genuine firmware | M | |
-| 23 | B6 | Turn field incidents into tests | M | |
-| 24 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 18 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
+| 19 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 20 | F15 | Put the spare inputs to use | S | allocate inputs first (F19, F14) |
+| 21 | C4 | Check a board still runs genuine firmware | M | |
+| 22 | B6 | Turn field incidents into tests | M | |
+| 23 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -375,17 +374,6 @@ sites; F11 lets it sit beside the MKR.
 
 ## Test bench
 
-### B1: Repeatable RF tests
-
-**Goal.** RF tests run at a known, repeatable link margin, so results compare from run to run and boards can be passed
-or failed against a calibrated line.
-
-**Today.** `-m rf` runs with the antennas unplugged or at low power, and the margin varies with the bench layout; the
-bench half of "Real RF" in TODO.md is open.
-
-**How.** Fixed SMA attenuators and a shielded box (a metal tin works; about $30, bench equipment outside the
-per-location budget), and a calibrated pass line for `rftest`.
-
 ### B2: Test attacks over real RF
 
 **Goal.** The replay, foreign-traffic, busy-channel and late-delivery defences are proven over real RF, not only in
@@ -393,7 +381,7 @@ the host simulation, including the command deadlines (0.16.0).
 
 **Today.** Those paths are exercised only by the host tests.
 
-**How.** The rejected board (…191117, `docs/bench-testing.md`) as a third node inside B1's box: replay
+**How.** The rejected board (…191117, `docs/bench-testing.md`) as a third node, all three in a shielded box (a metal tin): replay
 frames, send foreign traffic on our SF and sync word, keep the channel busy, and withhold and late-deliver a CMD.
 
 **Cost / risk.** Run it as a separate bench-only sketch, like the GateSim, never a mode in GateLink firmware

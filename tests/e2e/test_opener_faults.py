@@ -315,7 +315,7 @@ def test_closed_sensor_catches_a_failed_closed_limit(rig):
         between = rig.wait_log("gate", "gate_state", a=GS["between"], since=m, timeout=3)
         rig.wait_house(5, io__k2=False)
         fault = rig.wait_log("gate", "gate_state", a=GS["fault"], since=m, timeout=8)
-        held_s = (fault["t"] - between["t"]) / 1000
+        held_s = (fault["bt"] - between["bt"]) / 1000  # the gate's own clock, ms
         assert 4.0 <= held_s <= 5.0, f"fault {held_s:.2f} s after between, expected ~4.5 (5 s from the sensor's drop)"
         rig.wait_house(10, gate="fault", io__k2=False)
         m2 = rig.mark()

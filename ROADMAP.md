@@ -50,9 +50,8 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 | 18 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
 | 19 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
 | 20 | F15 | Put the spare inputs to use | S | allocate inputs first (F19, F14) |
-| 21 | C4 | Check a board still runs genuine firmware | M | |
-| 22 | B6 | Turn field incidents into tests | M | |
-| 23 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 21 | B6 | Turn field incidents into tests | M | |
+| 22 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -312,16 +311,6 @@ it is kept across resets in a flash journal (`log.get` with `before`), but nothi
 event log left wall-clock time out: uptime and boot number order events, but don't date them), e.g. "14:02 Opened from the controller, open in 14 s", "03:10 Moved
 locally (keypad or other controller)", readable remotely through the house via F2. (The naming rule applies: no brand
 names in `web/`.)
-
-### C4: Check a board still runs genuine firmware
-
-**Goal.** At any service visit, the installer can confirm a board runs the release it should (`tamper-undetectable`).
-
-**Today.** Flashing checks what it wrote (the web console's SAM-BA CRC, bossac's verify), but nothing checks a board
-later.
-
-**How.** Read the application back over the bootloader and compare it with the release's image, from the tools and the
-web console.
 
 ### C5: Keep other sites from using the console's port grants
 

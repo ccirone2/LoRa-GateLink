@@ -233,7 +233,9 @@ After the pull request carrying a new `FW_VERSION` is merged (`/release` in Clau
 The web console flashes over Web Serial by speaking the Arduino SAM-BA bootloader protocol itself (`SamBa` in
 `web/js/samba.js`, driven by `web/js/firmware.js`): a 1200-baud open/close resets the board into the bootloader (USB PID 0x0059, a separate port
 grant), then erase from 0x2000 (`X`), 4 KB chunks staged in RAM and written (`S` + `Y`), CRC-16 check (`Z`)
-and a reset. It recognises GateLink images by the `GATELINK_FW=x.y.z` marker (`FW_MARKER`, `config.cpp`; the
+and a reset. The touch itself erases the application's first flash row (the vector table: the SAMD core's `banzai()`
+in `Reset.cpp`, so the bootloader stays in charge), so a board reset into its bootloader that way boots again only
+once an image is written; a double-tap of the reset button enters it without erasing anything. It recognises GateLink images by the `GATELINK_FW=x.y.z` marker (`FW_MARKER`, `config.cpp`; the
 version reported by `info`/`status` is read from it so the linker keeps it).
 
 Release notes template:

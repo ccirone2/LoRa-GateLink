@@ -188,3 +188,16 @@ def test_interlock_gap_check_flags_a_press_soon_after_the_other_release(gap_ms, 
     b._check_interlock_gap(releases, problems)
     assert len(problems) == bad
     assert b.facts["closest relay interlock gap (ms)"] == gap_ms
+
+
+def test_interlock_gap_check_takes_a_press_from_its_sooner_line():
+    """Run 20261024-170528: CLOSE's `evt pulse` came at 161.000 s (held 240 ms) but its release line late, at 161.341 s,
+    in one read with OPEN's `evt pulse` (held 496 ms, released at 161.838 s). From the release lines alone the gap reads
+    1 ms; from CLOSE's pulse line it is the 101 ms the interlock left."""
+    b = bench_mod.Bench.__new__(bench_mod.Bench)
+    b.facts = {}
+    releases = {1: [(161.838, 496)], 2: [(161.341, 240)]}
+    problems = []
+    b._check_interlock_gap(releases, problems, {1: [161.341], 2: [161.000]})
+    assert problems == []
+    assert b.facts["closest relay interlock gap (ms)"] == 101

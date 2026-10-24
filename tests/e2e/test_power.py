@@ -151,7 +151,7 @@ def test_gate_power_cut_keeps_history(rig, lipo):
     rig.expect_commands(0)
     try:
         rig.gate.request("hist.clear", period_s=60)
-        time.sleep(62)
+        rig.wait_for(lambda: rig.gate.history()[1]["current"] >= 1, 70, "gate: bucket 0 closed")
         before, head = rig.gate.history()
         assert head["persist"] is True, f"gate history not kept in its flash: {head}"
         assert [b["idx"] for b in before] == [0, 1], before

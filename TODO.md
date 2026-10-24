@@ -73,10 +73,8 @@ once its fix is merged and record it in the pull request.
   when `logSave` runs and what `evLogAppend` returned (a debug build), and run the full suite until it shows.
   Diagnostics only (the ring keeps the entries across resets; only a power cut in that window loses them).
 - [ ] **Bench suite gaps and fixed waits** (from the 2026-10-08 review).
-  - Fixed sleeps that bet on timing: `test_reboots.py` (`sleep(0.2)` to catch the gate in its ~0.5 s bootloader;
-    start from the UART `boot` event or `sim.restart` instead), `test_history.py` (`sleep(62)` against a 60 s
-    bucket; poll until the bucket rolls), and the `sleep(2)`/`sleep(3)` before negative assertions (derive them from
-    the profile).
+  - Fixed sleeps that bet on timing: the `sleep(2)`/`sleep(3)` before negative assertions (derive them from the
+    profile).
   - The checks after every test cover K2 but not K1 (wiring K1 to the suite is ROADMAP B5): add one comparing house K1 with the gate state, allowing for
     `holdingTravel` and the sync window.
   - Not covered on the bench: `openSyncWindow` never shortening a window, the `settleUntil` floor, and a controller

@@ -112,8 +112,8 @@ def test_gate_boot_waits_for_opener_limits(rig):
     rig.allow_reboot("gate")
     m = rig.mark()
     rig.gate.request_reboot()
-    time.sleep(0.2)  # the gate is in its bootloader (~0.5 s): the opener restarts under it
-    rig.sim.restart(2500)
+    rig.wait_log("gate", "boot", since=m, timeout=10)  # on its UART, so not lost with USB
+    rig.sim.restart(2500)  # the opener's limits drop as the gate starts, and come back during its settling
     rig.wait_log("house", "session", since=m, timeout=25)
     rig.wait_gate("closed", timeout=15)
     time.sleep(2)

@@ -1,9 +1,11 @@
 """Opener-side failures, injected with the GateSim: power loss, a jammed or deaf opener, bad limit signals."""
+import contextlib
 import time
 
 import pytest
 
 from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink.gatesim import GateSimError
 from gatelink_client.wire import ACT_CLOSE, ACT_OPEN, CAUSE, GS, RES_NO_POWER
 
 TRAVEL_TIMEOUT_S = PROFILE_COMMON["travel_timeout_s"]
@@ -281,3 +283,57 @@ def test_limit_chatter_debounced(rig):
     house_states = [e["a"] for e in rig.logs("house", "gate_state", since=m)]
     assert house_states == states, f"house saw {house_states}"
     assert len(rig.logs("house", "cmd_sent", a=ACT_OPEN, since=m)) == 1
+
+
+def _in4_follows_ch4(rig):
+    """Whether the closed sensor is wired: gate IN4 follows the GateSim's CH4 off and back (closed_sense still off)."""
+    try:
+        for mode, want in (("off", False), ("auto", True)):
+            rig.sim.relays([(4, mode)], 0)
+            rig.wait_gate("closed", timeout=3, io__in4=want)
+    except (AssertionError, GateSimError):  # not wired, or a GateSim sketch without relay 4
+        return False
+    finally:
+        with contextlib.suppress(GateSimError):
+            rig.sim.relays([(4, "auto")], 0)
+    return True
+
+
+def test_closed_sensor_catches_a_failed_closed_limit(rig):
+    """closed_sense (0.20.0, F12): gate IN4, the GateSim's closed sensor on CH4, must agree with the closed limit.
+    Its wire pulled with the gate closed: not closed at once, fault 5 s on, closed again once it's back. Then the
+    threat itself: the closed limit stuck reading (AUX2 failed) and the gate opened by a local button: between, then
+    fault, never closed, and the house shows not closed."""
+    rig.expect_commands(0)
+    if not _in4_follows_ch4(rig):
+        pytest.skip("gate IN4 doesn't follow the GateSim's CH4: the closed sensor isn't wired (docs/bench-testing.md)")
+    try:
+        rig.gate.config_set(closed_sense=1)
+        rig.wait_gate("closed", timeout=5)
+        m = rig.mark()
+        rig.sim.relays([(4, "off")], 0)
+        between = rig.wait_log("gate", "gate_state", a=GS["between"], since=m, timeout=3)
+        rig.wait_house(5, io__k2=False)
+        fault = rig.wait_log("gate", "gate_state", a=GS["fault"], since=m, timeout=8)
+        held_s = (fault["t"] - between["t"]) / 1000
+        assert 4.0 <= held_s <= 5.0, f"fault {held_s:.2f} s after between, expected ~4.5 (5 s from the sensor's drop)"
+        rig.wait_house(10, gate="fault", io__k2=False)
+        m2 = rig.mark()
+        rig.sim.relays([(4, "auto")], 0)
+        rig.wait_log("gate", "gate_state", a=GS["closed"], since=m2, timeout=3)
+        rig.wait_house(10, gate="closed", io__k2=True)
+
+        m3 = rig.mark()
+        rig.sim.relays([(2, "on")], 0)  # the closed limit reads wherever the gate is
+        rig.sim.open_gate()
+        rig.wait_log("gate", "gate_state", a=GS["between"], since=m3, timeout=5)
+        rig.wait_house(5, io__k2=False)
+        rig.wait_log("gate", "gate_state", a=GS["fault"], since=m3, timeout=8)
+        rig.wait_house(10, gate="fault", io__k2=False, io__k1=True)
+        rig.expect_no("gate", "gate_state", a=GS["closed"], since=m3)
+    finally:
+        rig.sim.relay_auto()
+        rig.gate.config_set(closed_sense=0)
+    rig.sim.close_gate()
+    rig.wait_gate("closed", timeout=SIM_TRAVEL_S + 10)
+    rig.wait_house(10, gate="closed", io__k2=True)

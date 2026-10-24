@@ -23,6 +23,13 @@ once its fix is merged and record it in the pull request.
 
 ## Bench and field tests
 
+- [ ] **Wire the bench closed sensor and run its scenario (0.20.0, `closed_sense`).** The GateSim drives the reed on
+  D10 (rig CH4), but nothing carries it to the gate board yet, so `test_closed_sensor_catches_a_failed_closed_limit`
+  skips. Wire rig CH4 COM to +24 V, CH4 NO to gate opto input 4+, opto input 4- to the 24 V return and opto OUT4 to
+  gate IN4 (A4) (the planned wires in `tools/bench-wiring/wiring.json`), then run
+  `uv run pytest tests/e2e -v -k test_closed_sensor_catches_a_failed_closed_limit` and mark the wires connected. The
+  host tests cover the logic (`gate_state_closed_sense_*` in `tests/native/test_system_gate_state.cpp`); this checks
+  the real opto channel and the 5 s fault on the board.
 - [ ] **A rebooted gate's session is verified slowly at 17 dBm on the bench.** After a gate reboot the house accepted
   the new session within 1.4–1.9 s at 5 dBm, but in 1.5–4.2 s at 17 dBm (and once over 7.8 s, run
   `20261014-231116`), on 0.15.2 as well (1.5–4.2 s, `20261013-144010`). While the house still has the old session
@@ -52,7 +59,8 @@ once its fix is merged and record it in the pull request.
   dropped off USB entirely again on the touch (no app or bootloader port), after probe scripts and a flash.
 - [ ] **A boot sometimes writes nothing to the event journal in its first seconds.** After a reset, what the boot
   before left unwritten goes to the journal at the first loop pass (`logSaveDue`: `savedAt` and `unsavedSince` are set
-  back at `logBegin`). Twice in a full suite (0.19.1 run `20261020-212219`, 0.19.3-dev run `20261022-172334`) the
+  back at `logBegin`). Three times in a full suite (0.19.1 run `20261020-212219`, 0.19.3-dev run `20261022-172334`,
+  0.20.0 run `20261023-160222`: boot 533 left boot 532's entries for the next boot; the rerun passed) the
   boot that `test_gate_reboot_at_rest` started wrote nothing in its ~7 s before the next test's reset, and
   `test_event_log_kept_across_a_reboot` failed. The gate's journal afterwards shows it (run `20261022-172334`):
   record 299 holds boot 500's last 13 entries and boot 501's `boot`, so boot 502 wrote it; record 300 holds entries
@@ -151,6 +159,11 @@ once its fix is merged and record it in the pull request.
   the house never heard (`missed_move`). Untested against a real 2GIG sensor and panel: at the house, take the house
   board's antenna off while the gate opens and closes (within the 100 s link timeout), put it back, and check
   Alarm.com logs the gate opened and closed. If the sensor or panel needs longer, raise `MISSED_OPEN_MS`.
+- [ ] **Fit the closed sensor at the gate (0.20.0, `closed_sense`).** The second closed sensor closes
+  `closed-limit-nc-fail-unsafe` only once it is fitted: an outdoor magnetic contact on the leaf, wetted from the
+  opener's accessory 24 V into opto channel 4 (docs/hardware.md). Check on site that it closes within the last inches
+  of travel: the gate reads `fault` if it and the closed limit disagree for 5 s, so a slow gate with a sensor that
+  closes early would read fault on every close. Then turn `closed_sense` on and run the install checks (docs/install.md).
 
 ## Supply chain
 

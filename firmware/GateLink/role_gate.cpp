@@ -65,6 +65,15 @@ static bool closedUnproven = false;
 static uint32_t bothSince = 0;  // when both limits started reading (0 = they don't)
 static bool fromOpen = false;  // the open limit read alone, and neither has read for BETWEEN_HOLD_MS since
 static uint32_t neitherSince = 0;  // when neither limit started reading (0 = one does)
+// closed_sense: IN4 is a second closed sensor on the leaf (a reed and magnet, F12), which doesn't depend on the
+// opener's AUX2 relay. Closed reads only while it and the closed limit both do; either alone is no closed limit (the
+// state is whatever the others read). Once they have disagreed for CLOSED_DISAGREE_MS it's fault until they agree: in
+// normal travel they part only between their switching points, a second or two near closed with the sensor mounted to
+// read in the last inches, while a failed limit relay, a sensor knocked off or a cut wire disagrees for good. Before
+// the fault the gate already reads not closed, so the wait costs only the diagnosis.
+#define CLOSED_DISAGREE_MS 5000
+static bool disagreed = false;
+static uint32_t disagreeSince = 0;  // when the closed limit and the sensor started to disagree (0 = they agree)
 static bool rebootAfterCmd = false;  // debug: next pulsed command reboots us before its ACK (a power cut)
 static uint32_t rebootAt = 0;
 
@@ -94,8 +103,9 @@ static bool acPower() {
 }
 
 static uint8_t readState() {
-  bool open = in1.active(), closed = in2.active();
-  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;
+  bool open = in1.active(), limit = in2.active();
+  bool closed = limit && (!cfg.closed_sense || in4.active());
+  if ((limit && (open || closedUnproven || fromOpen)) || disagreed) return GS_FAULT;
   if (closed) return GS_CLOSED;
   if (open) return GS_OPEN;
   // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may
@@ -204,7 +214,15 @@ void gateLoop(uint32_t now) {
   } else if (elapsed(now, neitherSince, BETWEEN_HOLD_MS)) {
     fromOpen = false;  // a stamp that ages past 2^31 ms only clears it again
   }
-  bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense
+  bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense, IN4 the closed sensor
+  if (!cfg.closed_sense || in2.active() == in4.active()) {
+    disagreeSince = 0;
+    disagreed = false;
+  } else if (!disagreeSince) {
+    disagreeSince = now | 1;
+  } else if (elapsed(now, disagreeSince, CLOSED_DISAGREE_MS)) {
+    disagreed = true;  // a stamp that ages past 2^31 ms only sets it again
+  }
 
   uint8_t s = readState();
   // `leaving` holds only while our pulse may still be what moves the gate off that limit: with both relays released

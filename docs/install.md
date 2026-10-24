@@ -117,9 +117,13 @@ card ticks the steps it can see (role, key, the other board matching, the link, 
   with AC: add a LiPo). MKR VIN is 5 V max.
 - [ ] CSW24UL AUX relay switches (1-2-3): relay 1 OFF OFF ON (*energizes at open limit*), relay 2 OFF ON OFF
   (*energizes when not at close limit*). Relay 2 at OFF OFF OFF (*always off*) reads closed wherever the gate is.
-- [ ] Opto board: OUT1–OUT4 → IN1–IN4 (OUT4 spare), output GND → board GND, output VCC → the board's **3.3 V only**. 24 V side:
+- [ ] Opto board: OUT1–OUT4 → IN1–IN4 (OUT4 the closed sensor, or spare), output GND → board GND, output VCC → the board's **3.3 V only**. 24 V side:
   the accessory output's 24 V → AUX C; open-limit AUX NO → channel 1; closed-limit AUX **NC** → channel 2;
-  channel 3 across the 24 V supply on AC (the one feeding the AES controller).
+  channel 3 across the 24 V supply on AC (the one feeding the AES controller); with a closed sensor, the accessory
+  output's 24 V through its contact → channel 4.
+- [ ] Closed sensor (recommended; [hardware.md](hardware.md)): mounted to close in the last inches of travel. Turn
+  `closed_sense` on, then: closed, IN2 and IN4 lit; part-open by hand, IN4 off; its wire pulled with the gate
+  closed, the gate reads *fault* 5 s later (and *closed* again once it's back).
 - [ ] K1 NO/COM → OPEN + COM, K2 NO/COM → CLOSE + COM.
 - [ ] `in1_invert`–`in4_invert` off.
 - [ ] Status on the gate board: *closed* at the close limit, *open* at the open limit, *between* while it moves;

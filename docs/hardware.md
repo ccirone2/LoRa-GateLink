@@ -22,7 +22,7 @@ and `firmware/GateLink/pins.h` in sync.
 | IN1 (A1) | Shelly relay output (O) — the Alarm.com switch state | CSW24UL AUX "open limit" (via opto) |
 | IN2 (A2) | Shelly 12 V supply (via opto) — `ctrl_power_sense` | CSW24UL AUX "closed limit" (via opto) |
 | IN3 (A3) | spare | AC power: the 24 V supply on mains (via opto) — `power_sense` |
-| IN4 (A4) | spare | spare |
+| IN4 (A4) | spare | Closed sensor on the leaf (via opto) — `closed_sense`; else spare |
 | K1 (D1) | Shelly SW input (energized = gate not closed) | CSW24UL OPEN + COM (pulsed only) |
 | K2 (D2) | 2GIG contact sensor terminals (energized = gate closed) | CSW24UL CLOSE + COM (pulsed only) |
 | FAULT (D5) | optional fault output (`fault_out`, HIGH = healthy) to a relay module for a second 2GIG sensor | optional fault output (`fault_out`), as on the house |
@@ -35,7 +35,8 @@ and `firmware/GateLink/pins.h` in sync.
   a relay *at* the close limit: that is its only close-limit mode, so take IN2 from AUX 2's **NC** contact; the
   open-limit relay from NO. The opener can say "closed" only by releasing that relay, and no wiring of it changes
   that: its NO contact would make a cut wire or a dead opto read closed, and a relay of our own on its NC contact
-  stays on when AUX 2 never energizes. Only a sensor of its own on the leaf is independent of it (ROADMAP F12). The
+  stays on when AUX 2 never energizes. Only a sensor of its own on the leaf is independent of it: gate IN4 with
+  `closed_sense` (below). The
   AUX limit relays switch only once the opener's travel limits are set, so a limit that never reads may be unset
   limits rather than a wiring fault. K1 NO/COM → OPEN + COM,
   K2 NO/COM → CLOSE + COM. The OPEN/CLOSE inputs are shared with an AES Prime Edge cellular controller and a
@@ -44,7 +45,7 @@ and `firmware/GateLink/pins.h` in sync.
   GND → board GND, output VCC → the board's **3.3 V only** (a PNP output passes VCC straight to the pin). On the
   24 V side, wet each AUX limit contact from the opener's 24 V accessory output (24 V → AUX C; open limit
   AUX NO → opto ch1, closed limit AUX NC → opto ch2) and put channel 3
-  across the 24 V; OUT4 is spare. A lit opto reads active; power loss, a dead opto or a cut wire reads off — "not
+  across the 24 V; channel 4 takes the closed sensor (below), or is spare. A lit opto reads active; power loss, a dead opto or a cut wire reads off — "not
   at a limit", never closed. The NC closed-limit contact keeps that: with the opener dead its accessory output has
   no 24 V to wet the contact, so IN2 reads off even though the relay has dropped. Wet the limits from the
   accessory output, not the AC 24 V supply, or a dead opener on AC would read closed. Leave the gate's `inN_invert` toggles off: inverting would make those faults read
@@ -54,6 +55,19 @@ and `firmware/GateLink/pins.h` in sync.
   the alarm sees not closed; before it, nothing can tell. Check it at the install (threat model,
   `closed-limit-nc-fail-unsafe`): relay 2's switches read OFF ON OFF (OFF OFF OFF, "relay always off", gives exactly
   this failure), and with the gate part-open IN2 reads off.
+- **Gate IN4 = closed sensor** (`closed_sense`, since 0.20.0; off by default). A magnetic contact (reed and magnet)
+  on the leaf, its contact closed with the gate closed: 24 V from the opener's accessory output through the contact
+  into opto channel 4, as the limits are wetted, so a dead opener reads it off too. Use an outdoor-rated contact with
+  a gap that suits the leaf, and mount it to close only in the last inches of travel: the gate reads `fault` once the
+  sensor and the closed limit have disagreed for 5 s, and in normal travel they part only between their switching
+  points. With `closed_sense` on, the gate reads closed only while both read, so a failed AUX2 relay
+  (`closed-limit-nc-fail-unsafe`) can no longer make an open gate read closed; a cut wire, a dead channel or a
+  knocked-off magnet reads `fault` with the gate closed (not closed at the house: fail safe). Turn it on only once the
+  sensor is fitted: without one the gate never reads closed. A closed limit the sensor doesn't confirm counts as no
+  limit, so without AC (on the opener's battery) commands are then refused, as in `no_power` or `fault`; and a gate
+  stopped in the sensor's last inches reads `fault` after 5 s, as it would read `stuck` once its travel timeout passed. Check it at the install: with the gate closed the I/O
+  card shows IN2 and IN4 lit; part-open by hand, IN4 goes off; unplug the sensor with the gate closed and the gate
+  reads `fault` 5 s later.
 - **Gate IN3 = AC power sense** (`power_sense`, default on). An opto channel across the 120 VAC → 24 V supply
   (the one feeding the AES controller) drives IN3; the CSW24UL has battery backup and keeps running without AC.
   IN3 off → a command still runs while one limit reads (not `fault`) or reverses ours mid-travel (CLOSE from 0.15.1, OPEN from 0.15.2: cutting the AC mustn't
@@ -136,8 +150,8 @@ unconnected. See [console.md](console.md). Leave the pins unused and `uart_conso
 
 ## Spare inputs
 
-IN4 (and IN3 on the house board) are pull-down inputs (contact to 3.3 V) reserved for future use such as a
-beam-break sensor or alarm status (see [ROADMAP.md](../ROADMAP.md), F15). They're debounced, logged (`input` events),
+House IN3/IN4, and gate IN4 with `closed_sense` off, are pull-down inputs (contact to 3.3 V) reserved for future use
+such as a beam-break sensor or alarm status (see [ROADMAP.md](../ROADMAP.md), F15). They're debounced, logged (`input` events),
 shown in Status (the gate's are also sent to the house), with `inN_invert` toggles, but don't affect behaviour
 yet. Leave them unwired if unused.
 

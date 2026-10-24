@@ -165,10 +165,24 @@ closed. Which of the two lied can't be told, so a stuck open limit read at the c
 nuisance only until the next full opening); a shorter overlap (a glitch, the relays switching over) isn't held. Without
 AC a held `fault` refuses commands as any `fault` does: the position can't be verified. Only the open limit reading alone clears it, since it is wetted by the
 same 24 V: the closed one reading off with nothing else (`between`) may only be that 24 V gone. Before the first full
-opening a stuck closed limit can't be told from a closed gate: F12's second sensor is the answer to that.
+opening a stuck closed limit can't be told from a closed gate: the second closed sensor below is the answer to that.
 Considered and not built (F14, 2026-10-15): a fault when the closed limit stays on after our OPEN pulse (a gate that
 doesn't move, the opener locked out or another controller holding CLOSE, is far likelier than a stuck limit and a gate
 stopped short of open, and the travel timeout already reports it: `last_result` `timeout`).
+
+**A second closed sensor** (0.20.0, F12, `closed_sense`, off by default). Gate IN4 takes a reed and magnet on
+the leaf, wetted from the opener's accessory 24 V like the limits, so it shares nothing with the AUX2 relay but that
+supply. With `closed_sense` on, `readState` reads closed only while the closed limit and IN4 both read; either alone
+is no closed limit (the state is what the others make it: `between`, `open` or `no_power`), and once they have
+disagreed for `CLOSED_DISAGREE_MS` (5 s, `disagreed`, set in `gateLoop` after the spare inputs are read) it is
+`fault` until they agree. A false closed then needs two failures, the limit relay and the sensor. Normal travel parts
+them only between their switching points (the sensor mounted to read in the last inches), and the gate reads not
+closed meanwhile, so the 5 s costs only the diagnosis: a failed limit relay with the gate part-open, a sensor knocked
+off or a cut wire with it closed, a sensor stuck on as the gate leaves closed. The both-limits hold, `fromOpen` and
+the boot settle still take the closed limit alone: they are about the AUX relays. Not remote-writable: whether IN4
+has a sensor is the install's wiring, and a remote write could otherwise drop the second check. Considered and not
+built: a sensor-only closed (the opener's own limit then counts for nothing), and a disagreement threshold as a
+setting (a constant until an install shows a sensor that can't be mounted close enough).
 
 **A closed limit with no travel before it** (0.17.2). No travel goes from one limit to the other without reading
 `between`, but the opener's controller can make it look so: restarting, it drops its AUX relays, so the open limit
@@ -286,7 +300,7 @@ struct layout changes (only the fallback uses it).
 
 `app.cpp`: boot, loop, PING/PONG, dispatch by `activeRole`; status LED (`updateLed`: PWM on `LED_BUILTIN`; identify
 strobe / solid = no role / breathing = link up / heartbeat = no link), spare inputs IN3/IN4 (`updateSpareInputs`,
-called by both roles; reported in STATUS bits 4–5; on the gate IN3 is the AC power sense, IN4 has no behaviour yet);
+called by both roles; reported in STATUS bits 4–5; on the gate IN3 is the AC power sense, IN4 the closed sensor with `closed_sense` on);
 house IN2 is the controller power sense (`ctrl_power_sense`, handled in `role_house.cpp`, not reported to the gate),
 the board supply (`supply.cpp`, polled every 5 ms before the roles; status `supply`, log `supply`), the reset cause
 (`PM->RCAUSE`, logged in `boot` a= and reported as `reset_cause`), the reset memo, and the fault output D5

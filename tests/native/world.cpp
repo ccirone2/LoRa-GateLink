@@ -747,7 +747,7 @@ bool Opener::in(int n) const {
     case 1: return atOpen();
     case 2: return atClosed();  // the closed-limit relay's NC contact, wetted by the opener's 24 V
     case 3: return ac;
-    default: return in4;
+    default: return reedMs >= 0 && alive() && pos <= reedMs;
   }
 }
 
@@ -1076,6 +1076,23 @@ void World::onLog(Board &b, const LogEv &e) {
 }
 
 void World::monitor() {
+  // With closed_sense on, closed needs the closed sensor (IN4) too (F12): the gate stays closed with it off no longer
+  // than its input lag and the 500 ms between hold. The setting is read once per spell (CHECKED after), not each ms.
+  const uint32_t REPORTED = 0x7FFFFFFF, CHECKED = 0xFFFFFFFF;
+  if (gateView == GS_CLOSED_ && !opener.in(4) && gate.running()) {
+    if (!closedNoSensorSince) {
+      closedNoSensorSince = now | 1;
+    } else if (closedNoSensorSince != REPORTED && closedNoSensorSince != CHECKED
+               && after(now, closedNoSensorSince + 700)) {
+      closedNoSensorSince = CHECKED;
+      if (gate.get("closed_sense")) {
+        violate("gate kept closed with the closed sensor off");
+        closedNoSensorSince = REPORTED;
+      }
+    }
+  } else if (closedNoSensorSince != REPORTED) {
+    closedNoSensorSince = 0;
+  }
   // One limit reading (not fault); the stamp is dropped once old, so it can't wrap into the future.
   if (opener.in(1) != opener.in(2)) limitAt = now | 1;
   else if (limitAt && (int32_t)(now - limitAt) > 1000) limitAt = 0;

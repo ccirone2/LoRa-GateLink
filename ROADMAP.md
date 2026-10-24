@@ -27,35 +27,33 @@ diagnosability; then the homeowner, installer and developer, in that order), the
 
 | Rank | Id | Item | Effort | Needs first |
 |---|---|---|---|---|
-| **Tier 1: the gate's real state, safety, never late** | | | | |
-| 1 | F12 | Never report closed on one failed contact | M | an input (H1, or gate IN4) |
 | **Tier 2: remote diagnosis, the installer's work, robust hardware** | | | | |
-| 2 | B1 | Repeatable RF tests | S | |
-| 3 | F3 | Tell the alarm what kind of trouble it is | M | |
-| 4 | F14 | Catch faults the inputs alone don't show | S | |
-| 5 | F2 | See the gate's log, history and status from the house | L | |
-| 6 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4, F12's parts |
-| 7 | F7 | Update the gate's firmware without visiting it | XL | F2 |
+| 1 | B1 | Repeatable RF tests | S | |
+| 2 | F3 | Tell the alarm what kind of trouble it is | M | |
+| 3 | F14 | Catch faults the inputs alone don't show | S | |
+| 4 | F2 | See the gate's log, history and status from the house | L | |
+| 5 | H1 | Cheaper ends that are hard to wire wrong | L | settles F3, F4's parts |
+| 6 | F7 | Update the gate's firmware without visiting it | XL | F2 |
 | **Tier 3: worthwhile, less urgent** | | | | |
-| 8 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
-| 9 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4) |
-| 10 | B5 | Let the suite check D5, K1 and supply dips | S | |
-| 11 | C2 | Answer "what happened last night?" | M | F2 |
-| 12 | F11 | Firmware ready for a second board | M | |
-| 13 | B2 | Test attacks over real RF | M | B1 |
-| 14 | B3 | Reach the host-only fault paths on the bench | M | |
-| 15 | D2 | Run the bench automatically, safely | M | |
-| 16 | F18 | Stop casual actuation over USB | M | |
-| 17 | F16 | Ignore a Shelly that reboots without losing power | M | |
-| 18 | F5 | Change radio settings without stranding the link | L | |
-| 19 | F13 | Work with controllers that pulse | L | |
+| 7 | F4 | Warn before the opener's battery or mechanics fail | S | a divider (H1 or by hand) |
+| 8 | F19 | Notice when a box is opened | S | an input (H1, or gate IN4 where no closed sensor is fitted) |
+| 9 | B5 | Let the suite check D5, K1 and supply dips | S | |
+| 10 | C2 | Answer "what happened last night?" | M | F2 |
+| 11 | F11 | Firmware ready for a second board | M | |
+| 12 | B2 | Test attacks over real RF | M | B1 |
+| 13 | B3 | Reach the host-only fault paths on the bench | M | |
+| 14 | D2 | Run the bench automatically, safely | M | |
+| 15 | F18 | Stop casual actuation over USB | M | |
+| 16 | F16 | Ignore a Shelly that reboots without losing power | M | |
+| 17 | F5 | Change radio settings without stranding the link | L | |
+| 18 | F13 | Work with controllers that pulse | L | |
 | **Tier 4: later, or waiting on a decision** | | | | |
-| 20 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
-| 21 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
-| 22 | F15 | Put the spare inputs to use | S | allocate inputs first (F12, F19, F14) |
-| 23 | C4 | Check a board still runs genuine firmware | M | |
-| 24 | B6 | Turn field incidents into tests | M | |
-| 25 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
+| 19 | F8 | Serve more than one gate from one house | L | H1, and a second gate at this site |
+| 20 | C5 | Keep other sites from using the console's port grants | S | the owner's domain |
+| 21 | F15 | Put the spare inputs to use | S | allocate inputs first (F19, F14) |
+| 22 | C4 | Check a board still runs genuine firmware | M | |
+| 23 | B6 | Turn field incidents into tests | M | |
+| 24 | H2 | Cheaper boards that protect the key: not now | XL | F11 |
 
 ## Firmware
 
@@ -207,20 +205,6 @@ never touches the hardware directly.
 
 **Cost / risk.** A refactor with no behaviour change: the host tests pass unchanged.
 
-### F12: Never report closed on one failed contact
-
-**Goal.** The alarm sees "closed" only when the gate really is closed, even if the opener's limit relay fails
-(`closed-limit-nc-fail-unsafe`, High).
-
-**Today.** "Closed" rests on one contact, the AUX2 relay's NC, which reads closed if that relay fails with its 24 V
-present.
-
-**How.** A magnetic or reed sensor on the leaf (a few dollars) as a second closed input: the gate reports closed only
-when both agree, and a lasting disagreement reads `fault`, which the house already shows as not-closed. A host-test
-monitor checks closed never shows with either sensor open.
-
-**Cost / risk.** Needs an input: gate IN4 is contended (F15), or H1's extra inputs.
-
 ### F13: Work with controllers that pulse
 
 **Goal.** The house works with the many smart relays and garage controllers that give a momentary contact rather
@@ -272,11 +256,12 @@ the installer's way after a repair).
 **Goal.** The spare inputs carry something worth knowing, e.g. a vehicle at the gate, or the alarm's armed state at
 the house.
 
-**Today.** Gate IN4 and house IN3/IN4 are wired, debounced, logged and reported but have no behaviour.
+**Today.** House IN3/IN4 are wired, debounced, logged and reported but have no behaviour; so is gate IN4 where no
+closed sensor is fitted.
 
 **How.** Candidates: a beam-break or vehicle-presence sensor at the gate reported to the house (and on to Alarm.com),
-or the alarm panel's armed state at the house. Gate IN4 is the gate's only spare, and F12, F14 and F19 want it too:
-allocate it, or add inputs (H1).
+or the alarm panel's armed state at the house. Gate IN4 went to the second closed sensor (F12, 0.20.0, decided 2026-10-23: it serves truth, the
+others diagnosis), so F14 and F19 need H1's inputs, or IN4 at a site without that sensor.
 
 **Open questions.** What should Alarm.com see, and may any of it affect commands? (The opener's own safety inputs stay
 in charge of entrapment.)
@@ -310,7 +295,7 @@ remote.*, debug.*) need proof of the key, leaving status, logs and history open.
 
 **Today.** Physical access is invisible until someone looks.
 
-**How.** An enclosure switch at the gate (IN4, or an H1 input), reported in STATUS, shown by the house as
+**How.** An enclosure switch at the gate (an H1 input, or IN4 where no closed sensor is fitted), reported in STATUS, shown by the house as
 needs-attention and logged.
 
 ## Web console
@@ -356,7 +341,7 @@ them.
 ### H1: Cheaper ends that are hard to wire wrong
 
 **Goal.** Each end costs less, survives its field wiring, and can't be wired with the wrong polarity or voltage; it
-also gives the inputs and outputs F3, F4, F8, F12, F14, F15 and F19 need. The hardware change most worth making.
+also gives the inputs and outputs F3, F4, F8, F14, F15 and F19 need. The hardware change most worth making.
 
 **Today.** A relay shield, an opto board, a buck and hand wiring, with no surge protection, four contended inputs,
 and the polarity and voltage warnings that fill `docs/hardware.md`.

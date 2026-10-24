@@ -163,7 +163,7 @@ class GateSim:
             self._ok(f"rail {site} auto")
 
     def relays(self, steps, gap_s):
-        """Force gate input signals in order, e.g. [(2, "off"), (3, "off")] (relay 1-3 = IN1-IN3), gap_s apart.
+        """Force gate input signals in order, e.g. [(2, "off"), (3, "off")] (relay 1-4 = IN1-IN4), gap_s apart.
         Replies are collected at the end: waiting for each takes ~0.1 s, too coarse for the gaps tested."""
         while not self._lines.empty():
             self._lines.get_nowait()
@@ -184,5 +184,5 @@ class GateSim:
             oks += reply == "ok"
 
     def relay_auto(self):
-        for n in (1, 2, 3):
+        for n in (1, 2, 3, 4):
             self._ok(f"relay {n} auto")

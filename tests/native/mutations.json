@@ -422,7 +422,7 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "find": "  if ((limit && (open || closedUnproven || fromOpen)) || disagreed) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
     "replace": "  if (closed) return GS_CLOSED;"
    }
   ]
@@ -509,8 +509,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "closedUnproven || fromOpen)) return GS_FAULT;",
-    "replace": "closedUnproven)) return GS_FAULT;"
+    "find": "closedUnproven || fromOpen)) || disagreed) return GS_FAULT;",
+    "replace": "closedUnproven)) || disagreed) return GS_FAULT;"
    }
   ]
  },
@@ -879,8 +879,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may\n  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.\n  if (!acPower()) return GS_NO_POWER;\n  return GS_BETWEEN;",
-    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  return GS_BETWEEN;"
+    "find": "  bool open = in1.active(), limit = in2.active();\n  bool closed = limit && (!cfg.closed_sense || in4.active());\n  if ((limit && (open || closedUnproven || fromOpen)) || disagreed) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  // Without AC a limit that reads can still be trusted (the opener runs on its battery), but none reading may\n  // mean the opener's battery is dead too (its AUX limit relays drop), not a gate between limits: unknown.\n  if (!acPower()) return GS_NO_POWER;\n  return GS_BETWEEN;",
+    "replace": "  bool open = in1.active(), limit = in2.active();\n  bool closed = limit && (!cfg.closed_sense || in4.active());\n  if (!acPower()) return GS_NO_POWER;\n  if ((limit && (open || closedUnproven || fromOpen)) || disagreed) return GS_FAULT;\n  if (closed) return GS_CLOSED;\n  if (open) return GS_OPEN;\n  return GS_BETWEEN;"
    }
   ]
  },
@@ -931,8 +931,13 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense\n\n  uint8_t s = readState();",
-    "replace": "  uint8_t s = readState();\n  bool spareChanged = updateSpareInputs(now);"
+    "find": "  bool spareChanged = updateSpareInputs(now);  // before readState(): IN3 is the power sense, IN4 the closed sensor\n",
+    "replace": "  bool spareChanged = false;\n"
+   },
+   {
+    "file": "role_gate.cpp",
+    "find": "  uint8_t s = readState();\n",
+    "replace": "  uint8_t s = readState();\n  spareChanged = updateSpareInputs(now);\n"
    }
   ]
  },
@@ -1139,8 +1144,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
-    "replace": "  if (closed) return GS_CLOSED;\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;"
+    "find": "  if ((limit && (open || closedUnproven || fromOpen)) || disagreed) return GS_FAULT;\n  if (closed) return GS_CLOSED;",
+    "replace": "  if (closed) return GS_CLOSED;\n  if ((limit && (open || closedUnproven || fromOpen)) || disagreed) return GS_FAULT;"
    }
   ]
  },
@@ -1154,8 +1159,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  bool open = in1.active(), closed = in2.active();\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;",
-    "replace": "  bool open = in1.active(), closed = in2.active();\n  if (!acPower()) return GS_NO_POWER;\n  if (closed && (open || closedUnproven || fromOpen)) return GS_FAULT;"
+    "find": "  bool open = in1.active(), limit = in2.active();\n  bool closed = limit && (!cfg.closed_sense || in4.active());\n  if ((limit && (open || closedUnproven || fromOpen)) || disagreed) return GS_FAULT;",
+    "replace": "  bool open = in1.active(), limit = in2.active();\n  bool closed = limit && (!cfg.closed_sense || in4.active());\n  if (!acPower()) return GS_NO_POWER;\n  if ((limit && (open || closedUnproven || fromOpen)) || disagreed) return GS_FAULT;"
    }
   ]
  },
@@ -3061,6 +3066,55 @@
     "file": "role_gate.cpp",
     "find": "  appKeep(closedUnproven ? KEEP_CLOSED_UNPROVEN : 0);",
     "replace": "  if (closedUnproven) appKeep(KEEP_CLOSED_UNPROVEN);"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl13_closed_ignores_the_closed_sensor",
+  "invariant": "state-from-limits",
+  "why": "SL13: closed_sense on, closed still rests on the closed limit alone: a failed AUX2 relay with the gate part-open reads closed (F12)",
+  "killed_by": [
+   "gate_state_closed_sense_stuck_closed_limit_part_open_never_reads_closed",
+   "gate_state_closed_sense_failed_sensor_reads_fault_until_it_reads"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  bool closed = limit && (!cfg.closed_sense || in4.active());",
+    "replace": "  bool closed = limit;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl14_lasting_disagreement_never_faults",
+  "invariant": "state-from-limits",
+  "why": "SL14: the closed limit and the closed sensor disagreeing for good never reads fault: a failed sensor or limit relay reads between for ever",
+  "killed_by": [
+   "gate_state_closed_sense_stuck_closed_limit_part_open_never_reads_closed",
+   "gate_state_closed_sense_failed_sensor_reads_fault_until_it_reads",
+   "gate_state_closed_sense_stuck_sensor_reads_fault_once_the_gate_leaves"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "    disagreed = true;  // a stamp that ages past 2^31 ms only sets it again",
+    "replace": "    disagreed = false;"
+   }
+  ]
+ },
+ {
+  "name": "gate_state_sl15_disagreement_faults_at_once",
+  "invariant": "state-from-limits",
+  "why": "SL15: any disagreement between the closed limit and the closed sensor reads fault at once, so every normal close and open passes through fault",
+  "killed_by": [
+   "gate_state_closed_sense_normal_travel_is_never_a_fault",
+   "gate_state_closed_sense_stuck_closed_limit_part_open_never_reads_closed"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "elapsed(now, disagreeSince, CLOSED_DISAGREE_MS)",
+    "replace": "elapsed(now, disagreeSince, 0)"
    }
   ]
  },

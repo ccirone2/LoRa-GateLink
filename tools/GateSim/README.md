@@ -16,11 +16,12 @@ closed-limit AUX relay energizes when *not* at the close limit. D3's coil is dri
 | D7 relay **NC** | 24 V into the gate board's buck | gate board supply (power rig) |
 | D8 relay **NO** | controller SW input | follows house K1 (sensed on D12), so the controller still syncs while K1's own contacts go to the Uno |
 | D9 relay **NC** | house 12 V rail (controller, IN2 opto, house buck) | house supply (power rig) |
-| D10 relay | nothing (CH4 spare) | held off |
+| D10 relay NO (CH4) | opto ch4 → gate IN4 | closed sensor on the leaf (`closed_sense`): on while powered and within 300 ms of travel from closed, moving or not |
 | D11 | house K2 NC (K2 COM → Uno GND) | senses the house K2 coil (bench check, e.g. on LiPo only) |
 | D12 | house K1 NC (K1 COM → Uno GND) | senses the house K1 coil; D8 repeats it to the controller |
 
-D7–D10 drive an optional 4-channel relay module (CH4 is a spare, held off). The power rig channels are wired through NC, so a released coil
+D7–D10 drive an optional 4-channel relay module (CH4, through NO and wetted with 24 V, is the closed sensor: a
+released coil reads not closed). The power rig channels are wired through NC, so a released coil
 means powered/connected: a Uno reset (opening its port) never cuts a board. Power the coils from a separate
 supply, not the PC's USB: on the bench 7.55 V feeds the Uno's VIN, and both modules' coils run from the Uno's
 5 V rail. Keep VIN at 7 V or more: the Uno stays on USB until VIN passes ~6.6 V. On USB alone, a third GateSim coil
@@ -38,9 +39,10 @@ move), `stop` (strand it between), `power on|off` (AC and the opener's battery t
 `ac on|off` (AC only: IN3; the opener carries on on its battery), `battery on|off` (the opener's battery),
 `restart <ms>` (the opener's controller reboots: the limits drop and pulses are ignored for that long, AC stays),
 `travel <s>` (default 15), `fault none|stuck|both|flicker|deaf`,
-`polarity low|high`, `relay <1-3> on|off|auto` (force the signal to gate IN1/IN2/IN3 for wiring checks, not
-saved; for relay 2, `on` releases D3's coil so its NC contact closes), `help`. `status` reports the signals
-(`relays open= closed= power=`), not the coils, plus `travel=`, `fault=` and `polarity=`.
+`polarity low|high`, `relay <1-4> on|off|auto` (force the signal to gate IN1–IN4 for wiring checks and sensor
+faults, not saved; for relay 2, `on` releases D3's coil so its NC contact closes; relay 4 `off` is a failed closed
+sensor, `on` one stuck closed), `help`. `status` reports the signals (`relays open= closed= power= reed=`), not the
+coils, plus `travel=`, `fault=` and `polarity=`.
 
 Power rig (not saved; reset by the suite's baseline): `supply none|acc|psu` (what feeds the gate board: `none`,
 the default, only explicit cuts; `acc` the opener's accessory output, so the board loses power only when the

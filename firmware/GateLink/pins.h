@@ -10,7 +10,8 @@
 // Never drive above 3.3 V. Use screw terminals / proto area.
 #define PIN_IN1 A1
 #define PIN_IN2 A2
-// IN3/IN4: read and reported. Gate IN3 = AC power sense (power_sense); the rest are spare.
+// IN3/IN4: read and reported. Gate IN3 = AC power sense (power_sense), gate IN4 = a second closed sensor on the leaf
+// (closed_sense, off by default); the rest are spare.
 #define PIN_IN3 A3
 #define PIN_IN4 A4
 
@@ -32,6 +33,7 @@
 //          IN1 = CSW24UL AUX relay "open limit"
 //          IN2 = CSW24UL AUX relay "closed limit"
 //          IN3 = AC power: the 24 V supply on mains (power sense)
+//          IN4 = closed sensor on the leaf, a reed and magnet (closed_sense; optional, else spare)
 //          K1  = CSW24UL OPEN + COM   (pulsed only)
 //          K2  = CSW24UL CLOSE + COM  (pulsed only)
 //          D5  = fault output (fault_out)

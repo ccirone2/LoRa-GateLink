@@ -185,7 +185,9 @@ struct Opener {
   bool stuck = false;  // jams just off the limit it leaves
   bool deaf = false;   // ignores its OPEN/CLOSE inputs (GateSim fault "deaf")
   int force[4] = { -1, -1, -1, -1 };  // gate IN1..IN4 forced off/on (-1 follows the model)
-  bool in4 = false;
+  // A closed sensor on the leaf (F12: a reed and magnet, wetted by the opener's 24 V like the limits) on IN4: on
+  // within reedMs of travel from closed, moving or not. -1: none fitted (IN4 off unless forced).
+  int32_t reedMs = -1;
   // Inputs, debounced like the GateSim (20 ms)
   struct Sense {
     bool raw = false, stable = false;
@@ -318,6 +320,8 @@ struct World {
     bool reported = false;
   } gk[2];
   uint32_t k2WrongSince = 0;
+  // The gate known closed with its closed sensor (IN4) off (0: not; 0xFFFFFFFF once checked, 0x7FFFFFFF once reported).
+  uint32_t closedNoSensorSince = 0;
   uint32_t limitAt = 0;  // the last time exactly one of the gate's limits read active (0: over 1 s ago)
   uint32_t gatePulseAt = 0;  // the last gate relay pulse's start (0: over travel_timeout_s ago)
   uint32_t in3OnSince = 0;       // since when the gate's IN3 (AC) has read on (0: off; capped at a minute's age)

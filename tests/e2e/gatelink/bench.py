@@ -29,7 +29,7 @@ PROFILE_HOUSE = {"mismatch_timeout_s": 20, "ctrl_power_sense": 0, "ctrl_power_pm
                  "ctrl_confirm_ms": 3000, "ctrl_settle_ms": 10000}
 # The install's controller power sensing (firmware defaults): IN2 opto and the board's supply, short confirm.
 REAL_CTRL_POWER = {"ctrl_power_sense": 1, "ctrl_power_pmic": 1, "ctrl_confirm_ms": 500}
-PROFILE_GATE = {"pulse_ms": 500, "power_sense": 1, "in1_invert": 0, "in2_invert": 0, "in3_invert": 0}
+PROFILE_GATE = {"pulse_ms": 500, "power_sense": 1, "closed_sense": 0, "in1_invert": 0, "in2_invert": 0, "in3_invert": 0}
 
 _ERRORS = (BoardError, GateSimError, ControllerError, KeyError, TypeError)
 

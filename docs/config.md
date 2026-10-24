@@ -57,6 +57,7 @@ tab). **What it does** is the Config tab's help text.
 | `pulse_ms` | 16 | 100–5000 (0.1–5 s) | 500 (0.5 s) | at once, remote | Gate: how long the OPEN/CLOSE contact closes. Raise it if the opener misses short presses; keep it short, as other devices share these inputs. |
 | `travel_timeout_s` | 17 | 5–300 | 60 | at once, remote | Longest a full open or close should take. Set it a little above your gate’s real travel time; past it, the gate counts as stuck. Set it on the gate (here or with a remote write): the house follows the gate’s value. |
 | `power_sense` | 26 | 0–1 | 1 (on) | at once, remote | Gate: IN3 watches the AC-powered 24 V supply. Without AC, commands run only while a limit reads; a limit that still reads (the opener runs on its battery) is trusted, and with none the gate reads “no power” instead of between. Turn off only if IN3 isn’t wired. |
+| `closed_sense` | 34 | 0–1 | 0 (off) | at once | Gate: IN4 is a second closed sensor on the gate leaf (a magnetic contact), so a failed closed-limit relay can’t make an open gate read closed. The gate reads closed only while the sensor and the closed limit agree; if they disagree for 5 s it reads fault. Turn on only once the sensor is fitted and wired: without one the gate never reads closed. |
 
 ## House node
 
@@ -87,7 +88,7 @@ tab). **What it does** is the Config tab's help text.
 | `in1_invert` | 14 | 0–1 | 0 (off) | at once | IN1 (house: controller output; gate: open limit). Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead. |
 | `in2_invert` | 15 | 0–1 | 0 (off) | at once | IN2 (house: controller power; gate: closed limit). Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead. |
 | `in3_invert` | 24 | 0–1 | 0 (off) | at once | IN3 (house: spare; gate: AC power). Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead. |
-| `in4_invert` | 25 | 0–1 | 0 (off) | at once | IN4 (spare on both boards). Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead. |
+| `in4_invert` | 25 | 0–1 | 0 (off) | at once | IN4 (house: spare; gate: closed sensor, or spare). Leave off. Inverted, a dead opto or cut wire reads as active; fix a reversed signal in the wiring instead. |
 | `uart_console` | 30 | 0–1 | 0 (off) | at once | Also run this console on the board’s serial pins (13 RX, 14 TX; 3.3 V, 250 kbaud) for a USB-to-UART adapter. Bench power testing only: the adapter keeps its port while the board is unpowered. Leave off at the install. |
 
 <!-- docgen:params end -->

@@ -14,7 +14,8 @@
 //   D7 relay NC  -> 24 V into the gate board's buck   (gate board supply)
 //   D8 relay NO  -> controller SW input: follows house K1 (sensed on D12), whose own contacts go to the Uno
 //   D9 relay NC  -> house 12 V rail (controller, IN2 opto, house board's buck)
-//   D10 relay    -> CH4, spare: held off (a floating input could switch it)
+//   D10 relay NO -> opto ch4 -> gate IN4  closed sensor on the leaf (closed_sense): on while powered and within
+//                                        REED_MS of travel from closed, moving or not (a reed reads by position)
 // House relay sense (optional, to check the house relays switch, e.g. on LiPo only):
 //   D11 <- house K2 NC, D12 <- house K1 NC, house K1/K2 COM -> Uno GND  (INPUT_PULLUP: LOW = coil released)
 //
@@ -33,7 +34,7 @@
 #include <EEPROM.h>
 
 const uint8_t PIN_R_OPEN = 2, PIN_R_CLOSED = 3, PIN_R_POWER = 4;
-const uint8_t PIN_R_GATE_RAIL = 7, PIN_R_K1_MIRROR = 8, PIN_R_HOUSE_RAIL = 9, PIN_R_SPARE = 10;
+const uint8_t PIN_R_GATE_RAIL = 7, PIN_R_K1_MIRROR = 8, PIN_R_HOUSE_RAIL = 9, PIN_R_REED = 10;
 const uint8_t PIN_S_OPEN = 5, PIN_S_CLOSE = 6;
 const uint8_t PIN_S_HOUSE_K2 = 11, PIN_S_HOUSE_K1 = 12;
 const uint32_t SENSE_DEBOUNCE_MS = 20;
@@ -72,8 +73,11 @@ uint32_t flickerAt = 0;
 bool flickerPhase = false;
 uint32_t lastTick = 0;
 const char *lastState = "";
-// Wiring-test overrides for relays 1-3 (D2-D4): -1 = follow the simulation, else forced off/on. Not saved.
-int8_t override[3] = {-1, -1, -1};
+// Wiring-test and fault overrides for relays 1-4 (D2-D4, D10): -1 = follow the simulation, else forced off/on (relay
+// 4 off: a failed closed sensor; on: one stuck closed). Not saved.
+int8_t override[4] = {-1, -1, -1, -1};
+// The closed sensor reads within this much travel of closed: mounted to close in the last inches.
+const uint32_t REED_MS = 300;
 
 struct Sense {
   uint8_t pin;
@@ -134,6 +138,8 @@ const char *stateName() {
 
 bool atOpen() { return alive() && dir == 0 && pos >= travelMs(); }
 bool atClosed() { return alive() && dir == 0 && pos == 0; }
+// Wetted by the opener's accessory 24 V, as the limits are: off with the opener dead.
+bool reed() { return override[3] < 0 ? alive() && pos <= REED_MS : override[3]; }
 
 void printSite(const __FlashStringHelper *what, uint8_t i, bool on) {
   Serial.print(what);
@@ -159,6 +165,7 @@ void applyRelays(uint32_t now) {
   writeRelay(PIN_R_CLOSED, !(override[1] < 0 ? c : override[1]));
   bool in3 = override[2] < 0 ? ac : override[2];
   writeRelay(PIN_R_POWER, in3);
+  writeRelay(PIN_R_REED, reed());
   if (in3 != lastAc) {
     lastAc = in3;
     Serial.println(in3 ? F("evt ac on") : F("evt ac off"));
@@ -242,6 +249,8 @@ void printStatus() {
   Serial.print(atClosed() || (fault == F_BOTH && alive()));
   Serial.print(F(" power="));
   Serial.print(override[2] < 0 ? ac : override[2]);
+  Serial.print(F(" reed="));
+  Serial.print(reed());
   Serial.print(F(" ac="));
   Serial.print(ac);
   Serial.print(F(" battery="));
@@ -278,7 +287,7 @@ void printHelp() {
   Serial.println(F("  supply none|acc|psu  gate board fed by: explicit cuts only / accessory output / AC supply"));
   Serial.println(F("  rail gate|house on|off|auto | rail gate|house cut <ms>"));
   Serial.println(F("  fault none|stuck|both|flicker|deaf | polarity low|high"));
-  Serial.println(F("  relay <1-3> on|off|auto  force the signal to gate IN1/IN2/IN3 (D2/D3/D4; D3 inverted, NC)"));
+  Serial.println(F("  relay <1-4> on|off|auto  force the signal to gate IN1-IN4 (D2/D3/D4/D10; D3 inverted, NC)"));
   Serial.println(F("  status house_k1/k2 = house relay coils, sensed on their NC contacts (D12/D11); D8 follows K1"));
   Serial.println(F("  open/close act like a local button (not the gate board); stop halts mid-travel"));
 }
@@ -357,11 +366,11 @@ void handleLine(char *line) {
     st.activeLow = !strcmp(arg, "low");
     EEPROM.put(0, st);
     Serial.println(F("ok"));
-  } else if (!strcmp(cmd, "relay") && arg && arg[0] >= '1' && arg[0] <= '3' && !arg[1]) {
+  } else if (!strcmp(cmd, "relay") && arg && arg[0] >= '1' && arg[0] <= '4' && !arg[1]) {
     char *mode = strtok(nullptr, " \t");
     int8_t v = !mode ? -2 : !strcmp(mode, "on") ? 1 : !strcmp(mode, "off") ? 0 : !strcmp(mode, "auto") ? -1 : -2;
     if (v == -2) {
-      Serial.println(F("err relay <1-3> on|off|auto"));
+      Serial.println(F("err relay <1-4> on|off|auto"));
       return;
     }
     override[arg[0] - '1'] = v;
@@ -394,7 +403,7 @@ void setup() {
   // Drive the "off" level before enabling the outputs so the relays don't click at boot (the simulation then
   // starts closed: D3's coil stays off, its NC contact giving the closed limit).
   const uint8_t relays[] = {PIN_R_OPEN, PIN_R_CLOSED, PIN_R_POWER, PIN_R_GATE_RAIL, PIN_R_K1_MIRROR,
-                            PIN_R_HOUSE_RAIL, PIN_R_SPARE};
+                            PIN_R_HOUSE_RAIL, PIN_R_REED};
   for (uint8_t p : relays) {
     writeRelay(p, false);
     pinMode(p, OUTPUT);

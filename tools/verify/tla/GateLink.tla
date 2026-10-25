@@ -252,6 +252,14 @@ CmdView == <<now, pos, gBoot, gSeq, gPeer, gBase, gAcc, gHaveCmd, gLastId, gLast
              hBoot, hSeq, hNextId, hSlot, hPeer, hBase, hAcc, hStatusSess, hStatusSeq, hClk,
              {IF f.t = "ST" THEN [t |-> "ST", s |-> f.s, q |-> f.q, c |-> f.c] ELSE f : f \in air}, ghostVars>>
 
+\* The state as SensorTruth sees it without commands (VIEW SensorView; MaxCmds = 0, else it is the whole state): nothing
+\* then moves the gate but others, so the link's command side (the gate verifying the house, its command memory, the
+\* house's frames) never touches the sensor, and states that differ only there are one state to TLC.
+SensorView == IF MaxCmds = 0
+              THEN <<now, pos, openSince, gBoot, gSeq, gLeft, hBoot, hPeer, hBase, hAcc, hState, hStatusSess,
+                     hStatusSeq, hStatusAt, hClk, hGateLeft, hLeftWhen, hSensor, hMissedUntil, air>>
+              ELSE vars
+
 TypeOK ==
   /\ pos \in {"closed", "open"}
   /\ hState \in {"unknown", "closed", "open"}

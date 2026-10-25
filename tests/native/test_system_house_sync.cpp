@@ -857,6 +857,39 @@ XFAIL_TEST(house_sync_window_survives_an_edge_begun_before_it, "TODO.md: a user 
   CHECK(w.opener.atClosed());
 }
 
+// [sync-window] The install's Shelly, following SW, answering K1 in a bench-like 120 ms. The gate closed, the switch
+// off; another controller opens the gate, and the owner switches on just as the open STATUS arrives (the edge is
+// debounced 15 ms after K1 goes on, inside K1's window, at the level it expects, but begun before it), then off 30 ms
+// after K1, and a flash save stops the house's loop for ~0.5 s. The Shelly follows K1's edge back on meanwhile. The
+// owner's first edge mustn't end the window: the house would send the owner's CLOSE once the save is over, then take
+// the Shelly's answer for an OPEN and send that too (opposite to a command not yet reported, so not suppressed): the
+// gate closing, then opening against the owner's last word. Found by the model checker
+// (tools/verify/esbmc/house_cmds.cpp, owner-only, the install's setup).
+XFAIL_TEST(house_sync_window_survives_a_double_switch_as_k1_changes, "TODO.md: a user edge begun before K1's change ends its sync window") {
+  Site w;
+  w.shelly.swDebounceMs = 120;
+  w.commission();
+  CHECK(!w.alarmSwitch());
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  uint32_t t0 = w.now;
+  w.extPress(true, 300);
+  const AirFrame *st = nullptr;
+  CHECK(w.runUntil([&] {
+    for (const AirFrame *f : w.sent(w.gate, MSG_STATUS_))
+      if ((int32_t)(f->start - t0) >= 0 && w.plain(f->b)[0] == GS_OPEN_) st = f;
+    return st != nullptr;
+  }, 30000));
+  runTo(w, st->end - 35);
+  w.user(true);
+  runTo(w, st->end + 30);
+  w.user(false);
+  runTo(w, st->end + 85);
+  w.house.send("{\"id\":900,\"cmd\":\"config.save\"}");
+  w.run(15000);
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0, ACT_OPEN_), 0);
+  CHECK_EQ(countSince(w.gate, "pulse", g0, 1), 0);
+}
+
 // [sync-window] [armed-after-status]
 TEST(house_sync_k1_relay_test_never_becomes_a_command) {
   // A console test pulse of house K1 moves the Shelly on and off. The house disarms for the pulse plus sync_window_ms:

@@ -14,8 +14,8 @@
 // ranges and the worst cases the sources allow (docs/architecture.md, "Verification"). With -DBROWNOUT_AFTER_PG the
 // Shelly reboots only on an outage that also drops the board's power good (the bench's ordering, 30 of 30 runs).
 //
-//   owner-only  every IN1 edge the house takes for a command (pendingAction, the one place it decides) is to a level
-//               the owner switched to since the last edge to that level the house acted on or set aside; a CLOSE
+//   owner-only  every command the house sends comes from an IN1 edge (pendingAction, the one place it decides) to a
+//               level the owner switched to since the last edge to that level the house acted on or set aside; a CLOSE
 //               decided before the house saw the controller's power drop never goes; no command goes before the
 //               house is armed (its first STATUS plus sync_window_ms)
 //
@@ -206,9 +206,9 @@ uint32_t linkPeerSession() { return 1; }
 static uint32_t pendingAt0;   // pendingAt before this pass's appLoop: a change is a decision (role_house.cpp)
 static bool decidedNow;       // one was made this pass
 static bool staleClose;       // a decided CLOSE waits, and the house has seen the controller's power drop since
+static bool pendingOk;        // the decision waiting in pendingAction came from the owner's edge
 static void decided(uint8_t a) {
-  CHECK(a == ACT_OPEN ? askedOpen : a == ACT_CLOSE && askedClose,
-        "owner-only: an IN1 edge the owner didn't make was taken for a command");
+  pendingOk = a == ACT_OPEN ? askedOpen : a == ACT_CLOSE && askedClose;
   if (a == ACT_OPEN) askedOpen = false;
   else askedClose = false;
   pendingAt0 = pendingAt;
@@ -225,6 +225,7 @@ void linkSendReliable(Slot slot, uint8_t type, const uint8_t *p, uint8_t len, ui
   CHECK(armedEver || armed, "owner-only: a command before the house was armed");
   uint8_t a = p[2];
   if (pendingAt != pendingAt0) decided(a);  // decided this pass and sent at once (an OPEN)
+  CHECK(pendingOk, "owner-only: a command from an IN1 edge the owner didn't make");
   CHECK(a == ACT_OPEN || a == ACT_CLOSE, "owner-only: a command neither OPEN nor CLOSE");
   CHECK(!(a == ACT_CLOSE && staleClose), "owner-only: a CLOSE decided before the controller's power dropped went");
   cmdPending = true;

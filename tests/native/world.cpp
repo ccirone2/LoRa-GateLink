@@ -793,7 +793,7 @@ void Shelly::update(World &w, bool rail, bool swIn) {
     swRaw = swIn;
     swSince = now;
   }
-  if (swRaw != sw && now - swSince >= 30) {
+  if (swRaw != sw && now - swSince >= swDebounceMs) {
     sw = swRaw;
     bool was = relay;
     if (mode == FOLLOW) relay = sw;

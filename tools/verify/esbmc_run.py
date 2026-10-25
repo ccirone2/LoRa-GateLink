@@ -32,7 +32,8 @@ def main(argv=None):
     ap.add_argument("--all", action="store_true", help="a verdict on every property, not just the first violation")
     ap.add_argument("--fw", default=str(ROOT / "firmware/GateLink"), help="firmware directory (mutate.py's copy)")
     ap.add_argument("--build", default=str(VERIFY / "build"), help="where params.h is (the Makefile's BUILD)")
-    ap.add_argument("--log", help="also write ESBMC's whole output (the full counterexample) to this file")
+    ap.add_argument("--log", help="where to write ESBMC's whole output, the full counterexample "
+                                  "(default: BUILD/logs/<harness and defines>.log)")
     args = ap.parse_args(argv)
     harness = Path(args.harness)
     cmd = [args.esbmc, "--std", "c++17", "-DHOST_BUILD", *[f"-D{d}" for d in args.define],
@@ -48,8 +49,9 @@ def main(argv=None):
         print(f"{label}: timed out after {args.timeout} s")
         return 1
     out = p.stdout + p.stderr
-    if args.log:
-        Path(args.log).write_text(out)
+    log = Path(args.log) if args.log else Path(args.build) / "logs" / (re.sub(r"[^\w.=-]+", "_", label) + ".log")
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(out)
     ok = "VERIFICATION SUCCESSFUL" in out
     failed = "VERIFICATION FAILED" in out
     if not ok and not failed:

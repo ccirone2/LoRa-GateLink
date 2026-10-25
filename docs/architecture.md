@@ -411,8 +411,9 @@ checks.
 2. *A withheld STATUS is taken however old* (TLC, SensorTruth). The house took any STATUS later than the last one it
    took: withheld frames played back in order, one per link timeout, held the sensor closed for as long as the attacker
    had kept them, not "up to its link timeout" as the threat model said.
-3. *A user edge begun before K1's change ends its sync window* (ESBMC, `house_cmds.cpp`, a toggling Shelly): the Shelly's
-   answer to K1, after the window closed early, became an OPEN.
+3. *A user edge begun before K1's change ends its sync window* (ESBMC, `house_cmds.cpp`, a toggling Shelly, and the
+   install's following one when the owner switches twice within its SW response): the Shelly's answer to K1, after the
+   window closed early, became an OPEN.
 4. *A supply dip hidden by a loop stall becomes a CLOSE* (ESBMC, `house_cmds.cpp`, `-DSTALLS_ANYWHERE`): a flash save
    stalls the house's loop ~0.5 s; a dip under it is never seen (power good is low for 100 ms or so), yet reboots the
    Shelly, whose relay drop then reads as the owner closing.

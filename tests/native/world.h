@@ -218,6 +218,9 @@ struct Shelly {
   bool sw = false;          // SW level as last acted on
   bool swRaw = false;
   uint32_t swSince = 0;
+  // SW steady this long before the relay answers. The bench's K1 to the house's debounced IN1 edge is 136-184 ms
+  // (docs/architecture.md, "Verification"): ~90-130 ms of it the Shelly's.
+  uint32_t swDebounceMs = 30;
   uint32_t bootMs = 1500;
   uint32_t relayDropMs = 460;  // relay contact falls this long into a 12 V cut (bench)
   // A cut this long reboots the Shelly even if power is back before its relay drops (it drops relayDropMs after the

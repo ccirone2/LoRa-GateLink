@@ -755,12 +755,14 @@ bool Opener::in(int n) const {
 void Shelly::update(World &w, bool rail, bool swIn) {
   uint32_t now = w.now;
   if (!rail) {
+    if (!cutAt) cutAt = now | 1;
     if (booted && !relayDropAt) relayDropAt = (now + relayDropMs) | 1;
     if (opto && !optoAt) optoAt = (now + optoDropMs) | 1;
   } else {
-    if (relayDropAt) {
-      // Back before the relay dropped: the cut was short enough to ride through.
-      relayDropAt = 0;
+    if (cutAt) {
+      // Back before the relay dropped: the cut was short enough to ride through, unless it browned the Shelly out.
+      if (relayDropAt && !(brownoutMs && now - cutAt >= brownoutMs)) relayDropAt = 0;
+      cutAt = 0;
     }
     if (!opto && !optoAt) optoAt = (now + optoUpMs) | 1;
     if (opto && optoAt) optoAt = 0;  // a dip the opto never saw

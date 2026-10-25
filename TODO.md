@@ -53,6 +53,17 @@ once its fix is merged and record it in the pull request.
   misconfigured Shelly (the install's follows the SW level) and a coincidence within the debounce. Fix: only an edge
   begun after the window opened (the Shelly answering K1) may end it early.
 
+- [ ] **A supply dip hidden by a loop stall becomes a CLOSE.** Found by the model checker
+  (`tools/verify/esbmc/house_cmds.cpp`, `owner-only`, `-DSTALLS_ANYWHERE`, the Shelly following K1): the house's loop
+  stops ~0.5 s in a flash save (with the radio restart; the soak's `loop_max_us` is 510 ms); a dip of the 12 V under it
+  holds the board's power good low for only ~100–300 ms, all inside the stall, so the house never sees the power go,
+  but the dip reboots the Shelly (the bench's did on 300 ms), whose relay drops ~0.5 s after the cut, after the stall:
+  an OFF edge with power reading good, sent as CLOSE once `ctrl_confirm_ms` passes, against the open gate. Trace
+  (ESBMC): cut at t, house passes at t+265 ms and t+1256 ms, power good low t+266..t+700, relay off t+384, CLOSE sent
+  t+2.1 s. Host test `house_power_dip_hidden_by_a_flash_save_never_closes` (XFAIL; the simulator's Shelly now reboots
+  on a short dip with `brownoutMs`). Fix: after a gap between loop passes long enough to hide a dip, a CLOSE edge waits
+  out a Shelly reboot and goes only if the switch stays off.
+
 ## Bench and field tests
 
 - [ ] **A rebooted gate's session is verified slowly at 17 dBm on the bench.** After a gate reboot the house accepted

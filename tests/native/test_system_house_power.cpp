@@ -411,6 +411,34 @@ TEST(house_power_dips_lipo_in_gate_open) {
   CHECK(w.opener.atOpen());
 }
 
+// [ctrl-power] A 300 ms dip of the controller's 12 V while the house's loop is stopped in a flash save (~0.5 s with the
+// radio restart): the board's power good is low for 50 ms of it, all inside the stall, so the house never sees the
+// power go. The dip reboots the Shelly all the same (as the bench's did: brownoutMs), its relay dropping 460 ms into it,
+// after the stall: an OFF edge with the power reading good. It mustn't become a CLOSE: a CLOSE edge seen soon after the
+// loop was blind that long waits until a Shelly reboot would be over, and the relay coming back on cancels it. Found by
+// the model checker (tools/verify/esbmc/house_cmds.cpp, owner-only, -DSTALLS_ANYWHERE).
+XFAIL_TEST(house_power_dip_hidden_by_a_flash_save_never_closes, "TODO.md: a supply dip hidden by a loop stall becomes a CLOSE") {
+  World w;
+  w.commission();
+  w.house.lipo = true;
+  w.shelly.brownoutMs = 250;
+  openByUser(w);
+  int cmds = w.house.count("cmd_sent");
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  w.house.send("{\"id\":900,\"cmd\":\"config.save\"}");  // the save stops the house's loop ~0.5 s
+  w.run(5);
+  w.setRail12(false);
+  w.run(300);
+  w.setRail12(true);
+  w.run(15000);
+  CHECK_EQ(countSince(w.house, "ctrl_power", h0), 0);  // the house never saw the dip
+  CHECK(find(w.house, "ctrl", h0, 0).ok);               // the relay's drop it did see
+  CHECK_EQ(w.house.count("cmd_sent"), cmds);
+  CHECK_EQ(pulses(w, g0), 0);
+  CHECK(w.opener.atOpen());
+  CHECK(w.alarmSwitch());
+}
+
 // [ctrl-power]
 TEST(house_power_dip_600ms_lipo_in_relay_drops_opto_misses_it) {
   // A dip long enough to drop the controller's relay (and reboot it) but too short for the opto to see: only the

@@ -49,8 +49,17 @@
 #ifndef PG_LAG_MAX
 #define PG_LAG_MAX 300
 #endif
+#ifndef PG_ON_MIN
+#define PG_ON_MIN 100  // power good back after the return: the charger's REGN turn-on delay, 100 ms min (datasheet)
+#endif
 #ifndef PG_ON_MAX
-#define PG_ON_MAX 500  // power good back after the return (not measured; the charger requalifies >= 100 ms)
+#define PG_ON_MAX 500  // (not measured)
+#endif
+// While power good is (or is about to be) low and the house hasn't yet seen it, its passes are at most POLL_MS apart:
+// it reads the charger every 5 ms (supply.cpp) unless something stalls the loop. -DSTALLS_ANYWHERE lets a PASS_MS stall
+// (a flash save, a radio restart: ~0.5 s on the bench) fall there too.
+#ifndef POLL_MS
+#define POLL_MS 50
 #endif
 #ifndef OPTO_LAG_MIN
 #define OPTO_LAG_MIN 1500  // IN2's opto into a cut (bench 1.6-2.1 s; misses 300 ms dips)
@@ -211,7 +220,7 @@ int main() {
   mode = nondet_u8() % 3;
 #endif
   RANGE(pgLag, PG_LAG_MIN, PG_LAG_MAX);
-  RANGE(pgOn, 0, PG_ON_MAX);
+  RANGE(pgOn, PG_ON_MIN, PG_ON_MAX);
   RANGE(optoLag, OPTO_LAG_MIN, OPTO_LAG_MAX);
   RANGE(optoOn, 0, OPTO_ON_MAX);
   RANGE(relayDrop, RELAY_DROP_MIN, RELAY_DROP_MAX);
@@ -228,7 +237,12 @@ int main() {
   houseBegin();
   for (int i = 0; i < PASSES; i++) {
     uint32_t d;
-    RANGE(d, 1, eventful ? PASS_MS : IDLE_MS);
+    // Power good low, or due to drop, and not yet seen low by the house (ctrlPower): it polls.
+    bool blind = outage && ctrlPower && (!backT || T < backT + pgOn);
+#ifdef STALLS_ANYWHERE
+    blind = false;
+#endif
+    RANGE(d, 1, blind ? POLL_MS : eventful ? PASS_MS : IDLE_MS);
     // The outage may begin (or end) during the gap, at any time in it.
     if (!backT && nondet_bool()) {
       uint32_t at;

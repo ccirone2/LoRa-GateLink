@@ -2,9 +2,9 @@
 //
 // An inductive proof. inv() below is an invariant over the relays, the coils as the opener sees them (ghosts, in
 // physical time) and the gate's clock. The harness checks that it holds after boot (-DBOOT: appRelaysBegin, the reset
-// memo, gateBegin) and that one loop pass from ANY state satisfying it, with everything else in the firmware arbitrary,
-// ends in a state satisfying it again (the default). Together: it holds after every pass of every run. The properties
-// are checked inside the pass, so they hold on every pass too:
+// memo, gateBegin) and that each segment of a loop pass (-DSEGMENT, see main) from ANY state satisfying it, with
+// everything else in the firmware arbitrary, ends in a state satisfying it again. Together: it holds throughout every
+// run, however long. The properties are checked inside each segment, so they hold throughout too:
 //
 //   interlock    a gate coil never energizes while the other is energized, nor within INTERLOCK_MS of its release
 //   pulse-only   a coil releases within its pulse's length (pulse_ms when it was asked, or the relay test's ms) plus
@@ -31,8 +31,13 @@
 #include "role_gate.cpp"
 #include "cfgmodel.h"
 
-#ifndef FRAMES
-#define FRAMES 2  // frames the link may hand over in one pass
+#define SEG_PASS 1
+#define SEG_CMD 2
+#define SEG_CFG 3
+#define SEG_TEST 4
+#define SEG_ROLE 5
+#ifndef SEGMENT
+#define SEGMENT SEG_PASS
 #endif
 // The longest loop pass while a relay pulses: nothing that blocks may run then (no-stall), so a pass is the radio
 // poll, the role and the console, a few ms. A pulse can overrun its end by one pass.
@@ -66,7 +71,7 @@ void digitalWrite(uint32_t pin, uint32_t v) {
     c.on = true;
     c.onT = T;
   } else if (v == LOW && c.on) {
-    CHECK(T - c.onT <= c.len + 1 + PASS_MAX_MS + HANDLER_SKEW_MS, "pulse-only: a gate coil held past its pulse");
+    CHECK(T - c.onT <= c.len + 1 + PASS_MAX_MS + SKEW_PASS, "pulse-only: a gate coil held past its pulse");
     c.on = false;
     c.offT = T;
     c.released = true;
@@ -100,6 +105,8 @@ void linkSend(uint8_t, const uint8_t *, uint8_t) {}
 void linkSendReliable(Slot, uint8_t, const uint8_t *, uint8_t, uint32_t) {}
 
 static uint64_t bootT;  // T at gateBegin(): the gate's clock is clockOrigin + (T - bootT)
+static bool inPass;     // between a pass's start (its `now`, passT) and its gateLoop
+static uint64_t passT;
 static uint64_t baseT;  // T when the firmware's clockBase was last read (uptimeMs)
 
 static Relay &relay(int k) { return k == 1 ? k1 : k2; }
@@ -126,7 +133,7 @@ static void deliverCmd() {
   inHandler = true;
   handleCmd(m, millis());
   inHandler = false;
-  baseT = T;  // handleCmd read the clock (gateClock) at millis()
+  if ((uint32_t)clockBase == toClk(T)) baseT = T;  // handleCmd read the clock (gateClock) at millis()
   int k = startedBy(before1, before2, len);
   if (!k) return;
   CHECK(m.len >= CMD_LEN, "fresh-cmd: a short command pulsed");
@@ -150,20 +157,18 @@ static void deliverCfgSet() {
   CHECK(k1.pulsing() == before1 && k2.pulsing() == before2, "pulse-only: a config write started or ended a pulse");
 }
 
+static void segmentEnd();
+// In the pass-start segment the pass is followed up to the link: the frames are the next segments.
 void linkPoll(uint32_t) {
-  for (int i = 0; i < FRAMES; i++) {
-    if (!nondet_bool()) continue;
-    uint32_t skew = nondet_u32();
-    ASSUME(skew <= HANDLER_SKEW_MS / FRAMES);
-    advance(skew);  // the handler's millis() is later than the pass's `now`
-    if (nondet_bool()) deliverCmd();
-    else deliverCfgSet();
-  }
+#if SEGMENT == SEG_PASS
+  segmentEnd();
+  ASSUME(false);  // the rest of the pass is the other segments
+#endif
 }
 
-// The console: a relay test of either relay, any length it accepts (console.cpp: 50..5000 ms).
-void consolePoll() {
-  if (!nondet_bool()) return;
+// The console: a relay test of either relay, any length it accepts (console.cpp: 50..5000 ms). Its own segment; in a
+// pass, consolePoll runs before the link (appLoop).
+static void relayTest() {
   uint8_t k = nondet_bool() ? 1 : 2;
   uint32_t ms = nondet_u32();
   ASSUME(ms >= 50 && ms <= 5000);
@@ -174,6 +179,7 @@ void consolePoll() {
   CHECK(ok != (k == 1 ? before1 : before2), "no-restart: a relay test of a pulsing relay was taken, or of an idle one refused");
   if (ok) CHECK(startedBy(before1, before2, ms) == k, "pulse-only: a relay test started the other relay");
 }
+void consolePoll() {}
 
 // --- the invariant ------------------------------------------------------------------------------------------------
 static bool checking;  // false: inv() assumes (the start of a step); true: it checks
@@ -191,11 +197,11 @@ static void invRelay(int k) {
     INV(r._startAt == 0 && r._pulseUntil != 0, "a coil on is a running pulse");
     INV((int32_t)(r._pulseUntil - toClk(c.onT)) >= 0, "a running pulse ends after it began");
     INV((int32_t)(r._pulseUntil - toClk(c.onT)) <= (int32_t)c.len + 1, "a running pulse ends within its length");
-    INV(T - c.onT <= (uint64_t)c.len + 1 + PASS_MAX_MS + HANDLER_SKEW_MS, "a running pulse has run within its length");
-    INV(ahead(r._pulseUntil) >= -HANDLER_SKEW_MS, "a running pulse ended at most a skew ago");
+    INV(T - c.onT <= (uint64_t)c.len + 1 + PASS_MAX_MS + SKEW_PASS, "a running pulse has run within its length");
+    INV(ahead(r._pulseUntil) >= -SKEW_PASS, "a running pulse ended at most a skew ago");
   } else if (r._startAt) {
     INV(r._pulseUntil != 0, "a waiting pulse has an end");
-    INV(ahead(r._startAt) >= -HANDLER_SKEW_MS && ahead(r._startAt) <= INTERLOCK_MS + 1,
+    INV(ahead(r._startAt) >= -SKEW_PASS && ahead(r._startAt) <= INTERLOCK_MS + 1 + SKEW_PASS,
         "a waiting pulse starts within the interlock");
     INV((int32_t)(r._pulseUntil - r._startAt) >= 0 && (int32_t)(r._pulseUntil - r._startAt) <= (int32_t)c.len + 1,
         "a waiting pulse ends within its length of its start");
@@ -208,7 +214,7 @@ static void invRelay(int k) {
   }
   if (r._offAt) {
     INV(c.released && r._offAt == (toClk(c.offT) | 1), "Relay::_offAt is the coil's last release");
-    INV(T - c.offT <= RELEASE_MEMO_MS + HANDLER_SKEW_MS, "Relay::_offAt is cleared once old");
+    INV(T - c.offT <= RELEASE_MEMO_MS + SKEW_PASS, "Relay::_offAt is cleared once old");
   } else {
     INV(!c.released || T - c.offT >= RELEASE_MEMO_MS - 1, "a recent release is remembered");
   }
@@ -219,7 +225,15 @@ static void inv() {
   invRelay(2);
   INV(!(k1.pulsing() && k2.pulsing()), "one relay pulses at a time");
   // The gate's clock: clockBase is millis() extended, as read at baseT, this pass.
-  INV(baseT <= T && T - baseT <= HANDLER_SKEW_MS, "the clock was read this pass");
+  // The pass: inside one, millis() is at most SKEW_PASS ahead of its `now`; the clock was read by the last gateLoop
+  // (at most a pass's gap before this `now`) or by a handler since. Between passes, gateLoop has just read it.
+  INV(baseT <= T, "the clock was read in the past");
+  if (inPass) {
+    INV(passT <= T && T - passT <= SKEW_PASS, "a pass's handlers run within SKEW_PASS of its now");
+    INV(baseT >= passT || passT - baseT <= IDLE_MAX_MS + SKEW_PASS, "the clock was read last pass");
+  } else {
+    INV(T - baseT <= SKEW_PASS, "the clock was read this pass");
+  }
   INV(bootT <= baseT, "the clock was read since boot");
   INV((uint32_t)clockBase == toClk(baseT), "clockBase's low bits are millis() when read");
   INV(clockBase - bootAt == baseT - bootT, "clockBase - bootAt is the time since boot");
@@ -311,6 +325,8 @@ static void anyState() {
   }
   houseSessionNow = nondet_u32();
   verifiedNow = nondet_bool();
+  inPass = nondet_bool();
+  passT = nondet_u64();
 }
 
 // --- boot: from reset ---------------------------------------------------------------------------------------------
@@ -330,8 +346,46 @@ static void boot() {
   in4.begin(PIN_IN4, cfg.in4_invert);
   bootT = baseT = T;
   gateBegin();
+  inPass = false;
   houseSessionNow = nondet_u32();
   verifiedNow = nondet_bool();
+}
+
+// The proof is split at the loop's cut points: the pass's start (time moves on, Relay::update, the radio and flash
+// work appLoop guards, up to the link), one frame handled (a CMD or a CFG_SET, its millis() a little later), one
+// console relay test, and the role's loop (gateLoop at the pass's `now`). Each segment, from any state satisfying the
+// invariant, ends in one satisfying it, and a pass is a sequence of them in any number: so the invariant holds after
+// every segment of every run, and the properties checked inside each hold throughout. The Makefile runs each segment
+// (-DSEGMENT=...) as its own query.
+static bool was[3];
+static uint32_t untilAt[3], startAtAt[3], offsAt[3];
+static uint32_t offCount[3];
+
+static void snapshot() {
+  for (int k = 1; k <= 2; k++) {
+    Relay &r = relay(k);
+    was[k] = r.pulsing();
+    untilAt[k] = r._pulseUntil;
+    startAtAt[k] = r._startAt;
+    offCount[k] = coil[k].released ? (uint32_t)coil[k].offT : 0;
+    waitingAtPass[k] = r._startAt != 0;
+  }
+}
+
+static void segmentEnd() {
+  for (int k = 1; k <= 2; k++) {
+    Relay &r = relay(k);
+    bool cut = (coil[k].released ? (uint32_t)coil[k].offT : 0) != offCount[k];
+    if (was[k] && r.pulsing() && !cut) {
+      CHECK(r._pulseUntil == untilAt[k], "no-restart: a running pulse's end moved");
+      CHECK(r._startAt == 0 || r._startAt == startAtAt[k], "no-restart: a waiting pulse's start moved");
+    }
+  }
+  checking = true;
+  inv();
+#ifdef REACH
+  CHECK(false, "reach: the end of the segment is reachable (this run must fail)");
+#endif
 }
 
 int main() {
@@ -347,37 +401,41 @@ int main() {
   anyState();
   checking = false;
   inv();
-  // One pass: time moves on, then appLoop (Relay::update, the link's frames, the console, gateLoop...).
+  snapshot();
+#if SEGMENT == SEG_PASS
+  // Time moves on, the house session may change; then appLoop up to the link (linkPoll ends the segment).
+  ASSUME(!inPass);
   uint32_t d = nondet_u32();
   ASSUME(d >= 1 && d <= (pulsingNow() ? (uint32_t)PASS_MAX_MS : IDLE_MAX_MS));
   advance(d);
+  inPass = true;
+  passT = T;
   if (nondet_bool()) {
     verifiedNow = nondet_bool();
     houseSessionNow = nondet_u32();
   }
-  bool was[3] = { false, k1.pulsing(), k2.pulsing() };
-  uint32_t until[3] = { 0, k1._pulseUntil, k2._pulseUntil };
-  uint32_t startAt[3] = { 0, k1._startAt, k2._startAt };
-  waitingAtPass[1] = k1._startAt != 0;
-  waitingAtPass[2] = k2._startAt != 0;
-  bool released[3] = { false, coil[1].released, coil[2].released };
-  uint64_t offT[3] = { 0, coil[1].offT, coil[2].offT };
-  uint64_t passT = T;
   appLoop();
-  // gateLoop read the clock at the pass's `now` (uptimeMs keeps the later of that and a handler's millis()).
-  if ((uint32_t)clockBase == toClk(passT)) baseT = passT;
-  for (int k = 1; k <= 2; k++) {
-    Relay &r = relay(k);
-    bool cut = coil[k].released != released[k] || coil[k].offT != offT[k];
-    if (was[k] && r.pulsing() && !cut) {
-      CHECK(r._pulseUntil == until[k], "no-restart: a running pulse's end moved");
-      CHECK(r._startAt == 0 || r._startAt == startAt[k], "no-restart: a waiting pulse's start moved");
-    }
-  }
-  checking = true;
-  inv();
-#ifdef REACH
-  CHECK(false, "reach: the end of the harness is reachable (this run must fail)");
+  ASSUME(false);  // not reached: linkPoll ends it
+#elif SEGMENT == SEG_CMD || SEGMENT == SEG_CFG || SEGMENT == SEG_TEST
+  ASSUME(inPass);
+  uint32_t skew = nondet_u32();
+  ASSUME(T + skew - passT <= SKEW_PASS);
+  advance(skew);  // a handler's millis() runs ahead of the pass's `now`
+#if SEGMENT == SEG_CMD
+  deliverCmd();
+#elif SEGMENT == SEG_CFG
+  deliverCfgSet();
+#else
+  relayTest();
+#endif
+  segmentEnd();
+#elif SEGMENT == SEG_ROLE
+  // gateLoop at the pass's `now`, a little behind millis() if handlers ran.
+  ASSUME(inPass);
+  gateLoop(toClk(passT));
+  if (passT > baseT) baseT = passT;  // uptimeMs read it there, unless a handler had read it later
+  inPass = false;
+  segmentEnd();
 #endif
   return 0;
 #endif

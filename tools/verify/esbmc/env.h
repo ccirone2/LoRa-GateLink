@@ -37,7 +37,8 @@ void delay(uint32_t ms) { advance(ms); }
 // read as past (under 2^31) when compared signed. A frame handler's millis() runs up to HANDLER_SKEW_MS ahead of the
 // pass's `now`.
 #define HANDLER_SKEW_MS 20
-#define IDLE_MAX_MS (0x40000000u - 64)
+#define SKEW_PASS (2 * HANDLER_SKEW_MS)  // how far millis() runs ahead of a pass's `now` by its end (frames, console)
+#define IDLE_MAX_MS (0x40000000u - 256)
 void delayMicroseconds(uint32_t) {}
 
 // The radio's time on air (radio.cpp, the SX1276 formula) for a frame of `len` bytes: only its bound matters here. At

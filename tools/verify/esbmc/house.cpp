@@ -21,9 +21,14 @@
 #include "role_house.cpp"
 #include "cfgmodel.h"
 
-#ifndef FRAMES
-#define FRAMES 2
+#define SEG_PASS 1
+#define SEG_STATUS 2
+#define SEG_ROLE 3
+#ifndef SEGMENT
+#define SEGMENT SEG_PASS
 #endif
+static bool inPass;     // between a pass's start (its `now`, passT) and its houseLoop
+static uint64_t passT;
 
 int digitalRead(uint32_t) { return nondet_bool() ? HIGH : LOW; }
 void pinMode(uint32_t, uint32_t) {}
@@ -68,14 +73,11 @@ static void deliverStatus() {
   takenState = p[ST_STATE];
 }
 
+static void segmentEnd();
+// In the pass-start segment the pass is followed up to the link: the frames and houseLoop are the next segments.
 void linkPoll(uint32_t) {
-  for (int i = 0; i < FRAMES; i++) {
-    if (!nondet_bool()) continue;
-    uint32_t skew = nondet_u32();
-    ASSUME(skew <= HANDLER_SKEW_MS / FRAMES);
-    advance(skew);
-    deliverStatus();
-  }
+  segmentEnd();
+  ASSUME(false);
 }
 
 // The console: relay tests of K2 are the exception the property names; anything else it does is outside (config
@@ -93,10 +95,13 @@ static void inv() {
     // STAMP_CAP_MS, and never so large it would read as negative.
     int32_t age = (int32_t)(clk - statusAt);
     uint64_t real = T - takenT;
-    INV(age >= -2 && age <= (int32_t)(STAMP_CAP_MS + HANDLER_SKEW_MS), "statusAt's age is in range (capped once a pass)");
+    // Capped at STAMP_CAP_MS by each houseLoop (capStamps), then a pass's gap at most.
+    INV(age >= -2 && age <= (int32_t)(STAMP_CAP_MS + 2 * SKEW_PASS + (inPass ? IDLE_MAX_MS : 0)),
+        "statusAt's age is in range (capped once a pass)");
     INV((int64_t)age + 1 >= (int64_t)(real < STAMP_CAP_MS ? real : STAMP_CAP_MS), "statusAt is no later than the take");
   }
   INV(taken ? gateState == takenState : gateState == GS_UNKNOWN, "gateState is the last STATUS taken, or unknown");
+  INV(!inPass || (passT <= T && T - passT <= SKEW_PASS), "a pass's handlers run within SKEW_PASS of its now");
 }
 
 static void anyState() {
@@ -127,6 +132,7 @@ static void anyState() {
   senseLitAt = nondet_u32(); pendingAction = nondet_u8(); pendingAt = nondet_u32(); cmdId = nondet_u16();
   cmdAction = nondet_u8(); cmdResult = nondet_i32(); cmdUnreported = nondet_bool();
   taken = nondet_bool(); takenT = nondet_u64(); takenState = nondet_u8();
+  inPass = nondet_bool(); passT = nondet_u64();
   gateSessionNow = nondet_u32();
   verifiedNow = nondet_bool();
 }
@@ -145,6 +151,18 @@ static void boot() {
   in4.begin(PIN_IN4, cfg.in4_invert);
   houseBegin();
   gateSessionNow = 0;
+  inPass = false;
+}
+
+// As gate.cpp, the step is split at the loop's cut points: the pass's start (time moves on, Relay::update, up to the
+// link), one STATUS handled (its millis() a little later), and houseLoop at the pass's `now`, where the sensor is
+// judged (a pass's gap at most after the link times out: the watchdog bounds a pass at 8 s, the bench saw 0.5 s).
+static void segmentEnd() {
+  checking = true;
+  inv();
+#ifdef REACH
+  CHECK(false, "reach: the end of the segment is reachable (this run must fail)");
+#endif
 }
 
 int main() {
@@ -160,23 +178,35 @@ int main() {
   anyState();
   checking = false;
   inv();
+#if SEGMENT == SEG_PASS
+  ASSUME(!inPass);
   uint32_t d = nondet_u32();
   ASSUME(d >= 1 && d <= IDLE_MAX_MS);
   advance(d);
-  uint64_t passT = T;
+  inPass = true;
+  passT = T;
+  appLoop();  // linkPoll ends the segment
+  ASSUME(false);
+#elif SEGMENT == SEG_STATUS
+  ASSUME(inPass);
+  uint32_t skew = nondet_u32();
+  ASSUME(T + skew - passT <= SKEW_PASS);
+  advance(skew);
+  deliverStatus();
+  segmentEnd();
+#elif SEGMENT == SEG_ROLE
+  ASSUME(inPass);
   bool test = k2.pulsing();
-  appLoop();
+  houseLoop(toClk(passT));
+  inPass = false;
   // sensor-truth, sensor_invert 0: K2 energized is the contact closed.
   if (!cfg.sensor_invert && k2.on() && !test && !k2.pulsing()) {
     CHECK(taken && takenState == GS_CLOSED, "sensor-truth: K2 closed without a closed STATUS taken");
+    // <= : statusAt is stamped `now | 1`, so the link reads up for the timeout's last millisecond too.
     if (cfg.linkloss_open)
-      // <= : statusAt is stamped `now | 1`, so the link reads up for the timeout's last millisecond too.
       CHECK((takenT >= passT ? 0 : passT - takenT) <= houseLinkTimeoutMs(), "sensor-truth: K2 closed past the link timeout after the STATUS");
   }
-  checking = true;
-  inv();
-#ifdef REACH
-  CHECK(false, "reach: the end of the harness is reachable (this run must fail)");
+  segmentEnd();
 #endif
   return 0;
 #endif

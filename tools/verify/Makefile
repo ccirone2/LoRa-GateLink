@@ -18,11 +18,14 @@ RUN := $(PYTHON) esbmc_run.py --esbmc $(ESBMC) --fw $(FW) --build $(BUILD)
 # check (REACH, which must fail: a harness that excludes every run proves nothing). link_window has no boot case (its
 # invariant is vacuous until a session is verified), nor has house_cmds (a bounded run from boot, not an induction).
 HARNESSES := gate house link_window house_cmds
+# gate.cpp's inductive step, one query per segment of a pass (see its main).
+GATE_SEGMENTS := 1 2 3 4 5
+HOUSE_SEGMENTS := 1 2 3
 BOOTED := gate house
 # The TLA+ model's configurations (tla/*.cfg): each says what it expects (tlc_trace.py).
 MODELS := $(wildcard tla/*.cfg)
 
-.PHONY: all esbmc tla clean $(HARNESSES:%=esbmc-%) $(BOOTED:%=esbmc-boot-%) $(HARNESSES:%=esbmc-reach-%) \
+.PHONY: all esbmc tla clean $(HARNESSES:%=esbmc-%) $(GATE_SEGMENTS:%=esbmc-gate-%) $(HOUSE_SEGMENTS:%=esbmc-house-%) $(BOOTED:%=esbmc-boot-%) $(HARNESSES:%=esbmc-reach-%) \
         $(MODELS:tla/%.cfg=tla-%)
 all: esbmc tla
 esbmc: $(HARNESSES:%=esbmc-%) $(BOOTED:%=esbmc-boot-%) $(HARNESSES:%=esbmc-reach-%)
@@ -32,12 +35,24 @@ $(BUILD)/params.h: gen_params.py $(FW)/config.cpp
 	@mkdir -p $(BUILD)
 	$(PYTHON) gen_params.py --fw $(FW) $@
 
-$(HARNESSES:%=esbmc-%): esbmc-%: $(BUILD)/params.h
+$(filter-out esbmc-gate esbmc-house,$(HARNESSES:%=esbmc-%)): esbmc-%: $(BUILD)/params.h
 	@$(RUN) esbmc/$*.cpp
+esbmc-gate: $(GATE_SEGMENTS:%=esbmc-gate-%)
+esbmc-house: $(HOUSE_SEGMENTS:%=esbmc-house-%)
+$(HOUSE_SEGMENTS:%=esbmc-house-%): esbmc-house-%: $(BUILD)/params.h
+	@$(RUN) -D SEGMENT=$* esbmc/house.cpp
+$(GATE_SEGMENTS:%=esbmc-gate-%): esbmc-gate-%: $(BUILD)/params.h
+	@$(RUN) -D SEGMENT=$* esbmc/gate.cpp
 $(BOOTED:%=esbmc-boot-%): esbmc-boot-%: $(BUILD)/params.h
 	@$(RUN) -D BOOT esbmc/$*.cpp
-$(HARNESSES:%=esbmc-reach-%): esbmc-reach-%: $(BUILD)/params.h
+$(filter-out esbmc-reach-gate esbmc-reach-house,$(HARNESSES:%=esbmc-reach-%)): esbmc-reach-%: $(BUILD)/params.h
 	@$(RUN) -D REACH --expect fail esbmc/$*.cpp
+esbmc-reach-gate: $(GATE_SEGMENTS:%=esbmc-reach-gate-%)
+esbmc-reach-house: $(HOUSE_SEGMENTS:%=esbmc-reach-house-%)
+$(HOUSE_SEGMENTS:%=esbmc-reach-house-%): esbmc-reach-house-%: $(BUILD)/params.h
+	@$(RUN) -D SEGMENT=$* -D REACH --expect fail esbmc/house.cpp
+$(GATE_SEGMENTS:%=esbmc-reach-gate-%): esbmc-reach-gate-%: $(BUILD)/params.h
+	@$(RUN) -D SEGMENT=$* -D REACH --expect fail esbmc/gate.cpp
 
 $(MODELS:tla/%.cfg=tla-%): tla-%:
 	@$(PYTHON) tlc_trace.py --jar $(TLA2TOOLS) tla/$*.cfg

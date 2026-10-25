@@ -220,6 +220,11 @@ struct Shelly {
   uint32_t swSince = 0;
   uint32_t bootMs = 1500;
   uint32_t relayDropMs = 460;  // relay contact falls this long into a 12 V cut (bench)
+  // A cut this long reboots the Shelly even if power is back before its relay drops (it drops relayDropMs after the
+  // cut all the same): the bench's Shelly rebooted on a 300 ms dip, its relay dropping ~200 ms after the board's
+  // power good. 0: it rides through any cut shorter than relayDropMs.
+  uint32_t brownoutMs = 0;
+  uint32_t cutAt = 0;
   uint32_t optoDropMs = 2100;  // the IN2 opto lags further (rail capacitors)
   uint32_t optoUpMs = 50;
   bool restoreSw = true;  // at boot the relay takes the SW level (else off)

@@ -14,6 +14,7 @@
 #include "link.cpp"
 #include "cfgmodel.h"
 
+#define FRAME_MAX (HDR_LEN + CHALLENGE_LEN + TAG_LEN)
 static uint32_t S;          // the sequence number the proof follows
 static uint32_t epochSess;  // the verified peer session the ghosts below belong to
 static uint32_t epochBase;  // the seq of the HELLO_ACK that verified it
@@ -77,11 +78,12 @@ int main() {
   accS = nondet_bool();
   checking = false;
   inv();
-  // One frame, any bytes.
-  uint8_t buf[MAX_FRAME];
+  // One frame, any bytes, up to a HELLO's length (the window doesn't look past the header; longer payloads only cost
+  // the checker time in the cipher's loops).
+  uint8_t buf[FRAME_MAX];
   for (size_t i = 0; i < sizeof(buf); i++) buf[i] = nondet_u8();
   uint8_t n = nondet_u8();
-  ASSUME(n <= MAX_FRAME);
+  ASSUME(n <= FRAME_MAX);
   uint32_t sess0 = peerSession, last0 = peerLastSeq;
   handleFrame(buf, n, 0, 0, clk);
   // A HELLO_ACK that verified a new session (or verified one again from none): the ghosts start over with it.

@@ -244,6 +244,14 @@ CmdFresh == ~badLate
 \* One command, at most one pulse, across gate reboots too.
 CmdOnce == ~badTwice
 
+\* The state as the command properties see it (VIEW CmdView in their .cfg files): the gate's departures and the contact
+\* sensor's bookkeeping, and what a STATUS says of the gate, never decide whether or when a command pulses, so states
+\* that differ only there are one state to TLC. The rest of the house's STATUS handling (which one it takes, its
+\* reckoning of the gate's clock, which dates commands) stays in.
+CmdView == <<now, pos, gBoot, gSeq, gPeer, gBase, gAcc, gHaveCmd, gLastId, gLastSeq,
+             hBoot, hSeq, hNextId, hSlot, hPeer, hBase, hAcc, hStatusSess, hStatusSeq, hClk,
+             {IF f.t = "ST" THEN [t |-> "ST", s |-> f.s, q |-> f.q, c |-> f.c] ELSE f : f \in air}, ghostVars>>
+
 TypeOK ==
   /\ pos \in {"closed", "open"}
   /\ hState \in {"unknown", "closed", "open"}

@@ -392,11 +392,12 @@ attacker who records every frame and delivers any of them, any number of times, 
 never, but can't forge one or answer a challenge (HMAC-SHA256, 128-bit challenges). Each action cites the firmware it
 stands for; the boards' local steps are the contracts the ESBMC harnesses prove (the link's acceptance is
 `link_window.cpp`'s, the gate's command checks `gate`'s, the sensor `house`'s). Properties: **SensorTruth** (the sensor
-shows closed at most LAG after the gate left closed), **CmdOrder** (a command never pulses after a later one was
-taken), **CmdOnce** (one command, one pulse, across reboots), **CmdFresh** (never past its TTL plus the slack). Each
-`.cfg` states what it expects: the configurations of the firmware before a fix keep finding the bug, so the model is
-shown to see it. Bounds: a few time units (one unit stands for any span: the model's constants are scaled), 4 to 6
-frames from each board, 1 or 2 commands, 2 boots each; exact clocks (the 100 ppm the house allows is analysed, not
+shows closed at most LAG after the gate left closed), **CmdOrder** (a command never pulses after a later one was taken),
+**CmdOnce** (one command, one pulse, across reboots), **CmdFresh** (never past its TTL plus the slack). Each `.cfg`
+states what it expects: the configurations of the firmware before a fix keep finding the bug, so the model is shown to
+see it. Bounds: a few time units (one unit stands for any span: the model's constants are scaled), 4 to 6 frames from
+the house and 3 to 6 from the gate, 1 or 2 commands, 2 boots each (the command properties' configurations merge states
+that differ only in the sensor's bookkeeping, `CmdView`); exact clocks (the 100 ppm the house allows is analysed, not
 modelled).
 
 **Mutations.** `tools/mutate.py --verify` breaks each property in a copy of the firmware (`tools/verify/mutations.json`:
@@ -438,15 +439,22 @@ range and the worst case the sources allow.
 - The crypto: the MAC and cipher are taken as ideal (the stand-in SHA256 and AES compute nothing; a forged frame's tag
   matches or not at the checker's choice, and the window proofs hold either way). The 128-bit challenge's freshness is
   an assumption of the protocol model.
-- `radio.cpp`, `extflash.cpp`, `supply.cpp`, `console.cpp` and `GateLink.ino` aren't run: the drivers are answered by
-  the harness, and the console's JSON is beyond the checker. So the console's holding `config.save` and the like during
-  a pulse is tested (systests), not proved. `sendDiag` and three config functions reach settings through pointers to
-  member, which ESBMC can't follow: the harnesses skip `sendDiag` (it only reads) and use name-for-name equivalents of
+- `radio.cpp`, `extflash.cpp`, `console.cpp` and `GateLink.ino` aren't run: the drivers are answered by the harness, and
+  the console's JSON is beyond the checker. So the console's holding `config.save` and the like during a pulse is tested
+  (systests), not proved. `sendDiag` and three config functions reach settings through pointers to member, which ESBMC
+  can't follow: the harnesses skip `sendDiag` (it only reads) and use name-for-name equivalents of
   `paramSet`/`paramValid` generated from `PARAMS`.
 - The gate's reported state (the limit holds, `fault`, `no_power`) is proved only not to touch the relays: whether it
   is true depends on the opener, whose timings are unpublished. The host tests and the bench check it.
 - The house's commands are proved over 8 passes from boot, not inductively; K1's consistency with the gate (resync)
-  isn't a safety property and isn't proved.
+  isn't a safety property and isn't proved. **owner-only** can't tell the owner from the Shelly where the house can't
+  either: in follow mode an owner switching on just as K1 does makes the same IN1 edge as the Shelly following K1, so
+  such an edge counts as the owner's.
+- `supply.cpp` runs only in `house_cmds.cpp`, on an I2C bus that always answers. A failed read keeps the last reading,
+  so a dip during bus errors would go unseen; the bus failing isn't modelled.
+- ESBMC 8.5 calls a method on the wrong operand of a conditional (`(c ? a : b).f()`); the firmware binds a reference
+  first, and `tests/tools/test_verify.py` keeps the form out of it (it made a proof fail on correct code; read the other
+  way, it could pass on wrong code).
 - The protocol model is bounded and its clocks exact; the house's 100 ppm allowance lets an attacker who relays every
   STATUS late drag its reckoning back by 100 ppm of the attack's length (8.6 s a day).
 - The first STATUS a house takes in a gate session (after either board restarts) has no reckoning to be dated against

@@ -9,15 +9,6 @@ once its fix is merged and record it in the pull request.
 
 ## Firmware
 
-- [ ] **A withheld older command runs after a newer one.** Found by the model checker (`tools/verify/tla`,
-  `asis_order.cfg`, invariant `CmdOrder`): the owner opens, then closes; the open's frames are jammed at the gate
-  and recorded, the close gets through (the gate, closed, takes it: `already`), then the recorded open is played
-  back. It is inside its deadline (`cmd_ttl_s`, 10 s by default) and inside the replay window (a lower seq the gate
-  hasn't seen), and its id isn't the last one taken, so `handleCmd` pulses K1: the gate opens against the owner's last
-  word. Trace (TLC, 10 steps): commands 1 (open, seq 2) and 2 (close, seq 3); the gate takes 2, then 1. Host test
-  `link_withheld_older_command_after_a_newer_one_is_refused` (XFAIL). Fix: the gate refuses a command framed before
-  the last one it took in this house session (a lower seq): the house never frames a command again once a later one
-  has replaced it in its slot.
 - [ ] **A withheld STATUS is taken however old.** Found by the model checker (`tools/verify/tla`, `asis_sensor.cfg`,
   invariant `SensorTruth`): every frame from the gate is kept from the house from just before the gate opens; the
   house's link times out and the sensor opens; then the last STATUS sent while closed, which the house never took, is

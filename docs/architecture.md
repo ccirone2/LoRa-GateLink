@@ -136,9 +136,11 @@ the slot's TTL; with no reading for the verified gate session (`linkPeerSession`
 returns false and the press stays in `pendingAction` (`clockWait`, log `cmd_hold` a=3) until there is one, its TTL
 shortened by the wait, or `cmd_ttl_s` from the switch has passed (`cmd_dropped`). The gate sends STATUS as soon as its
 link verifies the house, a new session or after its own restart (`houseSession`, `houseVerified`), so that wait is a
-second or two. `handleCmd` checks the deadline after the duplicate check (a resend of a command already run gets its
-result), with a slack of `CMD_LATE_SLACK_MS` plus a STATUS's and a CMD's airtime, and refuses with `RES_LATE`, which
-the house treats as `RES_NO_POWER`: resync at once. CMD stays 9 bytes (a 30-byte frame): the 4 more a gate session id
+second or two. `handleCmd` checks the order, then the deadline after the duplicate check (a resend of a command already
+run gets its result): a command framed before the last one taken this house session (`m.seq < lastCmdSeq`, the
+window takes lower seqs it hasn't seen) is refused `RES_LATE` and logged `replay` (0.20.3: a withheld older command
+otherwise ran after the owner's later one, or a renumbered resend of a command run twice); the deadline with a slack
+of `CMD_LATE_SLACK_MS` plus a STATUS's and a CMD's airtime, and refuses with `RES_LATE`, which the house treats as `RES_NO_POWER`: resync at once. CMD stays 9 bytes (a 30-byte frame): the 4 more a gate session id
 would take made the frame 34 bytes, which no longer fit the gaps of a neighbour sending every 100 ms; the random
 origin binds a deadline to its boot instead. Don't use 32 bits for the deadline (a command withheld 2^32 ms would read
 as current, host-tested) nor a time window on the gate alone (it can't tell a delayed frame from a retry).
@@ -409,7 +411,8 @@ checks. A proof out of time judges nothing (`no verdict`): it neither kills nor 
 **What the checker found** (each a host test and a TODO.md item until its fix merges, each fix its own pull request):
 
 1. *A withheld older command runs after a newer one* (TLC, CmdOrder; also CmdOnce, the same mechanism running a
-   renumbered resend twice). Within its deadline, the gate checked only the last command's id.
+   renumbered resend twice). Within its deadline, the gate checked only the last command's id. Fixed in 0.20.3: the
+   gate refuses a command framed before the last one it took (`cmd_order.cfg` holds; `gate.cpp`'s **in-order**).
 2. *A withheld STATUS is taken however old* (TLC, SensorTruth). The house took any STATUS later than the last one it
    took: withheld frames played back in order, one per link timeout, held the sensor closed for as long as the attacker
    had kept them, not "up to its link timeout" as the threat model said.

@@ -65,7 +65,8 @@ Someone listening learns the message types, frame lengths and times, not the pay
 changed, not to what, nor why (a move or the mains power). They can't forge frames, or replay frames that were
 delivered. A frame **withheld** (jammed at its receiver and recorded) and delivered later is taken if its seq is
 still inside the replay window, so each message type that matters is checked for that: the house takes STATUS
-only in seq order (0.13.9), and a command carries a deadline (below).
+only in seq order (0.13.9), and a command carries a deadline (below) and is taken only if framed after the last one
+the gate took from that house session (0.20.3).
 
 ## Command deadlines
 
@@ -78,6 +79,14 @@ seconds at SF12 / 125 kHz), or with one further ahead than the longest `cmd_ttl_
 `RES_LATE`, log `cmd_late`, no pulse. So a command jammed at the gate and recorded, played back later, never moves
 it, however long its seq stays inside the window (before 0.16.0 it could fire whenever the attacker chose while the
 gate heard fewer than 32 frames from the house).
+
+Inside its deadline, a command withheld and played back after a later one the gate took would still undo it: the
+owner opens, then closes; the open is jammed at the gate, the close gets through, then the open is played back and the
+gate opens. So the gate also refuses a command with a lower seq than the last one it took from this house session
+(0.20.3; ACKed `RES_LATE`, log `replay`, no pulse; found by the model checker, `tools/verify`): the house frames a
+command only while it is in its slot, so every frame of an earlier command, renumbered resends included, has a lower
+seq than the first frame of a later one. The same rule keeps a renumbered resend of a command the gate ran, played back
+after a later one, from running it twice.
 
 The house learns the gate's clock from STATUS, which carries it (`ST_CLOCK`). A STATUS that was resent (its first
 frames lost) carries the clock of when it was built, seconds behind, so a reading replaces the one in use only if it

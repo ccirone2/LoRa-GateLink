@@ -256,10 +256,10 @@ TEST(link_withheld_command_played_back_later_is_refused) {
 
 // [freshness] [pulse-only] The owner opens, then closes a second later. The open command is kept from the gate (every
 // send of it jammed there and recorded); the close gets through, and the gate, closed already, takes it. Then the open
-// is played back, inside its deadline and inside the replay window (a lower seq it hasn't seen): it must not run, as
-// the owner's last word was close. Found by the model checker (tools/verify/tla, CmdOrder): the gate checked a
-// command's id only against the last one, so the older command opened the gate.
-XFAIL_TEST(link_withheld_older_command_after_a_newer_one_is_refused, "TODO.md: a withheld older command runs after a newer one") {
+// is played back, inside its deadline and inside the replay window (a lower seq it hasn't seen): refused (RES_LATE, log
+// replay), as the owner's last word was close. Found by the model checker (tools/verify/tla, CmdOrder): before 0.20.3
+// the gate checked a command's id only against the last one, so the older command opened the gate.
+TEST(link_withheld_older_command_after_a_newer_one_is_refused) {
   World w;
   w.commission();
   CHECK(w.opener.atClosed());
@@ -276,11 +276,53 @@ XFAIL_TEST(link_withheld_older_command_after_a_newer_one_is_refused, "TODO.md: a
   CHECK(w.runUntil([&] { return w.gate.count("cmd_rx") > 0; }, 5000));  // the close, the gate already closed
   CHECK_EQ(w.gate.count("pulse"), 0);
   w.drop = nullptr;
+  int replays = w.gate.count("replay");
   w.inject(w.gate, kept);
   w.run(3000);
+  CHECK_EQ(w.gate.count("replay"), replays + 1);
+  CHECK_EQ(w.gate.count("cmd_late"), 0);  // inside its deadline: the order stops it
   CHECK_EQ(w.gate.count("pulse"), 0);
   CHECK(w.opener.atClosed());
   CHECK(w.sensorClosed());
+}
+
+// [freshness] [pulse-only] One press, one pulse, even replayed: the owner opens and the gate runs it, but its ACKs are
+// lost, so the command stays in the house's slot; a replayed HELLO makes the house renumber it, and that frame (a new
+// seq, the same command) is kept from the gate and recorded. The owner closes; the gate takes it. Played back, the
+// renumbered open isn't the last command the gate took (the close is), and its seq is new to the window: refused for
+// coming before the close, it must not open the gate a second time. Found by the model checker (tools/verify/tla,
+// CmdOnce); before 0.20.3 it pulsed again.
+TEST(link_renumbered_resend_after_a_newer_command_is_refused) {
+  World w;
+  w.commission();
+  CHECK(w.opener.atClosed());
+  uint32_t firstSeq = 0;
+  Bytes renumbered;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from == w.gate.idx && f.type() == 3) return true;  // the gate's ACKs: the open stays pending at the house
+    if (f.from != w.house.idx || f.type() != 4 || w.plain(f.b)[2] != 1) return false;  // MSG_CMD, ACT_OPEN
+    if (!firstSeq) firstSeq = seqOf(f.b);
+    if (seqOf(f.b) == firstSeq) return false;  // the original: it runs
+    if (renumbered.empty()) renumbered = f.b;
+    return true;  // the renumbered resend: kept
+  };
+  w.user(true);
+  CHECK(w.runUntil([&] { return w.gate.count("pulse") == 1; }, 3000));
+  // The gate's first HELLO again: the house answers it (its verified session) and renumbers what waits.
+  CHECK(w.gate.request("debug.replay", "\"hello\":true")["sent"] == true);
+  CHECK(w.runUntil([&] { return !renumbered.empty(); }, 4000));
+  w.drop = [&](const AirFrame &f) { return f.from == w.house.idx && f.type() == 4 && w.plain(f.b)[2] == 1; };
+  w.user(false);
+  CHECK(w.runUntil([&] { return w.gate.count("cmd_rx") >= 2; }, 5000));  // the close
+  int pulses = w.gate.count("pulse"), replays = w.gate.count("replay");
+  w.drop = nullptr;
+  w.inject(w.gate, renumbered);
+  w.run(500);
+  CHECK_EQ(w.gate.count("replay"), replays + 1);
+  CHECK_EQ(w.gate.count("pulse"), pulses);
+  CHECK(w.runUntil([&] { return w.opener.atClosed(); }, 20000));
+  w.run(5000);
+  CHECK(w.opener.atClosed());
 }
 
 // [sensor-closed-only-known] Every frame from the gate is kept from the house from just before the gate opens; the

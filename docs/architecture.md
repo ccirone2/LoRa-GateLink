@@ -87,8 +87,12 @@ slot gives up only when the TTL ends. STATUS's TTL is `heartbeat_s` capped at 10
 **Link loss.** STATUS carries the gate's `heartbeat_s`, and the house declares link loss after
 `houseLinkTimeoutMs()` = max(`link_timeout_s`, 2.5 × that heartbeat) without a STATUS (`houseStatusAt`, `appLinkUp`;
 other frames don't count, and its own link restart, `houseLinkRestarted`, starts it over); it takes a STATUS only if
-its seq is above the last one taken in that gate session (`linkPeerSession`), so one withheld and delivered late
-changes nothing (log `replay`); the gate counts its own link down (LED, history, D5) after `gateLinkTimeoutMs()`,
+its seq is above the last one taken in that gate session (`linkPeerSession`), and (0.20.4) its clock (`ST_CLOCK`) is
+no further behind the house's reckoning of the gate's clock (`gateClockRef`) than `STATUS_TTL_MS` (the gate gives a
+STATUS up then) plus its airtime, `STATUS_STALE_SLACK_MS` and `CLOCK_DRIFT` of the reading's age: one withheld and
+delivered late changes nothing (log `replay`). Before, the seq check alone let STATUS frames withheld and played back in
+order, one per link timeout, hold the sensor closed for as long as the attacker had kept them (finding 2,
+"Verification"). The first STATUS of a gate session has no reckoning to be dated against (`status_first.cfg`). The gate counts its own link down (LED, history, D5) after `gateLinkTimeoutMs()`,
 the same with its own heartbeat and any frame from the house. Only the gate uses `heartbeat_s`, so there is no
 cross-check between them on one board.
 
@@ -130,8 +134,9 @@ keep them in sync. The longest loop pass since boot is status `loop_max_us` (the
 `clockOrigin`, 47 random bits drawn in `gateBegin`; STATUS carries it (`ST_CLOCK`, 48 bits) and its uptime fields come
 from `uptimeMs`, so they no longer wrap at 49.7 days either. The house keeps one reading per gate session
 (`clockSession`, `clockGate`, `clockAt`; `clockAt` is the handler's `millis()`, later than the loop's `now`, so every
-age is signed): a reading replaces it unless it's behind by more than `CLOCK_DRIFT` (100 ppm) of the age, and
-`capStamps` forgets it after `CLOCK_MAX_AGE_MS` (3 h). `sendCommand` stamps `CMD_DEADLINE` = the gate's clock now +
+age is signed): a reading replaces it unless it's behind by more than `CLOCK_DRIFT` (200 ppm: two
+±20 ppm crystals, one outdoors, reach ~115 ppm) of the age; commands aren't dated in one `CLOCK_MAX_AGE_MS` (3 h) old,
+and `capStamps` forgets it at `STAMP_CAP_MS` (it still dates STATUS). `sendCommand` stamps `CMD_DEADLINE` = the gate's clock now +
 the slot's TTL; with no reading for the verified gate session (`linkPeerSession`, 0 during our own link restart too) it
 returns false and the press stays in `pendingAction` (`clockWait`, log `cmd_hold` a=3) until there is one, its TTL
 shortened by the wait, or `cmd_ttl_s` from the switch has passed (`cmd_dropped`). The gate sends STATUS as soon as its
@@ -212,7 +217,7 @@ close would need a minimum travel time, which isn't measured (TODO.md).
 
 Considered and not built: deadlines on every reliable
 frame in the link, with the peer's clock carried in HELLO_ACK. One reading a session drifts past the slack within
-hours (100 ppm: 8.6 s a day), so it needs STATUS's readings anyway, and gate-to-house freshness would need the house's
+hours (200 ppm: 17 s a day), so it needs STATUS's readings anyway, and gate-to-house freshness would need the house's
 clock too; STATUS has its own (seq order) and config writes rarely matter (`withheld-config-write`).
 
 ## History: `history.cpp` and `histlog.cpp`
@@ -400,7 +405,7 @@ states what it expects: the configurations of the firmware before a fix keep fin
 see it. Bounds: a few time units (one unit stands for any span: the model's constants are scaled), 4 to 6 frames from
 the house and 3 to 6 from the gate, 1 or 2 commands, 2 boots each, 2 moves off closed by others per gate boot
 (`MaxLeft`: without it the departure count, which every STATUS carries, never ends; the command properties'
-configurations merge states that differ only in the sensor's bookkeeping, `CmdView`); exact clocks (the 100 ppm the
+configurations merge states that differ only in the sensor's bookkeeping, `CmdView`); exact clocks (the 200 ppm the
 house allows is analysed, not modelled).
 
 **Mutations.** `tools/mutate.py --verify` breaks each property in a copy of the firmware (`tools/verify/mutations.json`:
@@ -415,7 +420,9 @@ checks. A proof out of time judges nothing (`no verdict`): it neither kills nor 
    gate refuses a command framed before the last one it took (`cmd_order.cfg` holds; `gate.cpp`'s **in-order**).
 2. *A withheld STATUS is taken however old* (TLC, SensorTruth). The house took any STATUS later than the last one it
    took: withheld frames played back in order, one per link timeout, held the sensor closed for as long as the attacker
-   had kept them, not "up to its link timeout" as the threat model said.
+   had kept them, not "up to its link timeout" as the threat model said. Fixed in 0.20.4: the house refuses one older
+   by its reckoning of the gate's clock than any the gate still sends (`status_age.cfg` holds; `status_tight.cfg` shows
+   the slack is needed; `status_first.cfg` the first STATUS of a gate session, still open, below).
 3. *A user edge begun before K1's change ends its sync window* (ESBMC, `house_cmds.cpp`, a toggling Shelly, and the
    install's following one when the owner switches twice within its SW response): the Shelly's answer to K1, after the
    window closed early, became an OPEN.
@@ -445,7 +452,7 @@ range and the worst case the sources allow.
 | Shelly relay drops ~0.46 s into a cut; a 300 ms dip reboots it, a 200 ms one doesn't; boots in ~3.1 s, to its last state | bench (PR #35, e2e dip runs); its manual: LED blinks 4–5 s at boot, parameter 17 (default: restore the last state); no SW response time published | the settle window covers its boot | the checker's Shelly boots at any level | the simulator's Shelly rode through dips under 460 ms and booted in 1.5 s: corrected for the new tests (`brownoutMs`) |
 | Shelly SW response | never documented; bench logs: K1 to the debounced IN1 edge 136–184 ms (p95) | sync windows (`sync_window_ms`, 500 ms at least) | 200 ms modelled |
 | `BOOT_SETTLE_MS` 3 s, `BETWEEN_HOLD_MS`, `BOTH_LIMITS_HOLD_MS` 500 ms, `CLOSED_DISAGREE_MS` 5 s | chosen; the CSW24UL's restart time, AUX timing and travel are unmeasured and unpublished (its manual: none) | the gate's reported state (truth), not the relay proofs | not covered (below) |
-| crystal drift 100 ppm (`CLOCK_DRIFT`) | assumed; two ±20 ppm tuning-fork crystals, one outdoors at −20 °C (−0.036 ppm/°C²), reach ~115 ppm | commands' slack over 3 h; the house's clock readings | over 100 ppm, readings behind its reckoning by more aren't taken (availability) |
+| crystal drift 200 ppm (`CLOCK_DRIFT`; 100 ppm before 0.20.4) | assumed; two ±20 ppm tuning-fork crystals, one outdoors at −20 °C (−0.036 ppm/°C²), reach ~115 ppm | commands' slack over 3 h; the house's clock readings; the STATUS age check | the ~115 ppm worst case is inside it; past 200 ppm a reading behind the reckoning by more isn't taken, and a STATUS that late is refused (availability, not truth) |
 | loop pass while pulsing ≤ 50 ms; stalls ~0.5 s | soak `loop_max_us` 510 ms (flash save with radio restart); docs said "up to ~1 s" | pulse-only's overrun bound; finding 4 | 1 s modelled |
 
 **Not covered, and why.**
@@ -469,8 +476,8 @@ range and the worst case the sources allow.
 - ESBMC 8.5 calls a method on the wrong operand of a conditional (`(c ? a : b).f()`); the firmware binds a reference
   first, and `tests/tools/test_verify.py` keeps the form out of it (it made a proof fail on correct code; read the other
   way, it could pass on wrong code).
-- The protocol model is bounded and its clocks exact; the house's 100 ppm allowance lets an attacker who relays every
-  STATUS late drag its reckoning back by 100 ppm of the attack's length (8.6 s a day).
+- The protocol model is bounded and its clocks exact; the house's 200 ppm allowance lets an attacker who relays every
+  STATUS late drag its reckoning back by 200 ppm of the attack's length (17 s a day), so a STATUS that old is taken.
 - The first STATUS a house takes in a gate session (after either board restarts) has no reckoning to be dated against
   (`status_first.cfg` once finding 2 is fixed): an attacker who withholds STATUS from the handshake on can deliver one
   late. Closing it needs the STATUS to answer a challenge of the house's (a frame format change: ROADMAP).

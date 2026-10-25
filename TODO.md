@@ -9,18 +9,6 @@ once its fix is merged and record it in the pull request.
 
 ## Firmware
 
-- [ ] **A withheld STATUS is taken however old.** Found by the model checker (`tools/verify/tla`, `asis_sensor.cfg`,
-  invariant `SensorTruth`): every frame from the gate is kept from the house from just before the gate opens; the
-  house's link times out and the sensor opens; then the last STATUS sent while closed, which the house never took, is
-  played back. A seq later than any it took, so the order check (0.13.9) passes, and the house shows closed with the
-  gate open for another link timeout. Played back one by one, in order, each just before the link times out, kept
-  STATUS frames hold the sensor closed for as long as the attacker kept frames: the threat model's "up to its link
-  timeout" (`withheld-gate-frames-replayed`) doesn't hold. Trace (TLC, 15 steps): STATUS closed (seq 3) built at t=1,
-  the gate opens at t=1, the house takes it at t=7, sensor closed 6 units after the gate opened (link timeout 3).
-  Host test `link_status_withheld_past_the_link_timeout_is_refused` (XFAIL). Fix: the house refuses a STATUS whose
-  clock (ST_CLOCK) is further behind its reckoning of the gate's clock than a STATUS can honestly be (the gate's STATUS
-  TTL plus its airtime and a slack, plus the 100 ppm drift since the reckoning's reading).
-
 - [ ] **A warm reset of the house blips its outputs for at least 0.5 s.** On a watchdog, crash, reset-button or
   software reset, K1/K2 drop until the house is back and the gate reports (~1.5 s). With the gate open the
   controller follows K1 off and on (Alarm.com shows it closed for a moment); with it closed the contact sensor

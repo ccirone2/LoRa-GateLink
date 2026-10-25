@@ -11,7 +11,6 @@
 #include "app.h"
 #include "board.h"
 
-#define STATUS_TTL_MS 10000
 // After boot, the first STATUS waits until the inputs have been steady this long (at most BOOT_SETTLE_MAX_MS): the
 // opener may be restarting with us (a power blip at the gate) and its limits come back after we do. Reporting them
 // early made the house show not-closed for a moment: the contact sensor opening, K1 flicking.

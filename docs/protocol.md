@@ -90,8 +90,9 @@ after a later one, from running it twice.
 
 The house learns the gate's clock from STATUS, which carries it (`ST_CLOCK`). A STATUS that was resent (its first
 frames lost) carries the clock of when it was built, seconds behind, so a reading replaces the one in use only if it
-puts the gate's clock later, or earlier by no more than the crystals can have drifted apart since (100 ppm); none for
-3 hours (a dead link) leaves it unknown. The reading is kept for the gate session it came from. With none for the
+puts the gate's clock later, or earlier by no more than the crystals can have drifted apart since (200 ppm); none for
+3 hours (a dead link) leaves commands undated. A STATUS whose clock is further behind the reading than any the gate
+still sends (its 10 s TTL, its airtime and a slack, plus the drift) was withheld: it isn't taken (0.20.4). The reading is kept for the gate session it came from. With none for the
 verified gate session (the gate just restarted and waits for its inputs to settle, a few seconds, or a link restarted)
 a command can't be dated: it waits (log `cmd_hold` a=3) for up to `cmd_ttl_s` from the switch, losing that much of its
 lifetime, and is dropped after it (log `cmd_dropped`, the controller put back), never sent undated. The gate reports

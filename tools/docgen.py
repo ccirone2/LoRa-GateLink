@@ -1317,7 +1317,7 @@ FACTS = [
       Q("web/js/logdecode.js", r"the alarm sensor opened for (\d+) s", s),
       Q("tests/native/README.md", r"opens the sensor for (\d+) s", s),
       Q("tests/e2e/test_link_faults.py", r"MISSED_OPEN_S = (\d+)", s), Q(E2E, r"the contact sensor opens for (\d+) s", s)),
-    D("STATUS_TTL_MS", f"{FW}/role_gate.cpp",
+    D("STATUS_TTL_MS", f"{FW}/roles.h",
       Q(PRO, r"STATUS: `heartbeat_s` capped at (\d+) s", s),
       Q(ARCH, r"STATUS's TTL is `heartbeat_s` capped at (\d+) s", s)),
     Fact("watchdog", None, r"WDT_CONFIG_PER_(\d+)K",

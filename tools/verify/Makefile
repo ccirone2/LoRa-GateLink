@@ -54,9 +54,11 @@ esbmc-house_cmds-install: $(BUILD)/params.h
 # Any Shelly mode, toggling on SW edges included (finding 3, fixed in 0.20.5).
 esbmc-house_cmds-toggle: $(BUILD)/params.h
 	@$(RUN) -D BROWNOUT_AFTER_PG esbmc/house_cmds.cpp
-# A loop stall (a flash save) anywhere, over a dip too (finding 4, TODO.md).
+# A loop stall (a flash save) anywhere, over a dip too (finding 4, fixed in 0.20.6). Expected to hold, but it hasn't
+# finished: 6 hours at 8 passes, 90 minutes at 6 (Boolector or Z3), split by the pass the outage begins in too
+# (docs/architecture.md, "Not covered"). On the framework (findings 3 and 4 open) it fails in a minute or two.
 esbmc-house_cmds-stalls: $(BUILD)/params.h
-	@$(RUN) $(INSTALL) -D STALLS_ANYWHERE --expect fail --expect-msg owner-only esbmc/house_cmds.cpp
+	@$(RUN) $(INSTALL) -D STALLS_ANYWHERE esbmc/house_cmds.cpp
 # A dip may reboot the Shelly without dropping the board's power good (unmeasured: the bench saw it drop first): the
 # relay's drop and the Shelly's boot back to its last state are then edges the house takes for the owner's, whatever
 # ctrl_confirm_ms (finding 5, TODO.md). The install's cover is the order (BROWNOUT_AFTER_PG), a measurement.

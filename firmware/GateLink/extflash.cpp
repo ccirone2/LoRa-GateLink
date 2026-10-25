@@ -49,6 +49,7 @@ static bool waitReady(uint32_t timeoutMs) {
     deselect();
     if (!(sr & SR_BUSY)) return true;
     if ((int32_t)(millis() - t0) >= (int32_t)timeoutMs) return false;
+    yield();  // an erase waits up to 400 ms: the supply is still read meanwhile (supplyWait)
     delayMicroseconds(50);
   }
 }

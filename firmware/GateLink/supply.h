@@ -7,5 +7,6 @@
 // never noticed (role_house.cpp, ctrl_power_pmic).
 void supplyBegin();
 void supplyPoll(uint32_t now);  // every few ms; logs `supply` (a = power good, b = REG08) on a change
+void supplyWait();              // from the loop's blocking waits (yield()): keeps a low power good for the next poll
 bool supplyKnown();             // the charger answered at boot
 bool supplyGood();              // VIN power good (true if the charger didn't answer)

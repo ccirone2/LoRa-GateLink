@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 STATE = re.compile(r"^State (\d+): <(.*?)>\s*$")
@@ -72,9 +73,11 @@ def main(argv=None):
     if expect and not args.expect_violation:
         args.expect_violation = expect.group(1)
     tla = cfg.parent / f"{model.group(1) if model else 'GateLink'}.tla"
-    cmd = ["java", "-XX:+UseParallelGC", "-cp", args.jar, "tlc2.TLC", "-workers", args.workers, "-deadlock",
-           "-cleanup", "-metadir", str((cfg.parent / "states" / cfg.stem).resolve()), "-config", cfg.name, tla.name]
-    p = subprocess.run(cmd, cwd=cfg.parent, capture_output=True, text=True)
+    # TLC's states on disk (gigabytes for the larger configurations) go in a temporary directory, gone after the run.
+    with tempfile.TemporaryDirectory(prefix=f"tlc-{cfg.stem}-") as states:
+        cmd = ["java", "-XX:+UseParallelGC", "-cp", args.jar, "tlc2.TLC", "-workers", args.workers, "-deadlock",
+               "-metadir", states, "-config", cfg.name, tla.name]
+        p = subprocess.run(cmd, cwd=cfg.parent, capture_output=True, text=True)
     out = p.stdout + p.stderr
     violated = re.search(r"Error: Invariant (\w+) is violated", out)
     stats = re.findall(r"^(\d+ states generated.*|The depth of the complete state graph search is \d+\.)$", out, re.M)

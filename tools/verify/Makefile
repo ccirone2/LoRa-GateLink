@@ -84,4 +84,4 @@ $(MODELS:tla/%.cfg=tla-%): tla-%:
 	@$(PYTHON) tlc_trace.py --jar $(TLA2TOOLS) tla/$*.cfg
 
 clean:
-	rm -rf $(BUILD) tla/states
+	rm -rf $(BUILD)

@@ -25,4 +25,3 @@ tests/web/report/
 
 # The locked Python environment (uv sync)
 .venv/
-tools/verify/tla/states/

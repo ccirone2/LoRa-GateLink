@@ -418,6 +418,11 @@ checks.
 4. *A supply dip hidden by a loop stall becomes a CLOSE* (ESBMC, `house_cmds.cpp`, `-DSTALLS_ANYWHERE`): a flash save
    stalls the house's loop ~0.5 s; a dip under it is never seen (power good is low for 100 ms or so), yet reboots the
    Shelly, whose relay drop then reads as the owner closing.
+5. *A Shelly reboot the house doesn't see restores an OPEN* (ESBMC, `house_cmds.cpp`, `esbmc-house_cmds-worst`): a dip
+   too short for power good that still reboots the Shelly, just as K1 changes. The relay's drop matches K1 and ends its
+   window early; the Shelly boots back to its last state (parameter 17's default), an edge outside the window, taken
+   for the owner's. Open: covered at the install only if every such dip drops power good first, which isn't measured
+   below 300 ms (TODO.md).
 
 **The numbers it rests on.** Every timing below is a range the checker tries in full; the Makefile runs the measured
 range and the worst case the sources allow.
@@ -425,10 +430,10 @@ range and the worst case the sources allow.
 | Number | Source | What depends on it | Worst case |
 |---|---|---|---|
 | `INTERLOCK_MS` 100 ms | chosen (PR #27) after the GateSim saw both inputs at once; the opener's input filter and the relays' contact timing are unmeasured (the G5V-1's datasheet: ~5 ms each) | the gap is proved in firmware time; that 100 ms is enough for the opener is an assumption | not provable here: the opener's input timing isn't published |
-| power good ~0.2 s before the relay into a cut | bench, 30 runs (PR #42); the BQ24195L datasheet gives no deglitch for it at all | a CLOSE from a cut is dropped (`ctrl_confirm_ms`) | run with the order reversed (`BROWNOUT_AFTER_PG` off): finding 4's mechanism, without a stall, if a dip can reboot the Shelly without dropping power good (unmeasured) |
+| power good ~0.2 s before the relay into a cut | bench, 30 runs (PR #42); the BQ24195L datasheet gives no deglitch for it at all | a CLOSE from a cut is dropped (`ctrl_confirm_ms`); **owner-only** at the install | run with the order reversed (`BROWNOUT_AFTER_PG` off, `esbmc-house_cmds-worst`): finding 5, a dip that reboots the Shelly without dropping power good (unmeasured below 300 ms); no setting covers it |
 | power good low ≥ 100 ms in a dip | BQ24195L datasheet: REGN turn-on delay 100 ms min before power good returns | the house sees every dip that drops it, when its loop runs | a loop stall longer than that: finding 4 |
 | IN2 opto 1.6–2.1 s into a cut, misses 300 ms dips | bench (PR #35, #42); the opto itself is µs (PC817): it's the rail's capacitors | only with `ctrl_power_pmic` off | — |
-| Shelly relay drops ~0.46 s into a cut; a 300 ms dip reboots it; boots in ~3.1 s | bench (PR #35, e2e dip runs); its manual: LED blinks 4–5 s at boot; no SW response time published | the settle window covers its boot | the simulator's Shelly rode through dips under 460 ms and booted in 1.5 s: corrected for the new tests (`brownoutMs`) |
+| Shelly relay drops ~0.46 s into a cut; a 300 ms dip reboots it; boots in ~3.1 s, to its last state | bench (PR #35, e2e dip runs); its manual: LED blinks 4–5 s at boot, parameter 17 (default: restore the last state); no SW response time published | the settle window covers its boot | the checker's Shelly boots at any level | the simulator's Shelly rode through dips under 460 ms and booted in 1.5 s: corrected for the new tests (`brownoutMs`) |
 | Shelly SW response | never documented; bench logs: K1 to the debounced IN1 edge 136–184 ms (p95) | sync windows (`sync_window_ms`, 500 ms at least) | 200 ms modelled |
 | `BOOT_SETTLE_MS` 3 s, `BETWEEN_HOLD_MS`, `BOTH_LIMITS_HOLD_MS` 500 ms, `CLOSED_DISAGREE_MS` 5 s | chosen; the CSW24UL's restart time, AUX timing and travel are unmeasured and unpublished (its manual: none) | the gate's reported state (truth), not the relay proofs | not covered (below) |
 | crystal drift 100 ppm (`CLOCK_DRIFT`) | assumed; two ±20 ppm tuning-fork crystals, one outdoors at −20 °C (−0.036 ppm/°C²), reach ~115 ppm | commands' slack over 3 h; the house's clock readings | over 100 ppm, readings behind its reckoning by more aren't taken (availability) |

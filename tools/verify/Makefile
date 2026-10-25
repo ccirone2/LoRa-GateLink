@@ -26,7 +26,7 @@ BOOTED := gate house
 MODELS := $(wildcard tla/*.cfg)
 
 .PHONY: all esbmc tla clean $(HARNESSES:%=esbmc-%) esbmc-house_cmds-install esbmc-house_cmds-toggle \
-        esbmc-house_cmds-stalls esbmc-house_cmds-worst esbmc-house_cmds-worst-confirm $(GATE_SEGMENTS:%=esbmc-gate-%) \
+        esbmc-house_cmds-stalls esbmc-house_cmds-worst $(GATE_SEGMENTS:%=esbmc-gate-%) \
         $(HOUSE_SEGMENTS:%=esbmc-house-%) $(BOOTED:%=esbmc-boot-%) $(HARNESSES:%=esbmc-reach-%) \
         $(MODELS:tla/%.cfg=tla-%)
 all: esbmc tla
@@ -43,8 +43,7 @@ esbmc-link_window: $(BUILD)/params.h
 # through a dip), then in the variants that each show what a property depends on. A variant expected to fail is a
 # finding still open or a dependency the docs name (architecture.md, "Verification").
 INSTALL := -D SHELLY_MODE=0 -D BROWNOUT_AFTER_PG
-esbmc-house_cmds: esbmc-house_cmds-install esbmc-house_cmds-toggle esbmc-house_cmds-stalls esbmc-house_cmds-worst \
-                  esbmc-house_cmds-worst-confirm
+esbmc-house_cmds: esbmc-house_cmds-install esbmc-house_cmds-toggle esbmc-house_cmds-stalls esbmc-house_cmds-worst
 # Finding 3 (TODO.md) is open on this firmware: the owner switching twice within the Shelly's SW response.
 esbmc-house_cmds-install: $(BUILD)/params.h
 	@$(RUN) $(INSTALL) --expect fail --expect-msg owner-only esbmc/house_cmds.cpp
@@ -55,12 +54,10 @@ esbmc-house_cmds-toggle: $(BUILD)/params.h
 esbmc-house_cmds-stalls: $(BUILD)/params.h
 	@$(RUN) $(INSTALL) -D STALLS_ANYWHERE --expect fail --expect-msg owner-only esbmc/house_cmds.cpp
 # A dip may reboot the Shelly without dropping the board's power good (unmeasured: the bench saw it drop first): the
-# relay's drop is then a CLOSE after ctrl_confirm_ms...
+# relay's drop and the Shelly's boot back to its last state are then edges the house takes for the owner's, whatever
+# ctrl_confirm_ms (finding 5, TODO.md). The install's cover is the order (BROWNOUT_AFTER_PG), a measurement.
 esbmc-house_cmds-worst: $(BUILD)/params.h
 	@$(RUN) -D SHELLY_MODE=0 --expect fail --expect-msg owner-only esbmc/house_cmds.cpp
-# ... unless ctrl_confirm_ms outlasts the Shelly's reboot, the setting that covers it.
-esbmc-house_cmds-worst-confirm: $(BUILD)/params.h
-	@$(RUN) -D SHELLY_MODE=0 -D CONFIRM_MS=7000 --expect fail --expect-msg owner-only esbmc/house_cmds.cpp  # finding 3
 esbmc-gate: $(GATE_SEGMENTS:%=esbmc-gate-%)
 esbmc-house: $(HOUSE_SEGMENTS:%=esbmc-house-%)
 $(HOUSE_SEGMENTS:%=esbmc-house-%): esbmc-house-%: $(BUILD)/params.h

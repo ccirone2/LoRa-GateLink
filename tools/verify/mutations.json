@@ -338,7 +338,6 @@
   "why": "IN1 edges inside a sync window (the Shelly following K1) become commands",
   "targets": [
    "esbmc-house_cmds-install",
-   "esbmc-house_cmds-worst-confirm",
    "esbmc-house_cmds-toggle",
    "esbmc-house_cmds-stalls",
    "esbmc-house_cmds-worst"
@@ -357,7 +356,6 @@
   "why": "a CLOSE edge waiting out ctrl_confirm_ms isn't dropped when the controller's power goes",
   "targets": [
    "esbmc-house_cmds-install",
-   "esbmc-house_cmds-worst-confirm",
    "esbmc-house_cmds-toggle",
    "esbmc-house_cmds-stalls",
    "esbmc-house_cmds-worst"
@@ -376,7 +374,6 @@
   "why": "a CLOSE edge goes at once, without waiting ctrl_confirm_ms",
   "targets": [
    "esbmc-house_cmds-install",
-   "esbmc-house_cmds-worst-confirm",
    "esbmc-house_cmds-toggle",
    "esbmc-house_cmds-stalls",
    "esbmc-house_cmds-worst"
@@ -395,7 +392,6 @@
   "why": "IN1 edges become commands before the house is armed",
   "targets": [
    "esbmc-house_cmds-install",
-   "esbmc-house_cmds-worst-confirm",
    "esbmc-house_cmds-toggle",
    "esbmc-house_cmds-stalls",
    "esbmc-house_cmds-worst"

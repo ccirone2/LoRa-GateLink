@@ -67,7 +67,27 @@ once its fix is merged and record it in the pull request.
   on a short dip with `brownoutMs`). Fix: read power good in the stall's waits too (flash access yields) and keep a low
   reading for the next pass, so the house sees the dip before the relay's drop.
 
+- [ ] **A Shelly reboot the house doesn't see restores an OPEN.** Found by the model checker
+  (`tools/verify/esbmc/house_cmds.cpp`, `owner-only`, `esbmc-house_cmds-worst`, the Shelly following K1): a dip of the
+  12 V too short for the board's power good (it drops ~150–300 ms into a cut) but long enough to reboot the Shelly (the
+  bench's rebooted on a 300 ms dip; shorter ones aren't measured). Just after K1 changes, before the Shelly has followed
+  it, its relay drops (~0.35–0.7 s into the dip): an OFF edge begun after K1 moved, at the level K1's window expects, so
+  it ends the window. The Shelly then boots back to its state before the cut (parameter 17 at its default 0, Shelly Wave
+  1 manual), outside the window: the house takes that edge for the owner's. Trace (ESBMC): the owner switches off, the
+  Shelly follows K1 on, a 96–162 ms dip, K1 off, the relay off 366 ms into the dip, the Shelly back ON 2.5 s later: OPEN
+  against the gate just closed. No `ctrl_confirm_ms` covers it (an OPEN goes at once; with parameter 17 = 1 the relay's
+  drop is a CLOSE nothing cancels). Host test `house_power_unseen_shelly_reboot_never_opens` (XFAIL; the simulator's
+  Shelly restores its last state with `restoreLast`): OPEN sent 3.1 s after K1 went off. Covered at the install only if
+  every dip that reboots the Shelly drops power good first (`esbmc-house_cmds-install`, `BROWNOUT_AFTER_PG`): measure
+  that (Bench, below) before choosing a fix.
+
 ## Bench and field tests
+
+- [ ] **The shortest 12 V dip that reboots the Shelly, against the board's power good.** The house's command proofs
+  rest on power good dropping before any dip that reboots the Shelly (`BROWNOUT_AFTER_PG`; finding above, "A Shelly
+  reboot the house doesn't see restores an OPEN"). Measured only for cuts and 300 ms dips (power good first, 30 of 30,
+  PR #42). Step the dip down from 300 ms (logic analyzer on the Shelly's relay output and the board's power good, as
+  in docs/bench-testing.md) to the shortest that reboots the Shelly, and record power good's lag at it.
 
 - [ ] **A rebooted gate's session is verified slowly at 17 dBm on the bench.** After a gate reboot the house accepted
   the new session within 1.4–1.9 s at 5 dBm, but in 1.5–4.2 s at 17 dBm (and once over 7.8 s, run

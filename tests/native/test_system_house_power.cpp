@@ -414,7 +414,8 @@ TEST(house_power_dips_lipo_in_gate_open) {
 // [ctrl-power] A 300 ms dip of the controller's 12 V while the house's loop is stopped in a flash save (~0.5 s with the
 // radio restart): the board's power good is low for 50 ms of it, all inside the stall, so the house never sees the
 // power go. The dip reboots the Shelly all the same (as the bench's did: brownoutMs), its relay dropping 460 ms into it,
-// after the stall: an OFF edge with the power reading good. It mustn't become a CLOSE. Found by the model checker (tools/verify/esbmc/house_cmds.cpp, owner-only, -DSTALLS_ANYWHERE).
+// after the stall: an OFF edge with the power reading good. It mustn't become a CLOSE. Found by the model checker
+// (tools/verify/esbmc/house_cmds.cpp, owner-only, -DSTALLS_ANYWHERE).
 XFAIL_TEST(house_power_dip_hidden_by_a_flash_save_never_closes, "TODO.md: a supply dip hidden by a loop stall becomes a CLOSE") {
   World w;
   w.commission();
@@ -435,6 +436,47 @@ XFAIL_TEST(house_power_dip_hidden_by_a_flash_save_never_closes, "TODO.md: a supp
   CHECK_EQ(pulses(w, g0), 0);
   CHECK(w.opener.atOpen());
   CHECK(w.alarmSwitch());
+}
+
+// [ctrl-power] A 150 ms dip of the controller's 12 V: too short for the board's power good (~250 ms into a cut), so the
+// house never sees it, but it reboots the Shelly (the bench's rebooted on 300 ms; shorter dips aren't measured), which is
+// at its default parameter 17 (it restores its last state at boot). The gate open, the switch on; another controller
+// closes the gate. The Shelly's relay drops 460 ms into the dip, just after K1 goes off and before the Shelly has
+// followed it: an OFF edge, begun after K1's change, at the level K1's window expects, so it ends the window. The Shelly
+// boots back ON, as it was before the cut, outside the window: it mustn't become an OPEN, which nobody asked for. Found
+// by the model checker (tools/verify/esbmc/house_cmds.cpp, owner-only, esbmc-house_cmds-worst-confirm). The site is
+// deterministic: a run without the dip finds when K1 goes off, and the dip is placed before it.
+XFAIL_TEST(house_power_unseen_shelly_reboot_never_opens, "TODO.md: a Shelly reboot the house doesn't see restores an OPEN") {
+  auto site = [](World &w) {
+    w.shelly.restoreLast = true;
+    w.shelly.brownoutMs = 100;
+    w.shelly.swDebounceMs = 120;
+    w.shelly.bootMs = 3000;
+    w.commission();
+    w.house.lipo = true;
+    openByUser(w);
+    w.extPress(false, 300);
+  };
+  uint32_t k1Off;
+  {
+    World dry;
+    site(dry);
+    CHECK(poll(dry, [&] { return !dry.house.coil(1); }, 30000, 1));
+    k1Off = dry.now;
+  }
+  World w;
+  site(w);
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  runTo(w, k1Off - 400);
+  w.setRail12(false);
+  w.run(150);
+  w.setRail12(true);
+  w.run(15000);
+  CHECK_EQ(countSince(w.house, "ctrl_power", h0), 0);  // the house never saw the dip
+  CHECK(find(w.house, "sync", h0, 0).ok);               // the relay's drop, taken as the Shelly following K1
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0, ACT_OPEN_), 0);
+  CHECK_EQ(countSince(w.gate, "pulse", g0, 1), 0);
+  CHECK(w.opener.atClosed());
 }
 
 // [ctrl-power]

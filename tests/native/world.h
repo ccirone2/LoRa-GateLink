@@ -231,6 +231,10 @@ struct Shelly {
   uint32_t optoDropMs = 2100;  // the IN2 opto lags further (rail capacitors)
   uint32_t optoUpMs = 50;
   bool restoreSw = true;  // at boot the relay takes the SW level (else off)
+  // Its parameter 17 at the default 0 ("saves last on/off status and restores it after a power failure", Shelly Wave 1
+  // manual): at boot the relay comes back as it was before the cut, whatever SW says (restoreSw is then ignored).
+  bool restoreLast = false;
+  bool lastRelay = false;
   uint32_t relayDropAt = 0, optoAt = 0;
   bool opto = true;
   void update(World &w, bool rail, bool swIn);

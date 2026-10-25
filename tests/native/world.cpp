@@ -771,6 +771,7 @@ void Shelly::update(World &w, bool rail, bool swIn) {
   if (relayDropAt && after(now, relayDropAt)) {
     relayDropAt = 0;
     booted = false;
+    lastRelay = relay;
     relay = false;
     bootAt = 0;
     w.trace.add(now, "shelly: unpowered (relay dropped)");
@@ -785,7 +786,7 @@ void Shelly::update(World &w, bool rail, bool swIn) {
     booted = true;
     sw = swRaw = swIn;
     swSince = now;
-    relay = restoreSw && mode == FOLLOW ? swIn : false;
+    relay = restoreLast ? lastRelay : restoreSw && mode == FOLLOW ? swIn : false;
     w.trace.add(now, fmt("shelly: booted, relay %s", relay ? "on" : "off"));
   }
   if (!booted) return;

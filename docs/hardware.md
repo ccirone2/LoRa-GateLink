@@ -104,8 +104,8 @@ and `firmware/GateLink/pins.h` in sync.
   300 ms dips alike, whatever the buck's set point (bench, 2026-10-07: 196–222 ms over 30 runs at 4.81, 5.02 and
   5.21 V). The controller counts as powered only while both IN2 and the supply are good. This needs the house
   board fed from the Shelly's supply, and with its LiPo to stay up through the cut; a USB cable that carries power
-  keeps the supply reading good. A power loss can only drop the relay (OFF), so an OFF edge (CLOSE) is still held
-  for `ctrl_confirm_ms` (default 0.5 s, a backstop; with `ctrl_power_pmic` off, set it to about 3 s, above the IN2
+  keeps the supply reading good. A power loss the house sees can only drop the relay (OFF), so an OFF edge (CLOSE) is
+  held for `ctrl_confirm_ms` (default 0.5 s, a backstop; with `ctrl_power_pmic` off, set it to about 3 s, above the IN2
   opto's ~1.65 s lag) and discarded if power drops meanwhile, while an ON edge (OPEN) is sent at once. With both
   power senses off there is no wait. After power returns (and
   after a house boot) IN1 edges count as sync for at least `ctrl_settle_ms` (default 10 s), and up to

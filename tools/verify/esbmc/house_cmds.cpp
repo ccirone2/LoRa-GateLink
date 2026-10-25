@@ -324,6 +324,9 @@ int main() {
       else askedClose = true;
       eventful = true;
     }
+    // pendingAt is read only while an action waits (role_house.cpp): with none, a time no decision this pass can stamp,
+    // so a decision always changes it (one stamped at the old value, as at now = 0 after the wrap, went unseen).
+    if (!pendingAction) pendingAt = clk + 1;
     pendingAt0 = pendingAt;
     decidedNow = false;
     bool level0 = shellyLevel;

@@ -254,6 +254,67 @@ TEST(link_withheld_command_played_back_later_is_refused) {
   CHECK(w.sensorClosed());
 }
 
+// [freshness] [pulse-only] The owner opens, then closes a second later. The open command is kept from the gate (every
+// send of it jammed there and recorded); the close gets through, and the gate, closed already, takes it. Then the open
+// is played back, inside its deadline and inside the replay window (a lower seq it hasn't seen): it must not run, as
+// the owner's last word was close. Found by the model checker (tools/verify/tla, CmdOrder): the gate checked a
+// command's id only against the last one, so the older command opened the gate.
+XFAIL_TEST(link_withheld_older_command_after_a_newer_one_is_refused, "TODO.md: a withheld older command runs after a newer one") {
+  World w;
+  w.commission();
+  CHECK(w.opener.atClosed());
+  Bytes kept;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from != w.house.idx || f.type() != 4 || w.plain(f.b)[2] != 1) return false;  // MSG_CMD, ACT_OPEN
+    if (kept.empty()) kept = f.b;
+    return true;
+  };
+  w.user(true);
+  CHECK(w.runUntil([&] { return !kept.empty(); }, 2000));
+  w.run(1000);
+  w.user(false);
+  CHECK(w.runUntil([&] { return w.gate.count("cmd_rx") > 0; }, 5000));  // the close, the gate already closed
+  CHECK_EQ(w.gate.count("pulse"), 0);
+  w.drop = nullptr;
+  w.inject(w.gate, kept);
+  w.run(3000);
+  CHECK_EQ(w.gate.count("pulse"), 0);
+  CHECK(w.opener.atClosed());
+  CHECK(w.sensorClosed());
+}
+
+// [sensor-closed-only-known] Every frame from the gate is kept from the house from just before the gate opens; the
+// house's link times out (the sensor opens, as it should). Then the last STATUS the gate sent while closed, which the
+// house never took, is played back: a seq later than any it took, so the order check (0.13.9) lets it through, but it
+// is over a link timeout old by the gate's own clock in it. It must not close the sensor with the gate open. Found by
+// the model checker (tools/verify/tla, SensorTruth): a relay that withholds STATUS and delivers it later held the house
+// behind the gate by as long as it liked, not just by the link timeout (threat model withheld-gate-frames-replayed).
+XFAIL_TEST(link_status_withheld_past_the_link_timeout_is_refused, "TODO.md: a withheld STATUS is taken however old") {
+  World w;
+  w.commission();
+  CHECK(w.sensorClosed());
+  Bytes kept;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from != w.gate.idx) return false;
+    if (f.type() == 5 && kept.empty()) kept = f.b;  // MSG_STATUS
+    return true;
+  };
+  CHECK(w.runUntil([&] { return !kept.empty(); }, 40000));  // the next heartbeat
+  CHECK_EQ(w.plain(kept)[0], GS_CLOSED_);
+  w.extPress(true, 500);
+  CHECK(w.runUntil([&] { return w.opener.atOpen(); }, 20000));
+  CHECK(w.runUntil([&] { return !w.houseLinkUp(); }, w.houseLinkTimeoutMs() + 1000));
+  CHECK(!w.sensorClosed());
+  w.run(5000);
+  int replays = w.house.count("replay");
+  w.inject(w.house, kept);
+  w.run(500);
+  CHECK_EQ(w.house.count("replay"), replays + 1);
+  CHECK(!w.houseLinkUp());
+  CHECK(!w.sensorClosed());
+  CHECK(w.opener.atOpen());
+}
+
 // [freshness] [outage] The house's last resend of a command, 9.7 s into its 10 s cmd_ttl_s, is the first to get
 // through: the gate still takes it (its deadline is the end of the house's TTL, reckoned from the gate's own clock in
 // STATUS, so it isn't refused as late) and opens.

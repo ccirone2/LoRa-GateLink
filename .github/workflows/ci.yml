@@ -82,6 +82,33 @@ jobs:
       - name: clang-tidy
         run: make -C tests/native TIDY=clang-tidy-18 tidy
 
+  # Formal verification (tools/verify, docs/architecture.md "Verification"): ESBMC proves the relay, command, sensor
+  # and replay-window properties on the firmware's own C++ for runs of any length, and TLC checks the protocol model
+  # with an attacker on the air. Versions: keep in step with tools/verify/docker/Dockerfile and docs/development.md
+  # (tests/tools/test_verify.py checks they agree).
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install ESBMC and TLC
+        run: |
+          esbmc_version=8.5
+          esbmc_sha256=d8da304dd0dfce6c9f488379f03a72e768bce8598c22478c980e1704247352f1
+          tla_version=1.7.4
+          tla_sha256=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+          curl -fsSL -o "$RUNNER_TEMP/esbmc.zip" \
+            "https://github.com/esbmc/esbmc/releases/download/v$esbmc_version/esbmc-linux.zip"
+          echo "$esbmc_sha256  $RUNNER_TEMP/esbmc.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/esbmc.zip" -d "$RUNNER_TEMP/esbmc"
+          curl -fsSL -o "$RUNNER_TEMP/tla2tools.jar" \
+            "https://github.com/tlaplus/tlaplus/releases/download/v$tla_version/tla2tools.jar"
+          echo "$tla_sha256  $RUNNER_TEMP/tla2tools.jar" | sha256sum -c -
+      - name: Proofs (make -C tools/verify)
+        run: |
+          make -C tools/verify -j"$(nproc)" ESBMC="$RUNNER_TEMP/esbmc/release/bin/esbmc" \
+            TLA2TOOLS="$RUNNER_TEMP/tla2tools.jar"
+
   # How much of the firmware the host tests run (gcovr over a --coverage build); fails below MIN_LINES %.
   coverage:
     runs-on: ubuntu-24.04

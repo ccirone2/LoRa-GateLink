@@ -9,6 +9,27 @@ once its fix is merged and record it in the pull request.
 
 ## Firmware
 
+- [ ] **A withheld older command runs after a newer one.** Found by the model checker (`tools/verify/tla`,
+  `asis_order.cfg`, invariant `CmdOrder`): the owner opens, then closes; the open's frames are jammed at the gate
+  and recorded, the close gets through (the gate, closed, takes it: `already`), then the recorded open is played
+  back. It is inside its deadline (`cmd_ttl_s`, 10 s by default) and inside the replay window (a lower seq the gate
+  hasn't seen), and its id isn't the last one taken, so `handleCmd` pulses K1: the gate opens against the owner's last
+  word. Trace (TLC, 10 steps): commands 1 (open, seq 2) and 2 (close, seq 3); the gate takes 2, then 1. Host test
+  `link_withheld_older_command_after_a_newer_one_is_refused` (XFAIL). Fix: the gate refuses a command framed before
+  the last one it took in this house session (a lower seq): the house never frames a command again once a later one
+  has replaced it in its slot.
+- [ ] **A withheld STATUS is taken however old.** Found by the model checker (`tools/verify/tla`, `asis_sensor.cfg`,
+  invariant `SensorTruth`): every frame from the gate is kept from the house from just before the gate opens; the
+  house's link times out and the sensor opens; then the last STATUS sent while closed, which the house never took, is
+  played back. A seq later than any it took, so the order check (0.13.9) passes, and the house shows closed with the
+  gate open for another link timeout. Played back one by one, in order, each just before the link times out, kept
+  STATUS frames hold the sensor closed for as long as the attacker kept frames: the threat model's "up to its link
+  timeout" (`withheld-gate-frames-replayed`) doesn't hold. Trace (TLC, 15 steps): STATUS closed (seq 3) built at t=1,
+  the gate opens at t=1, the house takes it at t=7, sensor closed 6 units after the gate opened (link timeout 3).
+  Host test `link_status_withheld_past_the_link_timeout_is_refused` (XFAIL). Fix: the house refuses a STATUS whose
+  clock (ST_CLOCK) is further behind its reckoning of the gate's clock than a STATUS can honestly be (the gate's STATUS
+  TTL plus its airtime and a slack, plus the 100 ppm drift since the reckoning's reading).
+
 - [ ] **A warm reset of the house blips its outputs for at least 0.5 s.** On a watchdog, crash, reset-button or
   software reset, K1/K2 drop until the house is back and the gate reports (~1.5 s). With the gate open the
   controller follows K1 off and on (Alarm.com shows it closed for a moment); with it closed the contact sensor
@@ -20,6 +41,17 @@ once its fix is merged and record it in the pull request.
   takes the controller down too (shared 12 V), so it's only the warm resets. The drops can now be timed on the logic
   analyzer (K1 = D1, K2 = D2 on two channels; docs/bench-testing.md), once those are wired.
 
+
+- [ ] **A user edge begun before K1's change ends its sync window.** Found by the model checker
+  (`tools/verify/esbmc/house_cmds.cpp`, `owner-only`, a Shelly set to toggle on SW edges): with the gate open, another
+  controller closes it and the user switches the controller off at the same moment. The closed STATUS turns K1 off
+  and opens a sync window expecting OFF; the user's edge, begun 35 ms earlier, is debounced inside it and ends it (a
+  matching edge ends a window early, so a user's next switch isn't swallowed). The Shelly then toggles on K1's edge,
+  back ON, outside the window: the house sends OPEN and the gate opens, against the user. The invariant says a
+  toggling Shelly must never turn sync into commands. Trace (systests, `house_sync_window_survives_an_edge_begun_before_it`,
+  XFAIL): K1 off 35003, sync 0 at 35019 (window ended), ctrl 1 at 35084, cmd_sent OPEN, gate pulse K1 at 35253. Needs a
+  misconfigured Shelly (the install's follows the SW level) and a coincidence within the debounce. Fix: only an edge
+  begun after the window opened (the Shelly answering K1) may end it early.
 
 ## Bench and field tests
 

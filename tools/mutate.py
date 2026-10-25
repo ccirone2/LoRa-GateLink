@@ -2,6 +2,7 @@
 """Mutation testing for the host tests: does each invariant's test fail when the invariant breaks?
 
     python3 tools/mutate.py [--only NAME,...] [--invariant TAG] [--jobs N] [--libs DIR] [--list]
+    python3 tools/mutate.py --verify [--only NAME,...] [--jobs N] [--list]
 
 Each mutation in tests/native/mutations.json breaks one rule in a scratch copy of firmware/GateLink (exact text
 edits: every `find` must occur once), rebuilds the host tests against it (tests/native/Makefile, `FW=`) and runs
@@ -11,6 +12,10 @@ breaks has no test that would notice, which is a gap to close. Exits 1 if any mu
 Needs Linux with g++ (the systests load each board's firmware as a shared object); on Windows, run it in the
 gatelink-dev container (tests/native/README.md). A base build is made once; each mutation copies it and recompiles
 only the files its edits touch. tests/native/README.md describes the catalog.
+
+With --verify the judge is the model checker instead (tools/verify: ESBMC, in the gatelink-verify container), and the
+catalog tools/verify/mutations.json: each mutation breaks a property a proof covers and names the Makefile targets
+that must then fail (`targets`). The unmutated firmware must pass them first.
 """
 
 import argparse
@@ -30,6 +35,8 @@ ROOT = Path(__file__).resolve().parent.parent
 NATIVE = ROOT / "tests/native"
 FW = ROOT / "firmware/GateLink"
 CATALOG = NATIVE / "mutations.json"
+VERIFY = ROOT / "tools/verify"
+VERIFY_CATALOG = VERIFY / "mutations.json"
 PROGRAMS = ("tests", "systests")
 
 
@@ -143,9 +150,37 @@ def run_one(m, base_build, base_fw, libs, work, timeout, jobs=None):
     return m["name"], "survived", "every test passed", []
 
 
+def run_verify(fw, build, targets, timeout):
+    """The model checker's targets against the firmware in `fw`: (passed, output tail)."""
+    cmd = ["make", "-s", "-C", str(VERIFY), f"FW={fw}", f"BUILD={build}", *targets]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, f"timed out after {timeout} s"
+    return p.returncode == 0, (p.stdout + p.stderr)[-1500:]
+
+
+def run_one_verify(m, base_fw, work, timeout):
+    """(name, outcome, detail, []) for a --verify mutation: killed when a target it names fails."""
+    d = Path(work) / m["name"]
+    fw = d / "fw"
+    shutil.copytree(base_fw, fw)
+    try:
+        apply_edits(fw, m)
+    except CatalogError as e:
+        return m["name"], "invalid", str(e), []
+    passed, out = run_verify(fw, d / "build", m["targets"], timeout)
+    shutil.rmtree(d, ignore_errors=True)
+    if passed:
+        return m["name"], "survived", "every proof still holds", []
+    failed = [line.strip() for line in out.splitlines() if "violated" in line or "UNEXPECTED" in line]
+    return m["name"], "killed", "; ".join(failed[:3]) or (out.strip().splitlines() or ["failed"])[-1], []
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
-    ap.add_argument("--catalog", default=str(CATALOG))
+    ap.add_argument("--catalog")
+    ap.add_argument("--verify", action="store_true", help="judge with the model checker (tools/verify)")
     ap.add_argument("--only", help="comma-separated mutation names")
     ap.add_argument("--invariant", help="only mutations with this invariant tag")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
@@ -156,6 +191,7 @@ def main(argv=None):
     ap.add_argument("--update", action="store_true",
                     help="record in the catalog the tests that killed each mutation (its killed_by, tried first)")
     args = ap.parse_args(argv)
+    args.catalog = args.catalog or str(VERIFY_CATALOG if args.verify else CATALOG)
 
     try:
         catalog = load_catalog(args.catalog)
@@ -175,6 +211,9 @@ def main(argv=None):
     if not picked:
         print("no mutations selected", file=sys.stderr)
         return 2
+
+    if args.verify:
+        return main_verify(picked, args)
 
     with tempfile.TemporaryDirectory(prefix="gatelink-mutate-") as work:
         base_fw, base_build = Path(work) / "base-fw", Path(work) / "base-build"
@@ -215,6 +254,36 @@ def main(argv=None):
           f"{len(survived)} survived, {len(invalid)} invalid")
     if survived:
         print("survived (a rule no test checks): " + ", ".join(survived))
+    return 1 if survived or invalid else 0
+
+
+def main_verify(picked, args):
+    for m in picked:
+        if not m.get("targets"):
+            print(f"{m['name']}: no targets (the tools/verify Makefile targets it must fail)", file=sys.stderr)
+            return 2
+    with tempfile.TemporaryDirectory(prefix="gatelink-mutate-verify-") as work:
+        base_fw = Path(work) / "base-fw"
+        shutil.copytree(FW, base_fw)
+        targets = sorted({t for m in picked for t in m["targets"]})
+        print(f"base run of {', '.join(targets)} ({len(picked)} mutations to run)...", flush=True)
+        passed, out = run_verify(base_fw, Path(work) / "base-build", targets, args.timeout)
+        if not passed:
+            print(f"the unmutated firmware already fails:\n{out}", file=sys.stderr)
+            return 2
+        results = []
+        with ThreadPoolExecutor(args.jobs) as ex:
+            futures = [ex.submit(run_one_verify, m, base_fw, work, args.timeout) for m in picked]
+            for f in futures:
+                name, outcome, detail, _ = f.result()
+                results.append((name, outcome))
+                print(f"{outcome:9} {name}: {detail}", flush=True)
+    survived = [n for n, o in results if o == "survived"]
+    invalid = [n for n, o in results if o == "invalid"]
+    print(f"\n{len(results)} mutations: {len(results) - len(survived) - len(invalid)} killed, "
+          f"{len(survived)} survived, {len(invalid)} invalid")
+    if survived:
+        print("survived (a property no proof checks): " + ", ".join(survived))
     return 1 if survived or invalid else 0
 
 

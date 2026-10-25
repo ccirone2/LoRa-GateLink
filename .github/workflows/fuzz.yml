@@ -50,13 +50,13 @@ jobs:
             TARGETS=${{ matrix.target }} FUZZ_SECONDS="$SECONDS_PER_TARGET" fuzz-smoke
       - name: Upload the crash
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.target }}-crash
           path: tests/native/build/fuzz/artifacts/
       - name: Upload what the run found (merge with make -f fuzz/Makefile corpus-merge)
         if: always() && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.target }}-corpus
           path: tests/native/build/fuzz/work/${{ matrix.target }}/

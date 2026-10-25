@@ -14,8 +14,15 @@
 // ranges and the worst cases the sources allow (docs/architecture.md, "Verification"). With -DBROWNOUT_AFTER_PG the
 // Shelly reboots only on an outage that also drops the board's power good (the bench's ordering, 30 of 30 runs).
 //
-//   owner-only  every command the house sends (OPEN or CLOSE) is one the owner switched to since the last command it
-//               sent, and none goes before the house is armed (its first STATUS plus sync_window_ms)
+//   owner-only  every IN1 edge the house takes for a command (pendingAction, the one place it decides) is to a level
+//               the owner switched to since the last edge to that level the house acted on or set aside; a CLOSE
+//               decided before the house saw the controller's power drop never goes; no command goes before the
+//               house is armed (its first STATUS plus sync_window_ms)
+//
+// Owner edges inside a sync window are set aside by design (CLAUDE.md), and in follow mode the owner switching on just
+// as K1 does is the same edge at IN1 as the Shelly following K1: a CLOSE decided before it still goes. That is the
+// limit of what the house can tell apart, and the property states it at the decision, where it can (an earlier form
+// checked at the send, against one flag per level, and flagged two CLOSEs for an owner's OFF, ON, OFF).
 //
 // Loop passes: up to IDLE_MS before anything happens (K1 driven, the outage, the owner), PASS_MS after (the longest
 // pass the bench has seen is ~0.5 s, a flash save; docs say up to ~1 s): a pass longer than the site's events would
@@ -28,6 +35,7 @@
 #include "io.cpp"
 #include "app.cpp"
 #include "role_house.cpp"
+#include "supply.cpp"
 #include "cfgmodel.h"
 
 #ifndef PASSES
@@ -57,7 +65,10 @@
 #endif
 // While power good is (or is about to be) low and the house hasn't yet seen it, its passes are at most POLL_MS apart:
 // it reads the charger every 5 ms (supply.cpp) unless something stalls the loop. -DSTALLS_ANYWHERE lets a PASS_MS stall
-// (a flash save, a radio restart: ~0.5 s on the bench) fall there too.
+// (a flash save, a radio restart: ~0.5 s on the bench) fall there too. A pass longer than POLL_MS is such a stall, and
+// its waits call yield() (delay(), the flash's busy wait): the harness calls it once in the stall, at a time when power
+// good is low if it is low for 5 ms or more of it, as the stall's reads every 5 ms would find it (supply.cpp's
+// supplyWait, where the firmware has one; yield() has no body otherwise).
 #ifndef POLL_MS
 #define POLL_MS 50
 #endif
@@ -109,13 +120,37 @@ static bool armedEver;
 static bool eventful;  // something has happened: passes are short from here on (see main)
 
 static uint64_t outageSoFar() { return backT ? backT - cutT : T - cutT; }
-// A signal that drops `lag` into the outage, if it lasts that long, and is back `on` after its end.
-static bool lit(uint32_t lag, uint32_t on) {
-  if (!outage || outageSoFar() < lag) return true;
-  return backT && T >= backT + on;
+// A signal that drops `lag` into the outage, if it lasts that long, and is back `on` after its end: at time t.
+static bool litAt(uint32_t lag, uint32_t on, uint64_t t) {
+  if (!outage || t < cutT) return true;
+  uint64_t soFar = (backT && backT <= t ? backT : t) - cutT;
+  if (soFar < lag) return true;
+  return backT && t >= backT + on;
 }
-bool supplyGood() { return lit(pgLag, pgOn); }
-bool supplyKnown() { return true; }
+static bool lit(uint32_t lag, uint32_t on) { return litAt(lag, on, T); }
+// The charger (supply.cpp reads it over I2C): REG08's power good bit, at T or inside a stall (sampleT).
+static bool sampling;
+static uint64_t sampleT;
+uint8_t wireStatus() { return litAt(pgLag, pgOn, sampling ? sampleT : T) ? 0x04 : 0; }
+extern "C" void yield(void);
+// A stall from g0 to T: its waits read power good every 5 ms. One read stands for them: in the span where it is low,
+// if that is 5 ms or more (past the first 5 ms, which the pass before read), else anywhere.
+static void stallReads(uint64_t g0) {
+  uint64_t lo = cutT + pgLag, hi = backT ? backT + pgOn : T;
+  bool low = outage && (!backT || backT - cutT >= pgLag);
+  if (lo < g0 + 5) lo = g0 + 5;
+  if (hi > T) hi = T;
+  uint32_t off;
+  RANGE(off, 5, (uint32_t)(T - g0));
+  sampleT = g0 + off;
+  if (low && lo + 5 <= hi) ASSUME(sampleT >= lo && sampleT < hi);
+  uint32_t c = clk;
+  clk -= (uint32_t)(T - sampleT);
+  sampling = true;
+  yield();
+  sampling = false;
+  clk = c;
+}
 
 int digitalRead(uint32_t pin) {
   if (pin == PIN_IN1) return relay ? HIGH : LOW;
@@ -168,6 +203,18 @@ static LinkStats stats;
 const LinkStats &linkStats() { return stats; }
 bool linkPeerVerified() { return true; }
 uint32_t linkPeerSession() { return 1; }
+static uint32_t pendingAt0;   // pendingAt before this pass's appLoop: a change is a decision (role_house.cpp)
+static bool decidedNow;       // one was made this pass
+static bool staleClose;       // a decided CLOSE waits, and the house has seen the controller's power drop since
+static void decided(uint8_t a) {
+  CHECK(a == ACT_OPEN ? askedOpen : a == ACT_CLOSE && askedClose,
+        "owner-only: an IN1 edge the owner didn't make was taken for a command");
+  if (a == ACT_OPEN) askedOpen = false;
+  else askedClose = false;
+  pendingAt0 = pendingAt;
+  decidedNow = true;
+  staleClose = false;
+}
 static bool cmdPending;
 bool linkPending(Slot s) { return s == SLOT_CMD && cmdPending; }
 void linkAck(uint32_t, uint8_t) {}
@@ -177,10 +224,9 @@ void linkSendReliable(Slot slot, uint8_t type, const uint8_t *p, uint8_t len, ui
   CHECK(len == CMD_LEN, "a command is CMD_LEN long");
   CHECK(armedEver || armed, "owner-only: a command before the house was armed");
   uint8_t a = p[2];
-  CHECK(a == ACT_OPEN ? askedOpen : a == ACT_CLOSE && askedClose,
-        "owner-only: a command the owner didn't switch to since the last one");
-  if (a == ACT_OPEN) askedOpen = false;
-  else askedClose = false;
+  if (pendingAt != pendingAt0) decided(a);  // decided this pass and sent at once (an OPEN)
+  CHECK(a == ACT_OPEN || a == ACT_CLOSE, "owner-only: a command neither OPEN nor CLOSE");
+  CHECK(!(a == ACT_CLOSE && staleClose), "owner-only: a CLOSE decided before the controller's power dropped went");
   cmdPending = true;
 }
 static uint32_t statusSeqNext = 100;
@@ -234,6 +280,7 @@ int main() {
   in2.begin(PIN_IN2, cfg.in2_invert);
   in3.begin(PIN_IN3, cfg.in3_invert);
   in4.begin(PIN_IN4, cfg.in4_invert);
+  supplyBegin();
   houseBegin();
   for (int i = 0; i < PASSES; i++) {
     uint32_t d;
@@ -243,7 +290,9 @@ int main() {
     blind = false;
 #endif
     RANGE(d, 1, blind ? POLL_MS : eventful ? PASS_MS : IDLE_MS);
-    // The outage may begin (or end) during the gap, at any time in it.
+    uint64_t g0 = T;
+    // The outage may begin (or end) during the gap, at any time in it. The rest of the gap is bounded as a gap from
+    // there would be: the house may be blind from the cut on.
     if (!backT && nondet_bool()) {
       uint32_t at;
       RANGE(at, 0, d - 1);
@@ -256,10 +305,17 @@ int main() {
         backT = T;
       }
       eventful = true;
-      advance(d - at);
+      bool blindNow = ctrlPower && (!backT || T < backT + pgOn);
+#ifdef STALLS_ANYWHERE
+      blindNow = false;
+#endif
+      uint32_t rest;
+      RANGE(rest, 1, blindNow ? POLL_MS : PASS_MS);
+      advance(rest);
     } else {
       advance(d);
     }
+    if (T - g0 > POLL_MS) stallReads(g0);
     site();
     if (shellyUp && (!outage || backT) && nondet_bool()) {  // the owner, over Z-Wave
       relay = !relay;
@@ -267,7 +323,17 @@ int main() {
       else askedClose = true;
       eventful = true;
     }
+    pendingAt0 = pendingAt;
+    decidedNow = false;
+    bool level0 = shellyLevel;
     appLoop();
+    if (pendingAction && pendingAt != pendingAt0) decided(pendingAction);
+    // An edge the house set aside (a sync, the power off): the owner's switch to that level, if any, is spent.
+    if (shellyLevel != level0 && !decidedNow) {
+      if (shellyLevel) askedOpen = false;
+      else askedClose = false;
+    }
+    if (pendingAction == ACT_CLOSE && !ctrlPower) staleClose = true;
     if (armed) armedEver = true;
   }
 #ifdef REACH

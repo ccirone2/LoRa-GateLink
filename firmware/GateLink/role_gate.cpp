@@ -347,6 +347,9 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   haveCmd = true;
   lastCmdId = id;
   uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
+  // Bound first, not `(action == ACT_OPEN ? k1 : k2).pulsing()`: ESBMC 8.5 calls a method on a conditional's other
+  // operand (tools/verify).
+  const Relay &mine = action == ACT_OPEN ? k1 : k2;
   // Still at this limit, but our last pulse is heading for the other one: pulse to reverse it.
   bool reversing = target != GS_UNKNOWN && target != want;
   // Without AC the opener runs on its battery, so a command still goes while a limit reads: the owner asked for it,
@@ -359,7 +362,7 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   } else if (state == want && !reversing) {
     lastResult = TR_ALREADY;
     lastCmdAck = RES_ALREADY;
-  } else if ((action == ACT_OPEN ? k1 : k2).pulsing()) {
+  } else if (mine.pulsing()) {
     // That relay is pulsing already (or waiting out the interlock to start): a second command the same way, such as
     // the switch flicked off and on inside ctrl_confirm_ms. It's the same press: ACK it as done. A running pulse is
     // never restarted, which would hold the opener's input for the gap plus pulse_ms.

@@ -21,6 +21,10 @@ static uint32_t epochBase;  // the seq of the HELLO_ACK that verified it
 static bool accS;           // S reached the role in this session and wasn't refused since
 static bool justS;          // the frame being handled is S (the RxHandler may refuse it)
 
+// The transmitter stays busy: every frame the link sends waits in its queue. Nothing in the window reads the sending
+// side, and with a frame sent or queued by chance the queue's frames had lengths the checker couldn't bound, so
+// reframePending's cipher loops unrolled to the full --unwind bound (it ran out of memory).
+bool radioTxBusy() { return true; }
 int digitalRead(uint32_t) { return LOW; }
 void digitalWrite(uint32_t, uint32_t) {}
 void pinMode(uint32_t, uint32_t) {}
@@ -65,6 +69,7 @@ int main() {
   cfg.key_set = 1;
   cfg.net_id = nondet_u8();
   activeRole = nondet_bool() ? ROLE_HOUSE : ROLE_GATE;
+  txOnAir = true;
   rxHandler = rx;
   ackHandler = ack;
   S = nondet_u32();
@@ -85,7 +90,10 @@ int main() {
   uint8_t n = nondet_u8();
   ASSUME(n <= FRAME_MAX);
   uint32_t sess0 = peerSession, last0 = peerLastSeq;
-  handleFrame(buf, n, 0, 0, clk);
+  // One call per length, each with a constant one: with the length symbolic the checker unrolls the cipher's loops
+  // to the full --unwind bound (and ran out of memory); with it constant they unroll exactly.
+  for (uint8_t k = 0; k <= FRAME_MAX; k++)
+    if (k == n) handleFrame(buf, k, 0, 0, clk);
   // A HELLO_ACK that verified a new session (or verified one again from none): the ghosts start over with it.
   if (peerSession != sess0 || (peerSession && !sess0)) {
     epochSess = peerSession;

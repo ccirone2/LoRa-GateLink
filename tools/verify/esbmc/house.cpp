@@ -96,7 +96,10 @@ static void inv() {
     int32_t age = (int32_t)(clk - statusAt);
     uint64_t real = T - takenT;
     // Capped at STAMP_CAP_MS by each houseLoop (capStamps), then a pass's gap at most.
-    INV(age >= -2 && age <= (int32_t)(STAMP_CAP_MS + 2 * SKEW_PASS + (inPass ? IDLE_MAX_MS : 0)),
+    // Capped at STAMP_CAP_MS by houseLoop at its pass's `now` (then a skew at most); inside a pass, the gap since the
+    // last pass more, as of this pass's `now`, and the handlers' skew since.
+    int64_t sincePass = inPass ? (int64_t)(T - passT) : 0;
+    INV(age >= -2 && age - sincePass <= (int64_t)STAMP_CAP_MS + SKEW_PASS + (inPass ? IDLE_MAX_MS : 0),
         "statusAt's age is in range (capped once a pass)");
     INV((int64_t)age + 1 >= (int64_t)(real < STAMP_CAP_MS ? real : STAMP_CAP_MS), "statusAt is no later than the take");
   }

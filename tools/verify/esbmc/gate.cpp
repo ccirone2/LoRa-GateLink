@@ -198,11 +198,12 @@ static void invRelay(int k) {
     INV((int32_t)(r._pulseUntil - toClk(c.onT)) >= 0, "a running pulse ends after it began");
     INV((int32_t)(r._pulseUntil - toClk(c.onT)) <= (int32_t)c.len + 1, "a running pulse ends within its length");
     INV(T - c.onT <= (uint64_t)c.len + 1 + PASS_MAX_MS + SKEW_PASS, "a running pulse has run within its length");
-    INV(ahead(r._pulseUntil) >= -SKEW_PASS, "a running pulse ended at most a skew ago");
+    // Relay::update ran at the pass's `now` and didn't end it: its end lies after that (as it does for one started since).
+    INV((int32_t)(r._pulseUntil - toClk(passT)) > 0, "a running pulse ends after the pass's now");
   } else if (r._startAt) {
     INV(r._pulseUntil != 0, "a waiting pulse has an end");
-    INV(ahead(r._startAt) >= -SKEW_PASS && ahead(r._startAt) <= INTERLOCK_MS + 1 + SKEW_PASS,
-        "a waiting pulse starts within the interlock");
+    INV((int32_t)(r._startAt - toClk(passT)) > 0 && (int32_t)(r._startAt - toClk(passT)) <= INTERLOCK_MS + 1 + SKEW_PASS,
+        "a waiting pulse starts after the pass's now, within the interlock");
     INV((int32_t)(r._pulseUntil - r._startAt) >= 0 && (int32_t)(r._pulseUntil - r._startAt) <= (int32_t)c.len + 1,
         "a waiting pulse ends within its length of its start");
     INV(!o.on, "a pulse waits only while the other coil is off");
@@ -214,9 +215,10 @@ static void invRelay(int k) {
   }
   if (r._offAt) {
     INV(c.released && r._offAt == (toClk(c.offT) | 1), "Relay::_offAt is the coil's last release");
-    INV(T - c.offT <= RELEASE_MEMO_MS + SKEW_PASS, "Relay::_offAt is cleared once old");
+    INV(c.offT >= passT || passT - c.offT <= RELEASE_MEMO_MS + 1, "Relay::_offAt is cleared once old (at the pass's now)");
   } else {
     INV(!c.released || T - c.offT >= RELEASE_MEMO_MS - 1, "a recent release is remembered");
+    INV(!c.released || c.offT <= T, "a release in the past");
   }
 }
 
@@ -228,8 +230,8 @@ static void inv() {
   // The pass: inside one, millis() is at most SKEW_PASS ahead of its `now`; the clock was read by the last gateLoop
   // (at most a pass's gap before this `now`) or by a handler since. Between passes, gateLoop has just read it.
   INV(baseT <= T, "the clock was read in the past");
+  INV(passT <= T && T - passT <= SKEW_PASS, "a pass ends within SKEW_PASS of its now");
   if (inPass) {
-    INV(passT <= T && T - passT <= SKEW_PASS, "a pass's handlers run within SKEW_PASS of its now");
     INV(baseT >= passT || passT - baseT <= IDLE_MAX_MS + SKEW_PASS, "the clock was read last pass");
   } else {
     INV(T - baseT <= SKEW_PASS, "the clock was read this pass");
@@ -344,7 +346,7 @@ static void boot() {
   in2.begin(PIN_IN2, cfg.in2_invert);
   in3.begin(PIN_IN3, cfg.in3_invert);
   in4.begin(PIN_IN4, cfg.in4_invert);
-  bootT = baseT = T;
+  bootT = baseT = passT = T;
   gateBegin();
   inPass = false;
   houseSessionNow = nondet_u32();

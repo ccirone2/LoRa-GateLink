@@ -541,7 +541,8 @@ void houseRelayTest(uint8_t k, uint32_t ms) {
     armed = false;
     armAt = (now + ms + cfg.sync_window_ms) | 1;
   }
-  (k == 1 ? k1 : k2).pulse(now, ms);
+  Relay &r = k == 1 ? k1 : k2;  // bound first: ESBMC 8.5 calls a method on a conditional's other operand
+  r.pulse(now, ms);
   logEvent(EV_PULSE, k, ms);
 }
 

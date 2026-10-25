@@ -76,7 +76,10 @@ def test_every_model_config_names_its_model_and_real_invariants():
 def test_verify_mutations_name_makefile_targets():
     make = (VERIFY / "Makefile").read_text(encoding="utf-8")
     harnesses = re.search(r"^HARNESSES := (.+)$", make, re.M).group(1).split()
-    targets = {f"esbmc-{h}" for h in harnesses}
+    targets = {f"esbmc-{h}" for h in harnesses} | set(re.findall(r"^(esbmc-[\w-]+):", make, re.M))
+    for h in ("gate", "house"):  # one target a segment (the pattern rules)
+        segments = re.search(rf"^{h.upper()}_SEGMENTS := (.+)$", make, re.M).group(1).split()
+        targets |= {f"esbmc-{h}-{s}" for s in segments}
     catalog = json.loads((VERIFY / "mutations.json").read_text(encoding="utf-8"))
     assert catalog
     for m in catalog:
@@ -84,3 +87,13 @@ def test_verify_mutations_name_makefile_targets():
         for e in m["edits"]:
             src = (ROOT / "firmware/GateLink" / e["file"]).read_text(encoding="utf-8")
             assert src.count(e["find"]) == 1, f"{m['name']}: {e['file']} has {src.count(e['find'])} matches"
+
+
+def test_firmware_avoids_conditional_method_calls():
+    # ESBMC 8.5 calls a method on the other operand of `(c ? a : b).m()`: the proof then checks another program than
+    # the one that ships (it found a gate command restarting a pulse that wasn't). Bind a reference first.
+    pattern = re.compile(r"\?[^;]*:[^;]*\)\s*(\.|->)\s*\w+\s*\(")
+    for src in sorted((ROOT / "firmware/GateLink").glob("*.[ch]*")):
+        for n, line in enumerate(src.read_text(encoding="utf-8").splitlines(), 1):
+            code = line.split("//")[0]
+            assert not pattern.search(code), f"{src.name}:{n}: {line.strip()}"

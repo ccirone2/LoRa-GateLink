@@ -88,8 +88,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  } else if ((action == ACT_OPEN ? k1 : k2).pulsing()) {",
-    "replace": "  } else if ((action == ACT_OPEN ? k1 : k2).pulsing() && false) {"
+    "find": "  } else if (mine.pulsing()) {",
+    "replace": "  } else if (mine.pulsing() && false) {"
    }
   ]
  },

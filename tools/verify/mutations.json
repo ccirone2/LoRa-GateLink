@@ -4,7 +4,11 @@
   "invariant": "interlock",
   "why": "interlockedPulse ignores the other relay's recent release (gapLeft): a pulse starts 0 ms after the other ended by itself",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
@@ -19,7 +23,11 @@
   "invariant": "pulse-only",
   "why": "Relay::update ends a pulse 100 ms late",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-5",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
@@ -34,12 +42,16 @@
   "invariant": "no-restart",
   "why": "handleCmd no longer treats a command for the relay already pulsing as the same press: the pulse restarts",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "} else if ((action == ACT_OPEN ? k1 : k2).pulsing()) {",
+    "find": "} else if (mine.pulsing()) {",
     "replace": "} else if (false) {"
    }
   ]
@@ -49,7 +61,11 @@
   "invariant": "no-restart",
   "why": "gateRelayTest takes a test of a relay already pulsing",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-4",
+   "esbmc-gate-2",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
@@ -64,7 +80,11 @@
   "invariant": "fresh-cmd",
   "why": "handleCmd takes a command up to a minute past its deadline",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
@@ -79,7 +99,11 @@
   "invariant": "fresh-cmd",
   "why": "handleCmd takes a deadline twice as far ahead as cmd_ttl_s allows",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
@@ -94,7 +118,11 @@
   "invariant": "fresh-cmd",
   "why": "the gate's clock reads 5 s behind the time since boot, so a command 5 s past its deadline is taken",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-2",
+   "esbmc-gate-5",
+   "esbmc-gate-4",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
@@ -109,7 +137,11 @@
   "invariant": "once",
   "why": "handleCmd never matches the last command's id: the same command pulses again",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
@@ -124,7 +156,11 @@
   "invariant": "no-stall",
   "why": "drainCfgQueue saves a queued remote write while a relay pulses",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
@@ -139,7 +175,11 @@
   "invariant": "no-stall",
   "why": "handleCfgSet saves at once even while a relay pulses",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-3",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-1"
   ],
   "edits": [
    {
@@ -154,7 +194,11 @@
   "invariant": "no-stall",
   "why": "appLoop restarts a faulted radio while a relay pulses",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-1",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3"
   ],
   "edits": [
    {
@@ -169,7 +213,11 @@
   "invariant": "no-stall",
   "why": "appLoop writes the history or event log while a relay pulses",
   "targets": [
-   "esbmc-gate"
+   "esbmc-gate-1",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3"
   ],
   "edits": [
    {
@@ -289,7 +337,11 @@
   "invariant": "controller",
   "why": "IN1 edges inside a sync window (the Shelly following K1) become commands",
   "targets": [
-   "esbmc-house_cmds"
+   "esbmc-house_cmds-install",
+   "esbmc-house_cmds-worst-confirm",
+   "esbmc-house_cmds-toggle",
+   "esbmc-house_cmds-stalls",
+   "esbmc-house_cmds-worst"
   ],
   "edits": [
    {
@@ -304,7 +356,11 @@
   "invariant": "controller",
   "why": "a CLOSE edge waiting out ctrl_confirm_ms isn't dropped when the controller's power goes",
   "targets": [
-   "esbmc-house_cmds"
+   "esbmc-house_cmds-install",
+   "esbmc-house_cmds-worst-confirm",
+   "esbmc-house_cmds-toggle",
+   "esbmc-house_cmds-stalls",
+   "esbmc-house_cmds-worst"
   ],
   "edits": [
    {
@@ -319,7 +375,11 @@
   "invariant": "controller",
   "why": "a CLOSE edge goes at once, without waiting ctrl_confirm_ms",
   "targets": [
-   "esbmc-house_cmds"
+   "esbmc-house_cmds-install",
+   "esbmc-house_cmds-worst-confirm",
+   "esbmc-house_cmds-toggle",
+   "esbmc-house_cmds-stalls",
+   "esbmc-house_cmds-worst"
   ],
   "edits": [
    {
@@ -334,7 +394,11 @@
   "invariant": "controller",
   "why": "IN1 edges become commands before the house is armed",
   "targets": [
-   "esbmc-house_cmds"
+   "esbmc-house_cmds-install",
+   "esbmc-house_cmds-worst-confirm",
+   "esbmc-house_cmds-toggle",
+   "esbmc-house_cmds-stalls",
+   "esbmc-house_cmds-worst"
   ],
   "edits": [
    {

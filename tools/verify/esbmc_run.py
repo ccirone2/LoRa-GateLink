@@ -28,9 +28,11 @@ def main(argv=None):
     ap.add_argument("--define", "-D", action="append", default=[])
     ap.add_argument("--expect", choices=["pass", "fail"], default="pass")
     ap.add_argument("--timeout", type=int, default=3000)
+    ap.add_argument("--expect-msg", help="with --expect fail: the violated property's message must contain this")
     ap.add_argument("--all", action="store_true", help="a verdict on every property, not just the first violation")
     ap.add_argument("--fw", default=str(ROOT / "firmware/GateLink"), help="firmware directory (mutate.py's copy)")
     ap.add_argument("--build", default=str(VERIFY / "build"), help="where params.h is (the Makefile's BUILD)")
+    ap.add_argument("--log", help="also write ESBMC's whole output (the full counterexample) to this file")
     args = ap.parse_args(argv)
     harness = Path(args.harness)
     cmd = [args.esbmc, "--std", "c++17", "-DHOST_BUILD", *[f"-D{d}" for d in args.define],
@@ -46,6 +48,8 @@ def main(argv=None):
         print(f"{label}: timed out after {args.timeout} s")
         return 1
     out = p.stdout + p.stderr
+    if args.log:
+        Path(args.log).write_text(out)
     ok = "VERIFICATION SUCCESSFUL" in out
     failed = "VERIFICATION FAILED" in out
     if not ok and not failed:
@@ -54,6 +58,12 @@ def main(argv=None):
     summary = re.search(r"\*\* (\d+ of \d+ properties failed.*)", out)
     print(f"{label}: {'holds' if ok else 'violated'}" + (f" ({summary.group(1)})" if summary else ""))
     good = ok if args.expect == "pass" else failed
+    if good and failed and args.expect_msg:
+        vio = out[out.find("Violated property:"):]
+        head = vio.splitlines()[:4]
+        good = any(args.expect_msg in line for line in head)
+        if not good:
+            print(f"{label}: violated, but not {args.expect_msg!r}: " + " / ".join(x.strip() for x in head))
     if failed and args.expect == "pass":
         for m in re.finditer(r"^\s+FAILED\s+\[[^\]]+\]\s+(.*)$", out, re.M):
             print(f"  FAILED {m.group(1).strip()}")

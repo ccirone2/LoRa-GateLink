@@ -64,8 +64,8 @@ once its fix is merged and record it in the pull request.
   an OFF edge with power reading good, sent as CLOSE once `ctrl_confirm_ms` passes, against the open gate. Trace
   (ESBMC): cut at t, house passes at t+265 ms and t+1256 ms, power good low t+266..t+700, relay off t+384, CLOSE sent
   t+2.1 s. Host test `house_power_dip_hidden_by_a_flash_save_never_closes` (XFAIL; the simulator's Shelly now reboots
-  on a short dip with `brownoutMs`). Fix: after a gap between loop passes long enough to hide a dip, a CLOSE edge waits
-  out a Shelly reboot and goes only if the switch stays off.
+  on a short dip with `brownoutMs`). Fix: read power good in the stall's waits too (flash access yields) and keep a low
+  reading for the next pass, so the house sees the dip before the relay's drop.
 
 ## Bench and field tests
 

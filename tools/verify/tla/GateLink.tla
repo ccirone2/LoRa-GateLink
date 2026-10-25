@@ -31,7 +31,7 @@ CONSTANTS
   STALE,        \* house, FixStatusAge: a STATUS whose clock is further behind the house's reckoning isn't taken
   LAG,       \* SensorTruth: how long after the gate leaves closed the sensor may still show closed
   MISSED,       \* MISSED_OPEN_MS: a missed move opens the sensor this long
-  MaxTime, MaxSeq, MaxBoots, MaxCmds,
+  MaxTime, MaxSeq, MaxGateSeq, MaxBoots, MaxCmds,  \* bounds; MaxSeq on the house's frames, MaxGateSeq the gate's
   FixCmdOrder,  \* gate refuses a command framed before the last one it took (this house session)
   FixStatusAge, \* house refuses a STATUS older than STALE by its reckoning of the gate's clock
   FirstFresh    \* assumption: the first STATUS a house takes in a gate session is at most STALE old
@@ -105,7 +105,7 @@ EnvMove ==
 \* The gate reports (role_gate.cpp sendStatus: heartbeat, a state change, a new house session). Whenever: safety can't
 \* depend on how often. Its resends are the same frame, already recorded.
 GateStatus ==
-  /\ gSeq < MaxSeq
+  /\ gSeq < MaxGateSeq
   /\ gSeq' = gSeq + 1
   /\ air' = air \cup {[t |-> "ST", s |-> gBoot, q |-> gSeq + 1, st |-> pos, c |-> GClock(gBoot, now), left |-> gLeft]}
   /\ UNCHANGED <<now, pos, openSince, gBoot, gPeer, gBase, gAcc, gHaveCmd, gLastId, gLastSeq, gLeft, houseVars,
@@ -193,7 +193,7 @@ DeliverStatus(f) ==
 \* The house verifies the gate's current session (its HELLO answered by a HELLO_ACK: link.cpp). Nothing at or before
 \* the HELLO_ACK is accepted after it (peerLastSeq, a full window).
 HouseVerify ==
-  /\ hPeer # gBoot /\ gSeq < MaxSeq
+  /\ hPeer # gBoot /\ gSeq < MaxGateSeq
   /\ hPeer' = gBoot /\ hBase' = gSeq + 1 /\ gSeq' = gSeq + 1 /\ hAcc' = {}
   /\ UNCHANGED <<now, pos, openSince, gBoot, gPeer, gBase, gAcc, gHaveCmd, gLastId, gLastSeq, gLeft, hBoot, hSeq,
                  hNextId, hSlot, hState, hStatusSess, hStatusSeq, hStatusAt, hClk, hGateLeft, hLeftWhen, hSensor,

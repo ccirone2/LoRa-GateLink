@@ -37,8 +37,11 @@ $(BUILD)/params.h: gen_params.py $(FW)/config.cpp
 	@mkdir -p $(BUILD)
 	$(PYTHON) gen_params.py --fw $(FW) $@
 
+# link_window.cpp one frame length per query (LEN_MIN..LEN_MAX; those under a header and tag in one): a few seconds
+# each, where all lengths in one query didn't finish in 2 hours.
+LINK_LENGTHS := 0-20 $(shell seq 21 37)
 esbmc-link_window: $(BUILD)/params.h
-	@$(RUN) esbmc/link_window.cpp
+	@for s in $(LINK_LENGTHS); do $(RUN) -D LEN_MIN=$${s%-*} -D LEN_MAX=$${s#*-} esbmc/link_window.cpp || exit 1; done
 # house_cmds.cpp in the install's setup (the Shelly following K1, the bench's timings, the house polling its power
 # through a dip), then in the variants that each show what a property depends on. A variant expected to fail is a
 # finding still open or a dependency the docs name (architecture.md, "Verification").
@@ -67,7 +70,9 @@ $(GATE_SEGMENTS:%=esbmc-gate-%): esbmc-gate-%: $(BUILD)/params.h
 $(BOOTED:%=esbmc-boot-%): esbmc-boot-%: $(BUILD)/params.h
 	@$(RUN) -D BOOT esbmc/$*.cpp
 esbmc-reach-link_window: $(BUILD)/params.h
-	@$(RUN) -D REACH --expect fail --expect-msg reach: esbmc/link_window.cpp
+	@for s in $(LINK_LENGTHS); do \
+	  $(RUN) -D REACH -D LEN_MIN=$${s%-*} -D LEN_MAX=$${s#*-} --expect fail --expect-msg reach: esbmc/link_window.cpp \
+	  || exit 1; done
 esbmc-reach-house_cmds: $(BUILD)/params.h
 	@$(RUN) $(INSTALL) -D REACH --expect fail --expect-msg reach: esbmc/house_cmds.cpp
 esbmc-reach-gate: $(GATE_SEGMENTS:%=esbmc-reach-gate-%)

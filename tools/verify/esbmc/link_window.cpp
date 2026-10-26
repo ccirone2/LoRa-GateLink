@@ -15,16 +15,25 @@
 #include "cfgmodel.h"
 
 #define FRAME_MAX (HDR_LEN + CHALLENGE_LEN + TAG_LEN)
+// The frame lengths one run covers (-D LEN_MIN / LEN_MAX): the Makefile splits them, each run a smaller query.
+#ifndef LEN_MIN
+#define LEN_MIN 0
+#endif
+#ifndef LEN_MAX
+#define LEN_MAX FRAME_MAX
+#endif
 static uint32_t S;          // the sequence number the proof follows
 static uint32_t epochSess;  // the verified peer session the ghosts below belong to
 static uint32_t epochBase;  // the seq of the HELLO_ACK that verified it
 static bool accS;           // S reached the role in this session and wasn't refused since
 static bool justS;          // the frame being handled is S (the RxHandler may refuse it)
 
-// The transmitter stays busy: every frame the link sends waits in its queue. Nothing in the window reads the sending
-// side, and with a frame sent or queued by chance the queue's frames had lengths the checker couldn't bound, so
-// reframePending's cipher loops unrolled to the full --unwind bound (it ran out of memory).
-bool radioTxBusy() { return true; }
+// The transmitter is idle and the channel clear, the air quiet for long (main): every frame the link sends goes out at
+// once and its queue stays empty. Nothing in the window reads the sending side. With frames queued (the transmitter
+// busy, or sent or queued by chance), the queue held frames of lengths the checker couldn't bound, and a HELLO's
+// re-framing of them (reframePending) unrolled the cipher and copies to the --unwind bound: out of memory.
+bool radioTxBusy() { return false; }
+bool radioChannelBusy() { return false; }
 int digitalRead(uint32_t) { return LOW; }
 void digitalWrite(uint32_t, uint32_t) {}
 void pinMode(uint32_t, uint32_t) {}
@@ -58,7 +67,10 @@ static bool windowHas(uint32_t s) {
 }
 
 static void inv() {
-  if (!peerSession) return;  // nothing verified: nothing reaches the role (handleFrame drops it)
+  if (!peerSession) {  // nothing verified: nothing reaches the role (handleFrame drops it)
+    INV(!peerOk, "no session, not verified (a HELLO_ACK for session 0 isn't taken)");
+    return;
+  }
   INV(epochSess == peerSession, "the ghosts follow the verified session");
   INV(epochBase <= peerLastSeq, "the handshake is at or below the newest seq");
   INV(!accS || windowHas(S), "a seq that reached the role is in the window");
@@ -83,10 +95,12 @@ static int after(uint32_t sess0) {
 }
 
 int main() {
+  configDefaults(cfg);  // the radio settings clearToSend times its backoff with
   cfg.key_set = 1;
   cfg.net_id = nondet_u8();
   activeRole = nondet_bool() ? ROLE_HOUSE : ROLE_GATE;
-  txOnAir = true;
+  txOnAir = false;
+  lastAirAt = clk - 60000;
   rxHandler = rx;
   ackHandler = ack;
   S = nondet_u32();
@@ -105,16 +119,16 @@ int main() {
   uint8_t buf[FRAME_MAX];
   for (size_t i = 0; i < sizeof(buf); i++) buf[i] = nondet_u8();
   uint8_t n = nondet_u8();
-  ASSUME(n <= FRAME_MAX);
+  ASSUME(n >= LEN_MIN && n <= LEN_MAX && LEN_MAX <= FRAME_MAX);
   uint32_t sess0 = peerSession;
   // One call per length, each with a constant one: with the length symbolic the checker unrolls the cipher's loops
   // to the full --unwind bound (and ran out of memory); with it constant they unroll exactly. Each call ends the run
   // (after): carried on, the state each call leaves (the frames it queued) merged into the next call's, and the
   // checker unrolled the queue's re-framing (reframePending) to the --unwind bound per frame, out of memory again.
-  for (uint8_t k = 0; k <= FRAME_MAX; k++)
+  for (uint8_t k = LEN_MIN; k <= LEN_MAX; k++)
     if (k == n) {
       handleFrame(buf, k, 0, 0, clk);
       return after(sess0);
     }
-  return 0;  // unreachable: n <= FRAME_MAX
+  return 0;  // unreachable: n is in LEN_MIN..LEN_MAX
 }

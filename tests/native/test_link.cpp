@@ -286,6 +286,21 @@ TEST(a_hello_ack_must_echo_the_whole_challenge) {
   CHECK(s.house.verified());
 }
 
+TEST(a_hello_ack_for_session_0_never_verifies) {
+  // 0 is "no session": no board draws it (drawSession). An answer naming it, echoing the challenge, isn't taken, or the
+  // link would be verified with no session and the replay window's start unknown (tools/verify, link_window).
+  Sim s;
+  s.drop = [](const AirFrame &f) { return f.type() == MSG_HELLO_ACK; };
+  s.run(1500);
+  const AirFrame *hello = last(s.sent(s.house, MSG_HELLO)), *g = last(s.sent(s.gate, MSG_HELLO));
+  CHECK(hello && g);
+  Bytes c = framePlain(s.house.cfg.key, hello->b);
+  s.inject(s.house, frameSeal(s.house.cfg.key, MSG_HELLO_ACK, g->b[2], g->b[3], g->b[4], 0, g->seq() + 100, c.data(),
+                              c.size()));
+  s.run(50);
+  CHECK(!s.house.verified());
+}
+
 TEST(a_new_key_encrypts_and_tags_alike_without_a_restart) {
   // The cipher key is derived again whenever the link key changes, not only at linkBegin, so a frame is never
   // encrypted under the old key and tagged under the new one: the peer would take it as authentic and read garbage.

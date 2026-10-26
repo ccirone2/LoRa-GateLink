@@ -372,7 +372,7 @@ anywhere, so every run crosses its wrap; a frame handler's millis() up to 20 ms 
 |---|---|---|
 | `gate.cpp` | **interlock**: a gate coil never energizes while the other is, nor within `INTERLOCK_MS` of its release. **pulse-only**: a coil releases within its pulse's length plus one pass, and energizes only for a command, a relay test or a pulse waiting out the interlock. **no-restart**: a running or waiting pulse's start and end never move. **fresh-cmd**: a command pulses only inside its deadline by the gate's clock (`CMD_LATE_SLACK_MS` plus two frames' airtime late, `CMD_AHEAD_MAX_MS` early), stated in physical time since boot, not with the firmware's clock. **once**: the last command taken never pulses again. **no-stall**: no flash write, radio restart or log save while a relay pulses or waits to | inductive, any run length |
 | `house.cpp` | **sensor-truth**: K2 closes the alarm's contact only while the last STATUS taken said closed, and (`linkloss_open`) no longer than `houseLinkTimeoutMs()` (+1 ms: stamps are `now \| 1`) after it was taken, as of the loop pass, across the wrap. **in-order**: a STATUS is taken only if later than the last one taken in the gate session | inductive, any run length |
-| `link_window.cpp` | **once**: a frame reaches the role at most once per verified peer session unless the role refused it (`linkRefuse`). **after-hello**: nothing at or before the HELLO_ACK that verified the session does. Both with the MAC left to chance, so they hold even for forged frames: the window alone keeps them | inductive, any run length |
+| `link_window.cpp` | **once**: a frame reaches the role at most once per verified peer session unless the role refused it (`linkRefuse`). **after-hello**: nothing at or before the HELLO_ACK that verified the session does. Both with the MAC left to chance, so they hold even for forged frames: the window alone keeps them. The transmitter idle and the channel clear (nothing queued; the window never reads the sending side); one query per frame length | inductive, any run length |
 | `house_cmds.cpp` | **owner-only**: every command the house sends is one the owner switched the controller to since its last command, and none goes before it is armed. Run in a model of the site: the Shelly (follows K1, toggles on SW edges, or detached; SW answered within 200 ms), its 12 V rail cut and restored at any moment, the board's power good, the IN2 opto and the Shelly's reboot each at any delay in a range (below) | bounded: 8 passes from boot |
 
 The inductive proofs: `inv()` in each harness is an invariant over the relays (or the STATUS taken), ghosts in
@@ -424,6 +424,10 @@ checks.
    for the owner's. Open: covered at the install only if every such dip drops power good first. On the bench it does:
    dips of 150 and 200 ms drop power good without rebooting the Shelly, 300 ms ones do both (TODO.md; 200–300 ms not
    yet stepped).
+6. *A HELLO_ACK for session 0 verifies the link with no session* (ESBMC, `link_window.cpp`, after-hello): 0 means no
+   session and no board draws it, but an answer naming it (echoing the challenge) was taken, the link verified with
+   no session and nothing marking where its window starts. Only a key holder can make one: the window alone didn't
+   keep it, as the properties claim. Fixed in 0.20.2: such an answer isn't taken (`link_window.cpp` holds).
 
 **The numbers it rests on.** Every timing below is a range the checker tries in full; the Makefile runs the measured
 range and the worst case the sources allow.

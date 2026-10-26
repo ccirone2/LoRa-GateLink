@@ -403,5 +403,20 @@
     "replace": "      if (true) {"
    }
   ]
+ },
+ {
+  "name": "v_hello_ack_session_0_verifies",
+  "invariant": "replay",
+  "why": "a HELLO_ACK naming session 0 is taken: verified with no session, a frame from before the handshake reaches the role",
+  "targets": [
+   "esbmc-link_window"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "    if (session == 0) return;  // no session (drawSession never draws it): verified, the window would have no start\n",
+    "replace": ""
+   }
+  ]
  }
 ]

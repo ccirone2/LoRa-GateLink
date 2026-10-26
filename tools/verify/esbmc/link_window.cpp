@@ -65,6 +65,23 @@ static void inv() {
   INV(S > epochBase || windowHas(S), "a seq at or before the handshake is in the window");
 }
 
+// After the frame: the ghosts follow a new session, and the invariant must hold again.
+static int after(uint32_t sess0) {
+  // A HELLO_ACK that verified a new session (or verified one again from none): the ghosts start over with it.
+  if (peerSession != sess0 || (peerSession && !sess0)) {
+    epochSess = peerSession;
+    epochBase = peerLastSeq;
+    accS = false;
+    CHECK(peerWindow == 0xFFFFFFFF, "after-hello: a new session's window starts full");
+  }
+  checking = true;
+  inv();
+#ifdef REACH
+  CHECK(false, "reach: the end of the harness is reachable (this run must fail)");
+#endif
+  return 0;
+}
+
 int main() {
   cfg.key_set = 1;
   cfg.net_id = nondet_u8();
@@ -89,23 +106,15 @@ int main() {
   for (size_t i = 0; i < sizeof(buf); i++) buf[i] = nondet_u8();
   uint8_t n = nondet_u8();
   ASSUME(n <= FRAME_MAX);
-  uint32_t sess0 = peerSession, last0 = peerLastSeq;
+  uint32_t sess0 = peerSession;
   // One call per length, each with a constant one: with the length symbolic the checker unrolls the cipher's loops
-  // to the full --unwind bound (and ran out of memory); with it constant they unroll exactly.
+  // to the full --unwind bound (and ran out of memory); with it constant they unroll exactly. Each call ends the run
+  // (after): carried on, the state each call leaves (the frames it queued) merged into the next call's, and the
+  // checker unrolled the queue's re-framing (reframePending) to the --unwind bound per frame, out of memory again.
   for (uint8_t k = 0; k <= FRAME_MAX; k++)
-    if (k == n) handleFrame(buf, k, 0, 0, clk);
-  // A HELLO_ACK that verified a new session (or verified one again from none): the ghosts start over with it.
-  if (peerSession != sess0 || (peerSession && !sess0)) {
-    epochSess = peerSession;
-    epochBase = peerLastSeq;
-    accS = false;
-    CHECK(peerWindow == 0xFFFFFFFF, "after-hello: a new session's window starts full");
-  }
-  (void)last0;
-  checking = true;
-  inv();
-#ifdef REACH
-  CHECK(false, "reach: the end of the harness is reachable (this run must fail)");
-#endif
-  return 0;
+    if (k == n) {
+      handleFrame(buf, k, 0, 0, clk);
+      return after(sess0);
+    }
+  return 0;  // unreachable: n <= FRAME_MAX
 }

@@ -155,7 +155,9 @@ static void cryptPayload(uint8_t *frame, uint8_t len) {
   uint8_t block[16] = {}, stream[16];
   memcpy(block, frame + 3, 10);  // src, dst, session, seq
   uint8_t *p = frame + HDR_LEN;
-  for (uint16_t off = 0; off < len; off += 16) {
+  // off < 256 always holds (len is 8 bits): it bounds the loop for the model checker, which with a symbolic len would
+  // unroll it to its --unwind limit (tools/verify, link_window ran out of memory in reframePending).
+  for (uint16_t off = 0; off < 256 && off < len; off += 16) {
     block[15] = off / 16;
     cipher.encryptBlock(stream, block);
     for (uint8_t i = 0; i < 16 && off + i < len; i++) p[off + i] ^= stream[i];

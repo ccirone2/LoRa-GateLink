@@ -460,17 +460,37 @@ def test_cloud_session_starts_the_install_once(repo, tmp_path, monkeypatch, caps
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.delenv("CLAUDE_ENV_FILE", raising=False)
     started = []
+    # still running, so a second session start doesn't start another
+    setup = subprocess.Popen(["sh", "-c", "sleep 60", "cloud_setup.sh"])
 
     def spawn(cmd, cwd, log):
         started.append(cmd)
-        return os.getpid()  # alive, so a second session start doesn't start another
+        return setup.pid
 
     monkeypatch.setattr(hooks, "spawn", spawn)
     ev = {"session_id": "c2", "cwd": str(repo), "source": "startup"}
-    out = call("session-start", ev, monkeypatch, capsys)[1]
-    assert "installing in the background" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
-    call("session-start", ev, monkeypatch, capsys)
+    try:
+        out = call("session-start", ev, monkeypatch, capsys)[1]
+        assert "installing in the background" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        call("session-start", ev, monkeypatch, capsys)
+    finally:
+        setup.kill()
+        setup.wait()
     assert len(started) == 1 and started[0][1].endswith("cloud_setup.sh")
+
+
+def test_cloud_session_restarts_an_install_whose_pid_was_reused(repo, tmp_path, monkeypatch, capsys):
+    """A cache kept from an earlier container: setup.pid names a process, but not the install, which died there
+    without writing setup.done. Seen in a routine: the pid was the new session's own, so nothing installed."""
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.delenv("CLAUDE_ENV_FILE", raising=False)
+    (tmp_path / "cache/gatelink").mkdir(parents=True)
+    (tmp_path / "cache/gatelink/setup.pid").write_text(str(os.getpid()), encoding="utf-8")
+    started = []
+    monkeypatch.setattr(hooks, "spawn", lambda cmd, cwd, log: started.append(cmd) or 1)
+    call("session-start", {"session_id": "c3", "cwd": str(repo), "source": "startup"}, monkeypatch, capsys)
+    assert len(started) == 1
 
 
 def test_local_session_prints_nothing(repo, monkeypatch, capsys):

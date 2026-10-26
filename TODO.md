@@ -168,3 +168,10 @@ once its fix is merged and record it in the pull request.
   `python tools/gatelink.py key backup <dir>` and keep its passphrase in the password manager; then
   check `python tools/gatelink.py ports` shows the same key id on both boards as `key id` does for the
   file ([docs/key-management.md](docs/key-management.md)). The install pair gets its own key, generated there.
+- [ ] **CI's FW_VERSION check passes when its base doesn't resolve.** `hooks.py check --base REF` (`ci.yml`,
+  "Firmware changes bump FW_VERSION") goes on when `git merge-base HEAD REF` fails (`find_base` in
+  `tools/agent/hooks.py` returns None), so it measures from HEAD, finds no change and exits 0. Not reachable today
+  (the job checks out with `fetch-depth: 0`, so `origin/<base_ref>` exists), but a shallow checkout or a renamed
+  base would turn the gate off silently. Fix: in `main()`, exit 2 when `--base` is given and has no merge base; a
+  host test (`--base origin/nosuch` after a committed firmware change) fails on main today. Found by the bug-sweep
+  routine, 2026-10-26.

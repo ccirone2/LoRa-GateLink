@@ -32,6 +32,7 @@ CONSTANTS
   LAG,       \* SensorTruth: how long after the gate leaves closed the sensor may still show closed
   MISSED,       \* MISSED_OPEN_MS: a missed move opens the sensor this long
   MaxTime, MaxSeq, MaxGateSeq, MaxBoots, MaxCmds,  \* bounds; MaxSeq on the house's frames, MaxGateSeq the gate's
+  MaxLeft,      \* bound: others move the gate off closed at most this often per gate boot (gLeft)
   FixCmdOrder,  \* gate refuses a command framed before the last one it took (this house session)
   FixStatusAge, \* house refuses a STATUS older than STALE by its reckoning of the gate's clock
   FirstFresh    \* assumption: the first STATUS a house takes in a gate session is at most STALE old
@@ -96,7 +97,10 @@ Tick ==
 
 \* Anyone else moves the gate: its local button, the AES controller, the siren (role_gate.cpp: cause external).
 \* Leaving closed counts a departure (leftClosed, ST_LEFT_CLOSED).
+\* Bounded (MaxLeft): moves take no time here, and each departure is counted into every later STATUS, so without a
+\* bound the states never end (a view without gLeft, CmdView, hid that).
 EnvMove ==
+  /\ pos = "open" \/ gLeft < MaxLeft
   /\ pos' = Other(pos)
   /\ openSince' = IF pos = "closed" THEN now ELSE openSince
   /\ gLeft' = IF pos = "closed" THEN gLeft + 1 ELSE gLeft

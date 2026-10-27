@@ -396,9 +396,10 @@ shows closed at most LAG after the gate left closed), **CmdOrder** (a command ne
 **CmdOnce** (one command, one pulse, across reboots), **CmdFresh** (never past its TTL plus the slack). Each `.cfg`
 states what it expects: the configurations of the firmware before a fix keep finding the bug, so the model is shown to
 see it. Bounds: a few time units (one unit stands for any span: the model's constants are scaled), 4 to 6 frames from
-the house and 3 to 6 from the gate, 1 or 2 commands, 2 boots each (the command properties' configurations merge states
-that differ only in the sensor's bookkeeping, `CmdView`); exact clocks (the 100 ppm the house allows is analysed, not
-modelled).
+the house and 3 to 6 from the gate, 1 or 2 commands, 2 boots each, 2 moves off closed by others per gate boot
+(`MaxLeft`: without it the departure count, which every STATUS carries, never ends; the command properties'
+configurations merge states that differ only in the sensor's bookkeeping, `CmdView`); exact clocks (the 100 ppm the
+house allows is analysed, not modelled).
 
 **Mutations.** `tools/mutate.py --verify` breaks each property in a copy of the firmware (`tools/verify/mutations.json`:
 the interlock's gap, a pulse ending late, the busy checks, the deadline, the dedup, the save guards, the sensor's link

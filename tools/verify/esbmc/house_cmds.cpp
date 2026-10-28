@@ -27,8 +27,7 @@
 // Loop passes: up to IDLE_MS before anything happens (K1 driven, the outage, the owner), PASS_MS after (the longest
 // pass the bench has seen is ~0.5 s, a flash save; docs say up to ~1 s): a pass longer than the site's events would
 // let the board miss them, as no real board does. The settings are the defaults
-// unless -DANY_CONFIG (the ones this depends on, anywhere in their range). -DOUTAGE_PASS=i lets the outage begin only in
-// pass i (PASSES: never): the runs for every i together cover what one run without it does, each a smaller query.
+// unless -DANY_CONFIG (the ones this depends on, anywhere in their range).
 #include "env.h"
 #define private public
 #include "io.h"
@@ -295,12 +294,7 @@ int main() {
     uint64_t g0 = T;
     // The outage may begin (or end) during the gap, at any time in it. The rest of the gap is bounded as a gap from
     // there would be: the house may be blind from the cut on.
-#ifdef OUTAGE_PASS
-    bool mayCut = outage || i == OUTAGE_PASS;
-#else
-    bool mayCut = true;
-#endif
-    if (!backT && mayCut && nondet_bool()) {
+    if (!backT && nondet_bool()) {
       uint32_t at;
       RANGE(at, 0, d - 1);
       advance(at);

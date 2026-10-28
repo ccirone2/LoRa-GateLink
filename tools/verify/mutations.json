@@ -424,6 +424,36 @@
   ]
  },
  {
+  "name": "v_sync_window_ends_before_the_shelly_answers",
+  "invariant": "sync-window",
+  "why": "a matching IN1 edge ends the sync window before the Shelly's answer to K1 can have come: a user's edge just after K1 moved ends it, and the Shelly's answer becomes a command",
+  "targets": [
+   "esbmc-house_cmds-install"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "      && elapsed(now, syncFrom, SHELLY_ANSWER_MS))",
+    "replace": "      )"
+   }
+  ]
+ },
+ {
+  "name": "v_sync_window_ends_on_an_edge_in_its_debounce",
+  "invariant": "sync-window",
+  "why": "the sync window ends early while IN1 reads otherwise in its debounce: a toggling Shelly's answer to K1, read first after a loop stall, then becomes a command",
+  "targets": [
+   "esbmc-house_cmds-toggle"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "shellyLevel == syncExpect && in1.raw() == shellyLevel",
+    "replace": "shellyLevel == syncExpect"
+   }
+  ]
+ },
+ {
   "name": "v_hello_ack_session_0_verifies",
   "invariant": "replay",
   "why": "a HELLO_ACK naming session 0 is taken: verified with no session, a frame from before the handshake reaches the role",

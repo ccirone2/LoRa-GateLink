@@ -12,7 +12,9 @@ ESBMC ?= esbmc
 TLA2TOOLS ?= /opt/tla2tools.jar
 PYTHON ?= python3
 BUILD ?= build
-RUN := $(PYTHON) esbmc_run.py --esbmc $(ESBMC) --fw $(FW) --build $(BUILD)
+# Each ESBMC run's limit, seconds (a gate segment takes ~40 minutes on a 4-core machine; mutate.py --verify passes more).
+ESBMC_TIMEOUT ?= 3000
+RUN := $(PYTHON) esbmc_run.py --esbmc $(ESBMC) --fw $(FW) --build $(BUILD) --timeout $(ESBMC_TIMEOUT)
 
 # The ESBMC harnesses (esbmc/*.cpp): each is an inductive proof (the step), its base case (BOOT) and a reachability
 # check (REACH, which must fail: a harness that excludes every run proves nothing). link_window has no boot case (its

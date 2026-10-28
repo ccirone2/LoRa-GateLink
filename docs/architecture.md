@@ -404,7 +404,7 @@ house allows is analysed, not modelled).
 **Mutations.** `tools/mutate.py --verify` breaks each property in a copy of the firmware (`tools/verify/mutations.json`:
 the interlock's gap, a pulse ending late, the busy checks, the deadline, the dedup, the save guards, the sensor's link
 check, the stamps' cap, the window's bits...) and the proof must then fail; one that still passes is a property no proof
-checks.
+checks. A proof out of time judges nothing (`no verdict`): it neither kills nor spares a mutation.
 
 **What the checker found** (each a host test and a TODO.md item until its fix merges, each fix its own pull request):
 

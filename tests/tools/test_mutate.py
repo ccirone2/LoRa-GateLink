@@ -57,6 +57,28 @@ def test_failed_tests_parses_the_runner():
     assert mutate.failed_tests(out) == ["breaks_k1", "fixed_now"]
 
 
+def test_a_checker_out_of_time_neither_kills_nor_spares(monkeypatch):
+    # A proof that ran out of time proved nothing: counting it as a kill would pass a mutation no proof catches.
+    class Done:
+        def __init__(self, code, out):
+            self.returncode, self.stdout, self.stderr = code, out, ""
+
+    def outcome(result):
+        def run(_cmd, **_kw):
+            if isinstance(result, Exception):
+                raise result
+            return result
+        monkeypatch.setattr(mutate.subprocess, "run", run)
+        return mutate.run_verify(Path("fw"), Path("b"), ["esbmc-x"], 10)[0]
+
+    assert outcome(Done(0, "x: holds (0 of 9 properties failed)")) is True
+    assert outcome(Done(2, "x: violated (1 of 9 properties failed)\nx: UNEXPECTED")) is False
+    assert outcome(mutate.subprocess.TimeoutExpired("make", 10)) is None
+    assert outcome(Done(2, "x: timed out after 5400 s\nmake: *** Error 1")) is None
+    assert outcome(Done(2, "x: ESBMC gave no verdict (exit -9):")) is None
+    assert outcome(Done(2, "a: violated (1 of 9 properties failed)\nb: timed out after 60 s")) is False
+
+
 CATALOG = mutate.CATALOG
 
 

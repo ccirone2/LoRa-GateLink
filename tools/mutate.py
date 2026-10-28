@@ -151,17 +151,22 @@ def run_one(m, base_build, base_fw, libs, work, timeout, jobs=None):
 
 
 def run_verify(fw, build, targets, timeout):
-    """The model checker's targets against the firmware in `fw`: (passed, output tail)."""
+    """The model checker's targets against the firmware in `fw`: (True passed / False failed / None no verdict in
+    time, output tail). A checker out of time has proved nothing either way: it neither kills nor spares a mutation."""
     cmd = ["make", "-s", "-C", str(VERIFY), f"FW={fw}", f"BUILD={build}", *targets]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return False, f"timed out after {timeout} s"
-    return p.returncode == 0, (p.stdout + p.stderr)[-1500:]
+        return None, f"timed out after {timeout} s"
+    out = (p.stdout + p.stderr)[-1500:]
+    if p.returncode and not re.search(r"violated|UNEXPECTED", out) and re.search(r"timed out after|no verdict", out):
+        return None, out
+    return p.returncode == 0, out
 
 
 def run_one_verify(m, base_fw, work, timeout):
-    """(name, outcome, detail, []) for a --verify mutation: killed when a target it names fails."""
+    """(name, outcome, detail, []) for a --verify mutation: killed when a target it names fails, no verdict when the
+    checker ran out of time first."""
     d = Path(work) / m["name"]
     fw = d / "fw"
     shutil.copytree(base_fw, fw)
@@ -171,6 +176,8 @@ def run_one_verify(m, base_fw, work, timeout):
         return m["name"], "invalid", str(e), []
     passed, out = run_verify(fw, d / "build", m["targets"], timeout)
     shutil.rmtree(d, ignore_errors=True)
+    if passed is None:
+        return m["name"], "no verdict", (out.strip().splitlines() or ["timed out"])[-1], []
     if passed:
         return m["name"], "survived", "every proof still holds", []
     failed = [line.strip() for line in out.splitlines() if "violated" in line or "UNEXPECTED" in line]
@@ -269,7 +276,8 @@ def main_verify(picked, args):
         print(f"base run of {', '.join(targets)} ({len(picked)} mutations to run)...", flush=True)
         passed, out = run_verify(base_fw, Path(work) / "base-build", targets, args.timeout)
         if not passed:
-            print(f"the unmutated firmware already fails:\n{out}", file=sys.stderr)
+            what = "gets no verdict in time" if passed is None else "already fails"
+            print(f"the unmutated firmware {what}:\n{out}", file=sys.stderr)
             return 2
         results = []
         with ThreadPoolExecutor(args.jobs) as ex:
@@ -280,11 +288,14 @@ def main_verify(picked, args):
                 print(f"{outcome:9} {name}: {detail}", flush=True)
     survived = [n for n, o in results if o == "survived"]
     invalid = [n for n, o in results if o == "invalid"]
-    print(f"\n{len(results)} mutations: {len(results) - len(survived) - len(invalid)} killed, "
-          f"{len(survived)} survived, {len(invalid)} invalid")
+    unknown = [n for n, o in results if o == "no verdict"]
+    print(f"\n{len(results)} mutations: {len(results) - len(survived) - len(invalid) - len(unknown)} killed, "
+          f"{len(survived)} survived, {len(invalid)} invalid, {len(unknown)} no verdict")
     if survived:
         print("survived (a property no proof checks): " + ", ".join(survived))
-    return 1 if survived or invalid else 0
+    if unknown:
+        print("no verdict (the checker ran out of time: a longer --timeout, or a smaller proof): " + ", ".join(unknown))
+    return 1 if survived or invalid or unknown else 0
 
 
 if __name__ == "__main__":

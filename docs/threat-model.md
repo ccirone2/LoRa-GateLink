@@ -59,8 +59,9 @@ The repository is public: every attacker knows the frame format, the defaults an
   any setting (`cleartext-traffic-analysis`: low).
 - **No replay of frames that were already delivered.** Each boot draws a fresh session id (unique by construction
   from the boot counter while it works, 0.13.9) and a random starting seq. A peer's session counts only once it has echoed a fresh challenge, and from then on only seqs above that,
-  each once (32-frame window). Delivered frames can't be replayed, within a session or across reboots
-  (`recorded-frame-replay`: low).
+  each once (32-frame window); an answer naming session 0 (no session, never drawn) isn't taken (0.20.2). Delivered
+  frames can't be replayed, within a session or across reboots, which the model checker proves of the window even for
+  frames with any tag (`tools/verify`, `link_window.cpp`) (`recorded-frame-replay`: low).
   - Frames **withheld** (jammed at the receiver and recorded) and delivered later aren't stopped by the window, so
     the messages that matter are checked for it: a withheld gate STATUS changes nothing (0.13.9), and a withheld
     command is past its deadline in the gate's clock (0.16.0). Challenges are 128 bits (0.16.0), so a library of

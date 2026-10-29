@@ -88,8 +88,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  } else if ((action == ACT_OPEN ? k1 : k2).pulsing()) {",
-    "replace": "  } else if ((action == ACT_OPEN ? k1 : k2).pulsing() && false) {"
+    "find": "  } else if (mine.pulsing()) {",
+    "replace": "  } else if (mine.pulsing() && false) {"
    }
   ]
  },
@@ -3192,6 +3192,21 @@
    {
     "file": "link.cpp",
     "find": "      if (m.reacks >= REACK_MAX) return false;\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "name": "link_hello_ack_session_0_verifies",
+  "invariant": "replay",
+  "why": "a HELLO_ACK naming session 0 (no session) is taken: the link is verified with no session and its replay window's start unknown",
+  "killed_by": [
+   "a_hello_ack_for_session_0_never_verifies"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "    if (session == 0) return;  // no session (drawSession never draws it): verified, the window would have no start\n",
     "replace": ""
    }
   ]

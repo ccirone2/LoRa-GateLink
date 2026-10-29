@@ -1,0 +1,422 @@
+[
+ {
+  "name": "v_interlock_no_gap_after_release",
+  "invariant": "interlock",
+  "why": "interlockedPulse ignores the other relay's recent release (gapLeft): a pulse starts 0 ms after the other ended by itself",
+  "targets": [
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "r.pulse(now, ms, wasOn ? INTERLOCK_MS : other.gapLeft(now, INTERLOCK_MS));",
+    "replace": "r.pulse(now, ms, wasOn ? INTERLOCK_MS : 0);"
+   }
+  ]
+ },
+ {
+  "name": "v_pulse_overruns_100ms",
+  "invariant": "pulse-only",
+  "why": "Relay::update ends a pulse 100 ms late",
+  "targets": [
+   "esbmc-gate-5",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "io.cpp",
+    "find": "if (_pulseUntil && !_startAt && (int32_t)(now - _pulseUntil) >= 0) set(false);",
+    "replace": "if (_pulseUntil && !_startAt && (int32_t)(now - _pulseUntil) >= 100) set(false);"
+   }
+  ]
+ },
+ {
+  "name": "v_cmd_restarts_running_pulse",
+  "invariant": "no-restart",
+  "why": "handleCmd no longer treats a command for the relay already pulsing as the same press: the pulse restarts",
+  "targets": [
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "} else if (mine.pulsing()) {",
+    "replace": "} else if (false) {"
+   }
+  ]
+ },
+ {
+  "name": "v_relay_test_restarts_running_pulse",
+  "invariant": "no-restart",
+  "why": "gateRelayTest takes a test of a relay already pulsing",
+  "targets": [
+   "esbmc-gate-4",
+   "esbmc-gate-2",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "if (r.pulsing()) return false;",
+    "replace": "if (false) return false;"
+   }
+  ]
+ },
+ {
+  "name": "v_cmd_deadline_a_minute_late",
+  "invariant": "fresh-cmd",
+  "why": "handleCmd takes a command up to a minute past its deadline",
+  "targets": [
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "if (late > slack || late < -(int64_t)CMD_AHEAD_MAX_MS) {",
+    "replace": "if (late > slack + 60000 || late < -(int64_t)CMD_AHEAD_MAX_MS) {"
+   }
+  ]
+ },
+ {
+  "name": "v_cmd_deadline_far_ahead",
+  "invariant": "fresh-cmd",
+  "why": "handleCmd takes a deadline twice as far ahead as cmd_ttl_s allows",
+  "targets": [
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "if (late > slack || late < -(int64_t)CMD_AHEAD_MAX_MS) {",
+    "replace": "if (late > slack || late < -(int64_t)CMD_AHEAD_MAX_MS * 2) {"
+   }
+  ]
+ },
+ {
+  "name": "v_gate_clock_5s_behind",
+  "invariant": "fresh-cmd",
+  "why": "the gate's clock reads 5 s behind the time since boot, so a command 5 s past its deadline is taken",
+  "targets": [
+   "esbmc-gate-2",
+   "esbmc-gate-5",
+   "esbmc-gate-4",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "return t - bootAt;",
+    "replace": "return t - bootAt - 5000;"
+   }
+  ]
+ },
+ {
+  "name": "v_cmd_id_never_deduplicated",
+  "invariant": "once",
+  "why": "handleCmd never matches the last command's id: the same command pulses again",
+  "targets": [
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "if (haveCmd && id == lastCmdId) {",
+    "replace": "if (false && id == lastCmdId) {"
+   }
+  ]
+ },
+ {
+  "name": "v_cfg_queue_drains_mid_pulse",
+  "invariant": "no-stall",
+  "why": "drainCfgQueue saves a queued remote write while a relay pulses",
+  "targets": [
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "if (!cfgQueued || appRelaysPulsing()) return;",
+    "replace": "if (!cfgQueued) return;"
+   }
+  ]
+ },
+ {
+  "name": "v_cfg_set_saves_mid_pulse",
+  "invariant": "no-stall",
+  "why": "handleCfgSet saves at once even while a relay pulses",
+  "targets": [
+   "esbmc-gate-3",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "if (!cfgQueued && !appRelaysPulsing()) {",
+    "replace": "if (!cfgQueued) {"
+   }
+  ]
+ },
+ {
+  "name": "v_radio_recovers_mid_pulse",
+  "invariant": "no-stall",
+  "why": "appLoop restarts a faulted radio while a relay pulses",
+  "targets": [
+   "esbmc-gate-1",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3"
+  ],
+  "edits": [
+   {
+    "file": "app.cpp",
+    "find": "if (radioRecoverDue() && !appRelaysPulsing()) radioRecover();",
+    "replace": "if (radioRecoverDue()) radioRecover();"
+   }
+  ]
+ },
+ {
+  "name": "v_history_saves_mid_pulse",
+  "invariant": "no-stall",
+  "why": "appLoop writes the history or event log while a relay pulses",
+  "targets": [
+   "esbmc-gate-1",
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3"
+  ],
+  "edits": [
+   {
+    "file": "app.cpp",
+    "find": "if (!appRelaysPulsing()) {",
+    "replace": "if (true) {"
+   }
+  ]
+ },
+ {
+  "name": "v_sensor_ignores_link_loss",
+  "invariant": "sensor-closed-only-known",
+  "why": "applyOutputs keeps the sensor closed with the link down (linkloss_open ignored)",
+  "targets": [
+   "esbmc-house"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "if (!linkUp && cfg.linkloss_open) closed = false;",
+    "replace": "if (false && cfg.linkloss_open) closed = false;"
+   }
+  ]
+ },
+ {
+  "name": "v_status_same_seq_taken_again",
+  "invariant": "sensor-closed-only-known",
+  "why": "handleStatus takes a STATUS whose seq equals the last one taken",
+  "targets": [
+   "esbmc-house"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "if (session == statusSession && m.seq <= statusSeq) {",
+    "replace": "if (session == statusSession && m.seq < statusSeq) {"
+   }
+  ]
+ },
+ {
+  "name": "v_status_stamp_never_capped",
+  "invariant": "sensor-closed-only-known",
+  "why": "capStamps no longer caps statusAt: after 2^31 ms of silence the link reads as up again",
+  "targets": [
+   "esbmc-house"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "if (statusAt && elapsed(now, statusAt, STAMP_CAP_MS)) statusAt = (now - STAMP_CAP_MS) | 1;",
+    "replace": "if (false) statusAt = (now - STAMP_CAP_MS) | 1;"
+   }
+  ]
+ },
+ {
+  "name": "v_link_timeout_doubled",
+  "invariant": "sensor-closed-only-known",
+  "why": "appLinkUp keeps the link up for twice the timeout",
+  "targets": [
+   "esbmc-house"
+  ],
+  "edits": [
+   {
+    "file": "app.cpp",
+    "find": "return at && !elapsed(now, at, timeout);",
+    "replace": "return at && !elapsed(now, at, timeout * 2);"
+   }
+  ]
+ },
+ {
+  "name": "v_window_forgets_seen_seqs",
+  "invariant": "replay",
+  "why": "acceptSeq no longer checks the window's bits: a seq seen within the last 32 is taken again",
+  "targets": [
+   "esbmc-link_window"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "if (d >= 32 || (peerWindow & (1UL << d))) return false;",
+    "replace": "if (d >= 32) return false;"
+   }
+  ]
+ },
+ {
+  "name": "v_hello_ack_window_empty",
+  "invariant": "replay",
+  "why": "a new session's window starts empty, so frames recorded before its HELLO_ACK are taken",
+  "targets": [
+   "esbmc-link_window"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "peerWindow = 0xFFFFFFFF;",
+    "replace": "peerWindow = 0;"
+   }
+  ]
+ },
+ {
+  "name": "v_refuse_clears_whole_window",
+  "invariant": "replay",
+  "why": "linkRefuse clears the whole window, not just the refused seq",
+  "targets": [
+   "esbmc-link_window"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "if (d < 32) peerWindow &= ~(1UL << d);",
+    "replace": "if (d < 32) peerWindow = 0;"
+   }
+  ]
+ },
+ {
+  "name": "v_sync_edges_become_commands",
+  "invariant": "controller",
+  "why": "IN1 edges inside a sync window (the Shelly following K1) become commands",
+  "targets": [
+   "esbmc-house_cmds-install",
+   "esbmc-house_cmds-toggle",
+   "esbmc-house_cmds-stalls",
+   "esbmc-house_cmds-worst"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "    if (syncActive) {",
+    "replace": "    if (false) {"
+   }
+  ]
+ },
+ {
+  "name": "v_power_loss_keeps_pending_close",
+  "invariant": "controller",
+  "why": "a CLOSE edge waiting out ctrl_confirm_ms isn't dropped when the controller's power goes",
+  "targets": [
+   "esbmc-house_cmds-install",
+   "esbmc-house_cmds-toggle",
+   "esbmc-house_cmds-stalls",
+   "esbmc-house_cmds-worst"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "if (!p) pendingAction = 0;",
+    "replace": "if (false) pendingAction = 0;"
+   }
+  ]
+ },
+ {
+  "name": "v_close_without_confirm",
+  "invariant": "controller",
+  "why": "a CLOSE edge goes at once, without waiting ctrl_confirm_ms",
+  "targets": [
+   "esbmc-house_cmds-install",
+   "esbmc-house_cmds-toggle",
+   "esbmc-house_cmds-stalls",
+   "esbmc-house_cmds-worst"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "|| elapsed(now, pendingAt, cfg.ctrl_confirm_ms))) {",
+    "replace": "|| true)) {"
+   }
+  ]
+ },
+ {
+  "name": "v_commands_before_armed",
+  "invariant": "controller",
+  "why": "IN1 edges become commands before the house is armed",
+  "targets": [
+   "esbmc-house_cmds-install",
+   "esbmc-house_cmds-toggle",
+   "esbmc-house_cmds-stalls",
+   "esbmc-house_cmds-worst"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "      if (armed) {",
+    "replace": "      if (true) {"
+   }
+  ]
+ },
+ {
+  "name": "v_hello_ack_session_0_verifies",
+  "invariant": "replay",
+  "why": "a HELLO_ACK naming session 0 is taken: verified with no session, a frame from before the handshake reaches the role",
+  "targets": [
+   "esbmc-link_window"
+  ],
+  "edits": [
+   {
+    "file": "link.cpp",
+    "find": "    if (session == 0) return;  // no session (drawSession never draws it): verified, the window would have no start\n",
+    "replace": ""
+   }
+  ]
+ }
+]

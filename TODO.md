@@ -9,6 +9,27 @@ once its fix is merged and record it in the pull request.
 
 ## Firmware
 
+- [ ] **A withheld older command runs after a newer one.** Found by the model checker (`tools/verify/tla`,
+  `asis_order.cfg`, invariant `CmdOrder`): the owner opens, then closes; the open's frames are jammed at the gate
+  and recorded, the close gets through (the gate, closed, takes it: `already`), then the recorded open is played
+  back. It is inside its deadline (`cmd_ttl_s`, 10 s by default) and inside the replay window (a lower seq the gate
+  hasn't seen), and its id isn't the last one taken, so `handleCmd` pulses K1: the gate opens against the owner's last
+  word. Trace (TLC, 10 steps): commands 1 (open, seq 2) and 2 (close, seq 3); the gate takes 2, then 1. Host test
+  `link_withheld_older_command_after_a_newer_one_is_refused` (XFAIL). Fix: the gate refuses a command framed before
+  the last one it took in this house session (a lower seq): the house never frames a command again once a later one
+  has replaced it in its slot.
+- [ ] **A withheld STATUS is taken however old.** Found by the model checker (`tools/verify/tla`, `asis_sensor.cfg`,
+  invariant `SensorTruth`): every frame from the gate is kept from the house from just before the gate opens; the
+  house's link times out and the sensor opens; then the last STATUS sent while closed, which the house never took, is
+  played back. A seq later than any it took, so the order check (0.13.9) passes, and the house shows closed with the
+  gate open for another link timeout. Played back one by one, in order, each just before the link times out, kept
+  STATUS frames hold the sensor closed for as long as the attacker kept frames: the threat model's "up to its link
+  timeout" (`withheld-gate-frames-replayed`) doesn't hold. Trace (TLC, 15 steps): STATUS closed (seq 3) built at t=1,
+  the gate opens at t=1, the house takes it at t=7, sensor closed 6 units after the gate opened (link timeout 3).
+  Host test `link_status_withheld_past_the_link_timeout_is_refused` (XFAIL). Fix: the house refuses a STATUS whose
+  clock (ST_CLOCK) is further behind its reckoning of the gate's clock than a STATUS can honestly be (the gate's STATUS
+  TTL plus its airtime and a slack, plus the 100 ppm drift since the reckoning's reading).
+
 - [ ] **A warm reset of the house blips its outputs for at least 0.5 s.** On a watchdog, crash, reset-button or
   software reset, K1/K2 drop until the house is back and the gate reports (~1.5 s). With the gate open the
   controller follows K1 off and on (Alarm.com shows it closed for a moment); with it closed the contact sensor
@@ -21,7 +42,56 @@ once its fix is merged and record it in the pull request.
   analyzer (K1 = D1, K2 = D2 on two channels; docs/bench-testing.md), once those are wired.
 
 
+- [ ] **A user edge begun before K1's change ends its sync window.** Found by the model checker
+  (`tools/verify/esbmc/house_cmds.cpp`, `owner-only`, a Shelly set to toggle on SW edges): with the gate open, another
+  controller closes it and the user switches the controller off at the same moment. The closed STATUS turns K1 off
+  and opens a sync window expecting OFF; the user's edge, begun 35 ms earlier, is debounced inside it and ends it (a
+  matching edge ends a window early, so a user's next switch isn't swallowed). The Shelly then toggles on K1's edge,
+  back ON, outside the window: the house sends OPEN and the gate opens, against the user. The invariant says a
+  toggling Shelly must never turn sync into commands. Trace (systests, `house_sync_window_survives_an_edge_begun_before_it`,
+  XFAIL): K1 off 35003, sync 0 at 35019 (window ended), ctrl 1 at 35084, cmd_sent OPEN, gate pulse K1 at 35253. The
+  install's Shelly (it follows the SW level) does the same if the owner switches twice within its SW response time
+  (ESBMC, the install's setup: the owner switches on in the pass a STATUS turns K1 on, which ends K1's window; off 52 ms
+  later, sent as CLOSE; the Shelly then follows K1's edge back on, 174 ms after it, outside the window: OPEN). A
+  coincidence within a debounce either way, but a scene in the alarm system could switch twice. Fix: only an edge begun
+  after the window opened (the Shelly answering K1) may end it early.
+
+- [ ] **A supply dip hidden by a loop stall becomes a CLOSE.** Found by the model checker
+  (`tools/verify/esbmc/house_cmds.cpp`, `owner-only`, `-DSTALLS_ANYWHERE`, the Shelly following K1): the house's loop
+  stops ~0.5 s in a flash save (with the radio restart; the soak's `loop_max_us` is 510 ms); a dip of the 12 V under it
+  holds the board's power good low for only ~100–300 ms, all inside the stall, so the house never sees the power go,
+  but the dip reboots the Shelly (the bench's did on 300 ms), whose relay drops ~0.5 s after the cut, after the stall:
+  an OFF edge with power reading good, sent as CLOSE once `ctrl_confirm_ms` passes, against the open gate. Trace
+  (ESBMC): cut at t, house passes at t+265 ms and t+1256 ms, power good low t+266..t+700, relay off t+384, CLOSE sent
+  t+2.1 s. Host test `house_power_dip_hidden_by_a_flash_save_never_closes` (XFAIL; the simulator's Shelly now reboots
+  on a short dip with `brownoutMs`). Fix: read power good in the stall's waits too (flash access yields) and keep a low
+  reading for the next pass, so the house sees the dip before the relay's drop.
+
+- [ ] **A Shelly reboot the house doesn't see restores an OPEN.** Found by the model checker
+  (`tools/verify/esbmc/house_cmds.cpp`, `owner-only`, `esbmc-house_cmds-worst`, the Shelly following K1): a dip of the
+  12 V too short for the board's power good (it drops ~150–300 ms into a cut) but long enough to reboot the Shelly (the
+  bench's rebooted on a 300 ms dip, not on 200 ms: Bench, below). Just after K1 changes, before the Shelly has followed
+  it, its relay drops (~0.35–0.7 s into the dip): an OFF edge begun after K1 moved, at the level K1's window expects, so
+  it ends the window. The Shelly then boots back to its state before the cut (parameter 17 at its default 0, Shelly Wave
+  1 manual), outside the window: the house takes that edge for the owner's. Trace (ESBMC): the owner switches off, the
+  Shelly follows K1 on, a 96–162 ms dip, K1 off, the relay off 366 ms into the dip, the Shelly back ON 2.5 s later: OPEN
+  against the gate just closed. No `ctrl_confirm_ms` covers it (an OPEN goes at once; with parameter 17 = 1 the relay's
+  drop is a CLOSE nothing cancels). Host test `house_power_unseen_shelly_reboot_never_opens` (XFAIL; the simulator's
+  Shelly restores its last state with `restoreLast`): OPEN sent 3.1 s after K1 went off. Covered at the install only if
+  every dip that reboots the Shelly drops power good first (`esbmc-house_cmds-install`, `BROWNOUT_AFTER_PG`), as the
+  bench's dips so far show (Bench, below); finish that measurement before choosing a fix.
+
 ## Bench and field tests
+
+- [ ] **The shortest 12 V dip that reboots the Shelly, against the board's power good.** The house's command proofs
+  rest on power good dropping before any dip that reboots the Shelly (`BROWNOUT_AFTER_PG`; finding above, "A Shelly
+  reboot the house doesn't see restores an OPEN"). Cuts and 300 ms dips: power good first, 30 of 30 (PR #42). The e2e
+  `test_house_supply_dips_ride_through` runs 20261013-102954 to 20261024-172921 (house log `supply` and IN1 per dip):
+  30, 50 and 80 ms dips dropped neither (0 of 15); 150 and 200 ms dropped power good (10 of 10, 152–228 ms after the
+  rig's command) but never rebooted the Shelly; 300 ms did both, power good first (5 of 5). So the threshold that
+  reboots it lies in 200–300 ms, above power good's (80–150 ms). Step 200–300 ms in 10 ms (logic analyzer on the
+  Shelly's relay output and the board's power good, as in docs/bench-testing.md) to the shortest that reboots it, and
+  record power good's lag at it.
 
 - [ ] **A rebooted gate's session is verified slowly at 17 dBm on the bench.** After a gate reboot the house accepted
   the new session within 1.4–1.9 s at 5 dBm, but in 1.5–4.2 s at 17 dBm (and once over 7.8 s, run

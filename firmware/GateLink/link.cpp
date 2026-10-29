@@ -614,6 +614,7 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
     // it: an answer recorded back then (and kept from us) mustn't count later. Sending a HELLO already replaces a
     // challenge over CHALLENGE_LIFE_MS old, and holding a command sends one at once; this covers the rest.
     if (plen < CHALLENGE_LEN || !challengeSet || !bytesEqual(payload, challenge, CHALLENGE_LEN)) return;
+    if (session == 0) return;  // no session (drawSession never draws it): verified, the window would have no start
     if (now - lastHelloAt >= CHALLENGE_LIFE_MS) return;  // unsigned, as above: an old HELLO never reads as recent
     challengeSet = false;
     stats.lastRxAt = now;

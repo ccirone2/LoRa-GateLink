@@ -24,6 +24,17 @@ When updating one, change it here, in `.github/workflows/ci.yml` (every job), `r
 (arduino-cli with its SHA-256; `tests/tools/test_agent_tooling.py` checks the last against the workflows and this
 table).
 
+The formal verification (`tools/verify`, [architecture.md](architecture.md#verification)) runs on these, as CI's
+`verify` job installs them; `tools/verify/docker/Dockerfile` has them all for a machine without them (Windows,
+macOS). Change a version there, in `ci.yml` (with its SHA-256) and here together (`tests/tools/test_verify.py`
+checks):
+
+| Tool | Version |
+|---|---|
+| ESBMC | 8.5 |
+| TLC (`tla2tools.jar`) | 1.7.4 |
+| Java | the runner's (17 or newer) |
+
 The web console is plain JS (ES modules) with no build step; its lint and tests need Node.js 22 and `npm ci`
 (`package.json`).
 

@@ -355,6 +355,125 @@ any of this, on every reset but power-on (TODO.md, the house's warm-reset blip).
 - `pins.h`: the pin map ([hardware.md](hardware.md) and the web console's `WIRING` table follow it). `crc32.h`: the
   CRC-32 of the config record, the history log's records and the console's request check.
 
+## Verification
+
+`tools/verify` proves the safety properties rather than testing them: ESBMC (a bounded model checker with a clang
+front end) on the firmware's own C++, and TLC on a TLA+ model of the two boards and the air between them, with an
+attacker in it. `make -C tools/verify` runs it all (CI's `verify` job; locally in `tools/verify/docker`). A proof that
+fails prints its counterexample; the judge is the checker, not a test someone wrote to pass.
+
+**On the C++ (ESBMC, `tools/verify/esbmc`).** Each harness `#include`s the firmware's `.cpp` files, so it checks the
+code that ships, and answers everything around it nondeterministically: every setting anywhere in its `PARAMS` range,
+every input on every read, any frame payload, length and seq, the house session changing, console relay tests, and
+time (any gap between loop passes up to just under 2^30 ms while no relay pulses, 50 ms while one does; millis() from
+anywhere, so every run crosses its wrap; a frame handler's millis() up to 20 ms ahead of the pass's `now`).
+
+| Harness | Properties | Kind |
+|---|---|---|
+| `gate.cpp` | **interlock**: a gate coil never energizes while the other is, nor within `INTERLOCK_MS` of its release. **pulse-only**: a coil releases within its pulse's length plus one pass, and energizes only for a command, a relay test or a pulse waiting out the interlock. **no-restart**: a running or waiting pulse's start and end never move. **fresh-cmd**: a command pulses only inside its deadline by the gate's clock (`CMD_LATE_SLACK_MS` plus two frames' airtime late, `CMD_AHEAD_MAX_MS` early), stated in physical time since boot, not with the firmware's clock. **once**: the last command taken never pulses again. **no-stall**: no flash write, radio restart or log save while a relay pulses or waits to | inductive, any run length |
+| `house.cpp` | **sensor-truth**: K2 closes the alarm's contact only while the last STATUS taken said closed, and (`linkloss_open`) no longer than `houseLinkTimeoutMs()` (+1 ms: stamps are `now \| 1`) after it was taken, as of the loop pass, across the wrap. **in-order**: a STATUS is taken only if later than the last one taken in the gate session | inductive, any run length |
+| `link_window.cpp` | **once**: a frame reaches the role at most once per verified peer session unless the role refused it (`linkRefuse`). **after-hello**: nothing at or before the HELLO_ACK that verified the session does. Both with the MAC left to chance, so they hold even for forged frames: the window alone keeps them. The transmitter idle and the channel clear (nothing queued; the window never reads the sending side); one query per frame length | inductive, any run length |
+| `house_cmds.cpp` | **owner-only**: every command the house sends is one the owner switched the controller to since its last command, and none goes before it is armed. Run in a model of the site: the Shelly (follows K1, toggles on SW edges, or detached; SW answered within 200 ms), its 12 V rail cut and restored at any moment, the board's power good, the IN2 opto and the Shelly's reboot each at any delay in a range (below) | bounded: 8 passes from boot |
+
+The inductive proofs: `inv()` in each harness is an invariant over the relays (or the STATUS taken), ghosts in
+physical time and the clocks. The harness checks that it holds after boot (`-DBOOT`: `appRelaysBegin`, the reset memo
+from a crash that may have kept anything, `gateBegin`/`houseBegin`), and that each segment of a loop pass, from any
+state satisfying it, with everything else in the firmware arbitrary (the gate's whole state machine, the house's sync
+windows...), ends in one satisfying it again. The segments are the loop's cut points: the pass's start (Relay::update,
+the radio and flash work `appLoop` guards), one frame handled, one console relay test, the role's loop. A ghost tracks
+where in a pass a segment may start, so any real run is a sequence of them: the invariant, and the properties checked
+inside every segment, hold for runs of any length, at every setting. Each harness also runs with `-DREACH`, an
+assertion that fails if the end of the segment can be reached at all, and must fail: a harness whose assumptions
+excluded every run would otherwise pass by proving nothing (the first draft did, cut by a loop bound).
+
+**The protocol (TLC, `tools/verify/tla/GateLink.tla`).** Both boards' sessions, seqs, replay windows, commands and
+deadlines, STATUS and the sensor, reboots (new sessions, RAM lost, a new clock origin), the gate moved by others; an
+attacker who records every frame and delivers any of them, any number of times, at any later time, in any order, or
+never, but can't forge one or answer a challenge (HMAC-SHA256, 128-bit challenges). Each action cites the firmware it
+stands for; the boards' local steps are the contracts the ESBMC harnesses prove (the link's acceptance is
+`link_window.cpp`'s, the gate's command checks `gate`'s, the sensor `house`'s). Properties: **SensorTruth** (the sensor
+shows closed at most LAG after the gate left closed), **CmdOrder** (a command never pulses after a later one was taken),
+**CmdOnce** (one command, one pulse, across reboots), **CmdFresh** (never past its TTL plus the slack). Each `.cfg`
+states what it expects: the configurations of the firmware before a fix keep finding the bug, so the model is shown to
+see it. Bounds: a few time units (one unit stands for any span: the model's constants are scaled), 4 to 6 frames from
+the house and 3 to 6 from the gate, 1 or 2 commands, 2 boots each, 2 moves off closed by others per gate boot
+(`MaxLeft`: without it the departure count, which every STATUS carries, never ends; the command properties'
+configurations merge states that differ only in the sensor's bookkeeping, `CmdView`); exact clocks (the 100 ppm the
+house allows is analysed, not modelled).
+
+**Mutations.** `tools/mutate.py --verify` breaks each property in a copy of the firmware (`tools/verify/mutations.json`:
+the interlock's gap, a pulse ending late, the busy checks, the deadline, the dedup, the save guards, the sensor's link
+check, the stamps' cap, the window's bits...) and the proof must then fail; one that still passes is a property no proof
+checks. A proof out of time judges nothing (`no verdict`): it neither kills nor spares a mutation.
+
+**What the checker found** (each a host test and a TODO.md item until its fix merges, each fix its own pull request):
+
+1. *A withheld older command runs after a newer one* (TLC, CmdOrder; also CmdOnce, the same mechanism running a
+   renumbered resend twice). Within its deadline, the gate checked only the last command's id.
+2. *A withheld STATUS is taken however old* (TLC, SensorTruth). The house took any STATUS later than the last one it
+   took: withheld frames played back in order, one per link timeout, held the sensor closed for as long as the attacker
+   had kept them, not "up to its link timeout" as the threat model said.
+3. *A user edge begun before K1's change ends its sync window* (ESBMC, `house_cmds.cpp`, a toggling Shelly, and the
+   install's following one when the owner switches twice within its SW response): the Shelly's answer to K1, after the
+   window closed early, became an OPEN.
+4. *A supply dip hidden by a loop stall becomes a CLOSE* (ESBMC, `house_cmds.cpp`, `-DSTALLS_ANYWHERE`): a flash save
+   stalls the house's loop ~0.5 s; a dip under it is never seen (power good is low for 100 ms or so), yet reboots the
+   Shelly, whose relay drop then reads as the owner closing.
+5. *A Shelly reboot the house doesn't see restores an OPEN* (ESBMC, `house_cmds.cpp`, `esbmc-house_cmds-worst`): a dip
+   too short for power good that still reboots the Shelly, just as K1 changes. The relay's drop matches K1 and ends its
+   window early; the Shelly boots back to its last state (parameter 17's default), an edge outside the window, taken
+   for the owner's. Open: covered at the install only if every such dip drops power good first. On the bench it does:
+   dips of 150 and 200 ms drop power good without rebooting the Shelly, 300 ms ones do both (TODO.md; 200–300 ms not
+   yet stepped).
+6. *A HELLO_ACK for session 0 verifies the link with no session* (ESBMC, `link_window.cpp`, after-hello): 0 means no
+   session and no board draws it, but an answer naming it (echoing the challenge) was taken, the link verified with
+   no session and nothing marking where its window starts. Only a key holder can make one: the window alone didn't
+   keep it, as the properties claim. Fixed in 0.20.2: such an answer isn't taken (`link_window.cpp` holds).
+
+**The numbers it rests on.** Every timing below is a range the checker tries in full; the Makefile runs the measured
+range and the worst case the sources allow.
+
+| Number | Source | What depends on it | Worst case |
+|---|---|---|---|
+| `INTERLOCK_MS` 100 ms | chosen (PR #27) after the GateSim saw both inputs at once; the opener's input filter and the relays' contact timing are unmeasured (the G5V-1's datasheet: ~5 ms each) | the gap is proved in firmware time; that 100 ms is enough for the opener is an assumption | not provable here: the opener's input timing isn't published |
+| power good ~0.2 s before the relay into a cut | bench, 30 runs (PR #42); the BQ24195L datasheet gives no deglitch for it at all | a CLOSE from a cut is dropped (`ctrl_confirm_ms`); **owner-only** at the install | run with the order reversed (`BROWNOUT_AFTER_PG` off, `esbmc-house_cmds-worst`): finding 5, a dip that reboots the Shelly without dropping power good (the bench's 150–200 ms dips drop power good and don't reboot it; 200–300 ms unstepped); no setting covers it |
+| power good low ≥ 100 ms in a dip | BQ24195L datasheet: REGN turn-on delay 100 ms min before power good returns | the house sees every dip that drops it, when its loop runs | a loop stall longer than that: finding 4 |
+| IN2 opto 1.6–2.1 s into a cut, misses 300 ms dips | bench (PR #35, #42); the opto itself is µs (PC817): it's the rail's capacitors | only with `ctrl_power_pmic` off | — |
+| Shelly relay drops ~0.46 s into a cut; a 300 ms dip reboots it, a 200 ms one doesn't; boots in ~3.1 s, to its last state | bench (PR #35, e2e dip runs); its manual: LED blinks 4–5 s at boot, parameter 17 (default: restore the last state); no SW response time published | the settle window covers its boot | the checker's Shelly boots at any level | the simulator's Shelly rode through dips under 460 ms and booted in 1.5 s: corrected for the new tests (`brownoutMs`) |
+| Shelly SW response | never documented; bench logs: K1 to the debounced IN1 edge 136–184 ms (p95) | sync windows (`sync_window_ms`, 500 ms at least) | 200 ms modelled |
+| `BOOT_SETTLE_MS` 3 s, `BETWEEN_HOLD_MS`, `BOTH_LIMITS_HOLD_MS` 500 ms, `CLOSED_DISAGREE_MS` 5 s | chosen; the CSW24UL's restart time, AUX timing and travel are unmeasured and unpublished (its manual: none) | the gate's reported state (truth), not the relay proofs | not covered (below) |
+| crystal drift 100 ppm (`CLOCK_DRIFT`) | assumed; two ±20 ppm tuning-fork crystals, one outdoors at −20 °C (−0.036 ppm/°C²), reach ~115 ppm | commands' slack over 3 h; the house's clock readings | over 100 ppm, readings behind its reckoning by more aren't taken (availability) |
+| loop pass while pulsing ≤ 50 ms; stalls ~0.5 s | soak `loop_max_us` 510 ms (flash save with radio restart); docs said "up to ~1 s" | pulse-only's overrun bound; finding 4 | 1 s modelled |
+
+**Not covered, and why.**
+
+- The crypto: the MAC and cipher are taken as ideal (the stand-in SHA256 and AES compute nothing; a forged frame's tag
+  matches or not at the checker's choice, and the window proofs hold either way). The 128-bit challenge's freshness is
+  an assumption of the protocol model.
+- `radio.cpp`, `extflash.cpp`, `console.cpp` and `GateLink.ino` aren't run: the drivers are answered by the harness, and
+  the console's JSON is beyond the checker. So the console's holding `config.save` and the like during a pulse is tested
+  (systests), not proved. `sendDiag` and three config functions reach settings through pointers to member, which ESBMC
+  can't follow: the harnesses skip `sendDiag` (it only reads) and use name-for-name equivalents of
+  `paramSet`/`paramValid` generated from `PARAMS`.
+- The gate's reported state (the limit holds, `fault`, `no_power`) is proved only not to touch the relays: whether it
+  is true depends on the opener, whose timings are unpublished. The host tests and the bench check it.
+- The house's commands are proved over 8 passes from boot, not inductively; K1's consistency with the gate (resync)
+  isn't a safety property and isn't proved. **owner-only** can't tell the owner from the Shelly where the house can't
+  either: in follow mode an owner switching on just as K1 does makes the same IN1 edge as the Shelly following K1, so
+  such an edge counts as the owner's.
+- `supply.cpp` runs only in `house_cmds.cpp`, on an I2C bus that always answers. A failed read keeps the last reading,
+  so a dip during bus errors would go unseen; the bus failing isn't modelled.
+- ESBMC 8.5 calls a method on the wrong operand of a conditional (`(c ? a : b).f()`); the firmware binds a reference
+  first, and `tests/tools/test_verify.py` keeps the form out of it (it made a proof fail on correct code; read the other
+  way, it could pass on wrong code).
+- The protocol model is bounded and its clocks exact; the house's 100 ppm allowance lets an attacker who relays every
+  STATUS late drag its reckoning back by 100 ppm of the attack's length (8.6 s a day).
+- The first STATUS a house takes in a gate session (after either board restarts) has no reckoning to be dated against
+  (`status_first.cfg` once finding 2 is fixed): an attacker who withholds STATUS from the handshake on can deliver one
+  late. Closing it needs the STATUS to answer a challenge of the house's (a frame format change: ROADMAP).
+- The checker runs on a 64-bit host; the firmware's arithmetic is in fixed-width types, which the checks rely on.
+- Power cuts mid-save and the config record (`config.cpp`): host tests, not proofs.
+
 ## Web console
 
 Plain ES modules, no build step. `web/index.html` carries a content security policy (scripts and data from the

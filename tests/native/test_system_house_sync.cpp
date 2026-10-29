@@ -709,8 +709,9 @@ TEST(house_sync_window_boundary_inside_is_sync_outside_is_a_command) {
 TEST(house_sync_window_starts_on_the_pass_k1_changes) {
   // Another controller closes the gate from open. On the pass the house hears closed it releases K1 and opens the
   // window before it reads IN1, so the user's OFF debounced on that very pass is a sync, while one debounced on the pass
-  // before is the user's (a CLOSE, which the house then drops: the gate is closed by then). The same site three times
-  // (the simulation is deterministic): first to learn when the house hears closed.
+  // before is the user's (a CLOSE, which the house then drops: the gate is closed by then). The sync doesn't end the
+  // window, though it matches K1: the Shelly's answer may still be coming (SHELLY_ANSWER_MS, 0.20.5). The same site three
+  // times (the simulation is deterministic): first to learn when the house hears closed.
   uint32_t t = 0;
   for (int run = 0; run < 3; run++) {  // 0: learn t; 1: edge on t (inside); 2: edge on t - 1 (outside)
     Site w;
@@ -738,7 +739,7 @@ TEST(house_sync_window_starts_on_the_pass_k1_changes) {
       Found sy = find(w.house, "sync", h0, 0);
       CHECK(sy.ok);
       CHECK_EQ(sy.e.at, t);
-      CHECK(w.house.status()["sync_window"] == false);  // it matched K1: ended there
+      CHECK(w.house.status()["sync_window"] == true);  // the Shelly's answer may still be coming
       w.run(4000);
       CHECK_EQ(countSince(w.house, "ctrl", h0), 0);
       CHECK_EQ(countSince(w.house, "cmd_suppressed", h0), 0);
@@ -768,9 +769,9 @@ TEST(house_sync_window_starts_on_the_pass_k1_changes) {
 // [sync-window]
 TEST(house_sync_window_ends_on_the_matching_edge_only) {
   // FOLLOW: another controller opens, K1 goes on and the Shelly's ON edge (the level K1 asked for) is a sync that ends
-  // the window there and then, so the user's OFF 120 ms later is the user's CLOSE. TOGGLE: the Shelly flips the other
-  // way, an edge that doesn't match, and the window stays open its full sync_window_ms: the user's ON inside it is a
-  // sync (it matches, so it ends the window), never a command.
+  // the window once SHELLY_ANSWER_MS (500) have passed since K1 moved, so the user's OFF 120 ms later is the user's
+  // CLOSE. TOGGLE: the Shelly flips the other way, an edge that doesn't match, and the window stays open its full
+  // sync_window_ms: the user's ON inside it is a sync (it matches, so it ends the window), never a command.
   {
     Site w;
     w.commission();
@@ -779,8 +780,11 @@ TEST(house_sync_window_ends_on_the_matching_edge_only) {
     Found sy = waitFor(w, w.house, "sync", h0, 300, 1);
     CHECK(sy.ok);
     CHECK_EQ(sy.e.at - t, SYNC_EDGE);
+    runTo(w, t + 499);
+    CHECK(w.house.status()["sync_window"] == true);
+    runTo(w, t + 501);
     CHECK(w.house.status()["sync_window"] == false);
-    runTo(w, sy.e.at + 120);
+    runTo(w, t + 620);
     size_t h1 = w.house.logs.size();
     w.user(false);
     Found c = waitFor(w, w.house, "ctrl", h1, 100, 0);
@@ -830,9 +834,9 @@ TEST(house_sync_window_ends_on_the_matching_edge_only) {
 // user switches the controller off just as the closed STATUS arrives: the user's edge is debounced 16 ms after K1 goes
 // off, inside the window K1's change opened and at the level it expects, but begun before it. It mustn't end the window:
 // the Shelly's answer to K1 (a toggle, back ON) follows 65 ms later and would then be taken as the user's OPEN, opening
-// the gate the user had just switched closed. Found by the model checker (tools/verify/esbmc/house_cmds.cpp,
-// owner-only, any Shelly mode).
-XFAIL_TEST(house_sync_window_survives_an_edge_begun_before_it, "TODO.md: a user edge begun before K1's change ends its sync window") {
+// the gate the user had just switched closed (before 0.20.5 it did). Found by the model checker
+// (tools/verify/esbmc/house_cmds.cpp, owner-only, any Shelly mode).
+TEST(house_sync_window_survives_an_edge_begun_before_it) {
   Site w;
   w.shelly.mode = Shelly::TOGGLE;
   w.commission();
@@ -865,7 +869,7 @@ XFAIL_TEST(house_sync_window_survives_an_edge_begun_before_it, "TODO.md: a user 
 // the Shelly's answer for an OPEN and send that too (opposite to a command not yet reported, so not suppressed): the
 // gate closing, then opening against the owner's last word. Found by the model checker
 // (tools/verify/esbmc/house_cmds.cpp, owner-only, the install's setup).
-XFAIL_TEST(house_sync_window_survives_a_double_switch_as_k1_changes, "TODO.md: a user edge begun before K1's change ends its sync window") {
+TEST(house_sync_window_survives_a_double_switch_as_k1_changes) {
   Site w;
   w.shelly.swDebounceMs = 120;
   w.commission();
@@ -888,6 +892,50 @@ XFAIL_TEST(house_sync_window_survives_a_double_switch_as_k1_changes, "TODO.md: a
   w.run(15000);
   CHECK_EQ(countSince(w.house, "cmd_sent", h0, ACT_OPEN_), 0);
   CHECK_EQ(countSince(w.gate, "pulse", g0, 1), 0);
+}
+
+// [sync-window] As above, but the owner's ON begins just after K1 goes on, before the Shelly answers (its SW debounce
+// 130 ms): it matches K1 and began after the window opened, so it ends the window as the Shelly's answer would.
+TEST(house_sync_window_survives_a_double_switch_just_after_k1_changes) {
+  Site w;
+  w.shelly.swDebounceMs = 130;
+  w.commission();
+  CHECK(!w.alarmSwitch());
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  w.extPress(true, 300);
+  CHECK(w.runUntil([&] { return w.house.coil(1); }, 30000));
+  uint32_t k = w.now;
+  runTo(w, k + 5);
+  w.user(true);
+  runTo(w, k + 60);
+  w.user(false);
+  runTo(w, k + 115);
+  w.house.send("{\"id\":900,\"cmd\":\"config.save\"}");
+  w.run(15000);
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0, ACT_OPEN_), 0);
+  CHECK_EQ(countSince(w.gate, "pulse", g0, 1), 0);
+}
+
+// [sync-window] A Shelly toggling on SW edges: the owner's ON just after K1 goes on marks the window answered, then the
+// Shelly flips OFF in answer to K1 while a flash save stalls the loop. The first pass after the save reads that OFF still
+// in its debounce: the window mustn't end there, or the OFF becomes a CLOSE the owner never asked for.
+TEST(house_sync_window_outlasts_an_edge_still_in_its_debounce) {
+  Site w;
+  w.shelly.mode = Shelly::TOGGLE;
+  w.shelly.swDebounceMs = 130;
+  w.commission();
+  CHECK(!w.alarmSwitch());
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  w.extPress(true, 300);
+  CHECK(w.runUntil([&] { return w.house.coil(1); }, 30000));
+  uint32_t k = w.now;
+  runTo(w, k + 20);
+  w.user(true);
+  runTo(w, k + 100);
+  w.house.send("{\"id\":900,\"cmd\":\"config.save\"}");
+  w.run(15000);
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0, ACT_CLOSE_), 0);
+  CHECK_EQ(countSince(w.gate, "pulse", g0, 2), 0);
 }
 
 // [sync-window] [armed-after-status]

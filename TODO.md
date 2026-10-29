@@ -21,20 +21,6 @@ once its fix is merged and record it in the pull request.
   analyzer (K1 = D1, K2 = D2 on two channels; docs/bench-testing.md), once those are wired.
 
 
-- [ ] **A user edge begun before K1's change ends its sync window.** Found by the model checker
-  (`tools/verify/esbmc/house_cmds.cpp`, `owner-only`, a Shelly set to toggle on SW edges): with the gate open, another
-  controller closes it and the user switches the controller off at the same moment. The closed STATUS turns K1 off
-  and opens a sync window expecting OFF; the user's edge, begun 35 ms earlier, is debounced inside it and ends it (a
-  matching edge ends a window early, so a user's next switch isn't swallowed). The Shelly then toggles on K1's edge,
-  back ON, outside the window: the house sends OPEN and the gate opens, against the user. The invariant says a
-  toggling Shelly must never turn sync into commands. Trace (systests, `house_sync_window_survives_an_edge_begun_before_it`,
-  XFAIL): K1 off 35003, sync 0 at 35019 (window ended), ctrl 1 at 35084, cmd_sent OPEN, gate pulse K1 at 35253. The
-  install's Shelly (it follows the SW level) does the same if the owner switches twice within its SW response time
-  (ESBMC, the install's setup: the owner switches on in the pass a STATUS turns K1 on, which ends K1's window; off 52 ms
-  later, sent as CLOSE; the Shelly then follows K1's edge back on, 174 ms after it, outside the window: OPEN). A
-  coincidence within a debounce either way, but a scene in the alarm system could switch twice. Fix: only an edge begun
-  after the window opened (the Shelly answering K1) may end it early.
-
 - [ ] **A supply dip hidden by a loop stall becomes a CLOSE.** Found by the model checker
   (`tools/verify/esbmc/house_cmds.cpp`, `owner-only`, `-DSTALLS_ANYWHERE`, the Shelly following K1): the house's loop
   stops ~0.5 s in a flash save (with the radio restart; the soak's `loop_max_us` is 510 ms); a dip of the 12 V under it

@@ -49,12 +49,11 @@ esbmc-link_window: $(BUILD)/params.h
 # finding still open or a dependency the docs name (architecture.md, "Verification").
 INSTALL := -D SHELLY_MODE=0 -D BROWNOUT_AFTER_PG
 esbmc-house_cmds: esbmc-house_cmds-install esbmc-house_cmds-toggle esbmc-house_cmds-stalls esbmc-house_cmds-worst
-# Finding 3 (TODO.md) is open on this firmware: the owner switching twice within the Shelly's SW response.
 esbmc-house_cmds-install: $(BUILD)/params.h
-	@$(RUN) $(INSTALL) --expect fail --expect-msg owner-only esbmc/house_cmds.cpp
-# Any Shelly mode, toggling on SW edges included (finding 3, TODO.md).
+	@$(RUN) $(INSTALL) esbmc/house_cmds.cpp
+# Any Shelly mode, toggling on SW edges included (finding 3, fixed in 0.20.5).
 esbmc-house_cmds-toggle: $(BUILD)/params.h
-	@$(RUN) -D BROWNOUT_AFTER_PG --expect fail --expect-msg owner-only esbmc/house_cmds.cpp
+	@$(RUN) -D BROWNOUT_AFTER_PG esbmc/house_cmds.cpp
 # A loop stall (a flash save) anywhere, over a dip too (finding 4, TODO.md).
 esbmc-house_cmds-stalls: $(BUILD)/params.h
 	@$(RUN) $(INSTALL) -D STALLS_ANYWHERE --expect fail --expect-msg owner-only esbmc/house_cmds.cpp

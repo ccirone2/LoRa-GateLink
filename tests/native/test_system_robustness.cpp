@@ -2237,3 +2237,37 @@ TEST(robustness_resync_window_outlasts_a_matching_edge_so_the_resync_never_comma
   checkAgree(w);
   w.checkClean();
 }
+
+// [sync-window] [resync]
+TEST(robustness_resync_window_stays_open_until_k1_is_back) {
+  // As above, but the user's edge (at the level the window expects) comes 600 ms into the resync: past
+  // SHELLY_ANSWER_MS, IN1 steady, with K1 still away for the rest of resync_ms. The window still mustn't end before K1
+  // is back (settleUntil), or the controller's edges until then would count as the user's.
+  World w;
+  Guard g{ w };
+  w.commission();
+  Rec r(w);
+  w.shelly.mode = Shelly::DETACHED;
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size(), k1 = r.n(HK1);
+  w.extPress(true, 300);
+  CHECK(r.until([&] { return r.n(HK1) > k1; }, 12000));
+  uint32_t K = r.e[HK1][k1].at;
+  r.run(SYNC_MS + 500);
+  CHECK(!w.alarmSwitch());
+  CHECK(!syncWindow(w));
+  w.shelly.mode = Shelly::FOLLOW;
+  uint32_t R = (K | 1) + MISMATCH_MS;
+  Found rs = waitFor(r, w.house, "resync", h0, MISMATCH_MS, 1);
+  CHECK(rs.ok);
+  CHECK_EQ(rs.e.at, R);
+  r.runTo(R + 600);
+  w.user(true);
+  r.runTo(R + RESYNC_MS - 50);  // the edge taken and steady, K1 still away
+  CHECK(syncWindow(w));
+  r.run(SYNC_MS + 15000);
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0), 0);
+  CHECK_EQ(countSince(w.gate, "cmd_rx", g0), 0);
+  CHECK(w.opener.atOpen());
+  checkAgree(w);
+  w.checkClean();
+}

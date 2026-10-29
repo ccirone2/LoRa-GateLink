@@ -1049,8 +1049,8 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncActive = false;",
-    "replace": "      if (shellyLevel == syncExpect) syncActive = false;"
+    "find": "      if (elapsed(now, settleUntil, 0)) syncAnswered = true;",
+    "replace": "      syncAnswered = true;"
    }
   ]
  },
@@ -1065,8 +1065,8 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncActive = false;",
-    "replace": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 1)) syncActive = false;"
+    "find": "      if (elapsed(now, settleUntil, 0)) syncAnswered = true;",
+    "replace": "      if (elapsed(now, settleUntil, 1)) syncAnswered = true;"
    }
   ]
  },
@@ -1450,21 +1450,6 @@
   ]
  },
  {
-  "name": "house_sync_m11_any_in1_edge_inside",
-  "invariant": "sync-window",
-  "why": "Any IN1 edge inside the window ends it, not only one that matches the K1 level, so a TOGGLE Shelly's wrong-way flip closes the window early.",
-  "killed_by": [
-   "house_sync_window_ends_on_the_matching_edge_only"
-  ],
-  "edits": [
-   {
-    "file": "role_house.cpp",
-    "find": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncActive = false;",
-    "replace": "      if (elapsed(now, settleUntil, 0)) syncActive = false;"
-   }
-  ]
- },
- {
   "name": "house_sync_m12_only_edge_matches_k1",
   "invariant": "sync-window",
   "why": "Only an edge that matches K1 counts as a sync. A non-matching edge inside the window (Shelly that shouldn't have moved, chatter) falls through to the command path.",
@@ -1477,8 +1462,8 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "    if (syncActive) {\n      if (shellyLevel == syncExpect",
-    "replace": "    if (syncActive && shellyLevel == syncExpect) {\n      if (shellyLevel == syncExpect"
+    "find": "    if (syncActive) {\n      if (elapsed(now, settleUntil, 0)) syncAnswered = true;",
+    "replace": "    if (syncActive && shellyLevel == syncExpect) {\n      if (elapsed(now, settleUntil, 0)) syncAnswered = true;"
    }
   ]
  },
@@ -2161,6 +2146,7 @@
   "invariant": "sync-window",
   "why": "M29: a resync's window can be ended by an IN1 edge at the target level while K1 is still away (the user's edge in its debounce, or chatter): the controller then following K1 away is taken as the user, a command away from the gate.",
   "killed_by": [
+   "robustness_resync_window_stays_open_until_k1_is_back",
    "robustness_chaos_seed_8",
    "robustness_resync_window_outlasts_a_matching_edge_so_the_resync_never_commands_the_gate"
   ],
@@ -3225,6 +3211,37 @@
     "file": "role_house.cpp",
     "find": "  if (dated && (int64_t)(held - clock) > (int64_t)(STATUS_TTL_MS + radioAirtimeMs(LINK_OVERHEAD + ST_LEN)",
     "replace": "  if (false && (int64_t)(held - clock) > (int64_t)(STATUS_TTL_MS + radioAirtimeMs(LINK_OVERHEAD + ST_LEN)"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_window_ends_before_the_shelly_answers",
+  "invariant": "sync-window",
+  "why": "a matching IN1 edge ends the sync window at once, before the Shelly's answer to K1 can have come: a user's edge just after K1 moved ends it, and the Shelly following K1 back after the user's next switch becomes a command (0.20.5)",
+  "killed_by": [
+   "house_sync_window_survives_a_double_switch_just_after_k1_changes",
+   "house_sync_window_ends_on_the_matching_edge_only"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "      && elapsed(now, syncFrom, SHELLY_ANSWER_MS))",
+    "replace": "      )"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_window_ends_on_an_edge_in_its_debounce",
+  "invariant": "sync-window",
+  "why": "the sync window ends early while IN1 reads otherwise in its debounce: a toggling Shelly's answer to K1, read first after a loop stall, then becomes a command (0.20.5)",
+  "killed_by": [
+   "house_sync_window_outlasts_an_edge_still_in_its_debounce"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "shellyLevel == syncExpect && in1.raw() == shellyLevel",
+    "replace": "shellyLevel == syncExpect"
    }
   ]
  },

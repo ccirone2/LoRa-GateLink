@@ -448,9 +448,9 @@ relay (as on the bench, 142 of 142 real cuts), so nothing proves the wait needed
 5. *A Shelly reboot the house doesn't see restores an OPEN* (ESBMC, `house_cmds.cpp`, `esbmc-house_cmds-worst`): a dip
    too short for power good that still reboots the Shelly, just as K1 changes. The relay's drop matches K1 and ends its
    window early; the Shelly boots back to its last state (parameter 17's default), an edge outside the window, taken
-   for the owner's. Open: covered at the install only if every such dip drops power good first. On the bench it does:
-   dips of 150 and 200 ms drop power good without rebooting the Shelly, 300 ms ones do both (TODO.md; 200–300 ms not
-   yet stepped).
+   for the owner's. Covered at the install, where every such dip drops power good first, as measured: the shortest dip
+   that reboots the bench's Shelly is ~280 ms, and power good drops in every dip from 150 ms up, always before the
+   relay (TODO.md). Open for a site where that order could fail.
 6. *A HELLO_ACK for session 0 verifies the link with no session* (ESBMC, `link_window.cpp`, after-hello): 0 means no
    session and no board draws it, but an answer naming it (echoing the challenge) was taken, the link verified with
    no session and nothing marking where its window starts. Only a key holder can make one: the window alone didn't
@@ -462,10 +462,10 @@ range and the worst case the sources allow.
 | Number | Source | What depends on it | Worst case |
 |---|---|---|---|
 | `INTERLOCK_MS` 100 ms | chosen (PR #27) after the GateSim saw both inputs at once; the opener's input filter and the relays' contact timing are unmeasured (the G5V-1's datasheet: ~5 ms each) | the gap is proved in firmware time; that 100 ms is enough for the opener is an assumption | not provable here: the opener's input timing isn't published |
-| power good ~0.2 s before the relay into a cut | bench, 30 runs (PR #42); the BQ24195L datasheet gives no deglitch for it at all | a CLOSE from a cut is dropped (`ctrl_confirm_ms`); **owner-only** at the install | run with the order reversed (`BROWNOUT_AFTER_PG` off, `esbmc-house_cmds-worst`): finding 5, a dip that reboots the Shelly without dropping power good (the bench's 150–200 ms dips drop power good and don't reboot it; 200–300 ms unstepped); no setting covers it |
+| power good ~0.2 s before the relay into a cut | bench, 30 runs (PR #42); the BQ24195L datasheet gives no deglitch for it at all | a CLOSE from a cut is dropped (`ctrl_confirm_ms`); **owner-only** at the install | run with the order reversed (`BROWNOUT_AFTER_PG` off, `esbmc-house_cmds-worst`): finding 5, a dip that reboots the Shelly without dropping power good (on the bench every dip from 150 ms drops power good, and only those from ~280 ms reboot the Shelly); no setting covers it |
 | power good low ≥ 100 ms in a dip | BQ24195L datasheet: REGN turn-on delay 100 ms min before power good returns | the house sees every dip that drops it, when its loop runs | a loop stall longer than that: finding 4 |
 | IN2 opto 1.6–2.1 s into a cut, misses 300 ms dips | bench (PR #35, #42); the opto itself is µs (PC817): it's the rail's capacitors | only with `ctrl_power_pmic` off | — |
-| Shelly relay drops ~0.46 s into a cut; a 300 ms dip reboots it, a 200 ms one doesn't; boots in ~3.1 s, to its last state | bench (PR #35, e2e dip runs); its manual: LED blinks 4–5 s at boot, parameter 17 (default: restore the last state); no SW response time published | the settle window covers its boot | the checker's Shelly boots at any level | the simulator's Shelly rode through dips under 460 ms and booted in 1.5 s: corrected for the new tests (`brownoutMs`) |
+| Shelly relay drops ~0.4 s into a cut; dips from ~280 ms reboot it, 270 ms ones don't; boots in ~3.1 s, to its last state | bench (PR #35, e2e dip runs); its manual: LED blinks 4–5 s at boot, parameter 17 (default: restore the last state); no SW response time published | the settle window covers its boot | the checker's Shelly boots at any level | the simulator's Shelly rode through dips under 460 ms and booted in 1.5 s: corrected for the new tests (`brownoutMs`) |
 | Shelly SW response | never documented; bench logs: K1 to the debounced IN1 edge 136–184 ms (p95) | sync windows (`sync_window_ms`, 500 ms at least) and their early end (`SHELLY_ANSWER_MS`, 500 ms) | 200 ms modelled |
 | `BOOT_SETTLE_MS` 3 s, `BETWEEN_HOLD_MS`, `BOTH_LIMITS_HOLD_MS` 500 ms, `CLOSED_DISAGREE_MS` 5 s | chosen; the CSW24UL's restart time, AUX timing and travel are unmeasured and unpublished (its manual: none) | the gate's reported state (truth), not the relay proofs | not covered (below) |
 | crystal drift 200 ppm (`CLOCK_DRIFT`; 100 ppm before 0.20.4) | assumed; two ±20 ppm tuning-fork crystals, one outdoors at −20 °C (−0.036 ppm/°C²), reach ~115 ppm | commands' slack over 3 h; the house's clock readings; the STATUS age check | the ~115 ppm worst case is inside it; past 200 ppm a reading behind the reckoning by more isn't taken, and a STATUS that late is refused (availability, not truth) |

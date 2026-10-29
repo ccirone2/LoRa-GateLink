@@ -205,6 +205,7 @@ void Board::tick() {
   else if (!vinLostAt) vinLostAt = w.now | 1;
   bool alive = vinNow || lipo || !after(w.now, vinLostAt + holdUpMs);
   pmicGood = !vinLostAt || !after(w.now, vinLostAt + w.pgLagMs);
+  if (!pmicGood) pmicDipped = true;
   if (!alive) {
     if (state != OFF) powerOff();
     return;
@@ -639,12 +640,23 @@ void supplyBegin() {
   Board &b = *cur;
   supplyGoodNow[b.idx] = !b.pmicKnown || b.pmicGood;
   b.pmicPollAt = b.clockMs;
+  b.pmicDipped = false;
   b.fnLog(EV_SUPPLY, b.pmicKnown ? supplyGoodNow[b.idx] : -1, b.pmicKnown ? (supplyGoodNow[b.idx] ? 0x04 : 0) : -1);
 }
 void supplyPoll(uint32_t now) {
   Board &b = *cur;
   if (b.preLinkUs) b.block(b.preLinkUs);
-  if (!b.pmicKnown || !after(now, b.pmicPollAt + 5)) return;
+  if (!b.pmicKnown) return;
+  if (b.pmicDipped) {  // low since the last poll, maybe inside a stall (supply.cpp supplyWait): this pass sees it
+    b.pmicDipped = false;
+    if (supplyGoodNow[b.idx]) {
+      supplyGoodNow[b.idx] = false;
+      b.pmicPollAt = now;
+      b.fnLog(EV_SUPPLY, 0, 0);
+      return;
+    }
+  }
+  if (!after(now, b.pmicPollAt + 5)) return;
   b.pmicPollAt = now;
   if (b.pmicGood == supplyGoodNow[b.idx]) return;
   supplyGoodNow[b.idx] = b.pmicGood;

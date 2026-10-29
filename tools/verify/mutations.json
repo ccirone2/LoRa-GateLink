@@ -454,6 +454,22 @@
   ]
  },
  {
+  "name": "v_stall_reads_no_power_good",
+  "invariant": "ctrl-power",
+  "why": "supplyWait no longer keeps a low power good read inside a stall: a dip a flash save hides becomes a CLOSE",
+  "targets": [
+   "esbmc-house_cmds-stalls",
+   "esbmc-house_cmds-install"
+  ],
+  "edits": [
+   {
+    "file": "supply.cpp",
+    "find": "  if (s >= 0 && !(s & PG_BIT) && dipped < 0) dipped = s;",
+    "replace": "  (void)s;"
+   }
+  ]
+ },
+ {
   "name": "v_hello_ack_session_0_verifies",
   "invariant": "replay",
   "why": "a HELLO_ACK naming session 0 is taken: verified with no session, a frame from before the handshake reaches the role",

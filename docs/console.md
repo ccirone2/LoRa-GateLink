@@ -264,7 +264,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `input` | spare input number (house 2/3/4, 2 only with `ctrl_power_sense` off; gate 3/4) | level |
 | `lbt_forced` | message type | ms it waited (for a channel that stayed busy, or frames heard so often the gaps never opened) |
 | `cfg` | at boot, config source: 0 defaults, 1 SPI flash, 2 program flash | saved settings dropped (unknown id or out of range) |
-| `supply` | board supply (VIN) power good: 1 good, 0 lost (on the LiPo); at boot −1 if the charger didn't answer | charger status register (REG08) |
+| `supply` | board supply (VIN) power good: 1 good, 0 lost (on the LiPo; also when it was read low during a loop stall and may be back already); at boot −1 if the charger didn't answer | charger status register (REG08) |
 | `cmd_hold` | pending command: 1 held (a HELLO came from an unverified session), 0 sent after all (the verified session answered), 2 dropped (the new session verified: the gate restarted), 3 waiting for the gate's clock to give it a deadline in (no STATUS yet from that gate session: it just restarted, or a link did; at most `cmd_ttl_s`, then `cmd_dropped`) | that session id |
 | `health` | fault output D5 changed (`fault_out`, see Fault output): 1 HIGH (healthy), 0 LOW (needs attention), −1 released (`fault_out` turned off: an input again) | the problems then, as bits: 1 starting, 2 radio, 4 link, 8 ac, 16 no_power, 32 fault, 64 reboots, 128 ctrl_sense, 256 stuck (0 = none) |
 | `cmd_late` | command id (gate: refused, no pulse) | ms past its deadline (a command delayed or played back); negative: a deadline that far ahead of the gate's clock, further than any `cmd_ttl_s` allows |

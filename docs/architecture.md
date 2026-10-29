@@ -343,7 +343,12 @@ any of this, on every reset but power-on (TODO.md, the house's warm-reset blip).
 - `board.h` is what needs the chip: kick, reset, free RAM, the kept RAM (implemented in `GateLink.ino`, and by the host
   simulation in `tests/native`, which keeps the words across a reset and fills them with garbage at power-on, so
   everything from `app.cpp` down except the radio, flash, charger and console drivers builds on the PC).
-- `supply.cpp`: the board's VIN power good, read from the BQ24195L charger over I2C (read-only).
+- `supply.cpp`: the board's VIN power good, read from the BQ24195L charger over I2C (read-only). Also read every
+  5 ms inside the loop's stalls (0.20.6): `delay()` calls `yield()`, which the firmware defines (`supplyWait`), and the
+  flash's busy wait calls it too. A low reading there is kept and reported at the next pass (`supply` a=0), whatever
+  the charger reads by then. Before, a ~0.5 s flash save with its radio restart could hide a 12 V dip entirely: the
+  house then saw the Shelly's relay drop (it reboots on a 300 ms dip) with power reading good, and sent a CLOSE
+  (finding 4 of the model checker, "Verification"). `supplyWait` doesn't log: it may run inside a flash write.
 - `io.cpp`: `Input` (debounced, internal pull-down, active HIGH) and `Relay` (non-blocking pulses, optionally
   delayed; `gapLeft` for the interlock).
 - `log.cpp`: the event log, a ring of `LOG_SIZE` entries in the kept RAM (after the reset memo, all of it checked by a
@@ -411,7 +416,12 @@ house allows is analysed, not modelled).
 **Mutations.** `tools/mutate.py --verify` breaks each property in a copy of the firmware (`tools/verify/mutations.json`:
 the interlock's gap, a pulse ending late, the busy checks, the deadline, the dedup, the save guards, the sensor's link
 check, the stamps' cap, the window's bits...) and the proof must then fail; one that still passes is a property no proof
-checks. A proof out of time judges nothing (`no verdict`): it neither kills nor spares a mutation.
+checks. A proof out of time judges nothing (`no verdict`): it neither kills nor spares a mutation. `-worst` (expected
+to fail either way) and `-stalls` (no verdict at all, below) can't judge one; `v_stall_reads_no_power_good` alone
+runs `-stalls`, which finds it in minutes. On 0.20.6 every mutation is killed but `v_close_without_confirm`: a CLOSE
+sent without `ctrl_confirm_ms` passes every proof, since in the install's setup power good drops before the Shelly's
+relay (as on the bench, 142 of 142 real cuts), so nothing proves the wait needed or enough. Without power good
+(`ctrl_power_pmic` off) it is too short: the IN2 opto drops ~2.1 s into a cut, the relay ~0.46 s.
 
 **What the checker found** (each a host test and a TODO.md item until its fix merges, each fix its own pull request):
 
@@ -432,7 +442,9 @@ checks. A proof out of time judges nothing (`no verdict`): it neither kills nor 
    ending it only on an edge begun after K1 moved, covered neither path alone and isn't needed with this one.)
 4. *A supply dip hidden by a loop stall becomes a CLOSE* (ESBMC, `house_cmds.cpp`, `-DSTALLS_ANYWHERE`): a flash save
    stalls the house's loop ~0.5 s; a dip under it is never seen (power good is low for 100 ms or so), yet reboots the
-   Shelly, whose relay drop then reads as the owner closing.
+   Shelly, whose relay drop then reads as the owner closing. Fixed in 0.20.6: the stall's waits read power good too
+   (`yield()`, `supplyWait`) and keep a low reading for the next pass. The host test now holds; the proof
+   (`esbmc-house_cmds-stalls`) hasn't finished (below).
 5. *A Shelly reboot the house doesn't see restores an OPEN* (ESBMC, `house_cmds.cpp`, `esbmc-house_cmds-worst`): a dip
    too short for power good that still reboots the Shelly, just as K1 changes. The relay's drop matches K1 and ends its
    window early; the Shelly boots back to its last state (parameter 17's default), an edge outside the window, taken
@@ -487,6 +499,11 @@ range and the worst case the sources allow.
   late. Closing it needs the STATUS to answer a challenge of the house's (a frame format change: ROADMAP).
 - The checker runs on a 64-bit host; the firmware's arithmetic is in fixed-width types, which the checks rely on.
 - Power cuts mid-save and the config record (`config.cpp`): host tests, not proofs.
+- `esbmc-house_cmds-stalls` (a flash save's stall anywhere, finding 4's fix) hasn't finished on a 4-core, 16 GB
+  machine: no verdict in 6 hours at 8 passes, nor in 90 minutes at 6 with Boolector or Z3 (Bitwuzla ran out of 4 GB),
+  nor in 3 hours with the outage's start fixed to one pass. With findings 3 and 4 open it finds a counterexample in a
+  minute or two; the install's setup without stalls anywhere holds. Finding 4's fix rests on its host test until then, and the
+  target stays out of `esbmc-house_cmds` (and CI): it runs by name.
 
 ## Web console
 

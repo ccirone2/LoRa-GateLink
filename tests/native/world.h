@@ -90,6 +90,7 @@ struct Board {
   uint32_t vinLostAt = 0;   // 0 = VIN present
   bool pmicKnown = true;
   bool pmicGood = true;     // charger's power good, as last polled
+  bool pmicDipped = false;  // power good was low since the last poll (the firmware reads it inside stalls too)
   uint32_t pmicPollAt = 0;
 
   // Pins

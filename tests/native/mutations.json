@@ -2264,6 +2264,7 @@
   "invariant": "sensor-closed-only-known",
   "why": "S1: the house takes any STATUS the link takes, also one older than the last it took (withheld at the house and played back late): an old closed sets it back to closed and closes the contact sensor while the gate stands open.",
   "killed_by": [
+   "link_withheld_status_delivered_just_after_a_newer_one_changes_nothing",
    "link_withheld_status_delivered_late_changes_nothing"
   ],
   "edits": [

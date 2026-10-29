@@ -223,6 +223,31 @@ TEST(link_withheld_status_delivered_late_changes_nothing) {
   CHECK(w.opener.atOpen());
 }
 
+// [sensor-closed-only-known] As above, but played back within a second of the newer STATUS the house took: inside the
+// age check's slack (STATUS_STALE_SLACK_MS, 2 s, 0.20.4), so only the order (older than the last one taken) keeps it out.
+TEST(link_withheld_status_delivered_just_after_a_newer_one_changes_nothing) {
+  World w;
+  w.commission();
+  CHECK(w.sensorClosed());
+  Bytes kept;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from != w.gate.idx || f.type() != 5) return false;
+    if (kept.empty()) kept = f.b;
+    return seqOf(f.b) == seqOf(kept);
+  };
+  CHECK(w.runUntil([&] { return !kept.empty(); }, 40000));
+  CHECK_EQ(w.plain(kept)[0], GS_CLOSED_);
+  uint32_t t0 = w.now;
+  w.extPress(true, 500);
+  CHECK(w.runUntil([&] { return w.houseSees() != GS_CLOSED_; }, 5000));
+  CHECK(!w.sensorClosed());
+  w.inject(w.house, kept);
+  w.run(200);
+  CHECK(w.now - t0 < 2000);  // young enough for the age check (STATUS_STALE_SLACK_MS)
+  CHECK(w.houseSees() != GS_CLOSED_);
+  CHECK(!w.sensorClosed());
+}
+
 // [freshness] [pulse-only] A command kept from the gate (jammed at it while recorded: every send of it) and played back
 // a minute after the house gave it up (threat model withheld-command-fires-late). Its seq is still inside the gate's
 // replay window, so the link takes it, but its deadline (the gate's clock, as the house had it from STATUS) has

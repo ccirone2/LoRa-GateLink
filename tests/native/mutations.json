@@ -1049,8 +1049,8 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncAnswered = true;",
-    "replace": "      if (shellyLevel == syncExpect) syncAnswered = true;"
+    "find": "      if (elapsed(now, settleUntil, 0)) syncAnswered = true;",
+    "replace": "      syncAnswered = true;"
    }
   ]
  },
@@ -1065,8 +1065,8 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncAnswered = true;",
-    "replace": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 1)) syncAnswered = true;"
+    "find": "      if (elapsed(now, settleUntil, 0)) syncAnswered = true;",
+    "replace": "      if (elapsed(now, settleUntil, 1)) syncAnswered = true;"
    }
   ]
  },
@@ -1446,21 +1446,6 @@
     "file": "role_house.cpp",
     "find": "  uint32_t until = now + extraMs + cfg.sync_window_ms;",
     "replace": "  uint32_t until = now + extraMs + cfg.sync_window_ms - 1;"
-   }
-  ]
- },
- {
-  "name": "house_sync_m11_any_in1_edge_inside",
-  "invariant": "sync-window",
-  "why": "Any IN1 edge inside the window ends it, not only one that matches the K1 level, so a TOGGLE Shelly's wrong-way flip closes the window early.",
-  "killed_by": [
-   "house_sync_window_ends_on_the_matching_edge_only"
-  ],
-  "edits": [
-   {
-    "file": "role_house.cpp",
-    "find": "      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncAnswered = true;",
-    "replace": "      if (elapsed(now, settleUntil, 0)) syncAnswered = true;"
    }
   ]
  },
@@ -2161,6 +2146,7 @@
   "invariant": "sync-window",
   "why": "M29: a resync's window can be ended by an IN1 edge at the target level while K1 is still away (the user's edge in its debounce, or chatter): the controller then following K1 away is taken as the user, a command away from the gate.",
   "killed_by": [
+   "robustness_resync_window_stays_open_until_k1_is_back",
    "robustness_chaos_seed_8",
    "robustness_resync_window_outlasts_a_matching_edge_so_the_resync_never_commands_the_gate"
   ],
@@ -2278,6 +2264,7 @@
   "invariant": "sensor-closed-only-known",
   "why": "S1: the house takes any STATUS the link takes, also one older than the last it took (withheld at the house and played back late): an old closed sets it back to closed and closes the contact sensor while the gate stands open.",
   "killed_by": [
+   "link_withheld_status_delivered_just_after_a_newer_one_changes_nothing",
    "link_withheld_status_delivered_late_changes_nothing"
   ],
   "edits": [

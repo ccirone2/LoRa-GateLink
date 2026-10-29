@@ -74,7 +74,7 @@ static bool syncActive = false;
 static uint32_t syncUntil = 0;
 static bool syncExpect = false;
 static uint32_t syncFrom = 0;  // when the window was last opened or moved on (K1 last changed)
-static bool syncAnswered = false;  // an edge at K1's level came: the window ends once SHELLY_ANSWER_MS have passed
+static bool syncAnswered = false;  // an edge came: the window ends once SHELLY_ANSWER_MS have passed, IN1 at K1's level
 // The Shelly's answer to a K1 change begins within this (bench: its debounced IN1 edge 136-184 ms after K1, p95).
 #define SHELLY_ANSWER_MS 500
 static uint32_t settleUntil = 0;  // no early end of the sync window before this (boot, controller power return, resync)
@@ -341,10 +341,10 @@ void houseLoop(uint32_t now) {
   if (in1.update(now, cfg.debounce_ms, cfg.in1_invert)) {
     shellyLevel = in1.active();
     // Any edge inside a sync window is attributed to K1 (e.g. a Shelly that toggles on every SW edge,
-    // or one still booting); if the Shelly ends up wrong, the mismatch/resync logic below corrects it. One at the level
-    // K1 asked for lets the window end early (below), so the user's next switch counts.
+    // or one still booting); if the Shelly ends up wrong, the mismatch/resync logic below corrects it. An edge lets the
+    // window end early (below, once IN1 is at the level K1 asked for), so the user's next switch counts.
     if (syncActive) {
-      if (shellyLevel == syncExpect && elapsed(now, settleUntil, 0)) syncAnswered = true;
+      if (elapsed(now, settleUntil, 0)) syncAnswered = true;
       logEvent(EV_SYNC, shellyLevel);
     } else if (!ctrlPower) {
       logEvent(EV_CTRL, shellyLevel, 1);

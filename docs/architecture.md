@@ -502,7 +502,8 @@ range and the worst case the sources allow.
 - `esbmc-house_cmds-stalls` (a flash save's stall anywhere, finding 4's fix) hasn't finished on a 4-core, 16 GB
   machine: no verdict in 6 hours at 8 passes, nor in 90 minutes at 6 with Boolector or Z3 (Bitwuzla ran out of 4 GB),
   nor in 3 hours with the outage's start fixed to one pass. With findings 3 and 4 open it finds a counterexample in a
-  minute or two; the install's setup without stalls anywhere holds. Finding 4's fix rests on its host test until then.
+  minute or two; the install's setup without stalls anywhere holds. Finding 4's fix rests on its host test until then, and the
+  target stays out of `esbmc-house_cmds` (and CI): it runs by name.
 
 ## Web console
 

@@ -48,7 +48,7 @@ esbmc-link_window: $(BUILD)/params.h
 # through a dip), then in the variants that each show what a property depends on. A variant expected to fail is a
 # finding still open or a dependency the docs name (architecture.md, "Verification").
 INSTALL := -D SHELLY_MODE=0 -D BROWNOUT_AFTER_PG
-esbmc-house_cmds: esbmc-house_cmds-install esbmc-house_cmds-toggle esbmc-house_cmds-stalls esbmc-house_cmds-worst
+esbmc-house_cmds: esbmc-house_cmds-install esbmc-house_cmds-toggle esbmc-house_cmds-worst
 esbmc-house_cmds-install: $(BUILD)/params.h
 	@$(RUN) $(INSTALL) esbmc/house_cmds.cpp
 # Any Shelly mode, toggling on SW edges included (finding 3, fixed in 0.20.5).
@@ -56,7 +56,8 @@ esbmc-house_cmds-toggle: $(BUILD)/params.h
 	@$(RUN) -D BROWNOUT_AFTER_PG esbmc/house_cmds.cpp
 # A loop stall (a flash save) anywhere, over a dip too (finding 4, fixed in 0.20.6). Expected to hold, but it hasn't
 # finished: 6 hours at 8 passes, 90 minutes at 6 (Boolector or Z3), split by the pass the outage begins in too
-# (docs/architecture.md, "Not covered"). On the framework (findings 3 and 4 open) it fails in a minute or two.
+# (docs/architecture.md, "Not covered"). On the framework (findings 3 and 4 open) it fails in a minute or two. Not in
+# esbmc-house_cmds (nor so CI) until it finishes: run it by name.
 esbmc-house_cmds-stalls: $(BUILD)/params.h
 	@$(RUN) $(INSTALL) -D STALLS_ANYWHERE esbmc/house_cmds.cpp
 # A dip may reboot the Shelly without dropping the board's power good (unmeasured: the bench saw it drop first): the

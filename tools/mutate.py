@@ -19,6 +19,7 @@ that must then fail (`targets`). The unmutated firmware must pass them first.
 """
 
 import argparse
+import functools
 import json
 import os
 import platform
@@ -95,13 +96,22 @@ def make(build, fw, libs, targets, timeout=1800):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
+@functools.cache
+def norand():
+    """`setarch <arch> -R` (no address randomisation) where it works. Docker's default seccomp refuses it, and a refused
+    setarch exits without running the tests: every mutation with killed_by then read as killed."""
+    cmd = ["setarch", platform.machine(), "-R"]
+    if shutil.which("setarch") and subprocess.run([*cmd, "true"], capture_output=True).returncode == 0:
+        return cmd
+    return []
+
+
 def run_tests(build, fw, libs, timeout, names=None, jobs=None):
     """With `names`, those system tests; else both programs, the system tests in parallel shards (`make run-tests
     run-systests`: not the fuzz replay, which builds the unmutated firmware). Returns (failed test names, crashed: a
     program that died without its summary line)."""
     if names:
-        norand = ["setarch", platform.machine(), "-R"] if shutil.which("setarch") else []
-        cmd = [*norand, str(Path(build) / "systests"), "--exact", *names]
+        cmd = [*norand(), str(Path(build) / "systests"), "--exact", *names]
     else:
         cmd = ["make", "-s", "-C", str(NATIVE), f"BUILD={build}", f"FW={fw}", f"LIBS={libs}", "run-tests",
                "run-systests"]

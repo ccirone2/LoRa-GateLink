@@ -88,7 +88,7 @@
 #define RELAY_DROP_MAX 700
 #endif
 #ifndef BROWNOUT_MIN
-#define BROWNOUT_MIN 0  // the shortest outage that reboots the Shelly (bench: a 300 ms dip does; shorter not measured)
+#define BROWNOUT_MIN 0  // the shortest outage that reboots the Shelly (bench: ~280 ms; any, as the worst case)
 #endif
 #ifndef BROWNOUT_MAX
 #define BROWNOUT_MAX 300

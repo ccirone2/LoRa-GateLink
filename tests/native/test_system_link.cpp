@@ -223,6 +223,31 @@ TEST(link_withheld_status_delivered_late_changes_nothing) {
   CHECK(w.opener.atOpen());
 }
 
+// [sensor-closed-only-known] As above, but played back within a second of the newer STATUS the house took: inside the
+// age check's slack (STATUS_STALE_SLACK_MS, 2 s, 0.20.4), so only the order (older than the last one taken) keeps it out.
+TEST(link_withheld_status_delivered_just_after_a_newer_one_changes_nothing) {
+  World w;
+  w.commission();
+  CHECK(w.sensorClosed());
+  Bytes kept;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from != w.gate.idx || f.type() != 5) return false;
+    if (kept.empty()) kept = f.b;
+    return seqOf(f.b) == seqOf(kept);
+  };
+  CHECK(w.runUntil([&] { return !kept.empty(); }, 40000));
+  CHECK_EQ(w.plain(kept)[0], GS_CLOSED_);
+  uint32_t t0 = w.now;
+  w.extPress(true, 500);
+  CHECK(w.runUntil([&] { return w.houseSees() != GS_CLOSED_; }, 5000));
+  CHECK(!w.sensorClosed());
+  w.inject(w.house, kept);
+  w.run(200);
+  CHECK(w.now - t0 < 2000);  // young enough for the age check (STATUS_STALE_SLACK_MS)
+  CHECK(w.houseSees() != GS_CLOSED_);
+  CHECK(!w.sensorClosed());
+}
+
 // [freshness] [pulse-only] A command kept from the gate (jammed at it while recorded: every send of it) and played back
 // a minute after the house gave it up (threat model withheld-command-fires-late). Its seq is still inside the gate's
 // replay window, so the link takes it, but its deadline (the gate's clock, as the house had it from STATUS) has
@@ -328,10 +353,10 @@ TEST(link_renumbered_resend_after_a_newer_command_is_refused) {
 // [sensor-closed-only-known] Every frame from the gate is kept from the house from just before the gate opens; the
 // house's link times out (the sensor opens, as it should). Then the last STATUS the gate sent while closed, which the
 // house never took, is played back: a seq later than any it took, so the order check (0.13.9) lets it through, but it
-// is over a link timeout old by the gate's own clock in it. It must not close the sensor with the gate open. Found by
-// the model checker (tools/verify/tla, SensorTruth): a relay that withholds STATUS and delivers it later held the house
-// behind the gate by as long as it liked, not just by the link timeout (threat model withheld-gate-frames-replayed).
-XFAIL_TEST(link_status_withheld_past_the_link_timeout_is_refused, "TODO.md: a withheld STATUS is taken however old") {
+// is over a link timeout old by the gate's own clock in it: refused (log replay), the sensor stays open. Found by the
+// model checker (tools/verify/tla, SensorTruth): before 0.20.4 a relay that withheld STATUS and delivered it later held
+// the house behind the gate by as long as it liked, not just by the link timeout (threat model withheld-gate-frames-replayed).
+TEST(link_status_withheld_past_the_link_timeout_is_refused) {
   World w;
   w.commission();
   CHECK(w.sensorClosed());
@@ -355,6 +380,28 @@ XFAIL_TEST(link_status_withheld_past_the_link_timeout_is_refused, "TODO.md: a wi
   CHECK(!w.houseLinkUp());
   CHECK(!w.sensorClosed());
   CHECK(w.opener.atOpen());
+}
+
+// [sensor-closed-only-known] [outage] The gate's STATUS whose sends all fail but the last, 9.5 s into its 10 s TTL: the
+// house still takes it (its clock is that much behind the house's reckoning, inside STATUS_TTL_MS plus the slack), as
+// the age check (0.20.4) must allow every STATUS the gate is still sending.
+TEST(link_status_resent_at_the_end_of_its_ttl_is_still_taken) {
+  World w;
+  w.commission();
+  uint32_t first = 0, firstAt = 0;
+  w.drop = [&](const AirFrame &f) {
+    if (f.from != w.gate.idx || f.type() != 5) return false;
+    if (!first) first = seqOf(f.b), firstAt = f.start;
+    return seqOf(f.b) == first && (int32_t)(f.start - firstAt) < 9500;
+  };
+  w.opener.travelMs = 20000;  // no other STATUS (open) before the resend gets through
+  w.extPress(true, 500);       // a state change: the gate reports at once
+  CHECK(w.runUntil([&] { return first != 0; }, 5000));
+  int replays = w.house.count("replay");
+  CHECK(w.runUntil([&] { return w.houseSees() == GS_BETWEEN_; }, 12000));
+  CHECK(w.now - firstAt >= 9500);
+  CHECK_EQ(w.house.count("replay"), replays);
+  CHECK(w.houseLinkUp());
 }
 
 // [freshness] [outage] The house's last resend of a command, 9.7 s into its 10 s cmd_ttl_s, is the first to get

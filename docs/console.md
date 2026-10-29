@@ -124,7 +124,7 @@ that its early warning saw coming (4 s into the stall, 4 s before the reset), wh
   `power_sense`, `ac_power` (IN3, or true with `power_sense` off), `settling` (after boot: the first STATUS waits
   until the inputs have been steady for 3 s, at most 10 s).
 - **House:** the gate's `gate`, `cause`, `last_result` and `target` as last reported, plus `link_up` (a STATUS from the
-  gate within `link_timeout_eff_s`; other frames, and a STATUS older than the last one taken, don't count),
+  gate within `link_timeout_eff_s`; other frames, and a STATUS older than the last one taken or than the gate still sends one, don't count),
   `link_timeout_eff_s`, `armed`, `ctrl` (controller level), `ctrl_power`, `sync_window`, `resyncing`, `cmd_id`,
   `cmd_pending`, `cmd_result` (ACK result: 0 ok, 1 already, 2 rejected, 4 no AC power, position unknown, 6 past its deadline; −1 none, −2 gave up)
   and `remote` (the gate's `uptime_s`, `rssi`, `snr`, `heartbeat_s`, `open_limit`, `close_limit`, `k1`, `k2`,

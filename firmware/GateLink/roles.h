@@ -44,6 +44,13 @@ enum TravelResult : uint8_t { TR_NONE = 0, TR_REACHED, TR_TIMEOUT, TR_ALREADY };
 #define STI_AC_LOST 0x40  // 0.7.0
 #define STI_REBOOTS 0x80  // 0.15.0
 
+// The gate gives a STATUS up this long after building it (its reliable slot's TTL, shorter with a short heartbeat_s):
+// resends carry the clock of when it was built, so no STATUS the gate is still sending is older than this, plus its
+// time on the air. The house refuses one older than that by its reckoning of the gate's clock, plus
+// STATUS_STALE_SLACK_MS (role_house.cpp handleStatus).
+#define STATUS_TTL_MS 10000
+#define STATUS_STALE_SLACK_MS 2000
+
 // CMD payload (house -> gate): cmd_id u16, action u8, then the deadline (link.h). 9 bytes keep the frame at 30, which
 // fits the gaps a busy neighbour leaves (test_system_link.cpp): a 34-byte one no longer did.
 #define CMD_DEADLINE 3  // u48, the gate's clock by which it must arrive: when it was sent plus the house's cmd_ttl_s

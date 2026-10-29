@@ -42,10 +42,13 @@ static uint32_t clockSession = 0, clockAt = 0;
 static uint64_t clockGate = 0;
 // A STATUS resent (its first frames lost) carries the clock of when it was built, so it reads behind, by seconds. A
 // reading replaces the one in use if it puts the gate's clock later, or earlier by no more than the crystals can have
-// drifted apart since (CLOCK_DRIFT: 100 ppm), so this board's crystal running a little fast against the gate's is
-// followed while a resent STATUS isn't taken. No reading for CLOCK_MAX_AGE_MS (a dead link: the gate reports every
-// heartbeat_s, an hour at most) and the clock isn't used: the crystals may have drifted apart by most of the slack.
-#define CLOCK_DRIFT 10000  // 1/100 ppm
+// drifted apart since (CLOCK_DRIFT), so this board's crystal running a little fast against the gate's is followed
+// while a resent STATUS isn't taken. 200 ppm: each board's 32.768 kHz crystal is +-20 ppm at 25 C, and a tuning fork
+// loses 0.036 ppm/C^2 away from its 25 C turnover, so a gate board at -20 C runs ~73 ppm slow against a house indoors
+// (about 115 ppm in all, plus aging; millis() runs off the crystal through the DFLL). No reading for CLOCK_MAX_AGE_MS
+// (a dead link: the gate reports every heartbeat_s, an hour at most) and commands aren't dated in the clock: it may
+// have drifted by most of their slack. The reading still dates a STATUS (handleStatus), until STAMP_CAP_MS.
+#define CLOCK_DRIFT 5000  // 1/200 ppm
 #define CLOCK_MAX_AGE_MS 10800000UL
 static bool clockWait = false;  // the pending command is waiting for the gate's clock (sendCommand)
 // The gate's count of departures from closed (ST_LEFT_CLOSED) in its latest STATUS, and what it was when the contact
@@ -138,12 +141,17 @@ bool houseGateStuck(uint32_t now) {
   return linkUp && haveStatus && gateState == GS_BETWEEN && elapsed(now, stuckSince, travelTimeoutMs());
 }
 
-// The gate's clock now, as far as its STATUS tells: false with no reading from its current session (it just restarted,
-// or its link did, and hasn't reported yet), or none for CLOCK_MAX_AGE_MS (capStamps).
-static bool gateClockNow(uint32_t now, uint64_t &clock) {
+// The gate's clock now, as the latest reading taken from its current session reckons it: false with none (it just
+// restarted, or its link did, and hasn't reported yet, or none for STAMP_CAP_MS: capStamps).
+static bool gateClockRef(uint32_t now, uint64_t &clock) {
   if (!clockSession || clockSession != linkPeerSession()) return false;
-  clock = clockGate + (int64_t)(int32_t)(now - clockAt);  // under CLOCK_MAX_AGE_MS old: signed is safe
+  clock = clockGate + (int64_t)(int32_t)(now - clockAt);  // under STAMP_CAP_MS old: signed is safe
   return true;
+}
+
+// The same, to date a command in: false also once the reading is CLOCK_MAX_AGE_MS old.
+static bool gateClockNow(uint32_t now, uint64_t &clock) {
+  return !elapsed(now, clockAt, CLOCK_MAX_AGE_MS) && gateClockRef(now, clock);
 }
 
 static bool k1Target(uint32_t now) {
@@ -298,7 +306,7 @@ static void capStamps(uint32_t now) {
   if (elapsed(now, betweenSince, STAMP_CAP_MS)) betweenSince = now - STAMP_CAP_MS;
   if (elapsed(now, stuckSince, STAMP_CAP_MS)) stuckSince = now - STAMP_CAP_MS;
   if (statusAt && elapsed(now, statusAt, STAMP_CAP_MS)) statusAt = (now - STAMP_CAP_MS) | 1;  // else it reads as fresh
-  if (clockSession && elapsed(now, clockAt, CLOCK_MAX_AGE_MS)) clockSession = 0;
+  if (clockSession && elapsed(now, clockAt, STAMP_CAP_MS)) clockSession = 0;
 }
 
 void houseLoop(uint32_t now) {
@@ -404,12 +412,24 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
     logEvent(EV_REPLAY, (int32_t)m.seq, (int32_t)statusSeq);
     return;
   }
+  // Older, by our reckoning of the gate's clock, than any STATUS the gate is still sending (STATUS_TTL_MS plus its
+  // airtime, a slack, and the crystals' drift since the reading): kept from us and delivered late, though no STATUS
+  // since has been taken. As one older than the last taken, it tells nothing about the gate now and keeps nothing alive.
+  // Before 0.20.4 STATUS frames withheld and played back in order, each just before the link timed out, held the
+  // contact sensor closed for as long as the attacker had frames (found by the model checker, tools/verify).
+  uint64_t clock = getU48(m.payload + ST_CLOCK), held;
+  bool dated = gateClockRef(now, held);
+  uint32_t drift = (uint32_t)(now - clockAt) / CLOCK_DRIFT;
+  if (dated && (int64_t)(held - clock) > (int64_t)(STATUS_TTL_MS + radioAirtimeMs(LINK_OVERHEAD + ST_LEN)
+                                                    + STATUS_STALE_SLACK_MS + drift)) {
+    logEvent(EV_REPLAY, (int32_t)m.seq, (int32_t)statusSeq);
+    return;
+  }
   bool sameSession = session == statusSession;
   statusSession = session;
   statusSeq = m.seq;
   statusAt = now | 1;
-  uint64_t clock = getU48(m.payload + ST_CLOCK), held;
-  if (!gateClockNow(now, held) || (int64_t)(clock - held) >= -(int64_t)((uint32_t)(now - clockAt) / CLOCK_DRIFT)) {
+  if (!dated || (int64_t)(clock - held) >= -(int64_t)drift) {
     clockSession = session;
     clockGate = clock;
     clockAt = now;

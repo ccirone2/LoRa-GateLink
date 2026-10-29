@@ -88,7 +88,7 @@ jobs:
   # (tests/tools/test_verify.py checks they agree).
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install ESBMC and TLC
@@ -105,9 +105,10 @@ jobs:
             "https://github.com/tlaplus/tlaplus/releases/download/v$tla_version/tla2tools.jar"
           echo "$tla_sha256  $RUNNER_TEMP/tla2tools.jar" | sha256sum -c -
       - name: Proofs (make -C tools/verify)
+        # Each ESBMC run's limit: a gate segment takes ~40 min alone, past 50 with the others alongside (-j).
         run: |
           make -C tools/verify -j"$(nproc)" ESBMC="$RUNNER_TEMP/esbmc/release/bin/esbmc" \
-            TLA2TOOLS="$RUNNER_TEMP/tla2tools.jar"
+            TLA2TOOLS="$RUNNER_TEMP/tla2tools.jar" ESBMC_TIMEOUT=5400
 
   # How much of the firmware the host tests run (gcovr over a --coverage build); fails below MIN_LINES %.
   coverage:

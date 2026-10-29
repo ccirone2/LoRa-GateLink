@@ -79,6 +79,18 @@ def test_a_checker_out_of_time_neither_kills_nor_spares(monkeypatch):
     assert outcome(Done(2, "a: violated (1 of 9 properties failed)\nb: timed out after 60 s")) is False
 
 
+def test_setarch_only_where_it_runs(monkeypatch):
+    # In Docker setarch -R is refused and exits without running the tests, which made every mutation read as killed.
+    for works, want in ((True, ["setarch", "x86_64", "-R"]), (False, [])):
+        mutate.norand.cache_clear()
+        monkeypatch.setattr(mutate.shutil, "which", lambda _name: "/usr/bin/setarch")
+        monkeypatch.setattr(mutate.platform, "machine", lambda: "x86_64")
+        code = 0 if works else 1
+        monkeypatch.setattr(mutate.subprocess, "run", lambda *_a, _c=code, **_k: type("P", (), {"returncode": _c})())
+        assert mutate.norand() == want
+    mutate.norand.cache_clear()
+
+
 CATALOG = mutate.CATALOG
 
 

@@ -1462,8 +1462,8 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "    if (syncActive) {\n      if (shellyLevel == syncExpect",
-    "replace": "    if (syncActive && shellyLevel == syncExpect) {\n      if (shellyLevel == syncExpect"
+    "find": "    if (syncActive) {\n      if (elapsed(now, settleUntil, 0)) syncAnswered = true;",
+    "replace": "    if (syncActive && shellyLevel == syncExpect) {\n      if (elapsed(now, settleUntil, 0)) syncAnswered = true;"
    }
   ]
  },

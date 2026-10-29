@@ -15,6 +15,7 @@
 //                firmware's clock
 //   once         a command whose id is the last one taken (this house session) never pulses; one that pulses becomes
 //                the last one taken
+//   in-order     a command framed before the last one taken (a lower seq, this house session) never pulses
 //   no-stall     no flash write, radio restart or log save runs while a coil pulses or waits to (each stops the loop)
 //
 // Everything outside the relays is arbitrary at the start of a step: the gate's state machine (state, target, the
@@ -122,18 +123,27 @@ static int startedBy(bool before1, bool before2, uint32_t len) {
 
 // gateOnRx's cases, called directly (handleCmd, handleCfgSet): through its switch the checker also walks into sendDiag,
 // which ESBMC can't follow (pointers to member). DIAG_REQ (sendDiag) only reads and sends; other types the gate ignores.
+// Ghosts: the seq of the last command taken in this house session (role_gate.cpp keeps it as lastCmdSeq; a new house
+// session clears haveCmd, and the ghost with it).
+static bool seqHave;
+static uint32_t seqLast;
 static void deliverCmd() {
   uint8_t p[CMD_LEN];
   for (int i = 0; i < CMD_LEN; i++) p[i] = nondet_u8();
   RxMsg m = { MSG_CMD, nondet_u32(), p, (uint8_t)(nondet_bool() ? CMD_LEN : nondet_u8() % CMD_LEN), 0, 0 };
   bool before1 = k1.pulsing(), before2 = k2.pulsing();
   bool dup = haveCmd && lastCmdId == getU16(p);
+  bool older = seqHave && m.seq < seqLast;
   uint32_t len = cfg.pulse_ms;
   uint64_t at = T;
   inHandler = true;
   handleCmd(m, millis());
   inHandler = false;
   if ((uint32_t)clockBase == toClk(T)) baseT = T;  // handleCmd read the clock (gateClock) at millis()
+  if (!dup && haveCmd && lastCmdId == getU16(p)) {  // taken
+    seqHave = true;
+    seqLast = m.seq;
+  }
   int k = startedBy(before1, before2, len);
   if (!k) return;
   CHECK(m.len >= CMD_LEN, "fresh-cmd: a short command pulsed");
@@ -144,6 +154,7 @@ static void deliverCmd() {
   CHECK(late >= -(int64_t)CMD_AHEAD_MAX_MS, "fresh-cmd: a command pulsed with a deadline too far ahead");
   CHECK(!dup, "once: the last command taken pulsed again");
   CHECK(haveCmd && lastCmdId == getU16(p), "once: a command pulsed without becoming the last one taken");
+  CHECK(!older, "in-order: a command framed before the last one taken pulsed");
 }
 
 static void deliverCfgSet() {
@@ -237,6 +248,7 @@ static void inv() {
     INV(T - baseT <= SKEW_PASS, "the clock was read this pass");
   }
   INV(bootT <= baseT, "the clock was read since boot");
+  INV(seqHave == haveCmd && (!haveCmd || seqLast == lastCmdSeq), "the ghost seq is the last command taken");
   INV((uint32_t)clockBase == toClk(baseT), "clockBase's low bits are millis() when read");
   INV(clockBase - bootAt == baseT - bootT, "clockBase - bootAt is the time since boot");
   INV(cfgQueued <= CFG_QUEUE, "the config queue holds at most CFG_QUEUE");
@@ -292,6 +304,9 @@ static void anyState() {
   leaving = nondet_u8();
   targetSince = nondet_u32();
   haveCmd = nondet_bool();
+  lastCmdSeq = nondet_u32();
+  seqHave = nondet_bool();
+  seqLast = nondet_u32();
   lastCmdId = nondet_u16();
   lastCmdAck = nondet_u8();
   leftClosed = nondet_u8();
@@ -375,6 +390,7 @@ static void snapshot() {
 }
 
 static void segmentEnd() {
+  if (!haveCmd) seqHave = false;  // a new house session (gateLoop): its seqs start over
   for (int k = 1; k <= 2; k++) {
     Relay &r = relay(k);
     bool cut = (coil[k].released ? (uint32_t)coil[k].offT : 0) != offCount[k];

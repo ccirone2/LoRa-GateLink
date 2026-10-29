@@ -33,6 +33,7 @@ static uint8_t leaving = GS_UNKNOWN;  // limit our pulse is moving the gate off 
 static uint32_t targetSince = 0;
 static bool haveCmd = false;
 static uint16_t lastCmdId = 0;
+static uint32_t lastCmdSeq = 0;  // the link seq the last command taken came in (this house session: haveCmd)
 static uint8_t lastCmdAck = RES_OK;
 static uint8_t leftClosed = 0;  // times the reported state has left closed since boot (ST_LEFT_CLOSED)
 static uint32_t lastStatusAt = 0;
@@ -327,6 +328,15 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
     linkAck(m.seq, lastCmdAck);
     return;
   }
+  // Framed before the last command taken: the replay window takes a lower seq it hasn't seen, so this is one kept from
+  // us and played back after the owner's later command (the house never frames a command again once a later one has
+  // replaced it in its slot). Running it, inside its deadline still, would undo the owner's last word, or run a
+  // renumbered resend of a command already run a second time. Refused, as late.
+  if (haveCmd && m.seq < lastCmdSeq) {
+    logEvent(EV_REPLAY, (int32_t)m.seq, (int32_t)lastCmdSeq);
+    linkAck(m.seq, RES_LATE);
+    return;
+  }
   if (action != ACT_OPEN && action != ACT_CLOSE) {
     linkAck(m.seq, RES_BAD);
     return;
@@ -346,6 +356,7 @@ static void handleCmd(const RxMsg &m, uint32_t now) {
   logEvent(EV_CMD_RX, action, id);
   haveCmd = true;
   lastCmdId = id;
+  lastCmdSeq = m.seq;
   uint8_t want = action == ACT_OPEN ? GS_OPEN : GS_CLOSED;
   // Bound first, not `(action == ACT_OPEN ? k1 : k2).pulsing()`: ESBMC 8.5 calls a method on a conditional's other
   // operand (tools/verify).

@@ -152,6 +152,25 @@
   ]
  },
  {
+  "name": "v_cmd_order_unchecked",
+  "invariant": "cmd-order",
+  "why": "handleCmd no longer refuses a command framed before the last one taken: a withheld older command pulses after the owner's later one",
+  "targets": [
+   "esbmc-gate-2",
+   "esbmc-gate-4",
+   "esbmc-gate-5",
+   "esbmc-gate-3",
+   "esbmc-gate-1"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (haveCmd && m.seq < lastCmdSeq) {",
+    "replace": "  if (false) {"
+   }
+  ]
+ },
+ {
   "name": "v_cfg_queue_drains_mid_pulse",
   "invariant": "no-stall",
   "why": "drainCfgQueue saves a queued remote write while a relay pulses",

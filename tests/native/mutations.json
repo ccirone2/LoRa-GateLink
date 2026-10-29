@@ -3197,6 +3197,22 @@
   ]
  },
  {
+  "name": "link_cmd_order_superseded_runs",
+  "invariant": "freshness",
+  "why": "handleCmd no longer refuses a command framed before the last one taken: a withheld older command runs after the owner's later one (0.20.3)",
+  "killed_by": [
+   "link_withheld_older_command_after_a_newer_one_is_refused",
+   "link_renumbered_resend_after_a_newer_command_is_refused"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if (haveCmd && m.seq < lastCmdSeq) {",
+    "replace": "  if (false && m.seq < lastCmdSeq) {"
+   }
+  ]
+ },
+ {
   "name": "link_hello_ack_session_0_verifies",
   "invariant": "replay",
   "why": "a HELLO_ACK naming session 0 (no session) is taken: the link is verified with no session and its replay window's start unknown",

@@ -386,10 +386,13 @@ void houseLoop(uint32_t now) {
     mismatchSince = 0;  // an unpowered Shelly can't follow K1; start over once it's back
   } else if (cfg.ctrl_sync && armed && linkUp && haveStatus && !linkPending(SLOT_CMD)) {
     bool t = k1Target(now);
-    // Mid-travel the Shelly may already show a user's new command while K1 holds the old limit.
-    if (shellyLevel == t || holdingTravel(now)) {
+    if (shellyLevel == t) {
       mismatchSince = 0;
       if (!syncActive) checkSoon = false;
+    } else if (holdingTravel(now)) {
+      // Mid-travel the Shelly may already show a user's new command while K1 holds the old limit. A check due (a refused
+      // command, power return) waits for the hold to end: the Shelly matching only the held level isn't in step.
+      mismatchSince = 0;
     } else if (checkSoon && !syncActive && !pendingAction) {
       // Settled after a boot or power return and still wrong: K1 alone won't move it (the Shelly only
       // follows SW edges), so resync now instead of waiting out mismatch_timeout_s.

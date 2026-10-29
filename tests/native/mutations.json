@@ -1308,7 +1308,7 @@
   "why": "driveK1 skips the change when the Shelly already shows that level (it compares shellyLevel, not K1), so K1 stays off at open after a user OPEN.",
   "killed_by": [
    "house_sync_no_resync_while_holding_through_a_travel",
-   "house_sync_mismatch_counts_from_the_end_of_the_hold",
+   "house_sync_jammed_command_resyncs_when_the_hold_ends",
    "house_sync_toggle_controller_never_turns_sync_into_commands",
    "house_sync_window_boundary_inside_is_sync_outside_is_a_command",
    "house_sync_window_starts_on_the_pass_k1_changes",
@@ -1351,7 +1351,7 @@
   "killed_by": [
    "house_sync_travel_hold_lasts_the_gates_travel_timeout_not_the_houses",
    "house_sync_no_resync_while_holding_through_a_travel",
-   "house_sync_mismatch_counts_from_the_end_of_the_hold"
+   "house_sync_jammed_command_resyncs_when_the_hold_ends"
   ],
   "edits": [
    {
@@ -1367,7 +1367,7 @@
   "why": "betweenSince is restamped on every BETWEEN STATUS instead of only on entering between, so each report (for example the gate's travel-timeout STATUS) restarts the hold.",
   "killed_by": [
    "house_sync_no_resync_while_holding_through_a_travel",
-   "house_sync_mismatch_counts_from_the_end_of_the_hold"
+   "house_sync_jammed_command_resyncs_when_the_hold_ends"
   ],
   "edits": [
    {
@@ -1383,13 +1383,29 @@
   "why": "Mismatch/resync is no longer paused during the travel hold.",
   "killed_by": [
    "house_sync_no_resync_while_holding_through_a_travel",
-   "house_sync_mismatch_counts_from_the_end_of_the_hold"
+   "house_sync_jammed_command_resyncs_when_the_hold_ends"
   ],
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "    if (shellyLevel == t || holdingTravel(now)) {",
-    "replace": "    if (shellyLevel == t) {"
+    "find": "    } else if (holdingTravel(now)) {",
+    "replace": "    } else if (false) {"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m7b_hold_drops_check_soon",
+  "invariant": "check-soon",
+  "why": "The travel hold clears checkSoon, as if the Shelly at K1's held level were in step: a command refused (no_power) or overridden (timeout) during the hold is resynced mismatch_timeout_s after it, not at once.",
+  "killed_by": [
+   "house_sync_jammed_command_resyncs_when_the_hold_ends",
+   "house_sync_refusal_heard_during_a_travel_hold_resyncs_once_it_ends"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "      // command, power return) waits for the hold to end: the Shelly matching only the held level isn't in step.\n      mismatchSince = 0;",
+    "replace": "      // command, power return) waits for the hold to end: the Shelly matching only the held level isn't in step.\n      mismatchSince = 0;\n      if (!syncActive) checkSoon = false;"
    }
   ]
  },
@@ -1402,7 +1418,7 @@
    "house_sync_travel_hold_keeps_the_limit_it_left_until_the_far_one",
    "house_sync_travel_hold_lasts_the_gates_travel_timeout_not_the_houses",
    "house_sync_no_resync_while_holding_through_a_travel",
-   "house_sync_mismatch_counts_from_the_end_of_the_hold",
+   "house_sync_jammed_command_resyncs_when_the_hold_ends",
    "house_sync_house_back_mid_travel_shows_not_closed_at_once",
    "house_sync_toggle_controller_never_turns_sync_into_commands",
    "house_sync_window_boundary_inside_is_sync_outside_is_a_command",
@@ -2115,7 +2131,7 @@
    "house_sync_house_restart_never_moves_the_gate",
    "house_sync_k1_relay_test_before_the_first_status_does_not_arm",
    "house_sync_lost_command_resynced_after_mismatch_timeout",
-   "house_sync_mismatch_counts_from_the_end_of_the_hold",
+   "house_sync_jammed_command_resyncs_when_the_hold_ends",
    "house_sync_no_power_refusal_resyncs_at_once",
    "house_sync_result_timeout_resyncs_at_once",
    "house_sync_siren_override_mid_travel_resyncs_at_once",

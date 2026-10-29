@@ -534,10 +534,12 @@ TEST(house_sync_no_resync_while_holding_through_a_travel) {
 }
 
 // [travel-hold] [resync]
-TEST(house_sync_mismatch_counts_from_the_end_of_the_hold) {
+TEST(house_sync_jammed_command_resyncs_when_the_hold_ends) {
   // From open the user closes and the gate jams just off its open limit. K1 holds open (ON) through the 30 s hold while
-  // the Shelly shows the user's OFF: no resync. From the hold's end K1 shows not closed (between), the Shelly still
-  // OFF: a lingering mismatch, resynced mismatch_timeout_s (10) later, not before.
+  // the Shelly shows the user's OFF: no resync. The gate gives up on its target meanwhile (result timeout, heard during
+  // the hold): from the hold's end K1 shows not closed (between), the Shelly still OFF (the gate shown closed), resynced
+  // on that pass, as for any command overridden, not mismatch_timeout_s (10) later. Before 0.20.7 the hold dropped the
+  // timeout's check, and the Shelly showed closed for mismatch_timeout_s.
   Site w;
   w.commission([](Board &b) {
     if (b.idx == 0) CHECK(b.set("mismatch_timeout_s", 10));
@@ -554,12 +556,11 @@ TEST(house_sync_mismatch_counts_from_the_end_of_the_hold) {
   uint32_t H = btw.e.at + 30000;  // the hold's end
   CHECK_EQ(watch(w, H - 1 - w.now, [&] { return w.house.coil(1) && !w.alarmSwitch(); }), 0);
   CHECK_EQ(countSince(w.house, "resync", h0), 0);
-  CHECK_EQ(watch(w, H + 9999 - w.now, [&] { return w.house.coil(1) && !w.alarmSwitch(); }), 0);
-  CHECK_EQ(countSince(w.house, "resync", h0), 0);
+  CHECK(find(w.gate, "travel_timeout", g0, GS_CLOSED_).ok);  // heard during the hold
   Found rs = waitFor(w, w.house, "resync", h0, 10);
   CHECK(rs.ok);
   CHECK_EQ(rs.e.a, 1);
-  CHECK_IN(rs.e.at - H, 10000, 10001);
+  CHECK_IN(rs.e.at - H, 0, 1);
   // The cycle: K1 to the Shelly's level (off) for resync_ms, then back on; the Shelly follows the second edge.
   CHECK(!w.house.coil(1));
   CHECK(w.runUntil([&] { return w.alarmSwitch(); }, 1100));
@@ -1298,6 +1299,56 @@ TEST(house_sync_no_power_refusal_resyncs_at_once) {
   CHECK(w.house.coil(1));
   w.run(5000);
   CHECK(w.alarmSwitch());
+  CHECK(!w.sensorClosed());
+  CHECK_EQ(countSince(w.house, "resync", h0), 1);
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0), 1);
+  CHECK_EQ(countSince(w.gate, "pulse", g0), 0);
+}
+
+// [resync] [check-soon] [travel-hold]
+TEST(house_sync_refusal_heard_during_a_travel_hold_resyncs_once_it_ends) {
+  // Someone else closes the gate; the house holds K1 (and the Shelly) at open through the travel. The opener dies on
+  // the way (AC and battery gone): the gate reads no_power, but that STATUS is lost the first time. The user switches
+  // off meanwhile, and the gate refuses the CLOSE (no_power) while the house still holds the travel. The resent STATUS
+  // ends the hold: K1 shows not closed, the Shelly still the user's OFF (the gate shown closed in the app). It is put
+  // back on the pass after, as for any refused command, not mismatch_timeout_s (75 s) later. Before 0.20.7 the
+  // refusal's check was dropped by the first pass of the hold, where the Shelly looked in step with K1's held level.
+  Site w;
+  w.commission();
+  openByOther(w);
+  w.run(4000);
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  w.extPress(false, 300);
+  CHECK(waitFor(w, w.house, "gate_state", h0, 3000, GS_BETWEEN_).ok);
+  w.run(2000);
+  CHECK(w.house.coil(1));  // holding open
+  CHECK(w.alarmSwitch());
+  bool lose = true;
+  w.drop = [&](const AirFrame &f) { return lose && f.from == w.gate.idx && f.type() == MSG_STATUS_; };
+  w.opener.ac = w.opener.battery = false;
+  CHECK(waitFor(w, w.gate, "gate_state", g0, 3000, GS_NO_POWER_).ok);
+  w.run(200);
+  CHECK_EQ(w.houseSees(), GS_BETWEEN_);
+  w.user(false);
+  Found cs = waitFor(w, w.house, "cmd_sent", h0, 2000, ACT_CLOSE_);
+  CHECK(cs.ok);
+  CHECK(waitFor(w, w.gate, "cmd_refused", g0, 2000).ok);
+  CHECK(poll(w, [&] { return w.house.status()["cmd_result"].as<int>() == RES_NO_POWER_; }, 2000));
+  w.run(200);
+  CHECK_EQ(w.houseSees(), GS_BETWEEN_);  // still holding
+  lose = false;
+  Found np = waitFor(w, w.house, "gate_state", h0, 12000, GS_NO_POWER_);
+  CHECK(np.ok);
+  CHECK(w.house.coil(1));
+  CHECK(!w.alarmSwitch());
+  Found rs = waitFor(w, w.house, "resync", h0, 5000);
+  CHECK(rs.ok);
+  CHECK_EQ(rs.e.a, 1);
+  CHECK_IN(rs.e.at - np.e.at, 0, 2);
+  CHECK(w.runUntil([&] { return w.alarmSwitch(); }, 1200));
+  w.run(5000);
+  CHECK(w.alarmSwitch());
+  CHECK(w.house.coil(1));
   CHECK(!w.sensorClosed());
   CHECK_EQ(countSince(w.house, "resync", h0), 1);
   CHECK_EQ(countSince(w.house, "cmd_sent", h0), 1);

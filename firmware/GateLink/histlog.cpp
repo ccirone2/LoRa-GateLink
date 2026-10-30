@@ -25,7 +25,9 @@ bool histLogBegin(uint32_t max, HistLogTake take, uint16_t &period, uint32_t &ne
     next = 0;
     return true;
   }
-  if (top[3] != KIND_BUCKET || top[2] != HLOG_FMT || idx == UINT32_MAX) return false;
+  // UINT32_MAX - 1 too: the next bucket would be UINT32_MAX, a number erased flash also reads as (found by fuzz_config;
+  // a corrupt record, as no board counts that far).
+  if (top[3] != KIND_BUCKET || top[2] != HLOG_FMT || idx >= UINT32_MAX - 1) return false;
   period = p;
   next = idx + 1;
   // The run, back from the newest: each older record must be the bucket before, written before it. A torn record is

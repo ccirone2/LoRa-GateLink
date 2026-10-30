@@ -1,6 +1,7 @@
 # Proposal: an M5Stack hardware architecture for GateLink
 
-Status: proposal (2026-10-30), not decided. It answers ROADMAP [H2](../../ROADMAP.md) ("cheaper boards that protect
+Status: proposal (2026-10-30), not decided. An alternative on RAK WisBlock parts is in
+[rak-wisblock-hardware.md](rak-wisblock-hardware.md), with a comparison at its end. It answers ROADMAP [H2](../../ROADMAP.md) ("cheaper boards that protect
 the key") with a concrete, off-the-shelf design. Prices are reseller figures from October 2026 and will drift.
 
 ## Summary

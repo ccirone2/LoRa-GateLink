@@ -357,6 +357,9 @@ footprint reusable if the board changes (H2).
 against ~10 mA) and +22 dBm output, at about the SX1276's sensitivity for a matched SF and bandwidth; the ESP32-S3's
 secure boot and flash encryption protect the key. Wi-Fi stays off.
 
+A concrete design on M5Stack parts (StamPLC + Unit LoRaWAN-US915) is in
+[docs/proposals/m5stack-hardware.md](docs/proposals/m5stack-hardware.md) (2026-10-30, not decided).
+
 **Cost / risk.** `radio.cpp` encodes a lot of hard-won SX1276 behaviour: a new radio driver, a flash and config
 backend, esptool-js in place of SAM-BA in the web console, and the bench numbers measured again. Only worth it for many
 sites; F11 lets it sit beside the MKR.

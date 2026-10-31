@@ -170,11 +170,13 @@
           this.keyReady = this.setKey(req.key.toLowerCase());
           return this.keyReady.then(() => ok());
         case 'relay.test':
-          if (![1, 2].includes(req.k) || !Number.isInteger(req.ms ?? 500) || (req.ms ?? 500) < 50 || (req.ms ?? 500) > 5000) {
+          if (![1, 2].includes(req.k) || !Number.isInteger(req.ms ?? 500) || (req.ms ?? 500) < 50 || (req.ms ?? 500) > 5000
+            || this.role === 'unset') {
             return err('k must be 1|2, ms 50..5000, role set');
           }
           return ok();
         case 'radio.ping': {
+          if (this.role === 'unset' || !this.keySet) return err('radio not ready, role unset, or no key set'); // appPing
           // spec.pongs: the answers to successive pings, cycled; each overrides these levels, null = no answer. With
           // `late` (levels), the previous ping's pong lands first, just before this ping reaches the board, as one
           // past the page's 8 s can. As in the firmware, a pong is reported only while its ping is the latest.

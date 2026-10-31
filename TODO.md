@@ -35,6 +35,7 @@ once its fix is merged and record it in the pull request.
   of 24 at 200–270 ms; e2e run 20261029-045638, house LiPo in), while power good drops in every dip from 150 ms up
   (0.17–0.26 s in), always before the relay (0.37–0.43 s), with no command sent. Fix it (the house can't see such a
   reboot) only for a site where that order could fail: another Shelly, or a supply that holds the board up longer.
+  ROADMAP F16 (a Shelly reboot with power present) is the same gap without the dip.
 
 ## Bench and field tests
 

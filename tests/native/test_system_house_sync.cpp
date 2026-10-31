@@ -538,7 +538,7 @@ TEST(house_sync_jammed_command_resyncs_when_the_hold_ends) {
   // From open the user closes and the gate jams just off its open limit. K1 holds open (ON) through the 30 s hold while
   // the Shelly shows the user's OFF: no resync. The gate gives up on its target meanwhile (result timeout, heard during
   // the hold): from the hold's end K1 shows not closed (between), the Shelly still OFF (the gate shown closed), resynced
-  // on that pass, as for any command overridden, not mismatch_timeout_s (10) later. Before 0.20.7 the hold dropped the
+  // on that pass, as for any command overridden, not mismatch_timeout_s (10) later. Before 0.20.9 the hold dropped the
   // timeout's check, and the Shelly showed closed for mismatch_timeout_s.
   Site w;
   w.commission([](Board &b) {
@@ -1311,7 +1311,7 @@ TEST(house_sync_refusal_heard_during_a_travel_hold_resyncs_once_it_ends) {
   // the way (AC and battery gone): the gate reads no_power, but that STATUS is lost the first time. The user switches
   // off meanwhile, and the gate refuses the CLOSE (no_power) while the house still holds the travel. The resent STATUS
   // ends the hold: K1 shows not closed, the Shelly still the user's OFF (the gate shown closed in the app). It is put
-  // back on the pass after, as for any refused command, not mismatch_timeout_s (75 s) later. Before 0.20.7 the
+  // back on the pass after, as for any refused command, not mismatch_timeout_s (75 s) later. Before 0.20.9 the
   // refusal's check was dropped by the first pass of the hold, where the Shelly looked in step with K1's held level.
   Site w;
   w.commission();

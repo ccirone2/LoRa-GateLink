@@ -600,11 +600,13 @@ def spawn(cmd, cwd, log):
 
 
 def _alive(pidfile):
+    """Whether the install the pidfile names still runs. Checked by its command line, not just the pid: a cache
+    kept from an earlier container can name a pid since reused by another process (once, the session's own)."""
     try:
-        os.kill(int(pidfile.read_text(encoding="utf-8")), 0)
-        return True
+        cmdline = Path(f"/proc/{int(pidfile.read_text(encoding='utf-8'))}/cmdline").read_bytes()
     except (OSError, ValueError):
         return False
+    return b"cloud_setup.sh" in cmdline
 
 
 def session_start(event):

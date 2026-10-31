@@ -188,6 +188,20 @@ TEST(config_factory_reset_erases_both_records) {
   CHECK_EQ(cfg.pulse_ms, 650);
 }
 
+// A reset whose erase fails leaves the old record in place (and says so). The next save must still win over it at the
+// next boot: written as seq 1, it lost to the old record's larger seq, so the save verified and was then undone.
+TEST(config_save_after_a_failed_reset_is_the_one_loaded) {
+  fresh();
+  saveWith(600);
+  saveWith(700);  // seq 2, in sector 1
+  flash.failErases = 2;
+  CHECK(!configFactoryReset());
+  saveWith(650);
+  configDefaults(cfg);
+  CHECK(configLoad());
+  CHECK_EQ(cfg.pulse_ms, 650);
+}
+
 static const uint8_t KEY_A[16] = { 0x8a, 0x3f, 0x1c, 0x6e, 0x9b, 0x2d, 0x4f, 0x70,
                                     0xa1, 0xc3, 0xe5, 0xf7, 0x09, 0x2b, 0x4d, 0x6f };
 static const uint8_t KEY_B[16] = { 0x13, 0xd2, 0x77, 0x40, 0xe9, 0x5c, 0x31, 0xb8,

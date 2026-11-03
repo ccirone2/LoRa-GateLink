@@ -78,7 +78,7 @@ export function renderConfig() {
         const v = fieldValue(el);
         row.classList.toggle('dirty', v !== S.params[name]);
         if (v !== S.params[name]) row.closest('details')?.setAttribute('open', ''); // an import's edit isn't left folded
-        if (el.type === 'number') el.setAttribute('aria-invalid', String(!Number.isInteger(v) || v < m.min || v > m.max || el.value === ''));
+        if (el.type === 'number') el.setAttribute('aria-invalid', String(!Number.isInteger(v) || v < m.min || v > m.max));
         updateDirtyCount();
       });
       if (el.type === 'number') el.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnCfgApply').click(); });
@@ -120,9 +120,11 @@ export function markUnsaved(on) {
   markConfigTab();
 }
 
-// On/off parameters are checkbox toggles; everything else carries its value in .value.
+// On/off parameters are checkbox toggles; everything else carries its value in .value. An empty number field (or one
+// the browser can't parse, which reads empty too) is NaN, never 0: Apply refuses it rather than sending 0.
 export function fieldValue(el) {
-  return el.type === 'checkbox' ? Number(el.checked) : Number(el.value);
+  if (el.type === 'checkbox') return Number(el.checked);
+  return el.value === '' ? NaN : Number(el.value);
 }
 
 export function setField(el, v) {

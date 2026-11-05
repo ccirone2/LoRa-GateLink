@@ -21,7 +21,7 @@ and `firmware/GateLink/pins.h` in sync.
 |---|---|---|
 | IN1 (A1) | Shelly relay output (O) — the Alarm.com switch state | CSW24UL AUX "open limit" (via opto) |
 | IN2 (A2) | Shelly 12 V supply (via opto) — `ctrl_power_sense` | CSW24UL AUX "closed limit" (via opto) |
-| IN3 (A3) | spare | AC power: the 24 V supply on mains (via opto) — `power_sense` |
+| IN3 (A3) | spare | AC power: the 24 V supply on mains (via opto) — `power_sense`; else spare |
 | IN4 (A4) | spare | Closed sensor on the leaf (via opto) — `closed_sense`; else spare |
 | K1 (D1) | Shelly SW input (energized = gate not closed) | CSW24UL OPEN + COM (pulsed only) |
 | K2 (D2) | 2GIG contact sensor terminals (energized = gate closed) | CSW24UL CLOSE + COM (pulsed only) |
@@ -150,7 +150,7 @@ unconnected. See [console.md](console.md). Leave the pins unused and `uart_conso
 
 ## Spare inputs
 
-House IN3/IN4, and gate IN4 with `closed_sense` off, are pull-down inputs (contact to 3.3 V) reserved for future use
+House IN3/IN4, gate IN3 with `power_sense` off and gate IN4 with `closed_sense` off are pull-down inputs (contact to 3.3 V) reserved for future use
 such as a beam-break sensor or alarm status (see [ROADMAP.md](../ROADMAP.md), F15). They're debounced, logged (`input` events),
 shown in Status (the gate's are also sent to the house), with `inN_invert` toggles, but don't affect behaviour
 yet. Leave them unwired if unused.

@@ -269,8 +269,10 @@ in charge of entrapment.)
 
 **Goal.** An internal Shelly reboot never moves the gate (`shelly-reboot-spurious-commands`).
 
-**Today.** IN2 only senses the Shelly's supply, so a reboot with power present can still produce an IN1 edge, a CLOSE
-then an OPEN.
+**Today.** IN2 and the board's power good (0.11.0) only sense the Shelly's supply, so a reboot with power present can
+still produce an IN1 edge, a CLOSE then an OPEN. The same gap with a supply dip too short for power good is TODO.md's
+"A Shelly reboot the house doesn't see restores an OPEN" (found by the model checker, 0.20.2): a fix here would cover
+it as well.
 
 **How.** Ideas: watch for the Shelly's relay dropping and coming back within a short window with no matching Alarm.com
 change, or sense its status LED.

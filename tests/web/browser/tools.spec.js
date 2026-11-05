@@ -98,6 +98,21 @@ test('a gate relay test asks first, then pulses', async ({ page }) => {
   expect((await requests(page)).find((r) => r.cmd === 'relay.test')).toMatchObject({ k: 2, ms: 500 });
 });
 
+// As console.cpp: a board with no role doesn't pulse its relays, and one without a key doesn't ping.
+test('a relay test on a board with no role, and a ping without a key, show the board\'s refusal', async ({ page }) => {
+  await openConsole(page, [{ role: 'unset' }, { role: 'house', keySet: false }]);
+  await connect(page, 'unset');
+  await page.locator('#tabbtn-install').click();
+  await page.locator('#btnK1').click();
+  await expect(page.locator('#toast')).toHaveText('k must be 1|2, ms 50..5000, role set');
+  await page.locator('#btnDisconnect').click();
+  await connect(page);
+  await page.locator('#tabbtn-link').click();
+  await page.locator('#btnPing').click();
+  await expect(page.locator('#toast')).toHaveText('radio not ready, role unset, or no key set');
+  await expect(page.locator('#pingRtt')).toHaveText('—');
+});
+
 test('link history loads every page and draws the chart, tiles and table', async ({ page }) => {
   await openConsole(page, [{ role: 'house', histBuckets: 30 }]);
   await connect(page);

@@ -168,3 +168,9 @@ once its fix is merged and record it in the pull request.
   `python tools/gatelink.py key backup <dir>` and keep its passphrase in the password manager; then
   check `python tools/gatelink.py ports` shows the same key id on both boards as `key id` does for the
   file ([docs/key-management.md](docs/key-management.md)). The install pair gets its own key, generated there.
+- [ ] **The web console's fake board still accepts a few requests the firmware refuses** (bug sweep 2026-10-25,
+  `tests/web/fake-serial.js` against `console.cpp`). `hist.clear` ignores `period_s` (firmware: 60..3600, else
+  `period_s must be 60..3600`, and `hist.get` then reports that period); `log.get` takes `before` 0 or a non-integer
+  (firmware: `before must be 1..4294967295`); `remote.set` while one is pending and a gate `relay.test` of a relay
+  already pulsing are never `busy`. No page path depends on them today (the page sends no `period_s` and only
+  `before` from a record's `seq`; `remote.js` handles `busy`, untested); model one when a test needs it.

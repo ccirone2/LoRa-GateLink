@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S
+from gatelink.bench import PROFILE_COMMON, SIM_TRAVEL_S, Bench
 from gatelink.flows import close_via_ctrl, open_via_ctrl, outage
 from gatelink_client.wire import ACT_OPEN, GS
 
@@ -94,7 +94,7 @@ def test_long_soak(rig, request):
     cols = ["t_s", "scenario"] + [f"{n}_{c}" for n in ("house", "gate")
                                   for c in ("uptime_s", "reset_cause", "radio_faults", "loop_max_us") + COUNTERS]
     expected = 0
-    last_uptime = {}
+    prev = rig.snapshot()
     t0 = rig.mark()
     i = 0
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -107,11 +107,14 @@ def test_long_soak(rig, request):
             rig.note(f"long soak {i + 1}: {scenario.__name__}")
             expected += scenario(rig)
             row = [round(rig.mark() - t0, 1), scenario.__name__]
+            snap = rig.snapshot()
             for n in ("house", "gate"):
                 st = rig.board(n).status()
-                if st["uptime_ms"] < last_uptime.get(n, 0):
-                    rig.fail(f"{n} reset during {scenario.__name__} (reset_cause {st['reset_cause']})")
-                last_uptime[n] = st["uptime_ms"]
+                # Not only the uptime falling: a reset early on (the first scenario's, or one soon after a flash) leaves
+                # the new uptime above the last reading.
+                if Bench._reset_between(prev[n], snap[n]):
+                    rig.fail(f"{n} reset during {scenario.__name__} or the baseline before it "
+                             f"(reset_cause {st['reset_cause']})")
                 if st["radio_faults"]:
                     rig.fail(f"{n} radio_faults {st['radio_faults']} after {scenario.__name__}")
                 if st.get("loop_max_us", 0) > LOOP_MAX_US:
@@ -120,6 +123,7 @@ def test_long_soak(rig, request):
                 row += [st["link"][c] for c in COUNTERS]
             w.writerow(row)
             f.flush()
+            prev = snap
             i += 1
     rig.facts["long soak"] = f"{i} scenarios in {minutes:g} min, counters in {path.name}"
     rig.expect_commands(expected)

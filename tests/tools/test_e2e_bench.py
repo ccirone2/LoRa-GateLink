@@ -201,3 +201,61 @@ def test_interlock_gap_check_takes_a_press_from_its_sooner_line():
     b._check_interlock_gap(releases, problems, {1: [161.341], 2: [161.000]})
     assert problems == []
     assert b.facts["closest relay interlock gap (ms)"] == 101
+
+
+def load_soak(monkeypatch):
+    """tests/e2e/test_soak.py, its `gatelink` imports pointed at the suite's package."""
+    monkeypatch.setitem(sys.modules, "gatelink", sys.modules["e2e_gatelink"])
+    monkeypatch.setitem(sys.modules, "gatelink.bench", bench_mod)
+    monkeypatch.setitem(sys.modules, "gatelink.flows", importlib.import_module("e2e_gatelink.flows"))
+    spec = importlib.util.spec_from_file_location("e2e_test_soak", _PKG.parent / "test_soak.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class SoakBoard(UptimeBoard):
+    def status(self):
+        st = super().status()
+        st["radio_faults"] = 0
+        st["link"] = {c: 0 for c in ("tx", "rx", "retries", "giveups", "mac_fail", "replay", "sessions",
+                                     "lbt_defers", "lbt_forced")}
+        return st
+
+
+class SoakRequest:
+    class config:  # noqa: N801 - stands in for pytest's request.config
+        @staticmethod
+        def getoption(name):
+            assert name == "--soak-minutes"
+            return 3  # three 60 s scenarios
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnknownMarkWarning")  # longsoak: registered in tests/e2e
+@pytest.mark.parametrize("gate_uptime, reset", [
+    (lambda t: (t - 95) * 1000, False),  # up 5 s at the start (just flashed), no reset
+    (lambda t: (t - 110) * 1000 if t >= 110 else (t - 95) * 1000, True),  # reset 10 s into the first scenario
+    (lambda t: (t - 230) * 1000 if t >= 230 else (t - 95) * 1000, True),  # reset 10 s into the third
+])
+def test_long_soak_names_the_scenario_a_reset_happened_in(monkeypatch, tmp_path, gate_uptime, reset):
+    """The soak's own check after each scenario must catch a reset whose new uptime outgrew the last reading (the
+    first scenario's, or any soon after a flash), not only one where the uptime fell."""
+    soak = load_soak(monkeypatch)
+    b, clock = reset_bench(gate_uptime)
+    b.house = SoakBoard(clock, lambda t: 600_000 + t * 1000)
+    b.gate = SoakBoard(clock, gate_uptime)
+    b.run_dir = tmp_path
+    b.facts = {}
+    b.baseline = lambda: None
+    monkeypatch.setattr(soak.time, "monotonic", lambda: clock[0])
+
+    def scenario(rig):
+        clock[0] += 60
+        return 0
+    monkeypatch.setattr(soak, "ROTATION", [scenario])
+    if reset:
+        with pytest.raises(AssertionError, match="gate reset during scenario"):
+            soak.test_long_soak(b, SoakRequest)
+    else:
+        soak.test_long_soak(b, SoakRequest)
+        assert "3 scenarios" in b.facts["long soak"]

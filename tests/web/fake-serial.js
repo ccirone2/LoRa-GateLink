@@ -84,6 +84,7 @@
       this.pings = 0;
       this.replyDelayMs = spec.replyDelayMs ?? 5;
       this.silent = false; // stops answering (a hung board)
+      this.remotePending = false; // a remote.set waiting for its remote_set event
     }
 
     async setKey(hex) {
@@ -201,7 +202,14 @@
           if (this.role !== 'house' || !m || !m.remote || req.value < m.min || req.value > m.max) {
             return err('house node only; param must be remote-writable and in range');
           }
-          this.emit({ event: 'remote_set', acked: true, ok: true, applied: true });
+          // As the firmware's SLOT_CFG (console.cpp linkPending): one write at a time, until its remote_set event
+          // (spec.remoteSetMs after it, the link's round trip).
+          if (this.remotePending) return err('busy');
+          this.remotePending = true;
+          setTimeout(() => {
+            this.remotePending = false;
+            this.port?.push({ event: 'remote_set', acked: true, ok: true, applied: true });
+          }, this.spec.remoteSetMs ?? 20);
           return ok();
         }
         case 'log.get': {

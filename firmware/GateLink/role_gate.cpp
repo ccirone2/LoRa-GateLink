@@ -537,11 +537,13 @@ bool gateRelayTest(uint8_t k, uint32_t ms) {
   if (r.pulsing()) return false;  // running, or waiting out the interlock: never restarted (the console says busy)
   interlockedPulse(r, other, now, ms);
   // Track it like a command so the resulting movement is attributed to us, not external. A gate already at
-  // that limit won't move for it, so there's nothing to attribute (a later move off it is someone else's).
+  // that limit won't move for it, so there's nothing to attribute (a later move off it is someone else's), unless our
+  // last pulse is heading for the other one: this one reverses it, as a command's would (handleCmd).
   // With no AC and no limit reading the opener may be dead: the pulse is only a wiring check, and the limit read
   // when power returns isn't ours.
   uint8_t want = k == 1 ? GS_OPEN : GS_CLOSED;
-  if (state != want && state != GS_NO_POWER) setTarget(want, now);
+  bool reversing = target != GS_UNKNOWN && target != want;
+  if ((state != want || reversing) && state != GS_NO_POWER) setTarget(want, now);
   logEvent(EV_PULSE, k, ms);
   return true;
 }

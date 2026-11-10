@@ -269,8 +269,10 @@ in charge of entrapment.)
 
 **Goal.** An internal Shelly reboot never moves the gate (`shelly-reboot-spurious-commands`).
 
-**Today.** IN2 only senses the Shelly's supply, so a reboot with power present can still produce an IN1 edge, a CLOSE
-then an OPEN.
+**Today.** IN2 and the board's power good (0.11.0) only sense the Shelly's supply, so a reboot with power present can
+still produce an IN1 edge, a CLOSE then an OPEN. The same gap with a supply dip too short for power good is TODO.md's
+"A Shelly reboot the house doesn't see restores an OPEN" (found by the model checker, 0.20.2): a fix here would cover
+it as well.
 
 **How.** Ideas: watch for the Shelly's relay dropping and coming back within a short window with no matching Alarm.com
 change, or sense its status LED.
@@ -391,8 +393,8 @@ CFG_SETs); the release workflow checks it is off in release binaries. B2 covers 
 **Goal.** The suite checks every output it depends on, and the supply dips behind the full-power TX resets can be
 measured.
 
-**Today.** The suite has no D5 check and checks K2 but not K1 after each test (TODO.md); supply dips are inferred from
-resets.
+**Today.** The suite has no D5 check. Since #177 it checks house K1 as well as K2 after each test, but from the
+house's own log, not from the wire; supply dips are inferred from resets.
 
 **How.** D5 and house K1 wired to GateSim inputs; current sensing (an INA219, ~$5) on each board's 5 V feed.
 

@@ -167,7 +167,7 @@ jobs:
           fetch-depth: 0  # the FW_VERSION check measures the branch from where it left its base
       # The Python environment is pyproject.toml + uv.lock (hashes); --locked fails if the lock is out of date.
       # uv's version: keep in step with pyproject.toml's required-version and tools/agent/cloud_setup.sh.
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: '0.13.5'
           python-version: '3.12'

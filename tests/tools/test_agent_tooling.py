@@ -455,6 +455,7 @@ def test_cloud_session_reports_an_installed_toolchain(repo, tmp_path, monkeypatc
     assert env_file.read_text(encoding="utf-8").startswith('export PATH="')
 
 
+@pytest.mark.skipif(not Path("/proc/self").exists(), reason="_alive reads /proc (cloud sessions are Linux)")
 def test_cloud_session_starts_the_install_once(repo, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))

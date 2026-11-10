@@ -391,8 +391,8 @@ CFG_SETs); the release workflow checks it is off in release binaries. B2 covers 
 **Goal.** The suite checks every output it depends on, and the supply dips behind the full-power TX resets can be
 measured.
 
-**Today.** The suite has no D5 check and checks K2 but not K1 after each test (TODO.md); supply dips are inferred from
-resets.
+**Today.** The suite has no D5 check. Since #177 it checks house K1 as well as K2 after each test, but from the
+house's own log, not from the wire; supply dips are inferred from resets.
 
 **How.** D5 and house K1 wired to GateSim inputs; current sensing (an INA219, ~$5) on each board's 5 V feed.
 

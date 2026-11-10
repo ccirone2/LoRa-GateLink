@@ -268,6 +268,19 @@ def test_one_rerun_passes_a_flaky_scenario_once_todo_names_it(root):
     assert by_id["full_suite"]["runs"] == ["20261010-090000", "20261010-100000"]
 
 
+def test_todo_must_name_the_scenario_itself_not_a_longer_one(root):
+    """A flake noted for test_remote_set_busy doesn't excuse test_remote_set (the suite has names like these)."""
+    add_run(root, "full", "20261010-090000", tests=with_outcome("full", JAM, "failed", "AssertionError: timed out"))
+    rerun_of_jam(root, "20261010-100000")
+    (root / "TODO.md").write_text("- [ ] **Flaky: test_jammed_gate_twice.** Timed out on 0.14.0.\n", encoding="utf-8")
+    _, text, data = collect(root)
+    assert not met(data)["full_suite"]
+    assert "TODO.md doesn't name `test_jammed_gate` as a flaky scenario" in text
+    (root / "TODO.md").write_text("- [ ] **Flaky: `test_jammed_gate`.** Timed out on 0.14.0.\n", encoding="utf-8")
+    _, _, data = collect(root)
+    assert met(data)["full_suite"]
+
+
 def test_a_rerun_that_fails_again_isnt_retried(root):
     (root / "TODO.md").write_text("test_jammed_gate is flaky\n", encoding="utf-8")
     add_run(root, "full", "20261010-090000", tests=with_outcome("full", JAM, "failed", "first"))

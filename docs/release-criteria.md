@@ -101,7 +101,7 @@ pytest tests/e2e -m power -k test_gate_power_bounce   # an opt-in group: give it
 The first later run that includes the scenario is its rerun; if it passes, the criterion is met, and the evidence
 file records the failure, its reason and the rerun. A rerun that fails too can't be retried: fix the cause or make
 a new full run. A rerun counts only once **TODO.md names the scenario** as flaky (what failed, on which version), so
-the flake gets looked at. Two or more failed scenarios mean a new run.
+the flake gets looked at; by its whole name (a note on `test_remote_set_busy` doesn't name `test_remote_set`). Two or more failed scenarios mean a new run.
 
 ## The evidence file
 

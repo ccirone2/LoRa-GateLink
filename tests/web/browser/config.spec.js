@@ -88,6 +88,17 @@ test('an out-of-range value is refused before anything is sent', async ({ page }
   expect((await requests(page)).some((r) => r.cmd === 'config.set')).toBe(false);
 });
 
+test('an emptied number field is refused, not applied as 0', async ({ page }) => {
+  await openConfig(page);
+  // 0 is in range here (no confirm wait for a switch-off), so an empty field read as 0 would go through.
+  await page.locator('#p_ctrl_confirm_ms').fill('');
+  await expect(page.locator('#p_ctrl_confirm_ms')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('#btnCfgApply')).toHaveText('Apply (1)');
+  await page.locator('#btnCfgApply').click();
+  await expect(page.locator('#toast')).toContainText('ctrl_confirm_ms must be an integer 0–5000');
+  expect((await requests(page)).some((r) => r.cmd === 'config.set')).toBe(false);
+});
+
 test('a must-match radio setting asks first, and nothing is sent if declined', async ({ page }) => {
   await openConfig(page, [{ role: 'house' }], { dismissDialogs: true });
   await page.locator('#p_sf').fill('10');

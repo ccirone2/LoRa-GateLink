@@ -415,7 +415,8 @@ def judge(c, runs, todo):
                       [latest.name, rr.name])
     base = (t.get("name") or "").split("[")[0]
     rerun = {"run": latest.name, "test": t.get("nodeid"), "reason": t.get("reason"), "rerun": rr.name}
-    if not base or base not in todo:
+    # The whole name: test_remote_set_busy noted as flaky doesn't name test_remote_set.
+    if not base or not re.search(rf"(?<!\w){re.escape(base)}(?!\w)", todo):
         return Result(False, f"{what}; its rerun {rr.name} passed, but TODO.md doesn't name `{base}` as a flaky "
                              f"scenario{note}", [latest.name, rr.name], rerun)
     return Result(True, f"{what}; passed its one rerun {rr.name}{note}", [latest.name, rr.name], rerun)

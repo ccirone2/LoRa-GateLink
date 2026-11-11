@@ -245,7 +245,7 @@ From `firmware/GateLink/log.h` (`a`/`b` meanings):
 | `link_up`, `link_down` | (house) | |
 | `mac_fail` | message type | RSSI |
 | `session` | peer session id (accepted) | |
-| `replay` | seq | last seq (house: also a STATUS older than the last one it took, withheld and delivered late, which it drops: b = that one's seq; gate: also a command framed before the last one it took, which it refuses `RES_LATE`: b = that one's seq) |
+| `replay` | seq | last seq (house: also a STATUS withheld and delivered late, which it drops: one older than the last it took, or by the gate's clock older than any the gate still sends; b = the last taken's seq; gate: also a command framed before the last one it took, which it refuses `RES_LATE`: b = the last taken's seq) |
 | `tx_giveup` | message type | seq |
 | `cmd_sent` | action (1 open, 2 close) | command id |
 | `cmd_suppressed` | action | gate state |

@@ -161,6 +161,14 @@ once its fix is merged and record it in the pull request.
   rulesets on `main` and `v*` tags and immutable releases are on (2026-10-14). Pages checks the `.bin` it bundles against
   GitHub's release attestation (`gh release verify-asset`, 2026-10-24). Left: build provenance attestations for the
   binary (`actions/attest-build-provenance`), if worth a third-party-free path to them.
+- [ ] **arduino-cli 1.5.1 → 1.6.0** (tagged 2026-11-10; deps-check 2026-11-11). It runs the build (library
+  discovery, prototypes, linking), so it changes the binary: bump it in a working session with the bench and a
+  release, once it is two weeks old (2026-11-24) and no 1.6.x patch follows. Changes since 1.5.1 that touch us:
+  library discovery (platform library dependencies exposed, library loading cached at init, the library index
+  scanned once, a symlinked library `utility` folder fixed), installed files synced to disk against power loss, and
+  faster xz extraction; nothing SAMD- or upload-specific beyond skipping port detection when no port is given.
+  Check: the compile stays warning-free and the `.bin` matches 1.5.1's (or explain the diff); then the version in
+  every `setup-arduino-cli` step, `tools/agent/cloud_setup.sh` (with its SHA-256) and `docs/development.md`.
 
 ## Housekeeping
 

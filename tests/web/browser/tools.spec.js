@@ -82,6 +82,23 @@ test('remote diagnostics and a remote write report back', async ({ page }) => {
   expect((await requests(page)).find((r) => r.cmd === 'remote.set')).toMatchObject({ name: 'pulse_ms', value: 700 });
 });
 
+test('a remote write while the last one is pending is refused busy', async ({ page }) => {
+  await openConsole(page, [{ role: 'house', remoteSetMs: 1500 }]);
+  await connect(page);
+  await page.locator('#tabbtn-link').click();
+  await page.locator('#remParam').selectOption('pulse_ms');
+  await page.locator('#remValue').fill('700');
+  await page.locator('#btnRemSet').click();
+  await expect(page.locator('#remResult')).toHaveText('sending…');
+  await page.locator('#btnRemSet').click();
+  await expect(page.locator('#remResult')).toHaveText('Busy: the previous remote set is still pending; wait for its result.');
+  // The first one's result still comes, and after it the board takes another.
+  await expect(page.locator('#remResult')).toHaveText('Gate accepted and saved the value.');
+  await page.locator('#btnRemSet').click();
+  await expect(page.locator('#remResult')).toHaveText('sending…');
+  expect((await requests(page)).filter((r) => r.cmd === 'remote.set')).toHaveLength(3);
+});
+
 test('a gate relay test asks first, then pulses', async ({ page }) => {
   await openConsole(page, [{ role: 'gate' }]);
   await connect(page, 'gate');

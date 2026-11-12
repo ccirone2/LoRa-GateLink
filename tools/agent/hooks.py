@@ -600,11 +600,13 @@ def spawn(cmd, cwd, log):
 
 
 def _alive(pidfile):
+    """Whether the install the pidfile names still runs. Checked by its command line, not just the pid: a cache
+    kept from an earlier container can name a pid since reused by another process (once, the session's own)."""
     try:
-        os.kill(int(pidfile.read_text(encoding="utf-8")), 0)
-        return True
+        cmdline = Path(f"/proc/{int(pidfile.read_text(encoding='utf-8'))}/cmdline").read_bytes()
     except (OSError, ValueError):
         return False
+    return b"cloud_setup.sh" in cmdline
 
 
 def session_start(event):
@@ -640,6 +642,11 @@ def main(argv=None):
 
     if args.cmd == "check":
         root = repo_root(os.getcwd())
+        # Without a base nothing committed counts as changed, and CI's FW_VERSION check would pass on any branch.
+        if root and not find_base(root, args.base):
+            print(f"no merge base between HEAD and {args.base or 'origin/main or main'}: fetch it "
+                  "(CI checks out with fetch-depth 0)", file=sys.stderr)
+            return 2
         findings = stop_findings(root, args.base) if root else []
         if args.only:
             findings = [f for f in findings if f.rule in args.only]

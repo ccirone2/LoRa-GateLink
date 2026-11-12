@@ -169,7 +169,7 @@ jobs:
       # uv's version: keep in step with pyproject.toml's required-version and tools/agent/cloud_setup.sh.
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          version: '0.12.24'
+          version: '0.13.5'
           python-version: '3.12'
           enable-cache: true
       - name: Install the locked environment (pyproject.toml, uv.lock)

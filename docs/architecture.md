@@ -291,7 +291,8 @@ key on the chip; on load, values out of range are dropped and ids this firmware 
 (`extras`) and written back by every save, so a downgrade doesn't lose a newer firmware's settings (both counted by
 the `cfg` log event); missing params take defaults. So **PARAMS ids are permanent**: a changed meaning or unit needs
 a new id. If the chip doesn't answer, config falls back to program flash (FlashStorage struct image,
-`CFG_VERSION`-checked, erased by uploads; status `cfg_store`). `config.reset` erases both sectors.
+`CFG_VERSION`-checked, erased by uploads; status `cfg_store`). `config.reset` erases both sectors; the next save's seq still goes on from the last one, so a record an erase
+failed to clear (the reset answers `flash write failed`) can't outrank it at the next boot.
 
 The `PARAMS[]` table drives console get/set, the web form (via `meta`), and remote-over-LoRa writes (`P_REMOTE`
 flag; radio params and `inN_invert` are never remote-writable). A remote write saves only that param on top of

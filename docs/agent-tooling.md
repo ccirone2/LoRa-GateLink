@@ -73,7 +73,9 @@ says why the rest doesn't, and the hook doesn't ask the same item again in that 
 | `trackers` | any code | `TODO.md` or `ROADMAP.md` (or "neither applies") |
 
 `python tools/agent/hooks.py check` prints the same list for the current branch, without asking-once state. CI runs
-it as `check --only fw-version` on every pull request, so that one item is enforced, not just asked.
+it as `check --only fw-version` on every pull request, so that one item is enforced, not just asked. A base it
+can't find (no merge base with `--base`, or with `origin/main` or `main`) exits 2 instead of passing a branch it
+compared with nothing.
 
 **Turning them off** for a session or machine: `"disableAllHooks": true` in `.claude/settings.local.json` (not
 committed). `/hooks` lists what's loaded; `claude --debug` logs each run.

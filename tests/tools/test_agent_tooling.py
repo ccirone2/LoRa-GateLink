@@ -360,6 +360,18 @@ def test_check_only_one_item_as_ci_does(repo, monkeypatch, capsys):
     assert "[fw-version]" in out and "[native-tests]" not in out
 
 
+def test_check_fails_when_its_base_cant_be_found(repo, monkeypatch, capsys):
+    """CI's FW_VERSION check must not pass because it compared nothing: a base it can't find (a shallow clone, a
+    mistyped ref) is an error, not a branch with no changes."""
+    monkeypatch.chdir(repo)
+    edit(repo, "firmware/GateLink/link.cpp")
+    git(repo, "commit", "-qam", "change")
+    assert hooks.main(["check", "--base", "origin/nosuch", "--only", "fw-version"]) == 2
+    assert "origin/nosuch" in capsys.readouterr().err
+    git(repo, "branch", "-q", "-m", "main", "trunk")  # no main or origin/main to default to
+    assert hooks.main(["check", "--only", "fw-version"]) == 2
+
+
 # ---- post-edit ----------------------------------------------------------------------------------------------
 
 

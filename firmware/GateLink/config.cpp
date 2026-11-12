@@ -160,7 +160,19 @@ static bool decode(const uint8_t *buf, Config &c, uint32_t &seq, int32_t &skippe
   return true;
 }
 
-// Loads the newest valid record from SPI flash on top of the defaults. Leaves the cached sector and seq alone.
+// Reads a record sector's page; false if the read was garbled on the bus (extflash.h): its magic read 0 twice and the
+// chip's id didn't read back either. No record starts so; with the chip answering, the zeros are what the flash holds
+// (an erase cut short), no record. A garbled sector mustn't be taken as empty: the other, older record would load.
+static bool readRecord(int8_t s, uint8_t *buf) {
+  for (int tries = 0; tries < 2; tries++) {
+    extFlashRead(s * EXTFLASH_SECTOR, buf, EXTFLASH_PAGE);
+    if (get32(buf)) return true;
+  }
+  return extFlashAnswers();
+}
+
+// Loads the newest valid record from SPI flash on top of the defaults. Leaves the cached sector and seq alone. False
+// with no valid record, or if a sector's read was garbled (then nothing is taken from it, though c may be changed).
 static bool spiRead(Config &c, SpiRecord &r) {
   uint8_t buf[EXTFLASH_PAGE];
   r.sector = -1;
@@ -173,7 +185,10 @@ static bool spiRead(Config &c, SpiRecord &r) {
     uint32_t seq;
     int32_t sk;
     Extras x;
-    extFlashRead(s * EXTFLASH_SECTOR, buf, sizeof(buf));
+    if (!readRecord(s, buf)) {
+      r = SpiRecord{ -1, 0, 0, {} };  // nothing found: no record of what was read before
+      return false;
+    }
     if (!decode(buf, t, seq, sk, x)) continue;
     if (r.sector >= 0 && (int32_t)(seq - r.seq) <= 0) continue;
     r.sector = s;

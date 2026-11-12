@@ -1056,6 +1056,51 @@ TEST(house_sync_k1_relay_test_before_the_first_status_does_not_arm) {
   CHECK(w.sensorClosed());
 }
 
+// [armed-after-status] [sync-window] [resync]
+TEST(house_sync_k1_relay_test_outlasting_the_first_status_runs_its_full_length) {
+  // As above, but the gate's first STATUS (closed) gets through early in a long K1 test pulse (5 s), sooner than
+  // sync_window_ms before its end. The house mustn't arm while the pulse still runs: armed, it found the Shelly (on,
+  // from the pulse) out of step with the closed gate, and its boot's resync set K1 and cut the test pulse short. The
+  // pulse runs its full length; its end puts the Shelly back (a sync), with no resync and no command.
+  Site w;
+  w.commission([](Board &b) { configureHouse(b, "ctrl_settle_ms", 0); });
+  w.run(2000);
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  bool block = true;
+  w.drop = [&block](const AirFrame &f) { return block && f.from == 1 && f.type() == MSG_STATUS_; };
+  w.house.reset(PM_RCAUSE_WDT);
+  Found boot = waitFor(w, w.house, "boot", h0, 2000);
+  CHECK(boot.ok);
+  runTo(w, boot.e.at + 5000);
+  CHECK(w.house.status()["armed"] == false);
+  CHECK_EQ(countSince(w.house, "gate_state", h0), 0);
+
+  JsonDocument r = w.house.request("relay.test", "\"k\":1,\"ms\":5000");
+  CHECK(r["ok"] == true);
+  Found p = find(w.house, "pulse", h0, 1);
+  CHECK(p.ok);
+  block = false;
+  Found st = waitFor(w, w.house, "gate_state", h0, 1900);
+  w.drop = nullptr;
+  CHECK(st.ok);
+  CHECK_EQ(st.e.a, GS_CLOSED_);
+  CHECK((int32_t)(p.e.at + 5000 - st.e.at) > (int32_t)SYNC_MS);  // armed before the pulse ended, as it was
+  CHECK_EQ(watch(w, p.e.at + 4999 - w.now, [&] { return w.house.coil(1); }), 0);
+  CHECK_EQ(countSince(w.house, "resync", h0), 0);
+  w.run(2);
+  CHECK(!w.house.coil(1));
+  CHECK(w.runUntil([&] { return !w.alarmSwitch(); }, 1000));
+  w.run(SYNC_MS + 2000);
+  CHECK(w.house.status()["armed"] == true);
+  CHECK_EQ(countSince(w.house, "resync", h0), 0);
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0), 0);
+  CHECK_EQ(countSince(w.gate, "cmd_rx", g0), 0);
+  CHECK_EQ(countSince(w.gate, "pulse", g0), 0);
+  CHECK(w.opener.atClosed());
+  CHECK(w.sensorClosed());
+  CHECK(!w.alarmSwitch());
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // [resync]
 

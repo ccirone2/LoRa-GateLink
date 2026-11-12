@@ -117,7 +117,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 |---|---|---|
 | `pulse-only` | Gate relays are only ever pulsed (`pulse_ms`, or a relay test's ms), never held, never restarted while pulsing | `gate_relays` |
 | `interlock` | A pulse never starts within `INTERLOCK_MS` of the other relay releasing, cut short or ended by itself | `gate_relays` |
-| `relay-test-target` | A relay test sets a target only if the gate isn't already at that limit (and the opener has power) | `gate_relays` |
+| `relay-test-target` | A relay test sets a target only if the gate isn't already at that limit or it reverses our last pulse (and the opener has power) | `gate_relays` |
 | `no-stall-in-pulse` | Nothing that stops the loop (a flash save, a radio restart, a history write, a reboot's wait) runs while a pulse does | `gate_relays`, `history` |
 | `watchdog` | The loop stays well inside the 8 s watchdog; one console request per port per pass | `gate_relays`, `robustness` |
 | `state-from-limits` | Gate state comes only from the opener's limit inputs (and the closed sensor, with `closed_sense`), never from our last command | `gate_state` |

@@ -909,6 +909,47 @@ TEST(gate_relays_test_at_the_limit_it_drives_to_sets_no_target) {
 }
 
 // [relay-test-target]
+TEST(gate_relays_test_reversing_our_pulse_at_its_limit_retargets) {
+  // A test toward the limit the gate is still at, while our last pulse heads for the other one, reverses it: the
+  // target becomes that limit, as a command's reversal does (handleCmd). Kept as the far limit, a move someone else
+  // makes toward it read as ours (lora), and the gate staying put timed out as an overridden command.
+  World w;
+  Guard g{ w };
+  w.commission();
+  Rec r(w);
+  w.opener.deaf = true;  // the gate stays closed for both pulses
+  CHECK(req(r, w.gate, "relay.test", "\"k\":1,\"ms\":500")["ok"] == true);
+  r.run(200);
+  CHECK(req(r, w.gate, "relay.test", "\"k\":2,\"ms\":300")["ok"] == true);
+  JsonDocument s = w.gate.status();
+  CHECK(s["gate"] == "closed");
+  CHECK(s["target"] == "closed");
+  r.run(65000);  // past travel_timeout_s (60)
+  s = w.gate.status();
+  CHECK(s["target"] == "");
+  CHECK(s["last_result"] == "reached");
+  CHECK_EQ(w.gate.count("travel_timeout"), 0);
+
+  // The same reversal, then someone else opens the gate within travel_timeout_s: theirs, not ours
+  CHECK(req(r, w.gate, "relay.test", "\"k\":1,\"ms\":500")["ok"] == true);
+  r.run(200);
+  CHECK(req(r, w.gate, "relay.test", "\"k\":2,\"ms\":300")["ok"] == true);
+  r.run(2000);
+  w.opener.deaf = false;
+  size_t l0 = w.gate.logs.size();
+  w.extPress(true, 300);
+  CHECK(r.until([&] { return w.gateSees() == GS_BETWEEN_; }, 3000));
+  std::vector<SC> st = statesSince(w.gate, l0);
+  CHECK_EQ(st.size(), 1);
+  CHECK(st[0] == SC(GS_BETWEEN_, CAUSE_EXTERNAL_));
+  CHECK(r.until([&] { return w.gateSees() == GS_OPEN_; }, 15000));
+  CHECK_EQ(w.gate.last("gate_state")->b, CAUSE_EXTERNAL_);
+  CHECK_EQ(w.gate.count("travel_timeout"), 0);
+  r.run(4000);
+  w.checkClean();
+}
+
+// [relay-test-target]
 TEST(gate_relays_test_sets_no_target_while_the_opener_is_unpowered) {
   World w;
   Guard g{ w };

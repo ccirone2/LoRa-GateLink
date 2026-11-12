@@ -642,6 +642,11 @@ def main(argv=None):
 
     if args.cmd == "check":
         root = repo_root(os.getcwd())
+        # Without a base nothing committed counts as changed, and CI's FW_VERSION check would pass on any branch.
+        if root and not find_base(root, args.base):
+            print(f"no merge base between HEAD and {args.base or 'origin/main or main'}: fetch it "
+                  "(CI checks out with fetch-depth 0)", file=sys.stderr)
+            return 2
         findings = stop_findings(root, args.base) if root else []
         if args.only:
             findings = [f for f in findings if f.rule in args.only]

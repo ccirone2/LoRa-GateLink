@@ -161,6 +161,9 @@ once its fix is merged and record it in the pull request.
   rulesets on `main` and `v*` tags and immutable releases are on (2026-10-14). Pages checks the `.bin` it bundles against
   GitHub's release attestation (`gh release verify-asset`, 2026-10-24). Left: build provenance attestations for the
   binary (`actions/attest-build-provenance`), if worth a third-party-free path to them.
+- [ ] **Drop the `minimatch` override in `package.json`** (deps-check 2026-11-13) once ESLint depends on
+  `minimatch` 11.0.1 or newer: it is there only for GHSA-g3hv-75wg-m249 (moderate, a glob DoS in a dev tool that lints
+  our own files), and ESLint 10.14.0 still asks for `^10.2.6` ([docs/development.md](docs/development.md)).
 
 ## Housekeeping
 

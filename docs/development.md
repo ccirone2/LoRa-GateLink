@@ -108,7 +108,7 @@ are built from the pull requests since the last tag.
    python tools/docgen.py     # reference docs vs the source (--write regenerates the generated tables)
    make -C tests/native       # host tests: link/config, and both boards' firmware in a simulated site (tests/native/README.md)
    make -C tests/native cppcheck tidy coverage   # static analysis and coverage (in Docker on Windows, as the README says)
-   uv run pytest tests/tools -q   # unit tests for the tools (release_evidence.py, docgen.py, the agent hooks, key backups, the bench suite's LiPo check)
+   uv run pytest tests/tools -q   # unit tests for the tools, the agent hooks and the bench suite's own helpers (tests/tools)
    uv run pytest tests/e2e -v        # on the bench; see tests/e2e/README.md
    ```
 5. Open a pull request with a summary and the bench results (suite pass count, anything new it found). CI
@@ -121,15 +121,16 @@ are built from the pull requests since the last tag.
    (`check_contract.py`, `docgen.py`), fails a pull request that changes the firmware without bumping `FW_VERSION`,
    lints the workflows (actionlint, with shellcheck), runs cppcheck and clang-tidy (`firmware/GateLink/.clang-tidy`)
    on the firmware and reports the host tests' coverage of it (failing below 85 % of lines; tests/native/README.md):
-   `make -C tests/native cppcheck tidy coverage`.
+   `make -C tests/native cppcheck tidy coverage`. Its `verify` job runs the formal verification (`make -C tools/verify`:
+   ESBMC and TLC, versions above), which can take hours.
 6. Merge to `main`. Once CI has passed on `main`, the web console is deployed to GitHub Pages (`pages.yml`; also
    after each release build, to bundle its `.bin`, and by hand with `gh workflow run pages.yml`).
 
 `main` is protected by a ruleset (repository settings): changes only through a pull request, merged as a merge
 commit, with CI's `firmware`, `static`, `coverage`, `web`, `python` and `workflows` jobs passing; no force pushes or
 deletion. The required checks are listed by job name in the ruleset, not here: rename or split one of those jobs and
-every pull request waits for the old name until the ruleset is changed with it. The fuzz and mutation jobs aren't
-required (they run only when their paths change). `v*` tags can't be moved or deleted (a second ruleset).
+every pull request waits for the old name until the ruleset is changed with it. The `verify` job isn't required (it
+can take hours), nor are the fuzz and mutation jobs (they run only when their paths change). `v*` tags can't be moved or deleted (a second ruleset).
 
 CI's actions are pinned by commit SHA and its runners by image (`ubuntu-24.04`); Dependabot
 (`.github/dependabot.yml`) proposes action, npm and Python (`uv.lock`, ruff included) updates weekly, and the nightly deps-check routine

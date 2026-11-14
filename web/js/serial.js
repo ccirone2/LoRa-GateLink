@@ -271,6 +271,8 @@ async function tryReconnect(p) {
   } catch {
     return; // not back yet; the timer retries
   }
+  // Gone again while the page read it: connectionLost() started a new reconnect, which this one mustn't stop.
+  if (S.port !== p) return;
   stopReconnect();
   logLine('reconnected');
   checkSameBoard(was);

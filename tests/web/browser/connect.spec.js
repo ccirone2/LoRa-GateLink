@@ -43,6 +43,25 @@ test('reboot: the page reconnects to the board when it comes back', async ({ pag
   await expect(page.locator('#logView')).toContainText('reconnected');
 });
 
+test('reboot: a board that drops again while the page reads it after reconnecting is reconnected, once', async ({ page }) => {
+  // The open that dropped is no reconnect: neither logged, nor allowed to stop the reconnect the drop started.
+  await openConsole(page, [{ role: 'house', rebootMs: 400 }]);
+  await connect(page);
+  const opens = await page.evaluate(() => window.__fake.ports[0].opens.length);
+  await page.evaluate(() => { window.__fake.boards[0].replyDelayMs = 2000; }); // the page's queries after reopening wait
+  await page.locator('#tabbtn-config').click();
+  await page.locator('#btnReboot').click();
+  await page.waitForFunction((n) => window.__fake.ports[0].isOpen && window.__fake.ports[0].opens.length > n, opens);
+  await page.evaluate(() => { // back, then gone again before it answered the page's info
+    window.__fake.boards[0].replyDelayMs = 5;
+    window.__fake.ports[0].replug(400);
+  });
+  await expect(page.locator('#devline')).toHaveText('MKR WAN 1310 · fw 0.13.8 · house', { timeout: 10000 });
+  await page.locator('#tabbtn-log').click();
+  await expect(page.locator('#logView')).toContainText('reconnected');
+  expect((await page.locator('#logView').textContent()).match(/reconnected/g)).toHaveLength(1);
+});
+
 test('a line that breaks the page is logged and skipped, and the session carries on', async ({ page }) => {
   await openConsole(page);
   await connect(page);

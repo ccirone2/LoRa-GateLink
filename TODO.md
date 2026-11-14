@@ -175,3 +175,10 @@ once its fix is merged and record it in the pull request.
   (firmware: `before must be 1..4294967295`); a gate `relay.test` of a relay already pulsing is never `busy`. No
   page path depends on them today (the page sends no `period_s` and only `before` from a record's `seq`); model one
   when a test needs it.
+- [ ] **A firmware update could flash the other board if that one waits in its bootloader** (bug sweep 2026-11-14).
+  `findBootPort` (`web/js/firmware.js`) takes the first granted bootloader port (`getPorts().find(isBootPort)`)
+  after the 1200-baud touch. With both boards on one computer and the other one already in its bootloader (a
+  failed update, a double-tapped reset), the page writes the image to that one and the board touched stays in its
+  bootloader. Both boards share VID/PID, so the port can't be told apart by its info; a `connect` event for a boot
+  port after the touch could. Not proven by a test yet (a browser test with two fake boards, one with
+  `bootloader: true`, could show it).

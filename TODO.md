@@ -169,6 +169,11 @@ once its fix is merged and record it in the pull request.
   `python tools/gatelink.py key backup <dir>` and keep its passphrase in the password manager; then
   check `python tools/gatelink.py ports` shows the same key id on both boards as `key id` does for the
   file ([docs/key-management.md](docs/key-management.md)). The install pair gets its own key, generated there.
+- [ ] **A site survey on the house starts with the link down** (bug sweep 2026-11-15). The web card
+  (`web/js/surveycard.js:24`) and `tools/gatelink.py survey` (`tools/gatelink.py:577`) check only `link.verified`,
+  which on the house stays set after the link is lost (status.js and the health line use `link_up` there). Started
+  then, the survey pings for its full length and reports poor instead of refusing at once with "needs the link up".
+  Fix both twins together (house: `link_up`; gate: `verified` and no `link` in `health`).
 - [ ] **The web console's fake board still accepts a few requests the firmware refuses** (bug sweep 2026-10-25,
   `tests/web/fake-serial.js` against `console.cpp`). `hist.clear` ignores `period_s` (firmware: 60..3600, else
   `period_s must be 60..3600`, and `hist.get` then reports that period); `log.get` takes `before` 0 or a non-integer

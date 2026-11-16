@@ -7,12 +7,12 @@ version = "0"
 requires-python = ">=3.10"
 dependencies = [
     "pyserial>=3.5",
-    "pytest>=9.1.1",
+    "pytest>=9.2.0",
     "cryptography>=50.0.1",  # tools/gatelink.py key: encrypted key backups (imported only there)
 ]
 
 [dependency-groups]
-dev = ["ruff==0.17.2"]  # the version CI uses; rules in ruff.toml
+dev = ["ruff==0.17.3"]  # the version CI uses; rules in ruff.toml
 
 [tool.uv]
 package = false

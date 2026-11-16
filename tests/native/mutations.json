@@ -182,8 +182,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (state != want && state != GS_NO_POWER) setTarget(want, now);",
-    "replace": "  if (state != GS_NO_POWER) setTarget(want, now);"
+    "find": "  if ((state != want || reversing) && state != GS_NO_POWER) setTarget(want, now);",
+    "replace": "  (void)reversing;\n  if (state != GS_NO_POWER) setTarget(want, now);"
    }
   ]
  },
@@ -197,8 +197,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (state != want && state != GS_NO_POWER) setTarget(want, now);",
-    "replace": "  if (state != want) setTarget(want, now);"
+    "find": "  if ((state != want || reversing) && state != GS_NO_POWER) setTarget(want, now);",
+    "replace": "  if (state != want || reversing) setTarget(want, now);"
    }
   ]
  },
@@ -213,8 +213,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  uint8_t want = k == 1 ? GS_OPEN : GS_CLOSED;\n  if (state != want",
-    "replace": "  uint8_t want = k == 1 ? GS_CLOSED : GS_OPEN;\n  if (state != want"
+    "find": "  uint8_t want = k == 1 ? GS_OPEN : GS_CLOSED;\n  bool reversing",
+    "replace": "  uint8_t want = k == 1 ? GS_CLOSED : GS_OPEN;\n  bool reversing"
    }
   ]
  },
@@ -228,8 +228,23 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (state != want && state != GS_NO_POWER) setTarget(want, now);",
-    "replace": "  if ((state == GS_OPEN || state == GS_CLOSED) && state != want) setTarget(want, now);"
+    "find": "  if ((state != want || reversing) && state != GS_NO_POWER) setTarget(want, now);",
+    "replace": "  if ((state == GS_OPEN || state == GS_CLOSED) && (state != want || reversing)) setTarget(want, now);"
+   }
+  ]
+ },
+ {
+  "name": "gate_relays_t5_gaterelaytest_keeps_the_old_target",
+  "invariant": "relay-test-target",
+  "why": "T5: gateRelayTest at the limit it drives to keeps our last pulse's target for the other limit, so a reversal there times out and someone else's move toward that limit reads as ours",
+  "killed_by": [
+   "gate_relays_test_reversing_our_pulse_at_its_limit_retargets"
+  ],
+  "edits": [
+   {
+    "file": "role_gate.cpp",
+    "find": "  if ((state != want || reversing) && state != GS_NO_POWER) setTarget(want, now);",
+    "replace": "  (void)reversing;\n  if (state != want && state != GS_NO_POWER) setTarget(want, now);"
    }
   ]
  },
@@ -572,8 +587,8 @@
   "edits": [
    {
     "file": "role_gate.cpp",
-    "find": "  if (state != want && state != GS_NO_POWER) setTarget(want, now);\n  logEvent(EV_PULSE, k, ms);",
-    "replace": "  (void)want;\n  logEvent(EV_PULSE, k, ms);"
+    "find": "  if ((state != want || reversing) && state != GS_NO_POWER) setTarget(want, now);\n  logEvent(EV_PULSE, k, ms);",
+    "replace": "  (void)want;\n  (void)reversing;\n  logEvent(EV_PULSE, k, ms);"
    }
   ]
  },

@@ -205,10 +205,11 @@ static void scrubOldKey(int8_t sector, const uint8_t key[16]) {
   extFlashProgram(addr, old, sizeof(old));
 }
 
-// Writes into the sector not holding the newest record, then reads it back.
+// Writes into the sector not holding the newest record, then reads it back. The seq goes on from the last one even
+// after a reset (spiSector -1): an erase that failed there leaves that record, which a restarted seq would lose to.
 static bool spiWrite(const Config &c) {
   uint8_t buf[EXTFLASH_PAGE], check[EXTFLASH_PAGE];
-  uint32_t seq = spiSector >= 0 ? spiSeq + 1 : 1;
+  uint32_t seq = spiSeq + 1;
   int8_t sector = spiSector == 0 ? 1 : 0;
   uint32_t addr = sector * EXTFLASH_SECTOR;
   size_t len = encode(c, seq, buf);

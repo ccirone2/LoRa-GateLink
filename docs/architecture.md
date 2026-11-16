@@ -290,7 +290,9 @@ older one is overwritten with zeros (`scrubOldKey`: that record then fails its C
 key on the chip; on load, values out of range are dropped and ids this firmware doesn't know are kept aside
 (`extras`) and written back by every save, so a downgrade doesn't lose a newer firmware's settings (both counted by
 the `cfg` log event); missing params take defaults. So **PARAMS ids are permanent**: a changed meaning or unit needs
-a new id. If the chip doesn't answer, config falls back to program flash (FlashStorage struct image,
+a new id. A sector whose magic reads 0 is read again, and with the chip's id garbled too the whole read gives up
+(`readRecord`, as the logs and boot counter do): a garbled sector taken as empty would load the older record. If the
+chip doesn't answer, config falls back to program flash (FlashStorage struct image,
 `CFG_VERSION`-checked, erased by uploads; status `cfg_store`). `config.reset` erases both sectors.
 
 The `PARAMS[]` table drives console get/set, the web form (via `meta`), and remote-over-LoRa writes (`P_REMOTE`

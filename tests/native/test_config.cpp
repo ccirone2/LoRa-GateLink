@@ -502,7 +502,7 @@ TEST(config_save_after_a_garbled_read_is_retried) {
   fresh();
   saveWith(600);
   saveWith(600);
-  flash.garbleReads = 2;  // both sectors read back as zeros once
+  flash.garbleReads = 3;  // sector 0 read back as zeros twice, and the id: the whole read
   cfg.pulse_ms = 900;
   CHECK(configSaveParam(paramByName("pulse_ms")));
   configDefaults(cfg);
@@ -515,10 +515,10 @@ TEST(config_save_refused_while_the_record_reads_garbled) {
   saveWith(600);
   saveWith(600);
   int programs = flash.programs;
-  flash.garbleReads = 4;  // the retry is garbled too
+  flash.garbleReads = 6;  // the retry is garbled too
   cfg.pulse_ms = 900;
   CHECK(!configSaveParam(paramByName("pulse_ms")));
-  flash.garbleReads = 4;
+  flash.garbleReads = 6;
   CHECK(!configSaveKey());
   CHECK_EQ(flash.programs, programs);  // nothing written
   configDefaults(cfg);
@@ -556,7 +556,7 @@ TEST(config_save_after_a_garbled_boot_read_keeps_the_record) {
   fresh();
   saveWith(600);
   saveWith(700);
-  flash.garbleReads = 2;
+  flash.garbleReads = 3;  // sector 0 twice, and the id
   CHECK(!configLoad());
   CHECK_EQ(cfg.pulse_ms, 500);
   cfg.retries = 3;
@@ -564,6 +564,34 @@ TEST(config_save_after_a_garbled_boot_read_keeps_the_record) {
   configDefaults(cfg);
   CHECK(configLoad());
   CHECK_EQ(cfg.pulse_ms, 700);
+  CHECK_EQ(cfg.retries, 3);
+}
+
+// A boot whose read of the newest record's sector comes back garbled (zeros) once. That read was taken as no record
+// there: the board booted on the older record (its pulse_ms, its role, its key if unchanged) without a word, and the
+// next save of one setting went on top of it. Like the logs and the boot counter, a sector whose magic reads 0 is read
+// again, and with the chip's id garbled too the whole read gives up (defaults, as with no record) rather than load the
+// older one.
+TEST(config_boot_read_garbled_once_loads_the_newest_record) {
+  fresh();
+  saveWith(600);
+  saveWith(700);
+  saveWith(800);
+  CHECK_EQ(newestSector(), 0);
+  flash.garbleReads = 1;  // sector 0's read
+  configDefaults(cfg);
+  CHECK(configLoad());
+  CHECK_EQ(cfg.pulse_ms, 800);
+
+  flash.garbleReads = 3;  // sector 0 twice, and the id: garbled, not the older record
+  configDefaults(cfg);
+  CHECK(!configLoad());
+  CHECK_EQ(cfg.pulse_ms, 500);
+  cfg.retries = 3;  // a save of one setting still goes on top of the newest record
+  CHECK(configSaveParam(paramByName("retries")));
+  configDefaults(cfg);
+  CHECK(configLoad());
+  CHECK_EQ(cfg.pulse_ms, 800);
   CHECK_EQ(cfg.retries, 3);
 }
 

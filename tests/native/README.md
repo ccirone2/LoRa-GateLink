@@ -2,9 +2,10 @@
 
 The firmware built with g++ and run on the PC, two ways:
 
-- **`tests`**: `link.cpp`, `config.cpp` and `histlog.cpp` on their own (`test_link.cpp`, `test_config.cpp`,
-  `test_histlog.cpp`): replays across sessions and restarts, HELLO side effects, retry spacing, timer wraps, power cuts
-  mid-save, records from other firmware, the history log's wrap and failed writes.
+- **`tests`**: `link.cpp`, `config.cpp`, `histlog.cpp` and `evlog.cpp` on their own (`test_link.cpp`,
+  `test_config.cpp`, `test_histlog.cpp`, `test_evlog.cpp`): replays across sessions and restarts, HELLO side effects,
+  retry spacing, timer wraps, power cuts mid-save, records from other firmware, the history log's and the event
+  journal's wrap and failed writes.
 - **`systests`**: both boards' **whole firmware** in a simulated site (`world.h`, `test_system*.cpp`): the opener, the
   controller (Shelly) and its power, the contact sensor and the radio channel, on one clock, with monitors that check
   the behavioural invariants (CLAUDE.md) every simulated millisecond. Every invariant has tests here that fail if it
@@ -43,7 +44,7 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
 ## The simulated site (`systests`)
 
 - **Each board is a copy of `build/node.so`**: the firmware (`app.cpp`, `link.cpp`, both roles, `io.cpp`, `log.cpp`,
-  `history.cpp`, `histlog.cpp`, `health.cpp`, `console.cpp`, `config.cpp`) plus `node/api.cpp`, its entry points. `world.cpp` loads one copy per
+  `history.cpp`, `histlog.cpp`, `flashlog.cpp`, `evlog.cpp`, `health.cpp`, `console.cpp`, `config.cpp`) plus `node/api.cpp`, its entry points. `world.cpp` loads one copy per
   board with `dlopen`, so each has its own globals; `-Bsymbolic` keeps each copy's references inside it, and
   `-fno-gnu-unique` lets `dlclose` really unload it, so a reset loads it again with fresh RAM. Left out: the drivers
   (`radio.cpp`, `extflash.cpp`, `supply.cpp`, `console_io.cpp`) and `GateLink.ino`. Their functions, and the Arduino
@@ -83,7 +84,7 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
   `random()` is seeded, so every run is the same.
 - **`sim.cpp`** holds the fakes:
   - The radio (`radio.h`): one SX127x per node on a shared channel, as above. `Sim::drop`, `Sim::corrupt`, `Sim::inject`.
-  - The SPI NOR flash (`extflash.h`, sectors 0–19). Programming only clears bits, within a page. `cutNextProgram`
+  - The SPI NOR flash (`extflash.h`, sectors 0–35). Programming only clears bits, within a page. `cutNextProgram`
     simulates a power cut mid-write (of a later one with `cutAfterPrograms`); `garbleReads` simulates a garbled bus (data and id reads);
     `failErases` erases that time out.
   - `logEvent`, which records events per node.
@@ -97,7 +98,7 @@ headers). `make` runs them with address randomization off (`setarch -R`) when it
   `begin` for a restart, `boot(count)` for a boot with a boot count, `stuckRng` for a dead entropy source, `onRx` to
   answer as a role would) and check `stats()`, `rx`, `acks`, `logs` and `s.sent(node, type)`. Config: call `fresh()`
   first (blank flash, defaults), then change `cfg`, save, load and inspect `flash.mem`. History log: `boot()` (a
-  `histLogBegin` on the flash as it is), `append`, `checkRun`.
+  `histLogBegin` on the flash as it is), `append`, `checkRun`; the event journal likewise (`evLogBegin`).
 
 ## Framework (`testing.h`)
 
@@ -151,7 +152,7 @@ mutation in `mutations.json` names the one it breaks. The tags:
 
 ## Mutation testing (`mutations.json`, `tools/mutate.py`)
 
-A test that can't fail proves nothing. `mutations.json` lists 188 ways to break the invariants above, each an exact
+A test that can't fail proves nothing. `mutations.json` lists 195 ways to break the invariants above, each an exact
 text edit to the firmware (`find` must occur once) with the invariant it breaks, why, and the tests that killed it
 (`killed_by`). `tools/mutate.py` applies each to a scratch copy of `firmware/GateLink`, rebuilds the host tests
 against it (`make FW=`) and runs its `killed_by` tests, then, if they all pass, the whole suite: a mutation is

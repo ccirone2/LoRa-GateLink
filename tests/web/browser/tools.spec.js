@@ -99,6 +99,29 @@ test('a remote write while the last one is pending is refused busy', async ({ pa
   expect((await requests(page)).filter((r) => r.cmd === 'remote.set')).toHaveLength(3);
 });
 
+// The board dropping takes their answers with it: nothing is left saying it waits, after it is back.
+test('a ping, diagnostics and a remote write pending when the board drops don\'t wait on after it reconnects', async ({ page }) => {
+  await openConsole(page, [{ role: 'house', pongs: [null], noDiag: true, remoteSetMs: 60000 }]);
+  await connect(page);
+  await page.locator('#tabbtn-link').click();
+  await page.locator('#btnPing').click();
+  await expect(page.locator('#pingRtt')).toHaveText('waiting…');
+  await page.locator('#btnDiag').click();
+  await expect(page.locator('#diagOut')).toHaveText('waiting for gate…');
+  await page.locator('#remParam').selectOption('pulse_ms');
+  await page.locator('#remValue').fill('700');
+  await page.locator('#btnRemSet').click();
+  await expect(page.locator('#remResult')).toHaveText('sending…');
+  await page.evaluate(() => window.__fake.ports[0].replug(300));
+  await expect(page.locator('#devline')).toHaveText('MKR WAN 1310 · fw 0.13.8 · house', { timeout: 10000 });
+  // Past the ping's and the diagnostics' own timeouts, which the disconnect cancelled.
+  await page.waitForTimeout(10500);
+  await expect(page.locator('#pingRtt')).toHaveText('no reply: the board disconnected');
+  await expect(page.locator('#diagOut')).toHaveText('No reply: the board disconnected before the gate answered. Try again.');
+  await expect(page.locator('#remResult')).toHaveText(
+    'No result: the board disconnected before the gate answered, so the gate may or may not have the value. Check it with Fetch gate diagnostics.');
+});
+
 test('a gate relay test asks first, then pulses', async ({ page }) => {
   await openConsole(page, [{ role: 'gate' }]);
   await connect(page, 'gate');

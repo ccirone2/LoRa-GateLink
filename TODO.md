@@ -164,6 +164,14 @@ once its fix is merged and record it in the pull request.
 - [ ] **Drop the `minimatch` override in `package.json`** (deps-check 2026-11-13) once ESLint depends on
   `minimatch` 11.0.1 or newer: it is there only for GHSA-g3hv-75wg-m249 (moderate, a glob DoS in a dev tool that lints
   our own files), and ESLint 10.14.0 still asks for `^10.2.6` ([docs/development.md](docs/development.md)).
+- [ ] **arduino-cli 1.5.1 → 1.6.0** (tagged 2026-11-10; deps-check 2026-11-11). It runs the build (library
+  discovery, prototypes, linking), so it changes the binary: bump it in a working session with the bench and a
+  release, once it is two weeks old (2026-11-24) and no 1.6.x patch follows. Changes since 1.5.1 that touch us:
+  library discovery (platform library dependencies exposed, library loading cached at init, the library index
+  scanned once, a symlinked library `utility` folder fixed), installed files synced to disk against power loss, and
+  faster xz extraction; nothing SAMD- or upload-specific beyond skipping port detection when no port is given.
+  Check: the compile stays warning-free and the `.bin` matches 1.5.1's (or explain the diff); then the version in
+  every `setup-arduino-cli` step, `tools/agent/cloud_setup.sh` (with its SHA-256) and `docs/development.md`.
 
 ## Housekeeping
 
@@ -172,9 +180,21 @@ once its fix is merged and record it in the pull request.
   `python tools/gatelink.py key backup <dir>` and keep its passphrase in the password manager; then
   check `python tools/gatelink.py ports` shows the same key id on both boards as `key id` does for the
   file ([docs/key-management.md](docs/key-management.md)). The install pair gets its own key, generated there.
+- [ ] **A site survey on the house starts with the link down** (bug sweep 2026-11-15). The web card
+  (`web/js/surveycard.js:24`) and `tools/gatelink.py survey` (`tools/gatelink.py:577`) check only `link.verified`,
+  which on the house stays set after the link is lost (status.js and the health line use `link_up` there). Started
+  then, the survey pings for its full length and reports poor instead of refusing at once with "needs the link up".
+  Fix both twins together (house: `link_up`; gate: `verified` and no `link` in `health`).
 - [ ] **The web console's fake board still accepts a few requests the firmware refuses** (bug sweep 2026-10-25,
   `tests/web/fake-serial.js` against `console.cpp`). `hist.clear` ignores `period_s` (firmware: 60..3600, else
   `period_s must be 60..3600`, and `hist.get` then reports that period); `log.get` takes `before` 0 or a non-integer
   (firmware: `before must be 1..4294967295`); a gate `relay.test` of a relay already pulsing is never `busy`. No
   page path depends on them today (the page sends no `period_s` and only `before` from a record's `seq`); model one
   when a test needs it.
+- [ ] **A firmware update could flash the other board if that one waits in its bootloader** (bug sweep 2026-11-14).
+  `findBootPort` (`web/js/firmware.js`) takes the first granted bootloader port (`getPorts().find(isBootPort)`)
+  after the 1200-baud touch. With both boards on one computer and the other one already in its bootloader (a
+  failed update, a double-tapped reset), the page writes the image to that one and the board touched stays in its
+  bootloader. Both boards share VID/PID, so the port can't be told apart by its info; a `connect` event for a boot
+  port after the touch could. Not proven by a test yet (a browser test with two fake boards, one with
+  `bootloader: true`, could show it).

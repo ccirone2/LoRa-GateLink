@@ -50,11 +50,12 @@ async function runSurvey(r) {
       if (!r.running) break;
     }
     // The previous ping's pong can still land after its 8 s, just before this ping reaches the board. It isn't this
-    // ping's answer, so it is skipped by its id.
+    // ping's answer, so it is skipped by its id, or, before a pong has shown the board's numbering (the survey's first
+    // pings unanswered), by its round trip: at least the 8 s waited.
     const stale = r.lastId;
     const answer = new Promise((resolve) => {
       r.pongWait = (ev) => {
-        if (ev && stale !== null && ev.ping_id === stale) return;
+        if (ev && ((stale !== null && ev.ping_id === stale) || ev.rtt_ms >= PING_TIMEOUT_MS)) return;
         clearTimeout(r.pongTimer);
         r.pongWait = null;
         resolve(ev);

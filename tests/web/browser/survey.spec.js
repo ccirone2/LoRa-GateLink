@@ -97,6 +97,19 @@ test('an unanswered ping\'s late pong is not taken for the next ping\'s answer',
   await expect(rows.nth(1).locator('td').nth(2)).toHaveText('-60.0 / -60.0 dBm');
 });
 
+test('a late pong is skipped by its round trip before any pong has shown the board\'s ping ids', async ({ page }) => {
+  // The first ping goes unanswered, so the page doesn't know the board's numbering yet, and its pong lands late
+  // (8.1 s round trip), just before ping 2 reaches the board, which answers that one as usual.
+  const late = { rssi: -120, snr: -5, peer_rssi: -121, peer_snr: -6 };
+  await startSurvey(page, [{ role: 'house', pongs: [null, { late }, {}] }]);
+  await page.clock.runFor(30000); // 0 lost (given up at 8), 8 ok, 10 ok, 12 lost (20), 20 ok, 22 ok, 24 in flight
+  await page.locator('#btnSurvey').click();
+  await expect(page.locator('#surveyStep')).toContainText(', 2 unanswered');
+  const rows = page.locator('#surveyTable tbody tr');
+  await expect(rows.nth(0).locator('td').nth(2)).toHaveText('-61.0 / -61.0 dBm');
+  await expect(rows.nth(1).locator('td').nth(2)).toHaveText('-60.0 / -60.0 dBm');
+});
+
 test('a role string from the board reaches the table as text', async ({ page }) => {
   // No firmware sends one like this; the page must still show it as text, never markup.
   await page.clock.install();

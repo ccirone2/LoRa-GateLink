@@ -523,9 +523,12 @@ def run_survey(board, seconds, interval, clock=None, sleep=None, progress=print)
             deadline, pong = clock() + SURVEY_PING_TIMEOUT_S, None
             while pong is None:
                 # The previous ping's pong can still land after its 8 s, just before this ping reaches the board.
-                # It isn't this ping's answer, so it is skipped by its id.
+                # It isn't this ping's answer, so it is skipped by its id, or, before a pong has shown the board's
+                # numbering (the survey's first pings unanswered), by its round trip: at least the 8 s waited.
                 pong = next((p for p in tl.select(src=board.name, kind="pong")[seen:]
-                             if last_id is None or p.get("ping_id") != last_id), None)
+                             if (last_id is None or p.get("ping_id") != last_id)
+                             and not (survey.is_num(p.get("rtt_ms"))
+                                      and p["rtt_ms"] >= SURVEY_PING_TIMEOUT_S * 1000)), None)
                 if pong is None:
                     if clock() >= deadline:
                         break

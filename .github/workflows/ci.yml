@@ -122,7 +122,7 @@ jobs:
       - name: Libraries the host build needs
         run: arduino-cli lib install "Crypto@0.4.0" "ArduinoJson@7.4.3"
       - name: Install gcovr
-        run: pip install gcovr==8.6
+        run: pip install gcovr==8.8
       - name: Coverage
         run: make -C tests/native -j"$(nproc)" coverage MIN_LINES=85
       - name: Report
@@ -167,7 +167,7 @@ jobs:
           fetch-depth: 0  # the FW_VERSION check measures the branch from where it left its base
       # The Python environment is pyproject.toml + uv.lock (hashes); --locked fails if the lock is out of date.
       # uv's version: keep in step with pyproject.toml's required-version and tools/agent/cloud_setup.sh.
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: '0.13.5'
           python-version: '3.12'

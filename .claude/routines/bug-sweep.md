@@ -11,14 +11,14 @@ description: Look for bugs and simplifications in one area a night; fix one, pro
    1. `role_gate.cpp` (relays, limits, AC power, STATUS, remote config)
    2. `role_house.cpp` (K1 sync, controller power, K2, link loss)
    3. `console.cpp` and `console_io.cpp`
-   4. `config.cpp`, `histlog.cpp` and `extflash.cpp` (the SPI flash)
+   4. `config.cpp`, `extflash.cpp`, `flashlog.cpp`, `histlog.cpp` and `evlog.cpp` (the SPI flash)
    5. `radio.cpp`, `supply.cpp`, `io.cpp`, `log.cpp`, `history.cpp`, `health.cpp`, `app.cpp`
    6. `web/js/serial.js`, `samba.js`, `firmware.js`, `keys.js`, `security.js` (the port, flashing, the key)
    7. `web/app.js` and the other `web/js/` modules (the tabs and cards: `status.js`, `config.js`, `history.js`, ...)
-   8. `tools/gatelink.py`, `tools/gatelink_client/`, `tools/release_evidence.py`
+   8. `tools/gatelink.py`, `tools/gatelink_client/`, `tools/flash.py`, `tools/release_evidence.py`
    9. `tests/e2e/gatelink/` (the suite's own correctness: checks that can't fail, races in waits)
-   10. `tests/native/` and `tests/web/` (fakes that disagree with the real thing)
-   11. `.github/workflows/`, `tools/agent/` (hooks), `tools/check_contract.py`
+   10. `tests/native/`, `tests/web/` and `tools/verify/` (fakes and stubs that disagree with the real thing)
+   11. `.github/workflows/`, `tools/agent/` (hooks), `tools/check_contract.py`, `docgen.py`, `mutate.py`, `fw_size.py`
 2. **Read it closely** against the rules in `CLAUDE.md` (behavioural invariants, wrap-safe timing, non-blocking
    loop, the console contract) and the area's section of `docs/architecture.md`, and look for: invariant breaks,
    wrap or overflow, unchecked lengths, state left behind on an error path, a retry or timer that can stall, dead

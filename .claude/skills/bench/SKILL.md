@@ -16,7 +16,7 @@ serial ends `191117` is never used.
    ```sh
    uv run tools/gatelink.py ports
    ```
-   Both boards must show their role, the firmware under test, `key set`, `cfg spi`, `tx_power` 5 (USB power) and a
+   Both boards must show their role, the firmware under test, the same key id (`key <8 hex>`), `cfg spi`, `tx_power` 5 (USB power) and a
    verified link. Wrong firmware: `/flash` first. A board left on the test profile by an interrupted run
    (`heartbeat_s` 5): `uv run tools/gatelink.py <role> reboot`. If `tools/GateSim` changed, re-upload the Uno
    (`/flash` step 5).

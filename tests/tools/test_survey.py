@@ -208,6 +208,20 @@ def test_run_survey_skips_the_previous_pings_late_pong():
     assert all(s.get("rssi") != -120 for s in samples)
 
 
+def test_run_survey_skips_a_late_pong_before_the_numbering_is_known():
+    # The first ping goes unanswered, so no pong has shown the board's ping ids yet, and its pong lands late (8.1 s
+    # round trip), just before ping 2 reaches the board. It isn't ping 2's answer: ping 2 takes its own.
+    clock = Clock()
+    weak = {"rssi": -120, "snr": -5.0, "peer_rssi": -121, "peer_snr": -6}
+    b = FakeBoard(clock, answer=lambda i: None if i == 0 else {"rssi": -70, "snr": 9.0, "peer_rssi": -71,
+                                                               "peer_snr": 8},
+                  late=lambda i: weak if i == 1 else None)
+    samples, _, _ = gatelink.run_survey(b, 20, 2, clock=clock.now, sleep=clock.sleep, progress=lambda s: None)
+    assert [s["lost"] for s in samples[:3]] == [True, False, False]
+    assert samples[1]["rssi"] == -70
+    assert all(s.get("rssi") != -120 for s in samples)
+
+
 def test_run_survey_keeps_what_it_has_when_the_board_fails():
     clock = Clock()
 

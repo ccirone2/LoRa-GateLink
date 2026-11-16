@@ -7,19 +7,22 @@ import { rememberGateFw } from './peer.js';
 
 // DIAG over LoRa is best effort; give up on the reply after this long.
 const DIAG_TIMEOUT_MS = 10000;
-let diagTimer = null;
+let diagTimer = null; // set while a diagnostics reply is awaited
+let setPending = false; // a remote write sent, its remote_set event not in yet
 
 async function remoteDiag() {
   clearTimeout(diagTimer);
   $('diagOut').textContent = 'waiting for gate…';
   // Armed before the request: the remote_diag event clears it, however soon it arrives.
   diagTimer = setTimeout(() => {
+    diagTimer = null;
     $('diagOut').textContent = `No reply from gate within ${DIAG_TIMEOUT_MS / 1000} s. Check the link and try again.`;
   }, DIAG_TIMEOUT_MS);
   try {
     await call('remote.diag');
   } catch (e) {
     clearTimeout(diagTimer);
+    diagTimer = null;
     $('diagOut').textContent = `Failed: ${e.message}`;
     throw e;
   }
@@ -56,6 +59,7 @@ async function remoteSet() {
   $('remResult').textContent = 'sending…';
   try {
     await call('remote.set', { name, value });
+    setPending = true;
   } catch (e) {
     // e.g. "busy" while the previous remote set is still pending, or an out-of-range value.
     $('remResult').textContent = e.message === 'busy' ? 'Busy: the previous remote set is still pending; wait for its result.' : `Not sent: ${e.message}`;
@@ -67,6 +71,7 @@ async function remoteSet() {
 export function onRemoteEvent(ev) {
   if (ev.event === 'remote_diag') {
     clearTimeout(diagTimer);
+    diagTimer = null;
     rememberGateFw(ev.fw);
     const c = ev.counters;
     $('diagOut').textContent =
@@ -74,6 +79,7 @@ export function onRemoteEvent(ev) {
       `tx ${c.tx} rx ${c.rx} retries ${c.retries} giveups ${c.giveups} mac_fail ${c.mac_fail} replay ${c.replay}\n` +
       Object.entries(ev.params).map(([k, v]) => `${k}=${v}`).join('  ');
   } else if (ev.event === 'remote_set') {
+    setPending = false;
     $('remResult').textContent = ev.ok ? 'Gate accepted and saved the value.'
       : ev.applied ? 'Gate applied the value but couldn’t save it; it reverts when the gate reboots.'
       : ev.acked ? 'Gate rejected the value.' : 'No reply from gate.';
@@ -86,7 +92,17 @@ export function resetRemote() {
   $('remResult').textContent = '';
 }
 
-export const stopRemote = () => clearTimeout(diagTimer);
+// The board is going: the replies it would have passed on won't come, so nothing is left saying it waits for them.
+export function stopRemote() {
+  if (diagTimer) $('diagOut').textContent = 'No reply: the board disconnected before the gate answered. Try again.';
+  clearTimeout(diagTimer);
+  diagTimer = null;
+  if (setPending) {
+    $('remResult').textContent = 'No result: the board disconnected before the gate answered, so the gate may or may not '
+      + 'have the value. Check it with Fetch gate diagnostics.';
+  }
+  setPending = false;
+}
 
 export function initRemote() {
   $('btnDiag').onclick = guard(remoteDiag);

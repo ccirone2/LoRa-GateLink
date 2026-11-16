@@ -42,7 +42,7 @@ The web console is plain JS (ES modules) with no build step; its lint and tests 
 the override once ESLint's own range takes a fixed release (`npm audit` clean without it).
 
 The Python tools, their tests and the bench suite share one environment, locked with hashes so every machine and CI
-run the same versions: `pyproject.toml` lists the dependencies (ruff 0.17.2 in its `dev` group) and `uv.lock` pins
+run the same versions: `pyproject.toml` lists the dependencies (ruff 0.17.3 in its `dev` group) and `uv.lock` pins
 them. Install uv 0.13.5 or newer ([docs.astral.sh/uv](https://docs.astral.sh/uv/); `pyproject.toml` refuses an
 older one), then:
 

@@ -324,7 +324,9 @@ void houseLoop(uint32_t now) {
     applyOutputs(now);
   }
 
-  if (!armed && armAt && elapsed(now, armAt, 0)) armed = true;
+  // Not while a K1 test pulse runs (one started before the first STATUS outlasts its armAt): armed, a resync would set
+  // K1 and cut it short. Its end opens a sync window (below) that covers the Shelly following it.
+  if (!armed && armAt && !k1.pulsing() && elapsed(now, armAt, 0)) armed = true;
   if (armed) everArmed = true;
   // The end of a K1 test pulse moves the Shelly too (the pulse may outlast arming): cover it with a window.
   bool k1Pulsing = k1.pulsing();

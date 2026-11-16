@@ -37,6 +37,9 @@ checks):
 
 The web console is plain JS (ES modules) with no build step; its lint and tests need Node.js 22 and `npm ci`
 (`package.json`).
+`package.json`'s `overrides` pins `minimatch` (ESLint's glob matcher) to 11.0.1, the first release fixed for
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249); ESLint 10.14.0 still asks for `^10.2.6`. Drop
+the override once ESLint's own range takes a fixed release (`npm audit` clean without it).
 
 The Python tools, their tests and the bench suite share one environment, locked with hashes so every machine and CI
 run the same versions: `pyproject.toml` lists the dependencies (ruff 0.17.2 in its `dev` group) and `uv.lock` pins

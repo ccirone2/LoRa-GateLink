@@ -89,9 +89,10 @@ export function resetPing() {
   for (const id of ['pingRtt', 'pingHere', 'pingPeer', 'pingMargin', 'pingFei']) $(id).textContent = '—';
 }
 
-// The board is going: nothing more will answer.
+// The board is going: nothing more will answer, so a ping still waiting is said to have none.
 export function stopPing() {
   clearInterval(pingTimer);
+  if (pingWait) $('pingRtt').textContent = 'no reply: the board disconnected';
   clearTimeout(pingWait);
   pingWait = null;
   $('pingAuto').checked = false;

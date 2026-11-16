@@ -195,6 +195,7 @@
         }
         case 'remote.diag':
           if (this.role !== 'house') return err('house node only');
+          if (this.spec.noDiag) return ok(); // spec.noDiag: the gate never answers (DIAG_REQ isn't retried)
           this.emit({ event: 'remote_diag', fw: this.fw, uptime_s: 3600,
             counters: { tx: 10, rx: 12, mac_fail: 0, replay: 0, retries: 1, giveups: 0 }, params: { retries: 5, heartbeat_s: 30 } });
           return ok();

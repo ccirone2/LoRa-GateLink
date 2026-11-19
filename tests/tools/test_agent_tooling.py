@@ -574,3 +574,21 @@ def test_contract_check_runs_for_every_file_it_reads():
     read += [p.relative_to(ROOT).as_posix() for d in check_contract.SUITE for p in d.rglob("*.py")]
     assert "firmware/GateLink/link.h" in read and "tests/e2e/test_remote.py" in read
     assert [f for f in read if not hooks.is_contract(f)] == []
+
+
+@pytest.mark.parametrize("line", [
+    'bench.wait_log("house", "no_such_event")',
+    'rig.timeline.first("house", "log", since, ev="no_such_event", a=1)',
+    'pulses = [e for e in logs if e["ev"] == "no_such_event"]',
+    'others = [e for e in logs if e["ev"] != "no_such_event"]',
+])
+def test_contract_check_catches_every_way_the_suite_names_a_log_event(line, tmp_path, monkeypatch, capsys):
+    """A log name the firmware never logs makes a suite check that can never match, however the suite names it."""
+    import check_contract
+
+    (tmp_path / "test_x.py").write_text(f"def test_x(bench, rig, logs, since):\n    {line}\n", encoding="utf-8")
+    monkeypatch.setattr(check_contract, "ROOT", tmp_path)
+    monkeypatch.setattr(check_contract, "SUITE", (tmp_path,))
+    monkeypatch.setattr(check_contract, "problems", [])
+    assert check_contract.main() == 1
+    assert "test_x.py:2: waits for `no_such_event`" in capsys.readouterr().out

@@ -8,7 +8,8 @@ mismatches, 0 if all agree.
 Checked:
 - roles.h / link.h enums (GateState, Cause, Action, AckResult) against the wire values in gatelink_client/wire.py;
 - log event names (log.cpp NAMES) against the log table in docs/console.md;
-- every log or event name the suite waits for or checks against the firmware's names;
+- every log or event name the suite waits for or checks (by position, `ev=` or `e["ev"] ==`) against the
+  firmware's names;
 - console commands (console.cpp `strcmp(cmd, ...)`) against the commands table in docs/console.md.
 """
 import ast
@@ -116,10 +117,12 @@ def main():
     # Names the suite waits for or checks: log events, or console events (docs events table).
     events = doc_table("| Event | Fields | When |")
     known = log_names | events
-    call = re.compile(r'\b(?:wait_log|expect_no|logs|first)\(\s*(?:"(?:house|gate)"|\w+)\s*,\s*"([a-z_0-9]+)"')
+    # A name passed to the helpers, as an `ev=` filter, or compared with an entry's "ev".
+    named = re.compile(r'\b(?:wait_log|expect_no|logs|first)\(\s*(?:"(?:house|gate)"|\w+)\s*,\s*"([a-z_0-9]+)"'
+                       r'|\bev="([a-z_0-9]+)"|\["ev"\]\s*[!=]=\s*"([a-z_0-9]+)"')
     for f in sorted(f for d in SUITE for f in d.rglob("*.py")):
         for n, line in enumerate(read(f).splitlines(), 1):
-            for name in call.findall(line):
+            for name in (next(filter(None, g)) for g in named.findall(line)):
                 if name not in known:
                     problems.append(f"{f.relative_to(ROOT)}:{n}: waits for `{name}`, which the firmware never logs")
 

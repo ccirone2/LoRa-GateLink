@@ -625,6 +625,7 @@ static void handleFrame(uint8_t *buf, size_t len, int16_t rssi, float snr, uint3
       // didn't restart, so a held command can go.
       acceptSeq(seq);
       peerOk = true;
+      helloRound = 0;  // it answers: the next challenge (a held command's) mustn't wait out a doubled interval
       releaseCmd();
       return;
     }

@@ -98,8 +98,9 @@ cross-check between them on one board.
 
 **Verification first.** Slots don't transmit until the peer is verified (their ACKs would be dropped anyway); at
 SF12 those retries crowded out the HELLO_ACK and the gate never verified. So an unverified board repeats its HELLO
-by itself (randomized gaps of base + up to base again, the base doubling to 8 s); nothing else may be on the air to
-provoke one.
+by itself (randomized gaps of base + up to base again, the base doubling to 8 s; back to 1 s whenever the peer answers,
+the verified session re-answering a challenge too, 0.20.13: a held command's challenges must not wait 8–16 s apart);
+nothing else may be on the air to provoke one.
 
 **Listen-before-talk.** One frame is on the air at a time (`txIdle()`); every transmission goes through
 `clearToSend()`: responses (ACK, PONG, HELLO_ACK, DIAG) after the 25 ms turnaround, new frames only after the

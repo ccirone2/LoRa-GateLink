@@ -438,6 +438,44 @@ TEST(replayed_old_hello_holds_the_command_until_the_live_session_answers) {
   CHECK_EQ(s.house.stats().sessions, 2);
 }
 
+TEST(rechallenges_after_old_hellos_keep_the_short_hello_interval) {
+  // Each replayed old HELLO makes the house challenge the verified gate, and the answer re-verifies the same session.
+  // That answer must restart the HELLO backoff, as a new session's does: otherwise after three such replays (any time
+  // apart) the interval stays at 8-16 s, and a command held by the next replay, its first challenges lost, outlives
+  // its 10 s TTL waiting for the next one.
+  Sim s;
+  CHECK(s.handshake());
+  Bytes oldHello = last(s.sent(s.gate, MSG_HELLO))->b;
+  s.gate.begin();
+  CHECK(s.runUntil([&] { return s.gate.verified() && s.house.stats().sessions == 2; }, 10000));
+  for (int i = 0; i < 3; i++) {
+    s.run(20000);
+    size_t hellos = s.sent(s.house, MSG_HELLO).size();
+    s.inject(s.house, oldHello);
+    CHECK(s.runUntil([&] { return s.sent(s.house, MSG_HELLO).size() > hellos; }, 1000));
+    s.run(1000);
+    CHECK(s.house.verified());
+  }
+  s.run(20000);
+  size_t hellos = s.sent(s.house, MSG_HELLO).size();
+  bool cmdLost = true;  // its first send, so the hold decides (as in the test above)
+  s.drop = [&](const AirFrame &f) {
+    if (f.from == 0 && f.type() == MSG_CMD) return cmdLost;
+    return f.from == 0 && f.type() == MSG_HELLO && s.sent(s.house, MSG_HELLO).size() < hellos + 2;
+  };
+  s.house.sendReliable(SLOT_CMD, MSG_CMD, CMD_OPEN, 10000);
+  s.run(50);
+  s.inject(s.house, oldHello);
+  s.run(100);
+  CHECK_EQ(s.house.count(EV_CMD_HOLD, 1), 1);
+  cmdLost = false;
+  CHECK(s.runUntil([&] { return !s.house.pending(SLOT_CMD); }, 11000));
+  CHECK_EQ(s.house.count(EV_CMD_HOLD, 0), 1);  // released by the gate's answer, not dropped
+  CHECK(s.house.acks.back().acked);
+  CHECK_EQ(s.gate.rxCount(MSG_CMD), 1);
+  CHECK_EQ(s.house.stats().sessions, 2);
+}
+
 TEST(gate_restart_with_a_lost_ack_drops_the_command) {
   // The gate ran the command, then restarted before its ACK got through: resending could pulse twice, late.
   Sim s;

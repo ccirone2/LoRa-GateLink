@@ -36,6 +36,12 @@ once its fix is merged and record it in the pull request.
   (0.17–0.26 s in), always before the relay (0.37–0.43 s), with no command sent. Fix it (the house can't see such a
   reboot) only for a site where that order could fail: another Shelly, or a supply that holds the board up longer.
   ROADMAP F16 (a Shelly reboot with power present) is the same gap without the dip.
+- [ ] **The ACK memo can evict a held (`linkAckLater`) entry** (bug sweep 2026-11-20). `ackMemo()` (`link.cpp:497`)
+  takes the next of its 4 entries round-robin whatever it holds, and the gate's CFG queue (`role_gate.cpp:402`) can
+  hold 4 writes at once (copies renumbered by replayed HELLOs). A CMD ACKed then evicts the oldest held one, and each
+  queued write's `linkAck` when drained evicts the next (the last one the CMD's memo): the house's resends of a write
+  whose memo went are counted and logged as `replay` (none happened), and a CMD whose ACK was lost isn't re-ACKed.
+  No host test yet; a fix would prefer evicting an answered entry (or size the memo to `CFG_QUEUE` + 1).
 
 ## Bench and field tests
 

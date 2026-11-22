@@ -1477,8 +1477,23 @@
   "edits": [
    {
     "file": "role_house.cpp",
-    "find": "  if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT) {\n    if (mismatchSince) mismatchSince = (now - (uint32_t)cfg.mismatch_timeout_s * 1000) | 1;",
-    "replace": "  if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT) {\n    if (mismatchSince) mismatchSince = now | 1;"
+    "find": "  if (gateResult == TR_TIMEOUT && (prevResult != TR_TIMEOUT || gateCmdId != prevCmdId)) {\n    if (mismatchSince) mismatchSince = (now - (uint32_t)cfg.mismatch_timeout_s * 1000) | 1;",
+    "replace": "  if (gateResult == TR_TIMEOUT && (prevResult != TR_TIMEOUT || gateCmdId != prevCmdId)) {\n    if (mismatchSince) mismatchSince = now | 1;"
+   }
+  ]
+ },
+ {
+  "name": "house_sync_m13b_repeated_timeout_ignored",
+  "invariant": "resync",
+  "why": "Only a change of result counts as an override, so a second timeout heard straight after the first (the STATUS between them lost) waits mismatch_timeout_s.",
+  "killed_by": [
+   "house_sync_second_timeout_after_a_lost_status_resyncs_at_once"
+  ],
+  "edits": [
+   {
+    "file": "role_house.cpp",
+    "find": "(gateResult == TR_TIMEOUT && (prevResult != TR_TIMEOUT || gateCmdId != prevCmdId))",
+    "replace": "(gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT)"
    }
   ]
  },

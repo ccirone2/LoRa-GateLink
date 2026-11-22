@@ -1237,6 +1237,53 @@ TEST(house_sync_result_timeout_resyncs_at_once) {
   CHECK_EQ(countSince(w.gate, "pulse", g0), 1);
 }
 
+// [resync] As above, twice: the siren holds OPEN through two CLOSEs, each timing out. The STATUS the gate sends for the
+// second (its pulse, result none) is lost, so the house hears timeout again straight after timeout: the second
+// override is a new one all the same (the gate's command id moved on), and the Shelly showing the user's OFF with the
+// gate open is put back at once. Before 0.20.14 only a change of result counted, and it waited mismatch_timeout_s.
+TEST(house_sync_second_timeout_after_a_lost_status_resyncs_at_once) {
+  Site w;
+  w.commission([](Board &b) {
+    if (b.idx == 1) CHECK(b.set("travel_timeout_s", 10));
+  });
+  openByUser(w);
+  w.run(4000);
+  w.opener.extOpenHold = true;
+  w.run(200);
+  size_t h0 = w.house.logs.size(), g0 = w.gate.logs.size();
+  w.user(false);
+  CHECK(waitFor(w, w.house, "cmd_sent", h0, 1000, ACT_CLOSE_).ok);
+  CHECK(waitFor(w, w.house, "resync", h0, 12000).ok);
+  CHECK(w.runUntil([&] { return w.alarmSwitch(); }, 3000));
+  w.run(SYNC_MS + 2000);
+  CHECK(w.house.status()["last_result"] == "timeout");
+  // Every STATUS that doesn't report timeout is lost from here on (the gate's for its second pulse).
+  w.drop = [&](const AirFrame &f) {
+    return f.from == w.gate.idx && f.type() == 5 && w.plain(f.b)[3] != 2;  // ST_RESULT, TR_TIMEOUT
+  };
+  size_t h1 = w.house.logs.size(), g1 = w.gate.logs.size();
+  size_t ev = w.house.events.size();
+  w.user(false);
+  CHECK(waitFor(w, w.house, "cmd_sent", h1, 1000, ACT_CLOSE_).ok);
+  CHECK(waitFor(w, w.gate, "pulse", g1, 2000, 2).ok);
+  uint32_t heard = 0;
+  CHECK(w.runUntil([&] { return (heard = statusSeen(w, &ev, "timeout")) != 0; }, 12000));
+  CHECK(find(w.gate, "travel_timeout", g1).ok);
+  CHECK(w.opener.atOpen());
+  CHECK(!w.alarmSwitch());  // the user's OFF, the gate open
+  Found rs = waitFor(w, w.house, "resync", h1, 5000);
+  CHECK(rs.ok);
+  CHECK_EQ(rs.e.a, 1);
+  CHECK_IN(rs.e.at - heard, 0, 2);
+  CHECK(w.runUntil([&] { return w.alarmSwitch(); }, 1200));
+  w.drop = nullptr;
+  w.opener.extOpenHold = false;
+  w.run(5000);
+  CHECK(w.alarmSwitch());
+  CHECK_EQ(countSince(w.house, "cmd_sent", h0), 2);
+  CHECK_EQ(countSince(w.gate, "pulse", g0), 2);
+}
+
 // [resync]
 TEST(house_sync_siren_override_mid_travel_resyncs_at_once) {
   // The user closes; mid-travel the siren sensor holds OPEN and takes the gate back to open: our command was overridden

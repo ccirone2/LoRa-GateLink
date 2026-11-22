@@ -497,8 +497,10 @@ static void handleStatus(const RxMsg &m, uint32_t now) {
   bool moved = (gateTarget != prevTarget && gateTarget != GS_UNKNOWN) || gateCmdId != prevCmdId;
   if (gateState == GS_BETWEEN && (prevState != GS_BETWEEN || !sameSession || !linkUp || moved)) stuckSince = now;
   // Command overridden (e.g. siren holding the gate open): resync the Shelly right away. A mismatch held off through
-  // the travel (holdingTravel()) never started: check it as soon as nothing is in the way.
-  if (gateResult == TR_TIMEOUT && prevResult != TR_TIMEOUT) {
+  // the travel (holdingTravel()) never started: check it as soon as nothing is in the way. A timeout reported with a
+  // command id the house hadn't heard is a new one too, even after a timeout: each command the gate pulses for clears
+  // its result, but that STATUS may have been lost (before 0.20.14 the house then waited out mismatch_timeout_s).
+  if (gateResult == TR_TIMEOUT && (prevResult != TR_TIMEOUT || gateCmdId != prevCmdId)) {
     if (mismatchSince) mismatchSince = (now - (uint32_t)cfg.mismatch_timeout_s * 1000) | 1;
     else checkSoon = true;
   }

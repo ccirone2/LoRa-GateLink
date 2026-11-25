@@ -163,7 +163,9 @@ once its fix is merged and record it in the pull request.
   binary (`actions/attest-build-provenance`), if worth a third-party-free path to them.
 - [ ] **Drop the `minimatch` override in `package.json`** (deps-check 2026-11-13) once ESLint depends on
   `minimatch` 11.0.1 or newer: it is there only for GHSA-g3hv-75wg-m249 (moderate, a glob DoS in a dev tool that lints
-  our own files), and ESLint 10.14.0 still asks for `^10.2.6` ([docs/development.md](docs/development.md)).
+  our own files). ESLint 10.15.0 (2026-11-13) asks for `^11.0.5` (as does its `@eslint/config-array` 0.23.6), so
+  bump ESLint from 10.14.0 to it and drop the override in one change, then check `npm ls minimatch` shows only
+  11.0.5 or newer ([docs/development.md](docs/development.md)).
 - [ ] **arduino-cli 1.5.1 → 1.6.0** (tagged 2026-11-10; deps-check 2026-11-11). It runs the build (library
   discovery, prototypes, linking), so it changes the binary: bump it in a working session with the bench and a
   release, once it is two weeks old (2026-11-24) and no 1.6.x patch follows. Changes since 1.5.1 that touch us:

@@ -198,3 +198,9 @@ once its fix is merged and record it in the pull request.
   bootloader. Both boards share VID/PID, so the port can't be told apart by its info; a `connect` event for a boot
   port after the touch could. Not proven by a test yet (a browser test with two fake boards, one with
   `bootloader: true`, could show it).
+- [ ] **Unplugging the last board while the board picker is open shows an error instead of the chooser** (bug sweep
+  2026-11-26). `pickRefreshSoon` (`web/js/serial.js`) reruns `pickRefresh` 1 s after a `disconnect` event; with no
+  granted port left it calls `addBoard`, whose `requestPort()` needs a user gesture. More than ~5 s after the last
+  click Chrome refuses it (`SecurityError`, not `NotFoundError`), so the picker closes and "Connect failed: Must be
+  handling a user gesture…" is toasted. Keeping the empty picker open (its Add board… button) would avoid it. Not
+  proven by a test: the fake's `requestPort` doesn't model user activation.

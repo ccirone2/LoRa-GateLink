@@ -260,6 +260,7 @@ async function tryReconnect(p) {
   if (S.port || opening || !reconnectUntil) return;
   if (Date.now() > reconnectUntil) {
     stopReconnect();
+    S.flashCheck = null; // an update's board that never came back: the next board connected wasn't the one flashed
     $('devline').textContent = 'not connected';
     toast('The board didn’t come back within 30 s. Click Connect board.', 'err');
     return;

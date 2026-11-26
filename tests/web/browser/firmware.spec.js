@@ -114,3 +114,18 @@ test('flashing a board already in its bootloader reconnects to it, not to the bo
   expect(page.dialogs).toEqual(['Flash firmware 0.14.0 to the selected board? Relays release and the link is down for about a minute.']);
   expect(await houseOpens()).toBe(before); // the house was left alone
 });
+
+test('an update whose board never comes back doesn’t report on the next board connected', async ({ page }) => {
+  // The gate, flashed from its bootloader, doesn't start within the reconnect window; later the house is connected.
+  await openConsole(page, [{ role: 'house', fw: '0.13.6' }, { role: 'gate', fw: '0.13.6', bootloader: true, bootMs: 600000 }]);
+  await page.clock.install(); // runs on its own until the test moves it on
+  await page.locator('#tabbtn-board').click();
+  await page.locator('#fwFile').setInputFiles({ name: 'GateLink.bin', mimeType: 'application/octet-stream', buffer: image() });
+  await expect(page.locator('#fwStep')).toContainText('written and verified', { timeout: 10000 });
+  await page.clock.runFor(31000);
+  await expect(page.locator('#toast')).toContainText('didn’t come back within 30 s');
+  await connect(page, 'house');
+  await expect(page.locator('#fwBoard')).toHaveText('0.13.6 (house)');
+  await expect(page.locator('#fwStep')).not.toContainText('Updated');
+  await expect(page.locator('#toast')).not.toContainText('Board is back');
+});

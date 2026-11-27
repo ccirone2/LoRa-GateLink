@@ -1,6 +1,6 @@
 // Boards that don't match (ROADMAP F10, web/js/peer.js): the page remembers each board it connects (firmware, key
 // id, the must-match settings) and, with the other one connected, says what differs next to "Peer verified".
-import { test, expect, openConsole, connect, requests } from './helpers.js';
+import { test, expect, openConsole, connect, requests, fixture } from './helpers.js';
 
 // Connects the house, then the gate (boards[0] and boards[1]), as an installer going from one box to the other.
 async function houseThenGate(page, house, gate) {
@@ -56,4 +56,26 @@ test('firmware a PATCH apart matches', async ({ page }) => {
 test('a board without a key differs from one with a key', async ({ page }) => {
   await houseThenGate(page, {}, { keySet: false });
   await expect(page.locator('#lnkPeer')).toContainText('differs: key id none here,');
+});
+
+test('a gate whose config.get goes unanswered isn’t remembered with the house’s settings', async ({ page }) => {
+  await openConsole(page, [{ role: 'house' }, { role: 'gate', params: { sf: 10 } }]);
+  await connect(page, 'house');
+  await expect(page.locator('#lnkPeer')).not.toHaveText('—');
+  await page.locator('#btnDisconnect').click();
+  await page.evaluate(() => {
+    const b = window.__fake.boards[1];
+    const handle = b.handle.bind(b);
+    b.handle = (req) => (req.cmd === 'config.get' ? null : handle(req));
+  });
+  await connect(page, 'gate');
+  await expect(page.locator('#toast')).toContainText('Connected, but the board didn\'t answer', { timeout: 10000 });
+  // A key written meanwhile remembers the board: not with settings it never reported.
+  await page.locator('#tabbtn-board').click();
+  await page.locator('#keyInput').fill(fixture.key.default);
+  await page.locator('#btnKeySet').click();
+  await expect(page.locator('#toast')).toContainText('Key written');
+  await page.locator('#btnDisconnect').click();
+  await connect(page, 'house');
+  await expect(page.locator('#lnkPeer')).not.toContainText('matches');
 });

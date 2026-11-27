@@ -19,6 +19,16 @@ export async function loadConfig() {
   rememberBoard();
 }
 
+// Another board connected: the last one's settings aren't this one's. Until its config.get answers, the form is empty,
+// so nothing (Apply, Export, the remembered peer) takes them for this board's.
+export function forgetConfig() {
+  S.meta = [];
+  S.params = {};
+  $('cfgForm').replaceChildren();
+  updateDirtyCount();
+  fillRemoteParams();
+}
+
 // A folded part of the form: the other role's groups, or Advanced. Kept open across a re-render (each Apply) if it was,
 // unless the role it was folded for has changed.
 let foldedFor = null;

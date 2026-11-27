@@ -172,3 +172,20 @@ test('a role applied for the next reboot folds the form for it at once', async (
   await expect(page.locator('#cfgOther summary')).toHaveText('Settings for the house board');
   await expect(page.locator('#p_pulse_ms')).toBeVisible();
 });
+
+test('another board whose config.get goes unanswered doesn’t show the last board’s settings as its own', async ({ page }) => {
+  await openConsole(page, [{ role: 'house', params: { tx_power: 5 } }, { role: 'gate', params: { tx_power: 14 } }]);
+  await connect(page, 'house');
+  await page.locator('#tabbtn-config').click();
+  await expect(page.locator('#p_tx_power')).toHaveValue('5');
+  await page.locator('#btnDisconnect').click();
+  await page.evaluate(() => {
+    const b = window.__fake.boards[1];
+    const handle = b.handle.bind(b);
+    b.handle = (req) => (req.cmd === 'config.get' ? null : handle(req));
+  });
+  await connect(page, 'gate');
+  await expect(page.locator('#toast')).toContainText('Connected, but the board didn\'t answer', { timeout: 10000 });
+  await expect(page.locator('#p_tx_power')).toHaveCount(0);
+  await expect(page.locator('#btnCfgApply')).toHaveText('Apply');
+});

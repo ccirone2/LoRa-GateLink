@@ -559,7 +559,10 @@ Notable pieces:
   connects, by role, in `localStorage` (`gatelink.boards`: firmware, key id, the `MUST_MATCH` settings, when seen),
   and compares the connected board with the other one; connected to the house with the link up it also asks the gate
   for its firmware once (`remote.diag`). A firmware difference in MAJOR.MINOR is flagged (a change both boards need
-  together); a PATCH apart matches. Storage failing (a private window) only means nothing to compare.
+  together); a PATCH apart matches. Storage failing (a private window) only means nothing to compare. A board is
+  remembered only once its own `config.get` has answered: connecting another board empties the Config form and
+  `S.params` first (`forgetConfig`), so one that doesn't answer is never shown, exported or remembered with the last
+  board's settings.
 - The health line above every tab while a board answers (`healthLine` in `healthline.js`, ROADMAP C1): the most important
   thing wrong as the connected board sees it, with what to do next, from the status reply, the running `sf` and
   `peerDiffs()`. Order follows the project's goals: setup (role, key, radio), a reboot loop, the link (naming what

@@ -16,7 +16,7 @@ import * as serial from './js/serial.js';
 import { applyRole, boardGone, refreshInfo } from './js/board.js';
 import { refreshStatus, renderStatus, pollStatus, resetPoll, clearVerdicts, POLL_MS } from './js/status.js';
 import { resetPeer } from './js/peer.js';
-import { initConfig, loadConfig, markUnsaved, dirtyCount } from './js/config.js';
+import { initConfig, loadConfig, forgetConfig, markUnsaved, dirtyCount } from './js/config.js';
 import { initSecurity } from './js/security.js';
 import { initLog, showLogEntry, resetLogPaging } from './js/log.js';
 import { initWiring } from './js/wiring.js';
@@ -54,7 +54,8 @@ const EVENTS = {
 };
 
 serial.hooks.onOpen = async ({ otherBoard, port }) => {
-  if (otherBoard) { // another board: its ping, survey and diagnostics results don't apply
+  if (otherBoard) { // another board: its settings, ping, survey and diagnostics results don't apply
+    forgetConfig();
     resetPing();
     resetSurvey();
     resetRemote();

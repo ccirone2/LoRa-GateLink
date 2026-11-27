@@ -38,7 +38,7 @@ let ready = false;
 
 // The connected board, once its info and config are in: after loadConfig, and again after its key changes.
 export function rememberBoard() {
-  if (!S.boardInfo || !ROLES.includes(S.role)) return;
+  if (!S.boardInfo || !S.meta.length || !ROLES.includes(S.role)) return; // config.get not answered yet
   ready = true;
   const all = { ...load() };
   const params = Object.fromEntries([...MUST_MATCH].filter((n) => n in S.params).map((n) => [n, S.params[n]]));
